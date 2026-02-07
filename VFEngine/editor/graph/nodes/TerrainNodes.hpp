@@ -328,14 +328,14 @@ namespace editor::graph {
     // Terrain Layer Stack - defines terrain layers and auto-blends them by weight maps.
     //
     // Each layer has: name, albedo texture path, normal texture path, tiling scale,
-    // blend mode (Linear/HeightBased/Overlay), and enabled flag.
+    // blend mode (Linear/Overlay), and enabled flag.
     // Properties:
     //   layerCount (1-16)
     //   layer{i}_name      (string) - user-facing layer name
     //   layer{i}_albedo    (string) - albedo texture file path
     //   layer{i}_normal    (string) - normal texture file path
     //   layer{i}_tiling    (float)  - UV tiling scale
-    //   layer{i}_blendMode (string) - blend mode (Linear/HeightBased/Overlay)
+    //   layer{i}_blendMode (string) - blend mode (Linear/Overlay)
     //   layer{i}_enabled   (float)  - 1.0 = enabled, 0.0 = disabled
     //
     // The paint brush system reads these layer definitions to let the user
@@ -391,14 +391,14 @@ namespace editor::graph {
             int layerCount = static_cast<int>(getPropertyValue<float>("layerCount", 1.0f));
             layerCount = std::clamp(layerCount, 1, 16);
 
-            // Collect layer info to separate Linear/HeightBased from Overlay
+            // Collect layer info to separate Linear from Overlay
             struct LayerInfo {
                 int index;
                 std::string blendMode;
                 std::string name;
                 bool enabled;
             };
-            std::vector<LayerInfo> baseLayers;    // Linear + HeightBased
+            std::vector<LayerInfo> baseLayers;    // Linear
             std::vector<LayerInfo> overlayLayers;  // Overlay
 
             for (int i = 0; i < layerCount; ++i) {
@@ -420,7 +420,7 @@ namespace editor::graph {
             code += "vec3 " + outputVarPrefix + "Normal = vec3(0.0);\n";
             code += "float " + outputVarPrefix + "TotalW = 0.0;\n";
 
-            // --- Pass 1: Linear and HeightBased layers ---
+            // --- Pass 1: Linear layers ---
             for (const auto& layer : baseLayers) {
                 int i = layer.index;
                 std::string prefix = "layer" + std::to_string(i) + "_";
@@ -435,11 +435,6 @@ namespace editor::graph {
                 // Sample weight from weight map SSBO
                 code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
                     "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
-
-                // HeightBased: sharpen weight for crisp transitions
-                if (layer.blendMode == "HeightBased") {
-                    code += "    w = smoothstep(0.4, 0.6, w); // HeightBased: sharp transition\n";
-                }
 
                 // Sample layer textures from bindless system via terrainLayers SSBO
                 code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);

@@ -555,10 +555,9 @@ namespace windows
                     if (auto* s = std::get_if<std::string>(&node.properties[prefix + "blendMode"]))
                         blendStr = *s;
 
-                    const char* blendModes[] = {"Linear", "HeightBased", "Overlay"};
+                    const char* blendModes[] = {"Linear", "Overlay"};
                     int currentBlend = 0;
-                    if (blendStr == "HeightBased") currentBlend = 1;
-                    else if (blendStr == "Overlay") currentBlend = 2;
+                    if (blendStr == "Overlay") currentBlend = 1;
 
                     if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes)))
                     {

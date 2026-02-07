@@ -102,8 +102,6 @@ namespace windows
 
                 ImGui::EndDisabled();
 
-                ImGui::SameLine();
-
                 // Sculpt mode toggle - enabled when terrain is selected or already sculpting
                 bool canSculpt = isSculptMode;
                 if (!canSculpt)
