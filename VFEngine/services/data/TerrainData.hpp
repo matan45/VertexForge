@@ -20,6 +20,7 @@ namespace services
 
         std::string heightmapPath;  // empty = flat terrain
         std::string terrainMaterialPath;  // .vfTerrainMat path
+        std::string weightMapPath;  // .vfTerrainWeights path (empty = default weights)
     };
 
     struct TerrainData
@@ -34,6 +35,7 @@ namespace services
         int32_t gridMaxZ = 0;
         std::string heightmapPath;
         std::string terrainMaterialPath;
+        std::string weightMapPath;
         uint32_t tileCount = 0;
 
         bool isActive = true;

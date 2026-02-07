@@ -39,6 +39,11 @@ namespace terrain
         void createGrid(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ,
                         ProgressCallback progress = nullptr);
 
+        // Weight map management
+        void initializeWeightMaps(uint8_t layerCount);
+        void updateWeightMapLayerCount(uint8_t newLayerCount);
+        [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();
+
     private:
         [[nodiscard]] TerrainTile* getOrCreateTile(const TileCoord& coord);
 

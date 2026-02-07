@@ -8,6 +8,7 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
 #include "terrain/BrushSampler.hpp"
+#include "terrain/TerrainWeightMapAsset.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
@@ -30,6 +31,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
         dispatcher.unregisterCommandHandler<events::brush::ApplyBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SaveWeightMapsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::LoadWeightMapsCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -98,6 +101,18 @@ namespace services
             [this](const events::brush::ApplyBrushCommand& cmd)
             {
                 applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SaveWeightMapsCommand>(
+            [this](const events::terrain::SaveWeightMapsCommand& cmd)
+            {
+                return saveWeightMaps(cmd.terrainEntity.id, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadWeightMapsCommand>(
+            [this](const events::terrain::LoadWeightMapsCommand& cmd)
+            {
+                return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -199,6 +214,7 @@ namespace services
         terrainComp.lodDistances = config.lodDistances;
         terrainComp.heightmapPath = config.heightmapPath;
         terrainComp.terrainMaterialPath = config.terrainMaterialPath;
+        terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
         terrainComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
@@ -209,6 +225,12 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
+
+        // Load saved weight maps if available
+        if (!config.weightMapPath.empty())
+        {
+            loadWeightMaps(parentHandle.id, config.weightMapPath);
+        }
 
         events::terrain::TerrainCreatedNotification notification;
         notification.terrainEntity = parentHandle;
@@ -299,6 +321,7 @@ namespace services
         data.gridMaxZ = comp.gridMaxZ;
         data.heightmapPath = comp.heightmapPath;
         data.terrainMaterialPath = comp.terrainMaterialPath;
+        data.weightMapPath = comp.weightMapPath;
         data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
                                                 (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;
@@ -553,5 +576,79 @@ namespace services
         notification.position = worldPosition;
         notification.type = brushType;
         dispatcher.publish(notification);
+    }
+
+    bool TerrainService::saveWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto allTiles = gridIt->second->getAllTiles();
+        if (allTiles.empty())
+        {
+            vfLogWarning("TerrainService: No tiles to save weight maps for");
+            return true;
+        }
+
+        uint32_t resolution = allTiles[0]->config.getVertexCount();
+
+        std::unordered_map<terrain::TileCoord, terrain::TileWeightMapData, terrain::TileCoordHash> tileWeights;
+        for (const auto* tile : allTiles)
+        {
+            if (tile->hasWeightMap())
+            {
+                tileWeights.emplace(tile->coord, tile->weightMap);
+            }
+        }
+
+        return terrain::TerrainWeightMapAsset::save(path, tileWeights, resolution);
+    }
+
+    bool TerrainService::loadWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto loadedWeights = terrain::TerrainWeightMapAsset::load(path);
+        if (loadedWeights.empty())
+        {
+            return false;
+        }
+
+        auto allTiles = gridIt->second->getAllTiles();
+        uint32_t loadedCount = 0;
+
+        for (auto* tile : allTiles)
+        {
+            auto it = loadedWeights.find(tile->coord);
+            if (it != loadedWeights.end())
+            {
+                // Verify resolution matches
+                if (it->second.resolution == tile->config.getVertexCount())
+                {
+                    tile->weightMap = std::move(it->second);
+                    tile->weightMapDirty = true;
+                    loadedCount++;
+                }
+                else
+                {
+                    vfLogWarning("TerrainService: Weight map resolution mismatch for tile ({}, {}): "
+                                 "expected {}, got {}",
+                                 tile->coord.x, tile->coord.z,
+                                 tile->config.getVertexCount(), it->second.resolution);
+                }
+            }
+        }
+
+        vfLogInfo("TerrainService: Loaded weight maps for {} of {} tiles", loadedCount, allTiles.size());
+        return true;
     }
 }

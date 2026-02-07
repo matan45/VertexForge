@@ -431,6 +431,9 @@ namespace components
         // Terrain material asset path (.vfTerrainMat)
         std::string terrainMaterialPath;
 
+        // Weight map data path (.vfTerrainWeights)
+        std::string weightMapPath;
+
         bool isActive = true;       // Global terrain enable/disable
         bool isDirty = false;       // Config changed, needs regeneration
 

@@ -170,4 +170,10 @@ namespace terrain
     {
         return static_cast<size_t>(z) * config.getVertexCount() + x;
     }
+
+    void TerrainTile::initializeWeightMap(uint8_t layerCount)
+    {
+        weightMap.initializeDefault(config.getVertexCount(), layerCount);
+        weightMapDirty = true;
+    }
 }

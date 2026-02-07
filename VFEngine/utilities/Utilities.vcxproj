@@ -147,6 +147,8 @@
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
     <ClInclude Include="terrain\TerrainTypes.hpp" />
+    <ClInclude Include="terrain\TerrainWeightMap.hpp" />
+    <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
@@ -198,6 +200,8 @@
     <ClCompile Include="terrain\TerrainMaterialAsset.cpp" />
     <ClCompile Include="terrain\TerrainTile.cpp" />
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
+    <ClCompile Include="terrain\TerrainWeightMap.cpp" />
+    <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />
