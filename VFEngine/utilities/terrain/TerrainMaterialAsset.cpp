@@ -129,9 +129,12 @@ namespace terrain
                         try
                         {
                             auto& layer = material.layers[i];
+                            layer.name = layerJson.value("name", "Layer " + std::to_string(i));
                             layer.albedoTexturePath = layerJson.value("albedoTexturePath", "");
                             layer.normalTexturePath = layerJson.value("normalTexturePath", "");
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
+                            layer.blendMode = stringToLayerBlendMode(layerJson.value("blendMode", "Linear"));
+                            layer.enabled = layerJson.value("enabled", true);
 
                             if (layer.tilingScale <= 0.0f)
                             {
@@ -303,9 +306,12 @@ namespace terrain
         {
             const auto& layer = material.layers[i];
             json layerJson;
+            layerJson["name"] = layer.name;
             layerJson["albedoTexturePath"] = layer.albedoTexturePath;
             layerJson["normalTexturePath"] = layer.normalTexturePath;
             layerJson["tilingScale"] = layer.tilingScale;
+            layerJson["blendMode"] = blendModeToString(layer.blendMode);
+            layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
         }
         j["layers"] = layersJson;
@@ -399,6 +405,7 @@ namespace terrain
         material.uuid = std::to_string(uuid::UUID().getValue());
         material.name = name;
         material.activeLayerCount = 1;
+        material.layers[0].name = "Layer 0";
         material.needsRecompile = true;
 
         // Create default Layer Stack node

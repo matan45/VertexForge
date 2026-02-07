@@ -328,23 +328,26 @@ namespace editor::graph {
 
     // Terrain Layer Stack - defines terrain layers and auto-blends them by weight maps.
     //
-    // Each layer has: albedo texture path, normal texture path, tiling scale.
+    // Each layer has: name, albedo texture path, normal texture path, tiling scale,
+    // blend mode (Linear/HeightBased/Overlay), and enabled flag.
     // Properties:
     //   layerCount (1-16)
-    //   layer{i}_albedo  (string) - albedo texture file path
-    //   layer{i}_normal  (string) - normal texture file path
-    //   layer{i}_tiling  (float)  - UV tiling scale
+    //   layer{i}_name      (string) - user-facing layer name
+    //   layer{i}_albedo    (string) - albedo texture file path
+    //   layer{i}_normal    (string) - normal texture file path
+    //   layer{i}_tiling    (float)  - UV tiling scale
+    //   layer{i}_blendMode (string) - blend mode (Linear/HeightBased/Overlay)
+    //   layer{i}_enabled   (float)  - 1.0 = enabled, 0.0 = disabled
     //
     // The paint brush system reads these layer definitions to let the user
     // pick which layer to paint. Weight maps control per-pixel blending.
     //
     // Outputs blended Albedo + Normal to connect to TerrainPBROutput.
     //
-    // Current state (pre VK-214/215):
+    // Current state (pre VK-215):
     //   - Texture paths are stored but not sampled (no GPU bindings yet)
     //   - Layer 0 weight = 1.0, others = 0.0 (no weight maps yet)
     //   - Falls back to default color
-    // After VK-214: textures loaded to GPU, sampling works
     // After VK-215: weight maps from painting, blending works
     class TerrainLayerStackNode : public ShaderNodeBase {
     public:
@@ -354,9 +357,12 @@ namespace editor::graph {
             properties["layerCount"] = 1.0f;
 
             // Initialize default layer 0
+            properties["layer0_name"] = std::string("Layer 0");
             properties["layer0_albedo"] = std::string("");
             properties["layer0_normal"] = std::string("");
             properties["layer0_tiling"] = 1.0f;
+            properties["layer0_blendMode"] = std::string("Linear");
+            properties["layer0_enabled"] = 1.0f;
 
             addOutputPin("Albedo", material::PinType::Vec3);
             addOutputPin("Normal", material::PinType::Vec3);
@@ -366,12 +372,18 @@ namespace editor::graph {
         void ensureLayerProperties(int layerCount) {
             for (int i = 0; i < layerCount; ++i) {
                 std::string prefix = "layer" + std::to_string(i) + "_";
+                if (properties.find(prefix + "name") == properties.end())
+                    properties[prefix + "name"] = std::string("Layer " + std::to_string(i));
                 if (properties.find(prefix + "albedo") == properties.end())
                     properties[prefix + "albedo"] = std::string("");
                 if (properties.find(prefix + "normal") == properties.end())
                     properties[prefix + "normal"] = std::string("");
                 if (properties.find(prefix + "tiling") == properties.end())
                     properties[prefix + "tiling"] = 1.0f;
+                if (properties.find(prefix + "blendMode") == properties.end())
+                    properties[prefix + "blendMode"] = std::string("Linear");
+                if (properties.find(prefix + "enabled") == properties.end())
+                    properties[prefix + "enabled"] = 1.0f;
             }
         }
 
@@ -388,11 +400,22 @@ namespace editor::graph {
 
             for (int i = 0; i < layerCount; ++i) {
                 std::string prefix = "layer" + std::to_string(i) + "_";
+
+                // Skip disabled layers
+                float enabledVal = getPropertyValue<float>(prefix + "enabled", 1.0f);
+                if (enabledVal < 0.5f) {
+                    std::string layerName = getPropertyValue<std::string>(prefix + "name", "Layer " + std::to_string(i));
+                    code += "// Layer " + std::to_string(i) + " (" + layerName + ") - disabled\n";
+                    continue;
+                }
+
                 std::string albedoPath = getPropertyValue<std::string>(prefix + "albedo", "");
                 std::string normalPath = getPropertyValue<std::string>(prefix + "normal", "");
                 float tiling = getPropertyValue<float>(prefix + "tiling", 1.0f);
+                std::string blendMode = getPropertyValue<std::string>(prefix + "blendMode", "Linear");
+                std::string layerName = getPropertyValue<std::string>(prefix + "name", "Layer " + std::to_string(i));
 
-                code += "{\n";
+                code += "{ // Layer " + std::to_string(i) + " (" + layerName + ") - blend: " + blendMode + "\n";
 
                 // Weight: fallback until VK-215 provides real weight maps
                 // TODO (VK-215): float w = texture(terrainWeightMaps[i/4], fragWorldUV)[i%4];
@@ -400,12 +423,11 @@ namespace editor::graph {
                 code += std::format("    float w = {}; // layer {} weight\n", weight, i);
 
                 // Texture sampling
-                // TODO (VK-214): when textures are GPU-bound, replace fallbacks with:
+                // TODO: when textures are GPU-bound, replace fallbacks with:
                 //   vec2 layerUV = fragWorldUV * {tiling};
                 //   vec3 layerAlbedo = texture(terrainLayerTextures[{i*2}], layerUV).rgb;
                 //   vec3 layerNormal = texture(terrainLayerTextures[{i*2+1}], layerUV).rgb * 2.0 - 1.0;
                 if (!albedoPath.empty()) {
-                    // Texture path defined - generate tiled UV + sampling placeholder
                     code += std::format("    vec2 layerUV = fragWorldUV * {:.6f};\n", tiling);
                     code += "    // albedo: " + albedoPath + "\n";
                     code += "    // normal: " + normalPath + "\n";
