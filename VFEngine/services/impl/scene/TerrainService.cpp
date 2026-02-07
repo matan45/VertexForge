@@ -10,6 +10,7 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
@@ -122,6 +123,9 @@ namespace services
                 if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
                 {
                     registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
+
+                    // Sync weight map layer count from the material
+                    syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
                 }
             });
 
@@ -252,6 +256,12 @@ namespace services
         if (!config.weightMapPath.empty())
         {
             loadWeightMaps(parentHandle.id, config.weightMapPath);
+        }
+
+        // Sync weight map layer count from the assigned material
+        if (!config.terrainMaterialPath.empty())
+        {
+            syncWeightMapLayerCount(parentHandle.id, config.terrainMaterialPath);
         }
 
         events::terrain::TerrainCreatedNotification notification;
@@ -645,6 +655,13 @@ namespace services
                 continue;
             }
 
+            // Expand weight map if the active layer exceeds current layer count
+            if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
+            {
+                tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
+                tile->weightMapGPUDirty = true;
+            }
+
             terrain::WeightBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = brushCenter;
             applyParams.tileWorldOrigin = glm::vec2(
@@ -666,6 +683,14 @@ namespace services
             {
                 tile->weightMapDirty = true;
                 tile->weightMapGPUDirty = true;
+
+                // Debug: log paint application with center weight sample
+                float cr, cg, cb, ca;
+                tile->weightMap.packRGBA(0, tile->weightMap.resolution / 2,
+                                         tile->weightMap.resolution / 2, cr, cg, cb, ca);
+                vfLogInfo("Paint applied tile({},{}): layer={}, center_weights=[{:.2f},{:.2f},{:.2f},{:.2f}]",
+                          tile->coord.x, tile->coord.z,
+                          brushParams.activeLayer, cr, cg, cb, ca);
             }
         }
 
@@ -747,5 +772,37 @@ namespace services
 
         vfLogInfo("TerrainService: Loaded weight maps for {} of {} tiles", loadedCount, allTiles.size());
         return true;
+    }
+
+    void TerrainService::syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath)
+    {
+        if (materialPath.empty())
+        {
+            return;
+        }
+
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        if (!materialData)
+        {
+            return;
+        }
+
+        uint8_t layerCount = materialData->activeLayerCount;
+        if (layerCount == 0)
+        {
+            layerCount = 1;
+        }
+
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+        grid->updateWeightMapLayerCount(layerCount);
+
+        vfLogInfo("TerrainService: Synced weight map layer count to {} from material '{}'",
+                  layerCount, materialPath);
     }
 }

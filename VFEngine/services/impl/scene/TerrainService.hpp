@@ -72,5 +72,6 @@ namespace services
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+        void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
     };
 }
