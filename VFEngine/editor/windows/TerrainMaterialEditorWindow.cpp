@@ -11,6 +11,7 @@
 #include <fstream>
 #include <algorithm>
 #include <format>
+#include <cstring>
 
 namespace windows
 {
@@ -538,7 +539,8 @@ namespace windows
                 // Layer name
                 {
                     char nameBuffer[64];
-                    strncpy_s(nameBuffer, sizeof(nameBuffer), layerName.c_str(), sizeof(nameBuffer) - 1);
+                    std::strncpy(nameBuffer, layerName.c_str(), sizeof(nameBuffer) - 1);
+                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
                     if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)))
                     {
                         node.properties[prefix + "name"] = std::string(nameBuffer);
@@ -661,17 +663,18 @@ namespace windows
                 // Remove layer button
                 ImGui::Spacing();
                 ImGui::BeginDisabled(layerCount <= 1);
-                if (ImGui::SmallButton("Remove Layer"))
+                bool removeClicked = ImGui::SmallButton("Remove Layer");
+                ImGui::EndDisabled();
+
+                if (removeClicked)
                 {
                     removeLayer(node, i, layerCount);
                     layerCount--;
                     changed = true;
-                    ImGui::EndDisabled();
                     ImGui::Unindent(8.0f);
                     ImGui::PopID();
                     break;
                 }
-                ImGui::EndDisabled();
 
                 ImGui::Unindent(8.0f);
             }
@@ -741,7 +744,8 @@ namespace windows
             {
                 std::string value = std::get<std::string>(propValue);
                 char buffer[256];
-                strncpy_s(buffer, sizeof(buffer), value.c_str(), sizeof(buffer) - 1);
+                std::strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
                 if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer)))
                 {
                     propValue = std::string(buffer);
