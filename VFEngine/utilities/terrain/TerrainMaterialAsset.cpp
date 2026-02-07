@@ -8,6 +8,7 @@
 #include <format>
 #include <algorithm>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace terrain
 {
@@ -153,6 +154,7 @@ namespace terrain
             if (j.contains("graph") && j["graph"].is_object())
             {
                 const auto& graphJson = j["graph"];
+                std::unordered_map<uint32_t, uint32_t> nodeIdRemap;
 
                 // Parse nodes
                 if (graphJson.contains("nodes") && graphJson["nodes"].is_array())
@@ -166,11 +168,15 @@ namespace terrain
                         try
                         {
                             material::ShaderNode node;
-                            node.id = nodeJson.value("id", 0u);
+                            uint32_t originalId = nodeJson.value("id", 0u);
+                            node.id = originalId;
 
                             if (nodeIds.count(node.id))
                             {
                                 node.id = material.graph.nextNodeId++;
+                                nodeIdRemap[originalId] = node.id;
+                                logWarningLimited(std::format(
+                                    "Duplicate node ID {} at index {}, remapped to {}", originalId, i, node.id));
                             }
                             nodeIds.insert(node.id);
 
@@ -214,6 +220,12 @@ namespace terrain
                     for (const auto& node : material.graph.nodes)
                         validNodeIds.insert(node.id);
 
+                    auto remapNodeId = [&](uint32_t id) -> uint32_t
+                    {
+                        auto it = nodeIdRemap.find(id);
+                        return (it != nodeIdRemap.end()) ? it->second : id;
+                    };
+
                     for (size_t i = 0; i < graphJson["links"].size(); ++i)
                     {
                         const auto& linkJson = graphJson["links"][i];
@@ -223,8 +235,8 @@ namespace terrain
                         {
                             material::NodeLink link;
                             link.id = linkJson.value("id", 0u);
-                            link.sourceNodeId = linkJson.value("sourceNode", 0u);
-                            link.targetNodeId = linkJson.value("targetNode", 0u);
+                            link.sourceNodeId = remapNodeId(linkJson.value("sourceNode", 0u));
+                            link.targetNodeId = remapNodeId(linkJson.value("targetNode", 0u));
                             link.sourcePin = linkJson.value("sourcePin", "");
                             link.targetPin = linkJson.value("targetPin", "");
 

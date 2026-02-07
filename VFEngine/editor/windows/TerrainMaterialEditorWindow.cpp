@@ -538,7 +538,7 @@ namespace windows
             {
                 std::string value = std::get<std::string>(propValue);
                 char buffer[256];
-                strncpy_s(buffer, value.c_str(), sizeof(buffer) - 1);
+                strncpy_s(buffer, sizeof(buffer), value.c_str(), sizeof(buffer) - 1);
                 if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer)))
                 {
                     propValue = std::string(buffer);

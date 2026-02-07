@@ -35,6 +35,21 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<AnimatorEditorWindow>> openAnimatorEditors;
         std::unordered_map<std::string, std::weak_ptr<VFXEditorWindow>> openVFXEditors;
         std::unordered_map<std::string, std::weak_ptr<TerrainMaterialEditorWindow>> openTerrainMaterialEditors;
+
+        template<typename T>
+        static void eraseExpired(std::unordered_map<std::string, std::weak_ptr<T>>& map)
+        {
+            for (auto it = map.begin(); it != map.end();)
+            {
+                if (it->second.expired())
+                    it = map.erase(it);
+                else
+                    ++it;
+            }
+        }
+
+        void cleanupExpired();
+
     public:
         explicit PreviewWindowManager() = default;
         ~PreviewWindowManager() = default;

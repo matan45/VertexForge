@@ -15,8 +15,25 @@
 
 namespace windows
 {
+    void PreviewWindowManager::cleanupExpired()
+    {
+        eraseExpired(openMeshPreviews);
+        eraseExpired(openImagePreviews);
+        eraseExpired(openAudioPreviews);
+        eraseExpired(openMaterialEditors);
+        eraseExpired(openInstanceEditors);
+        eraseExpired(openPrefabPreviews);
+        eraseExpired(openFontPreviews);
+        eraseExpired(openAnimationPreviews);
+        eraseExpired(openAnimatorEditors);
+        eraseExpired(openVFXEditors);
+        eraseExpired(openTerrainMaterialEditors);
+    }
+
     bool PreviewWindowManager::openPreview(const fs::path& filePath, AssetType type)
     {
+        cleanupExpired();
+
         std::string path = StringUtil::wstringToUtf8(filePath.wstring());
 
         switch (type)
