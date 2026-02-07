@@ -63,6 +63,9 @@ namespace services
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
 
+        bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
+        bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
+
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();

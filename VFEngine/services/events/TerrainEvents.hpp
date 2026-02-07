@@ -72,4 +72,18 @@ namespace events::terrain
 
         std::string_view getName() const override { return "TerrainMaterialCompiled"; }
     };
+
+    struct SaveWeightMapsCommand : ICommand<bool> {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "SaveWeightMaps"; }
+    };
+
+    struct LoadWeightMapsCommand : ICommand<bool> {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "LoadWeightMaps"; }
+    };
 }
