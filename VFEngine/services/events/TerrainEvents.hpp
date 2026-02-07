@@ -59,6 +59,13 @@ namespace events::terrain
         std::string_view getName() const override { return "TerrainDeleted"; }
     };
 
+    struct SetTerrainMaterialPathCommand : ICommand<> {
+        services::EntityHandle terrainEntity;
+        std::string materialPath;
+
+        std::string_view getName() const override { return "SetTerrainMaterialPath"; }
+    };
+
     struct CompileTerrainMaterialCommand : ICommand<bool> {
         std::string materialPath;
 

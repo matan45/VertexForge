@@ -1,6 +1,9 @@
 #pragma once
 
 #include "events/EventTypes.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
+#include <memory>
+#include <string>
 
 namespace windows
 {
@@ -16,6 +19,10 @@ namespace windows
         int falloffIndex = 2;
         int shapeIndex = 0;
 
+        // Cached terrain material data for layer names
+        std::shared_ptr<terrain::TerrainMaterialData> materialData;
+        std::string materialPath;
+
         events::SubscriptionToken paintModeToken;
         events::SubscriptionToken brushTypeToken;
         events::SubscriptionToken brushParamsToken;
@@ -30,5 +37,6 @@ namespace windows
 
     private:
         void subscribe();
+        void loadMaterialFromTarget();
     };
 }

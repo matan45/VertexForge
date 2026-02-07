@@ -2,7 +2,12 @@
 #include "events/EventDispatcher.hpp"
 #include "events/PaintModeEvents.hpp"
 #include "events/PaintBrushEvents.hpp"
+#include "events/TerrainEvents.hpp"
+#include "terrain/TerrainMaterialAsset.hpp"
+#include "resource/ResourceManager.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
+#include <algorithm>
 
 namespace windows
 {
@@ -21,6 +26,35 @@ namespace windows
         if (brushParamsToken.isValid())
         {
             dispatcher.unsubscribe(brushParamsToken);
+        }
+    }
+
+    void PaintToolPanel::loadMaterialFromTarget()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{});
+        if (!targetEntity.has_value())
+        {
+            materialData.reset();
+            materialPath.clear();
+            return;
+        }
+
+        events::terrain::GetTerrainDataQuery query;
+        query.entity = targetEntity.value();
+        auto terrainData = dispatcher.query(query);
+        if (!terrainData.has_value() || terrainData->terrainMaterialPath.empty())
+        {
+            materialData.reset();
+            materialPath.clear();
+            return;
+        }
+
+        if (terrainData->terrainMaterialPath != materialPath)
+        {
+            materialPath = terrainData->terrainMaterialPath;
+            materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
         }
     }
 
@@ -51,6 +85,13 @@ namespace windows
 
                     auto type = d.query(events::paintBrush::GetPaintBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
+
+                    loadMaterialFromTarget();
+                }
+                else
+                {
+                    materialData.reset();
+                    materialPath.clear();
                 }
             });
 
@@ -119,14 +160,91 @@ namespace windows
         }
 
         ImGui::Spacing();
+        ImGui::Text("Terrain Material");
+        ImGui::Separator();
+
+        // Show current material path or browse button
+        if (!materialPath.empty())
+        {
+            // Extract filename from path
+            std::string displayName = materialPath;
+            auto lastSlash = displayName.find_last_of("/\\");
+            if (lastSlash != std::string::npos)
+            {
+                displayName = displayName.substr(lastSlash + 1);
+            }
+            ImGui::TextWrapped("%s", displayName.c_str());
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button(materialPath.empty() ? "Browse Material..." : "Change"))
+        {
+            nfd::FileDialog fileDialog;
+            std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                {L"Terrain Material", L"*.vfTerrainMat"}
+            };
+            std::string selectedPath = fileDialog.openFileDialog(filters);
+            if (!selectedPath.empty())
+            {
+                selectedPath.erase(
+                    std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
+                    selectedPath.end());
+
+                // Update the terrain component's material path
+                auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{});
+                if (targetEntity.has_value())
+                {
+                    events::terrain::SetTerrainMaterialPathCommand cmd;
+                    cmd.terrainEntity = targetEntity.value();
+                    cmd.materialPath = selectedPath;
+                    dispatcher.execute(cmd);
+
+                    // Reload material data
+                    materialPath = selectedPath;
+                    materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+                }
+            }
+        }
+
+        ImGui::Spacing();
         ImGui::Text("Layer Selection");
         ImGui::Separator();
 
-        if (ImGui::SliderInt("Layer", &activeLayer, 0, 3))
+        if (materialData && materialData->activeLayerCount > 0)
         {
-            events::paintBrush::SetPaintActiveLayerCommand cmd;
-            cmd.layer = static_cast<uint32_t>(activeLayer);
-            dispatcher.execute(cmd);
+            int maxLayer = static_cast<int>(materialData->activeLayerCount) - 1;
+            activeLayer = std::clamp(activeLayer, 0, maxLayer);
+
+            if (ImGui::BeginCombo("Layer", materialData->layers[activeLayer].name.c_str()))
+            {
+                for (int i = 0; i <= maxLayer; ++i)
+                {
+                    const auto& layer = materialData->layers[i];
+                    if (!layer.enabled)
+                    {
+                        continue;
+                    }
+
+                    bool isSelected = (activeLayer == i);
+                    std::string label = std::to_string(i) + ": " + layer.name;
+                    if (ImGui::Selectable(label.c_str(), isSelected))
+                    {
+                        activeLayer = i;
+                        events::paintBrush::SetPaintActiveLayerCommand cmd;
+                        cmd.layer = static_cast<uint32_t>(activeLayer);
+                        dispatcher.execute(cmd);
+                    }
+                    if (isSelected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("No layers - assign a terrain material above");
         }
 
         ImGui::Spacing();
