@@ -188,6 +188,7 @@ namespace render::gpudriven
         }
 
         it->second.isUploaded = it->second.hasAnyAllocation();
+        gpuTileDataDirty_ = true;
 
         return true;
     }
@@ -203,6 +204,7 @@ namespace render::gpudriven
 
         terrainBuffer_.freeTileLOD(tileKeyStr, lodLevel);
         it->second.lodAllocs[lodLevel] = TerrainLODAllocation{};
+        gpuTileDataDirty_ = true;
 
         // If no LODs remain, remove the allocation
         if (!it->second.hasAnyAllocation())
@@ -228,6 +230,8 @@ namespace render::gpudriven
             terrainBuffer_.freeTile(tileKey);
         }
         allocations_.clear();
+        cachedGPUTileData_.clear();
+        gpuTileDataDirty_ = true;
     }
 
     bool TerrainGPUAdapter::uploadLODData(
@@ -382,15 +386,21 @@ namespace render::gpudriven
         alloc.weightMapOffset = offsetElements * 4;
         alloc.weightMapSize = totalBytes;
         alloc.weightMapUploaded = true;
+        gpuTileDataDirty_ = true;
 
         return true;
     }
 
-    std::vector<TerrainTileGPUData> TerrainGPUAdapter::buildGPUTileData(
-        const std::vector<terrain::TerrainTile*>& tiles) const
+    const std::vector<TerrainTileGPUData>& TerrainGPUAdapter::buildGPUTileData(
+        const std::vector<terrain::TerrainTile*>& tiles)
     {
-        std::vector<TerrainTileGPUData> result;
-        result.reserve(tiles.size());
+        if (!gpuTileDataDirty_)
+        {
+            return cachedGPUTileData_;
+        }
+
+        cachedGPUTileData_.clear();
+        cachedGPUTileData_.reserve(tiles.size());
 
         for (const terrain::TerrainTile* tile : tiles)
         {
@@ -463,9 +473,10 @@ namespace render::gpudriven
             gpuTile.flags = ObjectFlags::TerrainTile;
             gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
-            result.push_back(gpuTile);
+            cachedGPUTileData_.push_back(gpuTile);
         }
 
-        return result;
+        gpuTileDataDirty_ = false;
+        return cachedGPUTileData_;
     }
 }

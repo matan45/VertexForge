@@ -250,9 +250,28 @@ namespace render::gpudriven
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
+        // Terrain profiling
+        float getTerrainUpdateUs() const { return terrainUpdateUs_; }
+        float getTerrainStreamingUs() const { return terrainStreamingUs_; }
+        float getTerrainBuildTileDataUs() const { return terrainBuildTileDataUs_; }
+        float getTerrainUploadTileDataUs() const { return terrainUploadTileDataUs_; }
+        const TerrainStreamingStats* getTerrainStreamingStats() const;
+        TerrainCullingStats getTerrainCullingStats();
+
     private:
         std::string currentTerrainMaterialPath_;
         std::vector<TerrainLayerGPUData> terrainLayerData_;
+
+        // Visibility tracking for dirty detection
+        size_t lastVisibleTileCount_ = 0;
+        TerrainTileKey lastVisibleFirst_{};
+        TerrainTileKey lastVisibleLast_{};
+
+        // CPU profiling timings (microseconds)
+        float terrainUpdateUs_ = 0.0f;
+        float terrainStreamingUs_ = 0.0f;
+        float terrainBuildTileDataUs_ = 0.0f;
+        float terrainUploadTileDataUs_ = 0.0f;
 
         bool registerMaterialTextures(const std::string& materialPath);
         void registerTerrainLayerTextures(const std::string& materialPath);

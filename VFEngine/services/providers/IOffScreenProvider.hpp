@@ -87,6 +87,36 @@ namespace services {
         uint32_t lightsCulledByHiZ = 0;
     };
 
+    // Terrain-specific profiling stats
+    struct TerrainDebugStats {
+        // CPU frame timings (microseconds)
+        float updateTerrainUs = 0.0f;
+        float streamingUs = 0.0f;
+        float buildTileDataUs = 0.0f;
+        float uploadTileDataUs = 0.0f;
+
+        // GPU culling stats (from task shader readback)
+        uint32_t totalTiles = 0;
+        uint32_t culledTiles = 0;
+        uint32_t totalMeshlets = 0;
+        uint32_t culledMeshlets = 0;
+        uint32_t visibleMeshlets = 0;
+        uint32_t lodCount0 = 0;
+        uint32_t lodCount1 = 0;
+        uint32_t lodCount2 = 0;
+        uint32_t lodCount3 = 0;
+
+        // Streaming stats
+        uint32_t tilesLoaded = 0;
+        uint32_t tilesStreaming = 0;
+        uint32_t fallbackTiles = 0;
+        uint32_t fullDetailTiles = 0;
+        uint32_t uploadsThisFrame = 0;
+        size_t memoryUsedBytes = 0;
+        size_t memoryBudgetBytes = 0;
+        size_t bytesUploadedThisFrame = 0;
+    };
+
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
@@ -104,6 +134,7 @@ namespace services {
         size_t dynamicLightBvhNodeCount = 0;
 
         GPUDrivenDebugStats gpuDriven;
+        TerrainDebugStats terrain;
     };
 
     struct ShadowStats {

@@ -35,14 +35,39 @@ namespace render::gpudriven
             }
         }
 
+        // Sort visible tiles by distance to camera (nearest first) for fallback budgeting
+        struct TileWithDistance
+        {
+            terrain::TerrainTile* tile;
+            float distance;
+        };
+        std::vector<TileWithDistance> sortedTiles;
+        sortedTiles.reserve(visibleTiles.size());
+
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
                 continue;
 
-            TerrainTileKey key{tile->coord.x, tile->coord.z};
             glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
             float distance = glm::length(tileCenter - cameraPosition);
+            sortedTiles.push_back({tile, distance});
+        }
+
+        std::sort(sortedTiles.begin(), sortedTiles.end(),
+                  [](const TileWithDistance& a, const TileWithDistance& b) {
+                      return a.distance < b.distance;
+                  });
+
+        uint32_t fallbackUploads = 0;
+        size_t fallbackBytes = 0;
+
+        for (const auto& entry : sortedTiles)
+        {
+            terrain::TerrainTile* tile = entry.tile;
+            float distance = entry.distance;
+
+            TerrainTileKey key{tile->coord.x, tile->coord.z};
 
             auto infoIt = tileInfos.find(key);
             if (infoIt == tileInfos.end())
@@ -66,6 +91,12 @@ namespace render::gpudriven
 
             if (!infoIt->second.hasLODLoaded(3))
             {
+                if (fallbackUploads >= config.maxFallbackUploadsPerFrame ||
+                    fallbackBytes >= config.maxFallbackBytesPerFrame)
+                {
+                    continue;
+                }
+
                 if (adapter.uploadTileAddLOD(*tile, 3))
                 {
                     infoIt->second.setLODLoaded(3);
@@ -80,11 +111,13 @@ namespace render::gpudriven
                     currentMemoryUsage += lodMemory;
                     stats.uploadsThisFrame++;
                     stats.bytesUploadedThisFrame += lodMemory;
+                    fallbackUploads++;
+                    fallbackBytes += lodMemory;
                 }
             }
 
-            // Upload weight map if tile has one (initial upload or dirty re-upload)
-            if (tile->hasWeightMap())
+            // Upload weight map only on initial load or when dirty
+            if (tile->hasWeightMap() && tile->weightMapGPUDirty)
             {
                 if (adapter.uploadWeightMap(*tile))
                 {

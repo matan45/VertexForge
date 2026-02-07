@@ -97,6 +97,9 @@ namespace render::gpudriven
 
         std::unordered_map<TerrainTileKey, TerrainTileAllocation, TerrainTileKeyHash> allocations_;
 
+        std::vector<TerrainTileGPUData> cachedGPUTileData_;
+        bool gpuTileDataDirty_ = true;
+
     public:
         explicit TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer);
         ~TerrainGPUAdapter();
@@ -117,8 +120,10 @@ namespace render::gpudriven
 
         void clear();
 
-        std::vector<TerrainTileGPUData> buildGPUTileData(
-            const std::vector<terrain::TerrainTile*>& tiles) const;
+        void markGPUTileDataDirty() { gpuTileDataDirty_ = true; }
+
+        const std::vector<TerrainTileGPUData>& buildGPUTileData(
+            const std::vector<terrain::TerrainTile*>& tiles);
 
     private:
         bool uploadLODData(

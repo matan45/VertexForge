@@ -221,6 +221,70 @@ namespace windows
             }
             ImGui::Separator();
 
+            if (ImGui::CollapsingHeader("Terrain Performance", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent();
+                const auto& t = stats.terrain;
+
+                ImGui::Text("CPU Frame Timings:");
+                ImGui::Text("  updateTerrain:   %.1f us (%.2f ms)", t.updateTerrainUs, t.updateTerrainUs / 1000.0f);
+                ImGui::Text("  Streaming:       %.1f us (%.2f ms)", t.streamingUs, t.streamingUs / 1000.0f);
+                ImGui::Text("  buildTileData:   %.1f us (%.2f ms)", t.buildTileDataUs, t.buildTileDataUs / 1000.0f);
+                ImGui::Text("  uploadTileData:  %.1f us (%.2f ms)", t.uploadTileDataUs, t.uploadTileDataUs / 1000.0f);
+
+                ImGui::Separator();
+
+                ImGui::Text("GPU Culling (Task Shader):");
+                ImGui::Text("  Total Tiles:     %u", t.totalTiles);
+                ImGui::Text("  Culled Tiles:    %u", t.culledTiles);
+                ImGui::Text("  Total Meshlets:  %u", t.totalMeshlets);
+                ImGui::Text("  Culled Meshlets: %u", t.culledMeshlets);
+                ImGui::Text("  Visible Meshlets:%u", t.visibleMeshlets);
+
+                if (t.totalMeshlets > 0)
+                {
+                    float cullRate = static_cast<float>(t.culledMeshlets) / static_cast<float>(t.totalMeshlets);
+                    ImGui::Text("  Meshlet Cull Rate:");
+                    ImGui::SameLine();
+                    ImGui::ProgressBar(cullRate, ImVec2(150, 0),
+                                       (std::to_string(static_cast<int>(cullRate * 100)) + "%").c_str());
+                }
+
+                ImGui::Separator();
+
+                ImGui::Text("LOD Distribution:");
+                ImGui::Text("  LOD0: %u  LOD1: %u  LOD2: %u  LOD3: %u",
+                            t.lodCount0, t.lodCount1, t.lodCount2, t.lodCount3);
+
+                ImGui::Separator();
+
+                ImGui::Text("Streaming:");
+                ImGui::Text("  Tiles Loaded:    %u", t.tilesLoaded);
+                ImGui::Text("  Streaming:       %u", t.tilesStreaming);
+                ImGui::Text("  Full Detail:     %u", t.fullDetailTiles);
+                ImGui::Text("  Fallback Only:   %u", t.fallbackTiles);
+                ImGui::Text("  Uploads/Frame:   %u", t.uploadsThisFrame);
+
+                if (t.bytesUploadedThisFrame > 0)
+                {
+                    ImGui::Text("  Bytes/Frame:     %zu KB", t.bytesUploadedThisFrame / 1024);
+                }
+
+                if (t.memoryBudgetBytes > 0)
+                {
+                    float memUsage = static_cast<float>(t.memoryUsedBytes) / static_cast<float>(t.memoryBudgetBytes);
+                    ImGui::Text("  GPU Memory:");
+                    ImGui::SameLine();
+                    char memStr[64];
+                    snprintf(memStr, sizeof(memStr), "%zu / %zu MB",
+                             t.memoryUsedBytes / (1024 * 1024), t.memoryBudgetBytes / (1024 * 1024));
+                    ImGui::ProgressBar(memUsage, ImVec2(150, 0), memStr);
+                }
+
+                ImGui::Unindent();
+            }
+            ImGui::Separator();
+
             if (ImGui::CollapsingHeader("BVH Statistics (CPU)", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();

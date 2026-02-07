@@ -43,11 +43,6 @@ namespace render::gpudriven
         cachedShadowDataLayout = shadowDataLayout;
         cachedShadowTextureLayout = shadowTextureLayout;
 
-        vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        transferCommandPool = device.getLogicalDevice().createCommandPool(poolInfo);
-
         vk::Device vkDevice = device.getLogicalDevice();
         vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
         emptyLayoutInfo.bindingCount = 0;
@@ -179,6 +174,11 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
+        if (tileDataBufferMapped_)
+        {
+            vkDevice.unmapMemory(tileDataBufferMemory);
+            tileDataBufferMapped_ = nullptr;
+        }
         core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
@@ -230,12 +230,6 @@ namespace render::gpudriven
             terrainDataLayout = nullptr;
         }
 
-        if (transferCommandPool)
-        {
-            vkDevice.destroyCommandPool(transferCommandPool);
-            transferCommandPool = nullptr;
-        }
-
         initialized = false;
     }
 
@@ -247,10 +241,14 @@ namespace render::gpudriven
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = bufferSize;
-        request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                             vk::MemoryPropertyFlagBits::eHostCoherent;
 
         core::BufferUtilities::createBuffer(request, tileDataBuffer, tileDataBufferMemory);
+
+        tileDataBufferMapped_ = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
+        std::memset(tileDataBufferMapped_, 0, bufferSize);
 
         loggerInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
                    maxTileCount, bufferSize);
@@ -473,52 +471,7 @@ namespace render::gpudriven
         currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
-        vk::Device vkDevice = device.getLogicalDevice();
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-
-        core::BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
-        stagingRequest.size = dataSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                   vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data = vkDevice.mapMemory(stagingMemory, 0, dataSize);
-        std::memcpy(data, tiles.data(), dataSize);
-        vkDevice.unmapMemory(stagingMemory);
-
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = transferCommandPool;
-        allocInfo.level = vk::CommandBufferLevel::ePrimary;
-        allocInfo.commandBufferCount = 1;
-
-        auto cmdBuffers = vkDevice.allocateCommandBuffers(allocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        vk::BufferCopy copyRegion{};
-        copyRegion.srcOffset = 0;
-        copyRegion.dstOffset = 0;
-        copyRegion.size = dataSize;
-        cmd.copyBuffer(stagingBuffer, tileDataBuffer, copyRegion);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-
-        device.getGraphicsQueue().submit(submitInfo, nullptr);
-        device.getGraphicsQueue().waitIdle();
-
-        vkDevice.freeCommandBuffers(transferCommandPool, cmd);
-
-        core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingMemory);
+        std::memcpy(tileDataBufferMapped_, tiles.data(), dataSize);
     }
 
     void TerrainMeshShaderPipeline::updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer)

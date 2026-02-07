@@ -26,7 +26,7 @@
         node_1_Normal += layerNormal * w;
         node_1_TotalW += w;
 }
-    { // Layer 2 (wall) - blend: Linear
+    { // Layer 2 (wall) - blend: HeightBased
         float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), 2u, fragTexCoord);
         vec2 layerUV = fragWorldUV * terrainLayers[2].tilingScale;
         uint albedoIdx_2 = terrainLayers[2].albedoTextureIndex;
@@ -37,25 +37,20 @@
         node_1_Normal += layerNormal * w;
         node_1_TotalW += w;
 }
-    float node_1_InvW = 1.0 / max(node_1_TotalW, 0.001);
-    node_1_Albedo *= node_1_InvW;
-    node_1_Normal = normalize(node_1_Normal);
-    { // Layer 3 (iron) - blend: Overlay
+    { // Layer 3 (iron) - blend: Linear
         float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), 3u, fragTexCoord);
         vec2 layerUV = fragWorldUV * terrainLayers[3].tilingScale;
         uint albedoIdx_3 = terrainLayers[3].albedoTextureIndex;
         vec3 layerAlbedo = (albedoIdx_3 > 0u) ? texture(bindlessTextures[nonuniformEXT(albedoIdx_3)], layerUV).rgb : vec3(0.5);
         uint normalIdx_3 = terrainLayers[3].normalTextureIndex;
         vec3 layerNormal = (normalIdx_3 > 0u) ? texture(bindlessTextures[nonuniformEXT(normalIdx_3)], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
-        vec3 ovBase = node_1_Albedo;
-        vec3 ovBlend = layerAlbedo;
-        vec3 ovResult = mix(
-            1.0 - 2.0 * (1.0 - ovBase) * (1.0 - ovBlend),
-            2.0 * ovBase * ovBlend,
-            step(ovBase, vec3(0.5)));
-        node_1_Albedo = mix(node_1_Albedo, ovResult, w);
-        node_1_Normal = normalize(mix(node_1_Normal, layerNormal, w));
+        node_1_Albedo += layerAlbedo * w;
+        node_1_Normal += layerNormal * w;
+        node_1_TotalW += w;
 }
+    float node_1_InvW = 1.0 / max(node_1_TotalW, 0.001);
+    node_1_Albedo *= node_1_InvW;
+    node_1_Normal = normalize(node_1_Normal);
     // Terrain material properties from shader graph
     vec3 mat_albedo = node_1_Albedo;
     vec3 mat_normalTS = node_1_Normal;

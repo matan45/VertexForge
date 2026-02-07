@@ -64,7 +64,7 @@ namespace render::gpudriven
         vk::DeviceMemory statsBufferMemory;
         TerrainCullingStats cachedStats{};
 
-        vk::CommandPool transferCommandPool;
+        void* tileDataBufferMapped_ = nullptr;
 
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::DescriptorSetLayout cachedBindlessLayout;

@@ -19,6 +19,7 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <unordered_map>
 #include <memory>
 
@@ -1307,6 +1308,8 @@ namespace render::gpudriven
                                           const glm::vec3& cameraPosition,
                                           const std::string& terrainMaterialPath)
     {
+        auto frameStart = std::chrono::high_resolution_clock::now();
+
         if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
         {
             return;
@@ -1322,6 +1325,8 @@ namespace render::gpudriven
             terrainTileData.clear();
             return;
         }
+
+        auto streamStart = std::chrono::high_resolution_clock::now();
 
         if (terrainStreamManager)
         {
@@ -1345,12 +1350,55 @@ namespace render::gpudriven
             }
         }
 
-        terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+        auto streamEnd = std::chrono::high_resolution_clock::now();
+        terrainStreamingUs_ = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        if (!terrainTileData.empty())
+        // Detect visibility changes and mark dirty if needed
+        size_t visibleCount = visibleTiles.size();
+        TerrainTileKey firstKey{}, lastKey{};
+        if (!visibleTiles.empty())
         {
+            if (visibleTiles.front() && visibleTiles.front()->isVisible)
+            {
+                firstKey = {visibleTiles.front()->coord.x, visibleTiles.front()->coord.z};
+            }
+            if (visibleTiles.back() && visibleTiles.back()->isVisible)
+            {
+                lastKey = {visibleTiles.back()->coord.x, visibleTiles.back()->coord.z};
+            }
+        }
+
+        if (visibleCount != lastVisibleTileCount_ ||
+            !(firstKey == lastVisibleFirst_) ||
+            !(lastKey == lastVisibleLast_))
+        {
+            terrainAdapter->markGPUTileDataDirty();
+            lastVisibleTileCount_ = visibleCount;
+            lastVisibleFirst_ = firstKey;
+            lastVisibleLast_ = lastKey;
+        }
+
+        auto buildStart = std::chrono::high_resolution_clock::now();
+        const auto& newTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+        auto buildEnd = std::chrono::high_resolution_clock::now();
+        terrainBuildTileDataUs_ = std::chrono::duration<float, std::micro>(buildEnd - buildStart).count();
+
+        auto uploadStart = std::chrono::high_resolution_clock::now();
+
+        if (!newTileData.empty())
+        {
+            terrainTileData = newTileData;
             terrainPipeline->updateTileData(terrainTileData);
         }
+        else
+        {
+            terrainTileData.clear();
+        }
+
+        auto uploadEnd = std::chrono::high_resolution_clock::now();
+        terrainUploadTileDataUs_ = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
+
+        terrainUpdateUs_ = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 
     void GPUDrivenRenderer::clearTerrainData()
@@ -1384,6 +1432,24 @@ namespace render::gpudriven
         {
             terrainPipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
         }
+    }
+
+    const TerrainStreamingStats* GPUDrivenRenderer::getTerrainStreamingStats() const
+    {
+        if (terrainStreamManager)
+        {
+            return &terrainStreamManager->getStats();
+        }
+        return nullptr;
+    }
+
+    TerrainCullingStats GPUDrivenRenderer::getTerrainCullingStats()
+    {
+        if (terrainPipeline)
+        {
+            return terrainPipeline->readStats();
+        }
+        return {};
     }
 
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
