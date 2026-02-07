@@ -378,6 +378,21 @@ namespace services
         return registry.all_of<components::TerrainComponent>(ent);
     }
 
+    std::string TerrainService::getTerrainMaterialPath() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TerrainComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::TerrainComponent>(entity);
+            if (!comp.terrainMaterialPath.empty())
+            {
+                return comp.terrainMaterialPath;
+            }
+        }
+        return {};
+    }
+
     bool TerrainService::hasTerrainTileComponent(EntityHandle entity) const
     {
         if (!entity.isValid())
@@ -683,14 +698,6 @@ namespace services
             {
                 tile->weightMapDirty = true;
                 tile->weightMapGPUDirty = true;
-
-                // Debug: log paint application with center weight sample
-                float cr, cg, cb, ca;
-                tile->weightMap.packRGBA(0, tile->weightMap.resolution / 2,
-                                         tile->weightMap.resolution / 2, cr, cg, cb, ca);
-                vfLogInfo("Paint applied tile({},{}): layer={}, center_weights=[{:.2f},{:.2f},{:.2f},{:.2f}]",
-                          tile->coord.x, tile->coord.z,
-                          brushParams.activeLayer, cr, cg, cb, ca);
             }
         }
 
@@ -801,8 +808,5 @@ namespace services
 
         terrain::TerrainGrid* grid = gridIt->second.get();
         grid->updateWeightMapLayerCount(layerCount);
-
-        vfLogInfo("TerrainService: Synced weight map layer count to {} from material '{}'",
-                  layerCount, materialPath);
     }
 }

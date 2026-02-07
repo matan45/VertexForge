@@ -81,10 +81,15 @@ namespace render::gpudriven
         vk::DescriptorPool emptyDescriptorPool;
         vk::DescriptorSet emptyDescriptorSet5;  // For Set 5
 
-        // Weight map descriptor (Set 1)
+        // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout_;
         vk::DescriptorPool weightMapPool_;
         vk::DescriptorSet weightMapDescriptorSet_;
+
+        // Terrain layer info buffer (Set 1, binding 1) - host-visible for easy updates
+        vk::Buffer terrainLayerBuffer_;
+        vk::DeviceMemory terrainLayerBufferMemory_;
+        void* terrainLayerBufferMapped_ = nullptr;
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
@@ -139,6 +144,8 @@ namespace render::gpudriven
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
 
         void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
+
+        void updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers);
 
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,

@@ -420,28 +420,14 @@ namespace editor::graph {
                 code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
                     "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
 
-                // Distinct fallback colors per layer so painting is visible without textures
-                static const char* fallbackColors[] = {
-                    "vec3(0.20, 0.55, 0.20)",  // green (grass)
-                    "vec3(0.55, 0.40, 0.20)",  // brown (dirt)
-                    "vec3(0.50, 0.50, 0.50)",  // gray (rock)
-                    "vec3(0.85, 0.80, 0.65)",  // sand
-                    "vec3(0.70, 0.15, 0.15)",  // red
-                    "vec3(0.15, 0.30, 0.70)",  // blue
-                    "vec3(0.80, 0.75, 0.20)",  // yellow
-                    "vec3(0.55, 0.20, 0.60)",  // purple
-                };
-
-                if (!albedoPath.empty()) {
-                    code += std::format("    vec2 layerUV = fragWorldUV * {:.6f};\n", tiling);
-                    code += "    // albedo: " + albedoPath + "\n";
-                    code += "    // normal: " + normalPath + "\n";
-                    code += std::string("    vec3 layerAlbedo = ") + fallbackColors[i % 8] + "; // placeholder until GPU textures bound\n";
-                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0); // placeholder\n";
-                } else {
-                    code += std::string("    vec3 layerAlbedo = ") + fallbackColors[i % 8] + ";\n";
-                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0);\n";
-                }
+                // Sample layer textures from bindless system via terrainLayers SSBO
+                code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
+                code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
+                code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
+                code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
+                code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
 
                 code += "    " + outputVarPrefix + "Albedo += layerAlbedo * w;\n";
                 code += "    " + outputVarPrefix + "Normal += layerNormal * w;\n";

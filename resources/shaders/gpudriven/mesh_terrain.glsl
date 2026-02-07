@@ -252,6 +252,11 @@ float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
     return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
 }
 
+// Terrain layer info SSBO (per-layer texture indices and tiling)
+layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
+    TerrainLayerGPUData terrainLayers[];
+};
+
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
 layout(push_constant) uniform PushConstants {

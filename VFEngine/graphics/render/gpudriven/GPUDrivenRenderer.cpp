@@ -8,6 +8,7 @@
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "material/MaterialManager.hpp"
 #include "components/Components.hpp"
@@ -993,6 +994,59 @@ namespace render::gpudriven
         return registered;
     }
 
+    void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
+    {
+        if (materialPath.empty() || materialPath == currentTerrainMaterialPath_)
+        {
+            return;
+        }
+
+        if (!bindlessTextures || !materialTextureCache)
+        {
+            return;
+        }
+
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        if (!materialData)
+        {
+            return;
+        }
+
+        terrainLayerData_.clear();
+        terrainLayerData_.resize(materialData->activeLayerCount);
+
+        for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+        {
+            const auto& layer = materialData->layers[i];
+            TerrainLayerGPUData& gpuLayer = terrainLayerData_[i];
+            gpuLayer = {};
+
+            auto tryRegisterLayerTex = [&](const std::string& texPath) -> uint32_t
+            {
+                if (texPath.empty()) return 0;
+                if (!materialTextureCache->loadTexture(texPath)) return 0;
+                vk::ImageView view = materialTextureCache->getViewForPath(texPath);
+                vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
+                if (!view || !sampler) return 0;
+                return bindlessTextures->registerTexture(texPath, view, sampler);
+            };
+
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTexturePath);
+            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTexturePath);
+
+            gpuLayer.tilingScale = layer.tilingScale;
+        }
+
+        if (terrainPipeline)
+        {
+            terrainPipeline->updateTerrainLayerInfo(terrainLayerData_);
+        }
+
+        currentTerrainMaterialPath_ = materialPath;
+        loggerInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
+                   materialData->activeLayerCount, materialPath);
+    }
+
     void GPUDrivenRenderer::updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels)
     {
         if (!initialized)
@@ -1250,11 +1304,17 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
-                                          const glm::vec3& cameraPosition)
+                                          const glm::vec3& cameraPosition,
+                                          const std::string& terrainMaterialPath)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
         {
             return;
+        }
+
+        if (!terrainMaterialPath.empty())
+        {
+            registerTerrainLayerTextures(terrainMaterialPath);
         }
 
         if (visibleTiles.empty())
@@ -1304,6 +1364,7 @@ namespace render::gpudriven
             terrainAdapter->clear();
         }
         terrainTileData.clear();
+        currentTerrainMaterialPath_.clear();
 
         // Reset terrain pipeline tile count to prevent rendering stale data
         if (terrainPipeline)

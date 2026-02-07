@@ -383,23 +383,6 @@ namespace render::gpudriven
         alloc.weightMapSize = totalBytes;
         alloc.weightMapUploaded = true;
 
-        // Debug: log first upload and any dirty re-uploads
-        static bool firstUploadLogged = false;
-        if (!firstUploadLogged || tile.weightMapGPUDirty)
-        {
-            // Sample center texel weights to verify data
-            uint32_t cx = wm.resolution / 2;
-            uint32_t cz = wm.resolution / 2;
-            float cr, cg, cb, ca;
-            wm.packRGBA(0, cx, cz, cr, cg, cb, ca);
-            vfLogInfo("WeightMap upload tile({},{}): offset={}, res={}, layers={}, totalBytes={}, "
-                      "center_weights=[{:.2f},{:.2f},{:.2f},{:.2f}], dirty={}",
-                      key.coordX, key.coordZ, alloc.weightMapOffset, wm.resolution,
-                      wm.activeLayerCount, totalBytes, cr, cg, cb, ca,
-                      tile.weightMapGPUDirty);
-            firstUploadLogged = true;
-        }
-
         return true;
     }
 
@@ -479,18 +462,6 @@ namespace render::gpudriven
             gpuTile.coordZ = key.coordZ;
             gpuTile.flags = ObjectFlags::TerrainTile;
             gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
-
-            // Debug: log GPU tile data for first tile
-            static bool firstTileLogged = false;
-            if (!firstTileLogged)
-            {
-                vfLogInfo("buildGPUTileData tile({},{}): wmOffset={}, wmUploaded={}, "
-                          "aabbMin.w(res)={}, aabbMax.w(layers)={}",
-                          key.coordX, key.coordZ, gpuTile.weightMapOffset,
-                          alloc.weightMapUploaded,
-                          gpuTile.aabbMin.w, gpuTile.aabbMax.w);
-                firstTileLogged = true;
-            }
 
             result.push_back(gpuTile);
         }

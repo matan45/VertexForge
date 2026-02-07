@@ -111,6 +111,14 @@ struct TerrainTileGPUData {
     uint weightMapOffset;       // Byte offset into weight map SSBO
 };
 
+// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (16 bytes)
+struct TerrainLayerGPUData {
+    uint albedoTextureIndex;    // Bindless index (0 = default white)
+    uint normalTextureIndex;    // Bindless index (0 = default)
+    float tilingScale;          // UV tiling multiplier
+    uint padding;
+};
+
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {
     if (lodLevel == 0) return tile.lod0MeshletData;
     if (lodLevel == 1) return tile.lod1MeshletData;

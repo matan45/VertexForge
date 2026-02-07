@@ -95,6 +95,16 @@ namespace render::gpudriven
     };
     static_assert(sizeof(TerrainTileGPUData) == 208);
 
+    // Per-layer texture indices for terrain material layers (16 bytes per layer)
+    struct TerrainLayerGPUData
+    {
+        uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
+        uint32_t normalTextureIndex;   // Bindless index (0 = default)
+        float tilingScale;             // UV tiling multiplier
+        uint32_t padding;
+    };
+    static_assert(sizeof(TerrainLayerGPUData) == 16);
+
     struct alignas(16) TerrainCullingStats
     {
         uint32_t totalTiles;

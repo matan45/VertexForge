@@ -78,22 +78,27 @@ namespace render::gpudriven
             loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor set!");
         }
 
-        // Create weight map descriptor (Set 1: 1 SSBO, fragment stage)
+        // Create weight map + layer info descriptor (Set 1: 2 SSBOs, fragment stage)
         {
-            vk::DescriptorSetLayoutBinding binding{};
-            binding.binding = 0;
-            binding.descriptorType = vk::DescriptorType::eStorageBuffer;
-            binding.descriptorCount = 1;
-            binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+            std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+            bindings[0].binding = 0;
+            bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[0].descriptorCount = 1;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            bindings[1].binding = 1;
+            bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[1].descriptorCount = 1;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
             weightMapLayout_ = vkDevice.createDescriptorSetLayout(layoutInfo);
 
             vk::DescriptorPoolSize poolSize{};
             poolSize.type = vk::DescriptorType::eStorageBuffer;
-            poolSize.descriptorCount = 1;
+            poolSize.descriptorCount = 2;
 
             vk::DescriptorPoolCreateInfo poolInfo{};
             poolInfo.maxSets = 1;
@@ -107,6 +112,37 @@ namespace render::gpudriven
             allocInfo.pSetLayouts = &weightMapLayout_;
             auto sets = vkDevice.allocateDescriptorSets(allocInfo);
             weightMapDescriptorSet_ = sets[0];
+        }
+
+        // Create host-visible terrain layer info buffer (16 layers x 16 bytes = 256 bytes)
+        {
+            constexpr vk::DeviceSize layerBufferSize = 16 * sizeof(TerrainLayerGPUData);
+
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = layerBufferSize;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent;
+
+            core::BufferUtilities::createBuffer(request, terrainLayerBuffer_, terrainLayerBufferMemory_);
+
+            terrainLayerBufferMapped_ = vkDevice.mapMemory(terrainLayerBufferMemory_, 0, layerBufferSize);
+            std::memset(terrainLayerBufferMapped_, 0, layerBufferSize);
+
+            // Write initial descriptor for binding 1
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = terrainLayerBuffer_;
+            bufferInfo.offset = 0;
+            bufferInfo.range = layerBufferSize;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = weightMapDescriptorSet_;
+            write.dstBinding = 1;
+            write.descriptorCount = 1;
+            write.descriptorType = vk::DescriptorType::eStorageBuffer;
+            write.pBufferInfo = &bufferInfo;
+
+            vkDevice.updateDescriptorSets(write, {});
         }
 
         createTileDataBuffer();
@@ -151,6 +187,13 @@ namespace render::gpudriven
             vkDevice.destroyDescriptorPool(terrainBufferPool);
             terrainBufferPool = nullptr;
         }
+
+        if (terrainLayerBufferMapped_)
+        {
+            vkDevice.unmapMemory(terrainLayerBufferMemory_);
+            terrainLayerBufferMapped_ = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer_, terrainLayerBufferMemory_);
 
         if (weightMapPool_)
         {
@@ -588,6 +631,15 @@ namespace render::gpudriven
         write.pBufferInfo = &bufferInfo;
 
         vkDevice.updateDescriptorSets(write, {});
+    }
+
+    void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
+    {
+        if (!terrainLayerBufferMapped_ || layers.empty()) return;
+
+        constexpr uint32_t maxLayers = 16;
+        uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
+        std::memcpy(terrainLayerBufferMapped_, layers.data(), count * sizeof(TerrainLayerGPUData));
     }
 
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,

@@ -236,7 +236,8 @@ namespace render::gpudriven
         void readBackLightOcclusionResults();
 
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
-                           const glm::vec3& cameraPosition);
+                           const glm::vec3& cameraPosition,
+                           const std::string& terrainMaterialPath = "");
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearTerrainData();
 
@@ -250,7 +251,11 @@ namespace render::gpudriven
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
     private:
+        std::string currentTerrainMaterialPath_;
+        std::vector<TerrainLayerGPUData> terrainLayerData_;
+
         bool registerMaterialTextures(const std::string& materialPath);
+        void registerTerrainLayerTextures(const std::string& materialPath);
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
