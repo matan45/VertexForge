@@ -11,6 +11,7 @@
 #include <fstream>
 #include <algorithm>
 #include <format>
+#include <cstring>
 
 namespace windows
 {
@@ -104,6 +105,13 @@ namespace windows
                 std::string prefix = "layer" + std::to_string(i) + "_";
                 auto& layer = materialData->layers[i];
 
+                auto nameIt = node.properties.find(prefix + "name");
+                if (nameIt != node.properties.end())
+                {
+                    if (auto* s = std::get_if<std::string>(&nameIt->second))
+                        layer.name = *s;
+                }
+
                 auto albedoIt = node.properties.find(prefix + "albedo");
                 if (albedoIt != node.properties.end())
                 {
@@ -124,9 +132,97 @@ namespace windows
                     if (auto* f = std::get_if<float>(&tilingIt->second))
                         layer.tilingScale = *f;
                 }
+
+                auto blendIt = node.properties.find(prefix + "blendMode");
+                if (blendIt != node.properties.end())
+                {
+                    if (auto* s = std::get_if<std::string>(&blendIt->second))
+                        layer.blendMode = terrain::stringToLayerBlendMode(*s);
+                }
+
+                auto enabledIt = node.properties.find(prefix + "enabled");
+                if (enabledIt != node.properties.end())
+                {
+                    if (auto* f = std::get_if<float>(&enabledIt->second))
+                        layer.enabled = (*f > 0.5f);
+                }
             }
             break;
         }
+    }
+
+    void TerrainMaterialEditorWindow::syncLayersToGraph()
+    {
+        for (auto& node : materialData->graph.nodes)
+        {
+            if (node.type != material::NodeType::TerrainLayerStack) continue;
+
+            int layerCount = materialData->activeLayerCount;
+            node.properties["layerCount"] = static_cast<float>(layerCount);
+
+            for (int i = 0; i < layerCount; ++i)
+            {
+                std::string prefix = "layer" + std::to_string(i) + "_";
+                const auto& layer = materialData->layers[i];
+
+                node.properties[prefix + "name"] = layer.name;
+                node.properties[prefix + "albedo"] = layer.albedoTexturePath;
+                node.properties[prefix + "normal"] = layer.normalTexturePath;
+                node.properties[prefix + "tiling"] = layer.tilingScale;
+                node.properties[prefix + "blendMode"] = terrain::blendModeToString(layer.blendMode);
+                node.properties[prefix + "enabled"] = layer.enabled ? 1.0f : 0.0f;
+            }
+
+            // Clean up properties beyond active count
+            for (int i = layerCount; i < terrain::MAX_TERRAIN_LAYERS; ++i)
+            {
+                std::string prefix = "layer" + std::to_string(i) + "_";
+                const std::vector<std::string> suffixes = {"name", "albedo", "normal", "tiling", "blendMode", "enabled"};
+                for (const auto& suffix : suffixes)
+                {
+                    node.properties.erase(prefix + suffix);
+                }
+            }
+            break;
+        }
+    }
+
+    void TerrainMaterialEditorWindow::removeLayer(material::ShaderNode& node, int removeIndex, int currentCount)
+    {
+        const std::vector<std::string> suffixes = {"name", "albedo", "normal", "tiling", "blendMode", "enabled"};
+
+        // Shift layers down in material data
+        for (int i = removeIndex; i < currentCount - 1; ++i)
+        {
+            materialData->layers[i] = materialData->layers[i + 1];
+        }
+        materialData->layers[currentCount - 1] = terrain::TerrainMaterialLayer{};
+
+        // Shift node properties down
+        for (int i = removeIndex; i < currentCount - 1; ++i)
+        {
+            std::string srcPrefix = "layer" + std::to_string(i + 1) + "_";
+            std::string dstPrefix = "layer" + std::to_string(i) + "_";
+
+            for (const auto& suffix : suffixes)
+            {
+                auto srcIt = node.properties.find(srcPrefix + suffix);
+                if (srcIt != node.properties.end())
+                    node.properties[dstPrefix + suffix] = srcIt->second;
+            }
+        }
+
+        // Remove trailing layer properties
+        std::string lastPrefix = "layer" + std::to_string(currentCount - 1) + "_";
+        for (const auto& suffix : suffixes)
+        {
+            node.properties.erase(lastPrefix + suffix);
+        }
+
+        // Update count
+        int newCount = currentCount - 1;
+        materialData->activeLayerCount = static_cast<uint8_t>(newCount);
+        node.properties["layerCount"] = static_cast<float>(newCount);
     }
 
     void TerrainMaterialEditorWindow::compileMaterial()
@@ -170,6 +266,7 @@ namespace windows
     {
         isDirty = true;
         materialData->needsRecompile = true;
+        autoCompileCountdown = AUTO_COMPILE_DELAY_FRAMES;
     }
 
     void TerrainMaterialEditorWindow::draw()
@@ -180,6 +277,16 @@ namespace windows
         {
             initEditor();
             needsInit = false;
+        }
+
+        // Debounced auto-compile for immediate feedback
+        if (autoCompileCountdown > 0)
+        {
+            autoCompileCountdown--;
+            if (autoCompileCountdown == 0 && materialData && materialData->needsRecompile)
+            {
+                compileMaterial();
+            }
         }
 
         ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
@@ -343,7 +450,7 @@ namespace windows
     {
         bool changed = false;
 
-        // Layer count
+        // Read layer count
         int layerCount = 1;
         auto lcIt = node.properties.find("layerCount");
         if (lcIt != node.properties.end())
@@ -352,33 +459,114 @@ namespace windows
                 layerCount = static_cast<int>(*f);
         }
 
-        if (ImGui::SliderInt("Layer Count", &layerCount, 1, terrain::MAX_TERRAIN_LAYERS))
+        // Layer count display + Add button
+        ImGui::Text("Layers: %d / %d", layerCount, terrain::MAX_TERRAIN_LAYERS);
+        ImGui::SameLine();
+        if (layerCount < terrain::MAX_TERRAIN_LAYERS)
         {
-            node.properties["layerCount"] = static_cast<float>(layerCount);
-            changed = true;
+            if (ImGui::SmallButton("+ Add Layer"))
+            {
+                auto& newLayer = materialData->layers[layerCount];
+                newLayer = terrain::TerrainMaterialLayer{};
+                newLayer.name = "Layer " + std::to_string(layerCount);
+
+                std::string prefix = "layer" + std::to_string(layerCount) + "_";
+                node.properties[prefix + "name"] = newLayer.name;
+                node.properties[prefix + "albedo"] = std::string("");
+                node.properties[prefix + "normal"] = std::string("");
+                node.properties[prefix + "tiling"] = 1.0f;
+                node.properties[prefix + "blendMode"] = std::string("Linear");
+                node.properties[prefix + "enabled"] = 1.0f;
+
+                layerCount++;
+                materialData->activeLayerCount = static_cast<uint8_t>(layerCount);
+                node.properties["layerCount"] = static_cast<float>(layerCount);
+                changed = true;
+            }
+        }
+        else
+        {
+            ImGui::BeginDisabled();
+            ImGui::SmallButton("+ Add Layer");
+            ImGui::EndDisabled();
         }
 
         ImGui::Spacing();
         ImGui::Separator();
 
-        // Per-layer texture definitions
+        // Per-layer definitions
         for (int i = 0; i < layerCount; ++i)
         {
             std::string prefix = "layer" + std::to_string(i) + "_";
 
             // Ensure properties exist
+            if (node.properties.find(prefix + "name") == node.properties.end())
+                node.properties[prefix + "name"] = std::string("Layer " + std::to_string(i));
             if (node.properties.find(prefix + "albedo") == node.properties.end())
                 node.properties[prefix + "albedo"] = std::string("");
             if (node.properties.find(prefix + "normal") == node.properties.end())
                 node.properties[prefix + "normal"] = std::string("");
             if (node.properties.find(prefix + "tiling") == node.properties.end())
                 node.properties[prefix + "tiling"] = 1.0f;
+            if (node.properties.find(prefix + "blendMode") == node.properties.end())
+                node.properties[prefix + "blendMode"] = std::string("Linear");
+            if (node.properties.find(prefix + "enabled") == node.properties.end())
+                node.properties[prefix + "enabled"] = 1.0f;
 
             ImGui::PushID(i);
 
-            std::string header = std::format("Layer {}", i);
-            if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            // Enabled checkbox
+            bool layerEnabled = true;
+            if (auto* f = std::get_if<float>(&node.properties[prefix + "enabled"]))
+                layerEnabled = (*f > 0.5f);
+            if (ImGui::Checkbox("##enabled", &layerEnabled))
             {
+                node.properties[prefix + "enabled"] = layerEnabled ? 1.0f : 0.0f;
+                changed = true;
+            }
+            ImGui::SameLine();
+
+            // Layer header with name
+            std::string layerName = "Layer " + std::to_string(i);
+            if (auto* s = std::get_if<std::string>(&node.properties[prefix + "name"]))
+                layerName = *s;
+
+            std::string headerLabel = std::format("{} ({})", layerName, i);
+            if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent(8.0f);
+
+                // Layer name
+                {
+                    char nameBuffer[64];
+                    std::strncpy(nameBuffer, layerName.c_str(), sizeof(nameBuffer) - 1);
+                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+                    if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)))
+                    {
+                        node.properties[prefix + "name"] = std::string(nameBuffer);
+                        changed = true;
+                    }
+                }
+
+                // Blend mode (not shown for layer 0 - it's the base)
+                if (i > 0)
+                {
+                    std::string blendStr = "Linear";
+                    if (auto* s = std::get_if<std::string>(&node.properties[prefix + "blendMode"]))
+                        blendStr = *s;
+
+                    const char* blendModes[] = {"Linear", "HeightBased", "Overlay"};
+                    int currentBlend = 0;
+                    if (blendStr == "HeightBased") currentBlend = 1;
+                    else if (blendStr == "Overlay") currentBlend = 2;
+
+                    if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes)))
+                    {
+                        node.properties[prefix + "blendMode"] = std::string(blendModes[currentBlend]);
+                        changed = true;
+                    }
+                }
+
                 // Albedo texture
                 {
                     std::string albedoPath;
@@ -471,6 +659,24 @@ namespace windows
                         changed = true;
                     }
                 }
+
+                // Remove layer button
+                ImGui::Spacing();
+                ImGui::BeginDisabled(layerCount <= 1);
+                bool removeClicked = ImGui::SmallButton("Remove Layer");
+                ImGui::EndDisabled();
+
+                if (removeClicked)
+                {
+                    removeLayer(node, i, layerCount);
+                    layerCount--;
+                    changed = true;
+                    ImGui::Unindent(8.0f);
+                    ImGui::PopID();
+                    break;
+                }
+
+                ImGui::Unindent(8.0f);
             }
 
             ImGui::PopID();
@@ -538,7 +744,8 @@ namespace windows
             {
                 std::string value = std::get<std::string>(propValue);
                 char buffer[256];
-                strncpy_s(buffer, sizeof(buffer), value.c_str(), sizeof(buffer) - 1);
+                std::strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
                 if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer)))
                 {
                     propValue = std::string(buffer);

@@ -6,14 +6,42 @@
 
 namespace terrain
 {
-    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.1";
+    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.2";
     constexpr int MAX_TERRAIN_LAYERS = 16;
+
+    enum class TerrainLayerBlendMode : uint8_t
+    {
+        Linear = 0,      // Standard weighted linear blend
+        HeightBased = 1,  // Height-aware sharp transitions
+        Overlay = 2       // Detail overlay
+    };
+
+    inline std::string blendModeToString(TerrainLayerBlendMode mode)
+    {
+        switch (mode)
+        {
+        case TerrainLayerBlendMode::Linear: return "Linear";
+        case TerrainLayerBlendMode::HeightBased: return "HeightBased";
+        case TerrainLayerBlendMode::Overlay: return "Overlay";
+        default: return "Linear";
+        }
+    }
+
+    inline TerrainLayerBlendMode stringToLayerBlendMode(const std::string& str)
+    {
+        if (str == "HeightBased") return TerrainLayerBlendMode::HeightBased;
+        if (str == "Overlay") return TerrainLayerBlendMode::Overlay;
+        return TerrainLayerBlendMode::Linear;
+    }
 
     struct TerrainMaterialLayer
     {
+        std::string name;
         std::string albedoTexturePath;
         std::string normalTexturePath;
         float tilingScale = 1.0f;
+        TerrainLayerBlendMode blendMode = TerrainLayerBlendMode::Linear;
+        bool enabled = true;
     };
 
     struct TerrainMaterialData

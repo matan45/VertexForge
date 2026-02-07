@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include <terrain/TerrainMaterialTypes.hpp>
+#include <material/MaterialTypes.hpp>
 #include <memory>
 #include <string>
 
@@ -25,6 +26,9 @@ namespace windows
         bool showCompileError = false;
         std::string compileErrorMessage;
 
+        int autoCompileCountdown = 0;
+        static constexpr int AUTO_COMPILE_DELAY_FRAMES = 10;
+
     public:
         explicit TerrainMaterialEditorWindow(const std::string& materialPath);
         ~TerrainMaterialEditorWindow() override;
@@ -40,6 +44,7 @@ namespace windows
         void saveMaterial();
         void compileMaterial();
         void syncLayersFromGraph();
+        void syncLayersToGraph();
 
         void drawToolbar();
         void drawGraphPanel();
@@ -49,6 +54,9 @@ namespace windows
         bool drawLayerStackProperties(material::ShaderNode& node);
         // Generic property editing for other node types
         bool drawGenericProperties(material::ShaderNode& node);
+
+        // Layer management helper
+        void removeLayer(material::ShaderNode& node, int removeIndex, int currentCount);
 
         void onGraphChanged();
     };
