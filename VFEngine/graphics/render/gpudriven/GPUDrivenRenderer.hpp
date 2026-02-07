@@ -262,11 +262,6 @@ namespace render::gpudriven
         std::string currentTerrainMaterialPath_;
         std::vector<TerrainLayerGPUData> terrainLayerData_;
 
-        // Visibility tracking for dirty detection
-        size_t lastVisibleTileCount_ = 0;
-        TerrainTileKey lastVisibleFirst_{};
-        TerrainTileKey lastVisibleLast_{};
-
         // CPU profiling timings (microseconds)
         float terrainUpdateUs_ = 0.0f;
         float terrainStreamingUs_ = 0.0f;

@@ -1353,30 +1353,10 @@ namespace render::gpudriven
         auto streamEnd = std::chrono::high_resolution_clock::now();
         terrainStreamingUs_ = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        // Detect visibility changes and mark dirty if needed
-        size_t visibleCount = visibleTiles.size();
-        TerrainTileKey firstKey{}, lastKey{};
-        if (!visibleTiles.empty())
-        {
-            if (visibleTiles.front() && visibleTiles.front()->isVisible)
-            {
-                firstKey = {visibleTiles.front()->coord.x, visibleTiles.front()->coord.z};
-            }
-            if (visibleTiles.back() && visibleTiles.back()->isVisible)
-            {
-                lastKey = {visibleTiles.back()->coord.x, visibleTiles.back()->coord.z};
-            }
-        }
-
-        if (visibleCount != lastVisibleTileCount_ ||
-            !(firstKey == lastVisibleFirst_) ||
-            !(lastKey == lastVisibleLast_))
-        {
-            terrainAdapter->markGPUTileDataDirty();
-            lastVisibleTileCount_ = visibleCount;
-            lastVisibleFirst_ = firstKey;
-            lastVisibleLast_ = lastKey;
-        }
+        // Always rebuild tile data from current visible set — the build itself
+        // is cheap (vector population from existing allocations) and the previous
+        // first/last/count heuristic missed mid-set visibility changes.
+        terrainAdapter->markGPUTileDataDirty();
 
         auto buildStart = std::chrono::high_resolution_clock::now();
         const auto& newTileData = terrainAdapter->buildGPUTileData(visibleTiles);

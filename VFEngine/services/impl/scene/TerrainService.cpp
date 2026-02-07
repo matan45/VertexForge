@@ -10,6 +10,7 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -666,6 +667,12 @@ namespace services
             }
 
             if (!tile->hasWeightMap())
+            {
+                continue;
+            }
+
+            // Validate layer index against shader/material limit
+            if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
             {
                 continue;
             }
