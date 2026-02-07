@@ -41,11 +41,15 @@ namespace render::gpudriven
         maxMeshletVertexCount_ = maxMeshletVertices;
         maxMeshletPrimitiveCount_ = maxMeshletPrimitives;
 
+        // 32M uint32 elements = 128MB for weight maps
+        maxWeightMapElements_ = 32 * 1024 * 1024;
+
         vertexAllocator_.reset(maxVertexCount_);
         indexAllocator_.reset(maxIndexCount_);
         meshletAllocator_.reset(maxMeshletCount_);
         meshletVertexAllocator_.reset(maxMeshletVertexCount_);
         meshletPrimitiveAllocator_.reset(maxMeshletPrimitiveCount_);
+        weightMapAllocator_.reset(maxWeightMapElements_);
 
         createBuffers();
 
@@ -70,6 +74,7 @@ namespace render::gpudriven
         currentMeshletCount_ = 0;
         currentMeshletVertexCount_ = 0;
         currentMeshletPrimitiveCount_ = 0;
+        currentWeightMapElements_ = 0;
 
         initialized_ = false;
         vfLogInfo("TerrainMeshBuffer cleaned up");
@@ -126,11 +131,27 @@ namespace render::gpudriven
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, meshletPrimitiveBuffer_, meshletPrimitiveBufferMemory_);
         }
+
+        {
+            core::BufferInfoRequest request(vkDevice, physicalDevice);
+            request.size = maxWeightMapElements_ * sizeof(uint32_t);
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                            vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, weightMapBuffer_, weightMapBufferMemory_);
+        }
     }
 
     void TerrainMeshBuffer::destroyBuffers()
     {
         vk::Device vkDevice = device_.getLogicalDevice();
+
+        if (weightMapBuffer_)
+        {
+            vkDevice.destroyBuffer(weightMapBuffer_);
+            vkDevice.freeMemory(weightMapBufferMemory_);
+            weightMapBuffer_ = nullptr;
+        }
 
         if (meshletPrimitiveBuffer_)
         {
@@ -450,6 +471,13 @@ namespace render::gpudriven
             freeLODSpace(lod);
         }
 
+        // Free weight map allocation
+        if (it->second.weightMapAllocated && it->second.weightMapSize > 0)
+        {
+            weightMapAllocator_.free(it->second.weightMapOffset, it->second.weightMapSize);
+            currentWeightMapElements_ -= it->second.weightMapSize;
+        }
+
         tileAllocations_.erase(it);
     }
 
@@ -534,8 +562,79 @@ namespace render::gpudriven
             {
                 freeLODSpace(lod);
             }
+            if (tile.weightMapAllocated && tile.weightMapSize > 0)
+            {
+                weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
+                currentWeightMapElements_ -= tile.weightMapSize;
+            }
         }
         tileAllocations_.clear();
+    }
+
+    uint32_t TerrainMeshBuffer::allocateWeightMap(const std::string& tileKey, uint32_t sizeBytes)
+    {
+        if (!initialized_) return FreeListAllocator::ALLOCATION_FAILED;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end()) return FreeListAllocator::ALLOCATION_FAILED;
+
+        auto& tile = it->second;
+
+        // Free existing allocation if size changed
+        if (tile.weightMapAllocated)
+        {
+            uint32_t newElements = (sizeBytes + 3) / 4;
+            if (tile.weightMapSize == newElements)
+            {
+                return tile.weightMapOffset;
+            }
+            weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
+            currentWeightMapElements_ -= tile.weightMapSize;
+            tile.weightMapAllocated = false;
+        }
+
+        uint32_t elementCount = (sizeBytes + 3) / 4; // Round up to uint32 alignment
+        uint32_t offset = weightMapAllocator_.allocate(elementCount);
+        if (offset == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            vfLogError("TerrainMeshBuffer: Failed to allocate {} bytes weight map for {}", sizeBytes, tileKey);
+            return FreeListAllocator::ALLOCATION_FAILED;
+        }
+
+        tile.weightMapOffset = offset;
+        tile.weightMapSize = elementCount;
+        tile.weightMapAllocated = true;
+        currentWeightMapElements_ += elementCount;
+
+        return offset;
+    }
+
+    bool TerrainMeshBuffer::uploadWeightMapData(const std::string& tileKey, const void* data, uint32_t sizeBytes)
+    {
+        if (!initialized_) return false;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end() || !it->second.weightMapAllocated) return false;
+
+        vk::DeviceSize byteOffset = static_cast<vk::DeviceSize>(it->second.weightMapOffset) * sizeof(uint32_t);
+        transferManager_->copyToBufferAsync(weightMapBuffer_, data, sizeBytes, byteOffset);
+        return true;
+    }
+
+    void TerrainMeshBuffer::freeWeightMap(const std::string& tileKey)
+    {
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end()) return;
+
+        auto& tile = it->second;
+        if (tile.weightMapAllocated && tile.weightMapSize > 0)
+        {
+            weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
+            currentWeightMapElements_ -= tile.weightMapSize;
+            tile.weightMapOffset = 0;
+            tile.weightMapSize = 0;
+            tile.weightMapAllocated = false;
+        }
     }
 
 }

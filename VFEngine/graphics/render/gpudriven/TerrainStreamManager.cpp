@@ -82,6 +82,15 @@ namespace render::gpudriven
                     stats.bytesUploadedThisFrame += lodMemory;
                 }
             }
+
+            // Upload weight map if tile has one (initial upload or dirty re-upload)
+            if (tile->hasWeightMap())
+            {
+                if (adapter.uploadWeightMap(*tile))
+                {
+                    tile->weightMapGPUDirty = false;
+                }
+            }
         }
 
         // Handle dirty tiles (brush sculpting) - re-upload regenerated LODs
@@ -119,6 +128,16 @@ namespace render::gpudriven
 
                 tile->clearLODGPUDirty(lod);
             }
+        }
+
+        // Handle weight map dirty (paint brush updates)
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap())
+                continue;
+
+            adapter.uploadWeightMap(*tile);
+            tile->weightMapGPUDirty = false;
         }
 
         while (!uploadQueue.empty())

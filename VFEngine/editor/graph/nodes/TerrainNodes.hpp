@@ -208,10 +208,9 @@ namespace editor::graph {
             int layerIndex = static_cast<int>(getPropertyValue<float>("layerIndex", 0.0f));
             layerIndex = std::clamp(layerIndex, 0, 15);
 
-            // Fallback: layer 0 gets weight 1.0, all others 0.0
-            // When VK-215 adds weight maps, this will sample terrainWeightMaps[layerIndex]
-            std::string weight = (layerIndex == 0) ? "1.0" : "0.0";
-            return "float " + outputVarPrefix + "Weight = " + weight + "; // layer " + std::to_string(layerIndex) + "\n";
+            return std::format("float {}Weight = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n",
+                outputVarPrefix, layerIndex);
         }
 
         std::string getOutputVarName(const std::string& outputVarPrefix,
@@ -417,24 +416,30 @@ namespace editor::graph {
 
                 code += "{ // Layer " + std::to_string(i) + " (" + layerName + ") - blend: " + blendMode + "\n";
 
-                // Weight: fallback until VK-215 provides real weight maps
-                // TODO (VK-215): float w = texture(terrainWeightMaps[i/4], fragWorldUV)[i%4];
-                std::string weight = (i == 0) ? "1.0" : "0.0";
-                code += std::format("    float w = {}; // layer {} weight\n", weight, i);
+                // Sample weight from weight map SSBO
+                code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                    "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
 
-                // Texture sampling
-                // TODO: when textures are GPU-bound, replace fallbacks with:
-                //   vec2 layerUV = fragWorldUV * {tiling};
-                //   vec3 layerAlbedo = texture(terrainLayerTextures[{i*2}], layerUV).rgb;
-                //   vec3 layerNormal = texture(terrainLayerTextures[{i*2+1}], layerUV).rgb * 2.0 - 1.0;
+                // Distinct fallback colors per layer so painting is visible without textures
+                static const char* fallbackColors[] = {
+                    "vec3(0.20, 0.55, 0.20)",  // green (grass)
+                    "vec3(0.55, 0.40, 0.20)",  // brown (dirt)
+                    "vec3(0.50, 0.50, 0.50)",  // gray (rock)
+                    "vec3(0.85, 0.80, 0.65)",  // sand
+                    "vec3(0.70, 0.15, 0.15)",  // red
+                    "vec3(0.15, 0.30, 0.70)",  // blue
+                    "vec3(0.80, 0.75, 0.20)",  // yellow
+                    "vec3(0.55, 0.20, 0.60)",  // purple
+                };
+
                 if (!albedoPath.empty()) {
                     code += std::format("    vec2 layerUV = fragWorldUV * {:.6f};\n", tiling);
                     code += "    // albedo: " + albedoPath + "\n";
                     code += "    // normal: " + normalPath + "\n";
-                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000); // placeholder until GPU textures bound\n";
+                    code += std::string("    vec3 layerAlbedo = ") + fallbackColors[i % 8] + "; // placeholder until GPU textures bound\n";
                     code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0); // placeholder\n";
                 } else {
-                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000);\n";
+                    code += std::string("    vec3 layerAlbedo = ") + fallbackColors[i % 8] + ";\n";
                     code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0);\n";
                 }
 

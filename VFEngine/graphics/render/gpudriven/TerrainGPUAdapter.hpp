@@ -68,6 +68,11 @@ namespace render::gpudriven
         // Geometric error per LOD for GPU LOD selection
         std::array<float, LOD_LEVEL_COUNT> geometricErrors{0.0f};
 
+        // Weight map allocation
+        uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
+        uint32_t weightMapSize = 0;        // Size in bytes
+        bool weightMapUploaded = false;
+
         bool isUploaded = false;
 
         bool hasAnyAllocation() const
@@ -102,6 +107,8 @@ namespace render::gpudriven
         TerrainTileAllocation* uploadTile(const terrain::TerrainTile& tile);
 
         bool uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
+
+        bool uploadWeightMap(const terrain::TerrainTile& tile);
 
         // Keeps other LODs intact
         void removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel);

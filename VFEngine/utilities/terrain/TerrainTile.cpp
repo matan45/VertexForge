@@ -175,5 +175,6 @@ namespace terrain
     {
         weightMap.initializeDefault(config.getVertexCount(), layerCount);
         weightMapDirty = true;
+        weightMapGPUDirty = true;
     }
 }

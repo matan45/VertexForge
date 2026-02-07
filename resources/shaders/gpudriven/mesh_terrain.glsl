@@ -207,9 +207,50 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Terrain material layer textures: 16 layers * 2 (albedo + normal) = 32 slots
-// TODO (VK-215): Enable when terrain texture painting pipeline is ready
-// layout(set = 1, binding = 0) uniform sampler2D terrainLayerTextures[32];
+// Set 11 - terrain tile data (needed for weight map offsets and layer counts)
+layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
+    TerrainTileGPUData tiles[];
+};
+
+// Weight map SSBO (packed RGBA uint8 data for all tiles)
+layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
+    uint weightMapData[];
+};
+
+// Read a single byte from the weight map SSBO
+float readWeightByte(uint byteOffset) {
+    uint wordIndex = byteOffset / 4u;
+    uint byteIndex = byteOffset % 4u;
+    uint word = weightMapData[wordIndex];
+    return float((word >> (byteIndex * 8u)) & 0xFFu) / 255.0;
+}
+
+// Sample a single texel from weight map for a specific layer
+float sampleWeightTexel(uint tileOffset, uint res, uint layer, uint x, uint z) {
+    uint texIdx = layer / 4u;
+    uint channel = layer % 4u;
+    uint texSize = res * res * 4u; // 4 bytes per texel (RGBA)
+    return readWeightByte(tileOffset + texIdx * texSize + (z * res + x) * 4u + channel);
+}
+
+// Bilinear interpolation of weight map for a specific layer
+float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
+    if (res == 0u) return (layer == 0u) ? 1.0 : 0.0;
+    uv = clamp(uv, 0.0, 1.0);
+    float fx = uv.x * float(res - 1u);
+    float fz = uv.y * float(res - 1u);
+    uint x0 = uint(floor(fx));
+    uint z0 = uint(floor(fz));
+    uint x1 = min(x0 + 1u, res - 1u);
+    uint z1 = min(z0 + 1u, res - 1u);
+    float sx = fract(fx);
+    float sz = fract(fz);
+    float w00 = sampleWeightTexel(tileOffset, res, layer, x0, z0);
+    float w10 = sampleWeightTexel(tileOffset, res, layer, x1, z0);
+    float w01 = sampleWeightTexel(tileOffset, res, layer, x0, z1);
+    float w11 = sampleWeightTexel(tileOffset, res, layer, x1, z1);
+    return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
+}
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
@@ -661,6 +702,28 @@ void main() {
     if (viewModeValue == 8u) {
         // Terrain UV visualization
         color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.0);
+    }
+
+    if (viewModeValue == 9u) {
+        // Weight map debug visualization - distinct color per layer, blended by weight
+        vec3 layerColors[8] = vec3[8](
+            vec3(0.20, 0.55, 0.20),  // Layer 0: green (grass)
+            vec3(0.55, 0.40, 0.20),  // Layer 1: brown (dirt)
+            vec3(0.50, 0.50, 0.50),  // Layer 2: gray (rock)
+            vec3(0.85, 0.80, 0.65),  // Layer 3: sand
+            vec3(0.70, 0.15, 0.15),  // Layer 4: red
+            vec3(0.15, 0.30, 0.70),  // Layer 5: blue
+            vec3(0.80, 0.75, 0.20),  // Layer 6: yellow
+            vec3(0.55, 0.20, 0.60)   // Layer 7: purple
+        );
+        uint wmOff = tiles[fragTileIndex].weightMapOffset;
+        uint wmRes = uint(tiles[fragTileIndex].aabbMin.w);
+        uint layerCount = uint(tiles[fragTileIndex].aabbMax.w);
+        vec3 c = vec3(0.0);
+        for (uint i = 0u; i < min(layerCount, 8u); ++i) {
+            c += layerColors[i] * sampleTileWeight(wmOff, wmRes, i, fragTexCoord);
+        }
+        color = c;
     }
 
     // Brush overlay visualization

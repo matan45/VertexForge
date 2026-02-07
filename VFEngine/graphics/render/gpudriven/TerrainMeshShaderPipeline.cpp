@@ -60,24 +60,53 @@ namespace render::gpudriven
         dummyPoolSize.descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo emptyPoolInfo{};
-        emptyPoolInfo.maxSets = 2;
+        emptyPoolInfo.maxSets = 1;
         emptyPoolInfo.poolSizeCount = 1;
         emptyPoolInfo.pPoolSizes = &dummyPoolSize;
         emptyPoolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         emptyDescriptorPool = vkDevice.createDescriptorPool(emptyPoolInfo);
 
-        std::array<vk::DescriptorSetLayout, 2> emptyLayouts = {emptyLayout, emptyLayout};
         vk::DescriptorSetAllocateInfo emptyAllocInfo{};
         emptyAllocInfo.descriptorPool = emptyDescriptorPool;
-        emptyAllocInfo.descriptorSetCount = 2;
-        emptyAllocInfo.pSetLayouts = emptyLayouts.data();
+        emptyAllocInfo.descriptorSetCount = 1;
+        emptyAllocInfo.pSetLayouts = &emptyLayout;
         auto emptySets = vkDevice.allocateDescriptorSets(emptyAllocInfo);
-        emptyDescriptorSet1 = emptySets[0];
-        emptyDescriptorSet5 = emptySets[1];
+        emptyDescriptorSet5 = emptySets[0];
 
-        if (!emptyDescriptorSet1 || !emptyDescriptorSet5)
+        if (!emptyDescriptorSet5)
         {
-            loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor sets!");
+            loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor set!");
+        }
+
+        // Create weight map descriptor (Set 1: 1 SSBO, fragment stage)
+        {
+            vk::DescriptorSetLayoutBinding binding{};
+            binding.binding = 0;
+            binding.descriptorType = vk::DescriptorType::eStorageBuffer;
+            binding.descriptorCount = 1;
+            binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &binding;
+            weightMapLayout_ = vkDevice.createDescriptorSetLayout(layoutInfo);
+
+            vk::DescriptorPoolSize poolSize{};
+            poolSize.type = vk::DescriptorType::eStorageBuffer;
+            poolSize.descriptorCount = 1;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            weightMapPool_ = vkDevice.createDescriptorPool(poolInfo);
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = weightMapPool_;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &weightMapLayout_;
+            auto sets = vkDevice.allocateDescriptorSets(allocInfo);
+            weightMapDescriptorSet_ = sets[0];
         }
 
         createTileDataBuffer();
@@ -121,6 +150,18 @@ namespace render::gpudriven
         {
             vkDevice.destroyDescriptorPool(terrainBufferPool);
             terrainBufferPool = nullptr;
+        }
+
+        if (weightMapPool_)
+        {
+            vkDevice.destroyDescriptorPool(weightMapPool_);
+            weightMapPool_ = nullptr;
+        }
+
+        if (weightMapLayout_)
+        {
+            vkDevice.destroyDescriptorSetLayout(weightMapLayout_);
+            weightMapLayout_ = nullptr;
         }
 
         if (emptyDescriptorPool)
@@ -201,7 +242,7 @@ namespace render::gpudriven
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
 
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -307,7 +348,7 @@ namespace render::gpudriven
 
         // Layout order (matching mesh_shader_gpudriven.glsl for sets 0-10):
         // Set 0: IBL/Camera
-        // Set 1: (unused - reserved for per-draw)
+        // Set 1: Weight map SSBO
         // Set 2: Bindless textures
         // Set 3: Meshlet data
         // Set 4: Vertex data
@@ -321,7 +362,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
-            emptyLayout,            // Set 1: (unused) - member variable
+            weightMapLayout_,       // Set 1: Weight map SSBO
             bindlessTextureLayout,  // Set 2: Bindless textures
             meshletDataLayout,      // Set 3: Meshlet data
             vertexDataLayout,       // Set 4: Vertex data
@@ -528,6 +569,27 @@ namespace render::gpudriven
         }
     }
 
+    void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer)
+    {
+        if (!initialized || !weightMapDescriptorSet_ || !weightMapBuffer) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = weightMapBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = weightMapDescriptorSet_;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eStorageBuffer;
+        write.pBufferInfo = &bufferInfo;
+
+        vkDevice.updateDescriptorSets(write, {});
+    }
+
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                                             vk::DescriptorSet bindlessDescSet,
                                                             vk::DescriptorSet lightDataDescSet,
@@ -562,7 +624,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSet, 12> currentSets = {
             iblDescriptorSet,              // Set 0: IBL/Camera
-            emptyDescriptorSet1,           // Set 1: Empty
+            weightMapDescriptorSet_,       // Set 1: Weight map SSBO
             bindlessDescriptorSet,         // Set 2: Bindless textures
             terrainMeshletDescriptorSet,   // Set 3: Meshlet data
             terrainVertexDescriptorSet,    // Set 4: Vertex data
@@ -586,7 +648,7 @@ namespace render::gpudriven
         if (!bindlessDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: bindlessDescriptorSet (set 2) is NULL!"); }
         if (!terrainMeshletDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: terrainMeshletDescriptorSet (set 3) is NULL!"); }
         if (!terrainVertexDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: terrainVertexDescriptorSet (set 4) is NULL!"); }
-        if (!emptyDescriptorSet1) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: emptyDescriptorSet1 (set 1) is NULL!"); }
+        if (!weightMapDescriptorSet_) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: weightMapDescriptorSet_ (set 1) is NULL!"); }
         if (!emptyDescriptorSet5) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: emptyDescriptorSet5 (set 5) is NULL!"); }
         if (!clusterGridDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: clusterGridDescriptorSet (set 7) is NULL!"); }
         if (!cullingOutputDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: cullingOutputDescriptorSet (set 8) is NULL!"); }

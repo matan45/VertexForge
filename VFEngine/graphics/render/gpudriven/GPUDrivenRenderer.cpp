@@ -559,6 +559,7 @@ namespace render::gpudriven
             terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
         {
             terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
+            terrainPipeline->updateWeightMapDescriptor(terrainMeshBuffer->getWeightMapBuffer());
         }
     }
 
