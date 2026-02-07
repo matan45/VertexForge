@@ -94,4 +94,12 @@ namespace events::paintBrush
 
         std::string_view getName() const override { return "PaintBrushTypeChanged"; }
     };
+
+    struct PaintBrushAppliedNotification : INotification
+    {
+        glm::vec3 position{0.0f};
+        ::terrain::PaintBrushType type;
+
+        std::string_view getName() const override { return "PaintBrushApplied"; }
+    };
 }
