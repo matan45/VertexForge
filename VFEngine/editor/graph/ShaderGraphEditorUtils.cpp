@@ -140,6 +140,19 @@ namespace editor::graph {
                 return IM_COL32(180, 100, 180, 255);
             case material::NodeType::MixColor:
                 return IM_COL32(100, 180, 100, 255);
+            // Terrain nodes - Earthy brown-gold
+            case material::NodeType::TerrainPBROutput:
+                return IM_COL32(150, 80, 80, 255);  // Same red as PBROutput
+            case material::NodeType::TerrainWorldPosition:
+            case material::NodeType::TerrainWorldNormal:
+            case material::NodeType::TerrainWorldUV:
+            case material::NodeType::TerrainHeightSample:
+            case material::NodeType::TerrainSlopeSample:
+            case material::NodeType::TerrainWeightSample:
+            case material::NodeType::TerrainLayerBlend:
+            case material::NodeType::TerrainTextureSample:
+            case material::NodeType::TerrainLayerStack:
+                return IM_COL32(140, 110, 60, 255);
             // Type Conversions (VK-56) - Cyan/Teal
             case material::NodeType::FloatToVec2:
             case material::NodeType::FloatToVec3:
@@ -198,6 +211,17 @@ namespace editor::graph {
             case material::NodeType::TextureSample:  return "Texture Sample";
             case material::NodeType::OrmSample:      return "ORM Sample";
             case material::NodeType::MixColor:       return "Mix Color";
+            // Terrain nodes
+            case material::NodeType::TerrainPBROutput:      return "Terrain PBR Output";
+            case material::NodeType::TerrainWorldPosition:  return "World Position";
+            case material::NodeType::TerrainWorldNormal:    return "World Normal";
+            case material::NodeType::TerrainWorldUV:        return "World UV";
+            case material::NodeType::TerrainHeightSample:   return "Height Sample";
+            case material::NodeType::TerrainSlopeSample:    return "Slope Sample";
+            case material::NodeType::TerrainWeightSample:   return "Weight Sample";
+            case material::NodeType::TerrainLayerBlend:     return "Layer Blend";
+            case material::NodeType::TerrainTextureSample:  return "Terrain Texture";
+            case material::NodeType::TerrainLayerStack:     return "Layer Stack";
             // Type Conversions (VK-56)
             case material::NodeType::FloatToVec2:    return "Float To Vec2";
             case material::NodeType::FloatToVec3:    return "Float To Vec3";

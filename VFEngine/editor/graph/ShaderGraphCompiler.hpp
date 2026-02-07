@@ -12,6 +12,12 @@ namespace editor::graph {
         std::string fragmentShader;
         std::string errorMessage;
     };
+
+    struct TerrainCompilationResult {
+        bool success = false;
+        std::string materialSnippet; // GLSL body (no header/footer templates)
+        std::string errorMessage;
+    };
     
     static const std::map<std::string, int> pbrPinToIndex = {
         {"Albedo", 0},      // TextureSlot::Albedo
@@ -47,9 +53,11 @@ namespace editor::graph {
     public:
         
         static CompilationResult compile(const material::MaterialData& material);
-        
+
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
-        
+
+        static TerrainCompilationResult compileTerrainGraph(const material::ShaderGraph& graph);
+
         static void reloadTemplates();
 
     private:
@@ -62,7 +70,9 @@ namespace editor::graph {
         static std::string readTextFile(std::string_view path);
 
         // Topological sort of nodes for proper evaluation order
-        static std::vector<uint32_t> topologicalSort(const material::ShaderGraph& graph);
+        // If outputNode is null, uses graph.findOutputNode() (for regular materials)
+        static std::vector<uint32_t> topologicalSort(const material::ShaderGraph& graph,
+                                                      const material::ShaderNode* outputNode = nullptr);
         
         static std::string generateNodeCode(const material::ShaderGraph& graph,
                                            uint32_t nodeId,

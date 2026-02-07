@@ -282,6 +282,7 @@ namespace material
                 else
                 {
                     const auto& graphJson = j["graph"];
+                    std::unordered_map<uint32_t, uint32_t> nodeIdRemap; // oldId -> newId for duplicates
 
                     // Parse nodes
                     if (graphJson.contains("nodes"))
@@ -307,14 +308,16 @@ namespace material
                                 try
                                 {
                                     ShaderNode node;
-                                    node.id = nodeJson.value("id", 0u);
+                                    uint32_t originalId = nodeJson.value("id", 0u);
+                                    node.id = originalId;
 
                                     // Check for duplicate node IDs
                                     if (nodeIds.count(node.id))
                                     {
-                                        logWarningLimited(std::format(
-                                            "Duplicate node ID {} at index {}, assigning new ID", node.id, i));
                                         node.id = material.graph.nextNodeId++;
+                                        nodeIdRemap[originalId] = node.id;
+                                        logWarningLimited(std::format(
+                                            "Duplicate node ID {} at index {}, remapped to {}", originalId, i, node.id));
                                     }
                                     nodeIds.insert(node.id);
 
@@ -423,6 +426,13 @@ namespace material
                             pin == "EmissionStrength" || pin == "Opacity";
                     };
 
+                    // Remap node IDs in links if any duplicates were resolved
+                    auto remapNodeId = [&](uint32_t id) -> uint32_t
+                    {
+                        auto it = nodeIdRemap.find(id);
+                        return (it != nodeIdRemap.end()) ? it->second : id;
+                    };
+
                     // Parse links with validation
                     if (graphJson.contains("links"))
                     {
@@ -446,8 +456,8 @@ namespace material
                                 {
                                     NodeLink link;
                                     link.id = linkJson.value("id", 0u);
-                                    link.sourceNodeId = linkJson.value("sourceNode", 0u);
-                                    link.targetNodeId = linkJson.value("targetNode", 0u);
+                                    link.sourceNodeId = remapNodeId(linkJson.value("sourceNode", 0u));
+                                    link.targetNodeId = remapNodeId(linkJson.value("targetNode", 0u));
                                     link.sourcePin = linkJson.value("sourcePin", "");
                                     link.targetPin = linkJson.value("targetPin", "");
 

@@ -21,6 +21,53 @@ namespace editor::graph {
         return compileGraph(material.graph);
     }
 
+    TerrainCompilationResult ShaderGraphCompiler::compileTerrainGraph(const material::ShaderGraph& graph) {
+        TerrainCompilationResult result;
+
+        // Validate node count
+        if (graph.nodes.size() > MAX_NODES) {
+            result.success = false;
+            result.errorMessage = "Shader graph exceeds maximum node limit (" + std::to_string(MAX_NODES) + ")";
+            return result;
+        }
+
+        // Find terrain output node
+        const material::ShaderNode* outputNode = graph.findTerrainOutputNode();
+        if (!outputNode) {
+            result.success = false;
+            result.errorMessage = "No Terrain PBR Output node found in shader graph";
+            return result;
+        }
+
+        // Check for cycles/depth issues
+        std::vector<uint32_t> sortedNodes = topologicalSort(graph, outputNode);
+        if (sortedNodes.empty() && !graph.nodes.empty()) {
+            result.success = false;
+            result.errorMessage = "Shader graph contains a cycle or exceeds maximum depth limit";
+            return result;
+        }
+
+        std::string typeErrorMessage;
+        if (!validateLinkTypes(graph, typeErrorMessage)) {
+            result.success = false;
+            result.errorMessage = typeErrorMessage;
+            return result;
+        }
+
+        // Generate GLSL snippet (no header/footer templates)
+        std::map<uint32_t, std::map<std::string, std::string>> nodeOutputVars;
+        std::string code;
+        code += "// Generated terrain material code\n";
+
+        for (uint32_t nodeId : sortedNodes) {
+            code += generateNodeCode(graph, nodeId, nodeOutputVars);
+        }
+
+        result.materialSnippet = code;
+        result.success = true;
+        return result;
+    }
+
     CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph) {
         CompilationResult result;
 
@@ -201,7 +248,8 @@ namespace editor::graph {
         return code;
     }
 
-    std::vector<uint32_t> ShaderGraphCompiler::topologicalSort(const material::ShaderGraph& graph) {
+    std::vector<uint32_t> ShaderGraphCompiler::topologicalSort(const material::ShaderGraph& graph,
+                                                                const material::ShaderNode* outputNode) {
         std::vector<uint32_t> result;
         std::set<uint32_t> visited;
         std::set<uint32_t> inStack;
@@ -262,9 +310,9 @@ namespace editor::graph {
         };
 
         // Visit all nodes, starting from output node
-        const material::ShaderNode* outputNode = graph.findOutputNode();
-        if (outputNode) {
-            visit(outputNode->id, 0);
+        const material::ShaderNode* startNode = outputNode ? outputNode : graph.findOutputNode();
+        if (startNode) {
+            visit(startNode->id, 0);
         }
 
         // If cycle detected, log detailed error

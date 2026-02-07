@@ -107,7 +107,7 @@ namespace editor::graph {
             while (ed::QueryDeletedNode(&nodeId)) {
                 uint32_t id = fromEditorNodeId(nodeId);
                 auto node = currentGraph->findNode(id);
-                if (node && node->type == material::NodeType::PBROutput) {
+                if (node && (node->type == material::NodeType::PBROutput || node->type == material::NodeType::TerrainPBROutput)) {
                     ed::RejectDeletedItem();
                 } else if (ed::AcceptDeletedItem()) {
                     // Remove all links connected to this node
@@ -280,6 +280,47 @@ namespace editor::graph {
                 }
                 if (ImGui::MenuItem("ORM Sample")) {
                     createNode(material::NodeType::OrmSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Terrain
+            if (ImGui::BeginMenu("Terrain")) {
+                if (ImGui::MenuItem("World Position")) {
+                    createNode(material::NodeType::TerrainWorldPosition, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("World Normal")) {
+                    createNode(material::NodeType::TerrainWorldNormal, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("World UV")) {
+                    createNode(material::NodeType::TerrainWorldUV, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Height Sample")) {
+                    createNode(material::NodeType::TerrainHeightSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Slope Sample")) {
+                    createNode(material::NodeType::TerrainSlopeSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Weight Sample")) {
+                    createNode(material::NodeType::TerrainWeightSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Layer Blend")) {
+                    createNode(material::NodeType::TerrainLayerBlend, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Terrain Texture")) {
+                    createNode(material::NodeType::TerrainTextureSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Layer Stack")) {
+                    createNode(material::NodeType::TerrainLayerStack, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndMenu();

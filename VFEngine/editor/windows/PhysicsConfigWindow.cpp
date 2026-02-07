@@ -195,7 +195,7 @@ namespace windows
                 else
                 {
                     char nameBuffer[64];
-                    strncpy_s(nameBuffer, layer.name.c_str(), sizeof(nameBuffer) - 1);
+                    strncpy_s(nameBuffer, sizeof(nameBuffer), layer.name.c_str(), sizeof(nameBuffer) - 1);
                     ImGui::PushItemWidth(150);
                     if (ImGui::InputText("##LayerName", nameBuffer, sizeof(nameBuffer)))
                     {

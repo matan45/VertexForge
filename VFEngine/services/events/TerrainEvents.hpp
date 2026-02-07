@@ -58,4 +58,18 @@ namespace events::terrain
 
         std::string_view getName() const override { return "TerrainDeleted"; }
     };
+
+    struct CompileTerrainMaterialCommand : ICommand<bool> {
+        std::string materialPath;
+
+        std::string_view getName() const override { return "CompileTerrainMaterial"; }
+    };
+
+    struct TerrainMaterialCompiledNotification : INotification {
+        std::string materialPath;
+        bool success = false;
+        std::string generatedSnippet;
+
+        std::string_view getName() const override { return "TerrainMaterialCompiled"; }
+    };
 }
