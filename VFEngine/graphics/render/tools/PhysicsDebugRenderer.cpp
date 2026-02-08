@@ -137,6 +137,7 @@ namespace render::mesh
         }
 
         cleanupMeshCache();
+        cleanupHeightFieldCache();
 
         initialized = false;
     }
@@ -159,6 +160,111 @@ namespace render::mesh
             }
         }
         meshCache.clear();
+    }
+
+    void PhysicsDebugRenderer::cleanupHeightFieldCache()
+    {
+        auto& dev = device.getLogicalDevice();
+
+        for (auto& [key, entry] : heightfieldCache)
+        {
+            if (entry.buffers.vertexBuffer)
+            {
+                dev.destroyBuffer(entry.buffers.vertexBuffer);
+                dev.freeMemory(entry.buffers.vertexMemory);
+            }
+            if (entry.buffers.indexBuffer)
+            {
+                dev.destroyBuffer(entry.buffers.indexBuffer);
+                dev.freeMemory(entry.buffers.indexMemory);
+            }
+        }
+        heightfieldCache.clear();
+    }
+
+    const MeshDebugData* PhysicsDebugRenderer::getOrCreateHeightFieldBuffers(
+        const PhysicsColliderRenderData& data) const
+    {
+        if (!data.heightfieldVertices || data.heightfieldVertices->empty() ||
+            !data.heightfieldLineIndices || data.heightfieldLineIndices->empty())
+        {
+            return nullptr;
+        }
+
+        auto it = heightfieldCache.find(data.heightfieldCacheKey);
+        if (it != heightfieldCache.end() && it->second.version == data.heightfieldVersion)
+        {
+            return it->second.buffers.isValid ? &it->second.buffers : nullptr;
+        }
+
+        // Invalidate old entry
+        if (it != heightfieldCache.end())
+        {
+            auto& dev = device.getLogicalDevice();
+            if (it->second.buffers.vertexBuffer)
+            {
+                dev.destroyBuffer(it->second.buffers.vertexBuffer);
+                dev.freeMemory(it->second.buffers.vertexMemory);
+            }
+            if (it->second.buffers.indexBuffer)
+            {
+                dev.destroyBuffer(it->second.buffers.indexBuffer);
+                dev.freeMemory(it->second.buffers.indexMemory);
+            }
+        }
+
+        HeightFieldCacheEntry entry;
+        entry.version = data.heightfieldVersion;
+
+        const auto& vertices = *data.heightfieldVertices;
+        const auto& indices = *data.heightfieldLineIndices;
+
+        try
+        {
+            vk::DeviceSize vertexBufferSize = static_cast<vk::DeviceSize>(vertices.size() * sizeof(glm::vec3));
+            core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            vertexRequest.size = vertexBufferSize;
+            vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(vertexRequest, entry.buffers.vertexBuffer, entry.buffers.vertexMemory);
+
+            core::BufferUtilities::copyToBuffer(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                device.getGraphicsQueue(),
+                device.getStagingCommandPool(),
+                entry.buffers.vertexBuffer,
+                vertices.data(),
+                vertexBufferSize
+            );
+
+            vk::DeviceSize indexBufferSize = static_cast<vk::DeviceSize>(indices.size() * sizeof(uint32_t));
+            core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            indexRequest.size = indexBufferSize;
+            indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(indexRequest, entry.buffers.indexBuffer, entry.buffers.indexMemory);
+
+            core::BufferUtilities::copyToBuffer(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                device.getGraphicsQueue(),
+                device.getStagingCommandPool(),
+                entry.buffers.indexBuffer,
+                indices.data(),
+                indexBufferSize
+            );
+
+            entry.buffers.indexCount = static_cast<uint32_t>(indices.size());
+            entry.buffers.isValid = true;
+        }
+        catch (...)
+        {
+            entry.buffers.isValid = false;
+        }
+
+        heightfieldCache[data.heightfieldCacheKey] = entry;
+        return entry.buffers.isValid ? &heightfieldCache[data.heightfieldCacheKey].buffers : nullptr;
     }
 
     const MeshDebugData* PhysicsDebugRenderer::getOrCreateMeshBuffers(const std::string& meshPath) const
@@ -777,6 +883,30 @@ namespace render::mesh
                                                     0, sizeof(PhysicsDebugPushConstants), &pushConstants);
 
                         commandBuffer.drawIndexed(boxIndexCount, 1, 0, 0, 0);
+                    }
+                    break;
+                }
+
+            case types::ColliderShape::HeightField:
+                {
+                    const MeshDebugData* hfData = getOrCreateHeightFieldBuffers(collider);
+                    if (hfData && hfData->isValid)
+                    {
+                        // World-space vertices, identity world matrix
+                        pushConstants.mvp = viewProj;
+                        pushConstants.color = glm::vec4(0.0f, 1.0f, 0.3f, 1.0f);
+
+                        commandBuffer.bindIndexBuffer(hfData->indexBuffer, 0, vk::IndexType::eUint32);
+                        vk::Buffer vertexBuffers[] = {hfData->vertexBuffer};
+                        vk::DeviceSize offsets[] = {0};
+                        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+                        commandBuffer.pushConstants(wireframePipelineLayout,
+                                                    vk::ShaderStageFlagBits::eVertex |
+                                                    vk::ShaderStageFlagBits::eFragment,
+                                                    0, sizeof(PhysicsDebugPushConstants), &pushConstants);
+
+                        commandBuffer.drawIndexed(hfData->indexCount, 1, 0, 0, 0);
                     }
                     break;
                 }

@@ -27,6 +27,12 @@ namespace render::mesh
         uint8_t bodyType = 1; // 0=Static, 1=Dynamic, 2=Kinematic
         bool isTrigger = false;
         std::string meshPath; // Path to mesh for ConvexMesh/TriangleMesh shapes
+
+        // HeightField wireframe (world-space vertices, line-list indices)
+        const std::vector<glm::vec3>* heightfieldVertices = nullptr;
+        const std::vector<uint32_t>* heightfieldLineIndices = nullptr;
+        std::string heightfieldCacheKey;
+        uint32_t heightfieldVersion = 0;
     };
 
     // Cached mesh data for debug rendering
@@ -81,6 +87,14 @@ namespace render::mesh
         // Mesh collider cache (path -> buffers)
         mutable std::unordered_map<std::string, MeshDebugData> meshCache;
 
+        // HeightField tile cache (cacheKey -> buffers + version)
+        struct HeightFieldCacheEntry
+        {
+            MeshDebugData buffers;
+            uint32_t version = 0;
+        };
+        mutable std::unordered_map<std::string, HeightFieldCacheEntry> heightfieldCache;
+
         bool initialized = false;
 
         static constexpr int SPHERE_SEGMENTS = 24;
@@ -111,6 +125,10 @@ namespace render::mesh
         // Get or create mesh debug buffers from cache
         const MeshDebugData* getOrCreateMeshBuffers(const std::string& meshPath) const;
         void cleanupMeshCache();
+
+        // Get or create HeightField wireframe buffers from cache
+        const MeshDebugData* getOrCreateHeightFieldBuffers(const PhysicsColliderRenderData& data) const;
+        void cleanupHeightFieldCache();
 
         glm::vec4 getColorForCollider(const PhysicsColliderRenderData& data) const;
     };

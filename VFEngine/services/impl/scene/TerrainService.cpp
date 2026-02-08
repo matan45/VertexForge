@@ -24,6 +24,61 @@
 #include "../../events/PhysicsEvents.hpp"
 #include "print/EditorLogger.hpp"
 
+namespace
+{
+    void generateTileColliderWireframe(
+        const terrain::TerrainTile& tile,
+        components::TerrainColliderDebugData& out)
+    {
+        if (!tile.hasHeightData())
+            return;
+
+        uint32_t vertexCount = tile.config.getVertexCount();
+        float spacing = tile.config.getVertexSpacing();
+        float originX = tile.worldOrigin.x;
+        float originZ = tile.worldOrigin.z;
+
+        // World-space vertices using Jolt's formula: offset + scale * (x, height, z)
+        out.vertices.resize(vertexCount * vertexCount);
+        for (uint32_t z = 0; z < vertexCount; ++z)
+        {
+            for (uint32_t x = 0; x < vertexCount; ++x)
+            {
+                float height = tile.heightData[z * vertexCount + x];
+                out.vertices[z * vertexCount + x] = glm::vec3(
+                    originX + x * spacing,
+                    height,
+                    originZ + z * spacing
+                );
+            }
+        }
+
+        // Line indices: horizontal + vertical grid lines
+        uint32_t lineCount = vertexCount * (vertexCount - 1) * 2;
+        out.lineIndices.clear();
+        out.lineIndices.reserve(lineCount * 2);
+
+        for (uint32_t z = 0; z < vertexCount; ++z)
+        {
+            for (uint32_t x = 0; x < vertexCount - 1; ++x)
+            {
+                out.lineIndices.push_back(z * vertexCount + x);
+                out.lineIndices.push_back(z * vertexCount + x + 1);
+            }
+        }
+        for (uint32_t x = 0; x < vertexCount; ++x)
+        {
+            for (uint32_t z = 0; z < vertexCount - 1; ++z)
+            {
+                out.lineIndices.push_back(z * vertexCount + x);
+                out.lineIndices.push_back((z + 1) * vertexCount + x);
+            }
+        }
+
+        out.version++;
+    }
+}
+
 namespace services
 {
     TerrainService::TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
@@ -714,6 +769,29 @@ namespace services
                 registry.emplace<components::TerrainColliderComponent>(ent);
             }
             registry.get<components::TerrainColliderComponent>(ent).hasCollider = true;
+
+            // Generate debug wireframe on tile child entities
+            if (registry.all_of<components::ChildrenComponent>(ent))
+            {
+                const auto& children = registry.get<components::ChildrenComponent>(ent).children;
+                for (auto childEnt : children)
+                {
+                    if (!registry.valid(childEnt) ||
+                        !registry.all_of<components::TerrainTileComponent>(childEnt))
+                        continue;
+
+                    const auto& tileComp = registry.get<components::TerrainTileComponent>(childEnt);
+                    terrain::TileCoord coord{tileComp.tileX, tileComp.tileZ};
+                    auto* tile = grid->getTile(coord);
+                    if (!tile || !tile->hasHeightData())
+                        continue;
+
+                    auto& debugComp = registry.emplace_or_replace<components::TerrainTileColliderDebugComponent>(childEnt);
+                    debugComp.tileX = tileComp.tileX;
+                    debugComp.tileZ = tileComp.tileZ;
+                    generateTileColliderWireframe(*tile, debugComp.debugData);
+                }
+            }
         }
 
         vfLogInfo("TerrainService: Added terrain collider with {} tiles", tileInfos.size());
@@ -729,9 +807,24 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(terrainEntity);
-        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+        if (registry.valid(ent))
         {
-            registry.remove<components::TerrainColliderComponent>(ent);
+            if (registry.all_of<components::TerrainColliderComponent>(ent))
+                registry.remove<components::TerrainColliderComponent>(ent);
+
+            // Remove debug wireframe from tile child entities
+            if (registry.all_of<components::ChildrenComponent>(ent))
+            {
+                const auto& children = registry.get<components::ChildrenComponent>(ent).children;
+                for (auto childEnt : children)
+                {
+                    if (registry.valid(childEnt) &&
+                        registry.all_of<components::TerrainTileColliderDebugComponent>(childEnt))
+                    {
+                        registry.remove<components::TerrainTileColliderDebugComponent>(childEnt);
+                    }
+                }
+            }
         }
 
         vfLogInfo("TerrainService: Removed terrain collider");
@@ -867,6 +960,8 @@ namespace services
             // Rebuild colliders for modified tiles
             if (physicsProvider && physicsProvider->hasTerrainCollider(*targetEntity))
             {
+                entt::entity terrainEnt = internal::fromHandle(*targetEntity);
+
                 for (const auto& coord : modifiedTiles)
                 {
                     auto* tile = grid->getTile(coord);
@@ -880,6 +975,26 @@ namespace services
                         info.worldOrigin = tile->worldOrigin;
                         info.vertexSpacing = tile->config.getVertexSpacing();
                         physicsProvider->rebuildTerrainTileCollider(*targetEntity, info);
+
+                        // Regenerate debug wireframe for this tile
+                        if (registry.valid(terrainEnt) &&
+                            registry.all_of<components::ChildrenComponent>(terrainEnt))
+                        {
+                            const auto& children = registry.get<components::ChildrenComponent>(terrainEnt).children;
+                            for (auto childEnt : children)
+                            {
+                                if (!registry.valid(childEnt) ||
+                                    !registry.all_of<components::TerrainTileColliderDebugComponent>(childEnt))
+                                    continue;
+
+                                auto& debugComp = registry.get<components::TerrainTileColliderDebugComponent>(childEnt);
+                                if (debugComp.tileX == coord.x && debugComp.tileZ == coord.z)
+                                {
+                                    generateTileColliderWireframe(*tile, debugComp.debugData);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
