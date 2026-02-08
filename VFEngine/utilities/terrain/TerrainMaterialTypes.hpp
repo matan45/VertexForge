@@ -2,7 +2,6 @@
 #include <string>
 #include <array>
 #include <cstdint>
-#include "../material/MaterialTypes.hpp"
 
 namespace terrain
 {
@@ -48,8 +47,6 @@ namespace terrain
         std::array<TerrainMaterialLayer, MAX_TERRAIN_LAYERS> layers;
         uint8_t activeLayerCount = 1;
 
-        // Shader graph for terrain material authoring
-        material::ShaderGraph graph;
         std::string cachedMaterialSnippet; // Compiled GLSL snippet
         bool needsRecompile = true;
     };

@@ -1,5 +1,6 @@
 #pragma once
 #include "material/MaterialTypes.hpp"
+#include <terrain/TerrainMaterialTypes.hpp>
 #include <string>
 #include <string_view>
 
@@ -56,7 +57,7 @@ namespace editor::graph {
 
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
 
-        static TerrainCompilationResult compileTerrainGraph(const material::ShaderGraph& graph);
+        static TerrainCompilationResult compileTerrainMaterial(const terrain::TerrainMaterialData& material);
 
         static void reloadTemplates();
 

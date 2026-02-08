@@ -21,47 +21,112 @@ namespace editor::graph {
         return compileGraph(material.graph);
     }
 
-    TerrainCompilationResult ShaderGraphCompiler::compileTerrainGraph(const material::ShaderGraph& graph) {
+    TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
-        // Validate node count
-        if (graph.nodes.size() > MAX_NODES) {
-            result.success = false;
-            result.errorMessage = "Shader graph exceeds maximum node limit (" + std::to_string(MAX_NODES) + ")";
-            return result;
+        int layerCount = std::clamp(static_cast<int>(material.activeLayerCount), 1, terrain::MAX_TERRAIN_LAYERS);
+
+        // Separate Linear from Overlay layers
+        struct LayerInfo {
+            int index;
+            std::string blendMode;
+            std::string name;
+            bool enabled;
+        };
+        std::vector<LayerInfo> baseLayers;
+        std::vector<LayerInfo> overlayLayers;
+
+        for (int i = 0; i < layerCount; ++i) {
+            const auto& layer = material.layers[i];
+            std::string blend = terrain::blendModeToString(layer.blendMode);
+            LayerInfo info{i, blend, layer.name, layer.enabled};
+            if (blend == "Overlay" && i > 0)
+                overlayLayers.push_back(info);
+            else
+                baseLayers.push_back(info);
         }
 
-        // Find terrain output node
-        const material::ShaderNode* outputNode = graph.findTerrainOutputNode();
-        if (!outputNode) {
-            result.success = false;
-            result.errorMessage = "No Terrain PBR Output node found in shader graph";
-            return result;
-        }
-
-        // Check for cycles/depth issues
-        std::vector<uint32_t> sortedNodes = topologicalSort(graph, outputNode);
-        if (sortedNodes.empty() && !graph.nodes.empty()) {
-            result.success = false;
-            result.errorMessage = "Shader graph contains a cycle or exceeds maximum depth limit";
-            return result;
-        }
-
-        std::string typeErrorMessage;
-        if (!validateLinkTypes(graph, typeErrorMessage)) {
-            result.success = false;
-            result.errorMessage = typeErrorMessage;
-            return result;
-        }
-
-        // Generate GLSL snippet (no header/footer templates)
-        std::map<uint32_t, std::map<std::string, std::string>> nodeOutputVars;
         std::string code;
         code += "// Generated terrain material code\n";
+        code += "// Terrain Layer Stack - blending " + std::to_string(layerCount) + " layer(s)\n";
+        code += "vec3 ls_Albedo = vec3(0.0);\n";
+        code += "vec3 ls_Normal = vec3(0.0);\n";
+        code += "float ls_TotalW = 0.0;\n";
 
-        for (uint32_t nodeId : sortedNodes) {
-            code += generateNodeCode(graph, nodeId, nodeOutputVars);
+        // Pass 1: Linear layers
+        for (const auto& layer : baseLayers) {
+            int i = layer.index;
+
+            if (!layer.enabled) {
+                code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
+                continue;
+            }
+
+            code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: " + layer.blendMode + "\n";
+
+            code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
+
+            code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
+            code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
+            code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
+            code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
+            code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
+
+            code += "    ls_Albedo += layerAlbedo * w;\n";
+            code += "    ls_Normal += layerNormal * w;\n";
+            code += "    ls_TotalW += w;\n";
+            code += "}\n";
         }
+
+        // Normalize base layers
+        code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
+        code += "ls_Albedo *= ls_InvW;\n";
+        code += "ls_Normal = normalize(ls_Normal);\n";
+
+        // Pass 2: Overlay layers
+        for (const auto& layer : overlayLayers) {
+            int i = layer.index;
+
+            if (!layer.enabled) {
+                code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
+                continue;
+            }
+
+            code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: Overlay\n";
+
+            code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
+
+            code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
+            code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
+            code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
+            code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
+            code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
+
+            // Photoshop-style overlay
+            code += "    vec3 ovBase = ls_Albedo;\n";
+            code += "    vec3 ovBlend = layerAlbedo;\n";
+            code += "    vec3 ovResult = mix(\n";
+            code += "        1.0 - 2.0 * (1.0 - ovBase) * (1.0 - ovBlend),\n";
+            code += "        2.0 * ovBase * ovBlend,\n";
+            code += "        step(ovBase, vec3(0.5)));\n";
+            code += "    ls_Albedo = mix(ls_Albedo, ovResult, w);\n";
+            code += "    ls_Normal = normalize(mix(ls_Normal, layerNormal, w));\n";
+            code += "}\n";
+        }
+
+        // Terrain PBR Output
+        code += "// Terrain material properties\n";
+        code += "vec3 mat_albedo = ls_Albedo;\n";
+        code += "vec3 mat_normalTS = ls_Normal;\n";
+        code += "float mat_metallic = 0.0;\n";
+        code += "float mat_roughness = 0.9;\n";
+        code += "float mat_ao = 1.0;\n";
 
         result.materialSnippet = code;
         result.success = true;
