@@ -1,4 +1,5 @@
 #include "TerrainGrid.hpp"
+#include "../print/EditorLogger.hpp"
 #include <algorithm>
 
 namespace terrain
@@ -235,6 +236,66 @@ namespace terrain
         {
             progress(1.0f, "Complete");
         }
+    }
+
+    bool TerrainGrid::loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
+                                          ProgressCallback progress)
+    {
+        tiles.clear();
+        uint32_t total = static_cast<uint32_t>(loadedTiles.size());
+        uint32_t current = 0;
+
+        for (const auto& loaded : loadedTiles)
+        {
+            if (!loaded.success)
+                continue;
+
+            if (progress)
+            {
+                progress(static_cast<float>(current) / static_cast<float>(total),
+                         "Loading tile (" + std::to_string(loaded.coord.x) + ", " +
+                         std::to_string(loaded.coord.z) + ")");
+            }
+
+            auto tile = std::make_unique<TerrainTile>(loaded.coord, config);
+            tile->initializeFromHeights(loaded.heightData);
+
+            // Assign weight map if present
+            if (loaded.weightMap.isInitialized())
+            {
+                tile->weightMap = loaded.weightMap;
+            }
+
+            // Use cached LOD data or fallback to regeneration
+            if (loaded.hasLODCache)
+            {
+                tile->lodLevels = loaded.lodData;
+                tile->isDirty = false;
+                tile->dirtyLODMask = 0;
+                tile->updateWorldBounds();
+                vfLogInfo("TerrainGrid: Loaded cached LODs for tile ({}, {})",
+                          loaded.coord.x, loaded.coord.z);
+            }
+            else
+            {
+                generator->generateAllLODs(*tile, nullptr);
+                vfLogInfo("TerrainGrid: Regenerated LODs for tile ({}, {})",
+                          loaded.coord.x, loaded.coord.z);
+            }
+
+            tiles.emplace(loaded.coord, std::move(tile));
+            ++current;
+        }
+
+        updateAllNeighborReferences();
+
+        if (progress)
+        {
+            progress(1.0f, "Complete");
+        }
+
+        vfLogInfo("TerrainGrid: Loaded {} tiles from serialized data", tiles.size());
+        return !tiles.empty();
     }
 
     void TerrainGrid::initializeWeightMaps(uint8_t layerCount)

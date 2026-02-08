@@ -79,6 +79,7 @@ namespace terrain
         uint64_t heightDataOffset = 0;      // Byte offset from file start
         uint32_t heightDataSize = 0;        // Byte count of height section
         uint64_t weightDataOffset = 0;      // 0 if no weight data for this tile
+        uint64_t meshletDataOffset = 0;     // 0 if no meshlet cache for this tile
     };
 
     // --- Result struct for loading a single tile's data ---
@@ -88,6 +89,10 @@ namespace terrain
         std::vector<float> heightData;
         TileWeightMapData weightMap;
         bool success = false;
+
+        // Cached LOD data (only populated when HAS_MESHLET_CACHE)
+        std::array<TileLODData, TERRAIN_LOD_COUNT> lodData;
+        bool hasLODCache = false;
     };
 
     // --- Terrain serializer ---
@@ -127,6 +132,12 @@ namespace terrain
             const TileIndexEntry& entry,
             TileWeightMapData& outWeights);
 
+        // Streaming: seek to a single tile's cached LOD/meshlet data
+        static bool readTileLODData(
+            std::string_view path,
+            const TileIndexEntry& entry,
+            std::array<TileLODData, TERRAIN_LOD_COUNT>& outLODData);
+
     private:
         static bool writeHeader(std::ofstream& file, const TerrainFileHeader& header);
         static bool writeIndexTable(std::ofstream& file, const std::vector<TileIndexEntry>& index);
@@ -136,8 +147,12 @@ namespace terrain
             TerrainFormatFlags flags,
             TileIndexEntry& outEntry);
 
+        static bool writeTileMeshletData(std::ofstream& file, const TerrainTile& tile,
+                                         TileIndexEntry& outEntry);
+
         static bool parseHeader(std::ifstream& file, TerrainFileHeader& outHeader);
         static bool parseIndexTable(std::ifstream& file, uint32_t tileCount,
                                     std::vector<TileIndexEntry>& outIndex);
+        static bool parseTileMeshletData(std::ifstream& file, TileLoadResult& result);
     };
 }

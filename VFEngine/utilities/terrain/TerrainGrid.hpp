@@ -2,6 +2,7 @@
 
 #include "TerrainTile.hpp"
 #include "TerrainTileGenerator.hpp"
+#include "TerrainSerializer.hpp"
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -38,6 +39,10 @@ namespace terrain
 
         void createGrid(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ,
                         ProgressCallback progress = nullptr);
+
+        // Load from serialized data (skips meshlet regeneration when LOD cache is available)
+        bool loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
+                                ProgressCallback progress = nullptr);
 
         // Weight map management
         void initializeWeightMaps(uint8_t layerCount);

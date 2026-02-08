@@ -70,6 +70,7 @@ namespace terrain
             writeLE(file, entry.heightDataOffset);
             writeLE(file, entry.heightDataSize);
             writeLE(file, entry.weightDataOffset);
+            writeLE(file, entry.meshletDataOffset);
         }
         return file.good();
     }
@@ -115,6 +116,14 @@ namespace terrain
             }
         }
 
+        // Meshlet/LOD cache section (optional)
+        outEntry.meshletDataOffset = 0;
+        if (hasFlag(flags, TerrainFormatFlags::HAS_MESHLET_CACHE))
+        {
+            if (!writeTileMeshletData(file, tile, outEntry))
+                return false;
+        }
+
         return file.good();
     }
 
@@ -150,6 +159,14 @@ namespace terrain
             if (tile->weightMap.isInitialized())
             {
                 flags = flags | TerrainFormatFlags::HAS_WEIGHT_MAPS;
+                break;
+            }
+        }
+        for (const auto* tile : allTiles)
+        {
+            if (!tile->lodLevels.empty() && tile->lodLevels[0].hasMeshlets())
+            {
+                flags = flags | TerrainFormatFlags::HAS_MESHLET_CACHE;
                 break;
             }
         }
@@ -195,7 +212,7 @@ namespace terrain
 
             // 2. Record index table position, write placeholder zeros
             auto indexTablePos = file.tellp();
-            constexpr size_t INDEX_ENTRY_SIZE = 28; // 4+4+8+4+8
+            constexpr size_t INDEX_ENTRY_SIZE = 36; // 4+4+8+4+8+8
             std::vector<char> placeholder(header.tileCount * INDEX_ENTRY_SIZE, 0);
             file.write(placeholder.data(), static_cast<std::streamsize>(placeholder.size()));
 
@@ -325,6 +342,7 @@ namespace terrain
             outIndex[i].heightDataOffset = readLE<uint64_t>(file);
             outIndex[i].heightDataSize = readLE<uint32_t>(file);
             outIndex[i].weightDataOffset = readLE<uint64_t>(file);
+            outIndex[i].meshletDataOffset = readLE<uint64_t>(file);
         }
         return file.good();
     }
@@ -407,6 +425,21 @@ namespace terrain
                         {
                             readVectorLE(file, result.weightMap.layerWeights[layer], texelCount);
                         }
+                    }
+                }
+
+                // Meshlet/LOD cache (optional, non-fatal)
+                if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_MESHLET_CACHE)
+                    && entry.meshletDataOffset != 0)
+                {
+                    file.seekg(static_cast<std::streamoff>(entry.meshletDataOffset));
+                    if (!parseTileMeshletData(file, result))
+                    {
+                        vfLogWarning("TerrainSerializer: Failed to read meshlet cache for tile ({}, {}), will regenerate",
+                                     entry.coordX, entry.coordZ);
+                        for (auto& lod : result.lodData)
+                            lod.clear();
+                        result.hasLODCache = false;
                     }
                 }
 
@@ -567,6 +600,303 @@ namespace terrain
         catch (const std::exception& e)
         {
             vfLogError("TerrainSerializer: Failed to read weights for tile ({}, {}): {}",
+                       entry.coordX, entry.coordZ, e.what());
+            return false;
+        }
+    }
+
+    // ── writeTileMeshletData ─────────────────────────────────────────────
+
+    bool TerrainSerializer::writeTileMeshletData(std::ofstream& file,
+                                                  const TerrainTile& tile,
+                                                  TileIndexEntry& outEntry)
+    {
+        // Check if this tile has meshlet data
+        bool hasMeshlets = false;
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            if (tile.lodLevels[lod].hasMeshlets())
+            {
+                hasMeshlets = true;
+                break;
+            }
+        }
+
+        if (!hasMeshlets)
+            return true; // meshletDataOffset stays 0
+
+        outEntry.meshletDataOffset = static_cast<uint64_t>(file.tellp());
+
+        // LOD count headers: per LOD meshletCount, meshletVertexCount, meshletPrimitiveCount
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            const auto& lodData = tile.lodLevels[lod];
+            writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.meshlets.size()));
+            writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.meshletVertices.size()));
+            writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.meshletPrimitives.size()));
+        }
+
+        // Per-LOD vertices: vertexCount + field-by-field vertex data
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            const auto& lodData = tile.lodLevels[lod];
+            writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.vertices.size()));
+
+            for (const auto& vertex : lodData.vertices)
+            {
+                writeLE<float>(file, vertex.position.x);
+                writeLE<float>(file, vertex.position.y);
+                writeLE<float>(file, vertex.position.z);
+                writeLE<float>(file, vertex.normal.x);
+                writeLE<float>(file, vertex.normal.y);
+                writeLE<float>(file, vertex.normal.z);
+                writeLE<float>(file, vertex.texCoords.x);
+                writeLE<float>(file, vertex.texCoords.y);
+                writeLE<int32_t>(file, vertex.boneIndices.x);
+                writeLE<int32_t>(file, vertex.boneIndices.y);
+                writeLE<int32_t>(file, vertex.boneIndices.z);
+                writeLE<int32_t>(file, vertex.boneIndices.w);
+                writeLE<float>(file, vertex.boneWeights.x);
+                writeLE<float>(file, vertex.boneWeights.y);
+                writeLE<float>(file, vertex.boneWeights.z);
+                writeLE<float>(file, vertex.boneWeights.w);
+            }
+        }
+
+        // Per-LOD indices
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            const auto& lodData = tile.lodLevels[lod];
+            writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.indices.size()));
+            writeVectorLE(file, lodData.indices);
+        }
+
+        // Meshlet descriptors + bounds (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            for (const auto& meshlet : tile.lodLevels[lod].meshlets)
+            {
+                writeLE<uint32_t>(file, meshlet.descriptor.vertexOffset);
+                writeLE<uint32_t>(file, meshlet.descriptor.primitiveOffset);
+                writeLE<uint8_t>(file, meshlet.descriptor.vertexCount);
+                writeLE<uint8_t>(file, meshlet.descriptor.primitiveCount);
+                writeLE<uint16_t>(file, 0); // padding
+
+                writeLE<float>(file, meshlet.bounds.boundingSphere.x);
+                writeLE<float>(file, meshlet.bounds.boundingSphere.y);
+                writeLE<float>(file, meshlet.bounds.boundingSphere.z);
+                writeLE<float>(file, meshlet.bounds.boundingSphere.w);
+                writeLE<float>(file, meshlet.bounds.cone.x);
+                writeLE<float>(file, meshlet.bounds.cone.y);
+                writeLE<float>(file, meshlet.bounds.cone.z);
+                writeLE<float>(file, meshlet.bounds.cone.w);
+            }
+        }
+
+        // Meshlet vertex indices (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            writeVectorLE(file, tile.lodLevels[lod].meshletVertices);
+        }
+
+        // Meshlet primitives (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            writeVectorLE(file, tile.lodLevels[lod].meshletPrimitives);
+        }
+
+        // Per-LOD metadata: AABB, boundingSphere, geometricError
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            const auto& lodData = tile.lodLevels[lod];
+            writeLE<float>(file, lodData.aabb.min.x);
+            writeLE<float>(file, lodData.aabb.min.y);
+            writeLE<float>(file, lodData.aabb.min.z);
+            writeLE<float>(file, lodData.aabb.max.x);
+            writeLE<float>(file, lodData.aabb.max.y);
+            writeLE<float>(file, lodData.aabb.max.z);
+            writeLE<float>(file, lodData.boundingSphere.x);
+            writeLE<float>(file, lodData.boundingSphere.y);
+            writeLE<float>(file, lodData.boundingSphere.z);
+            writeLE<float>(file, lodData.boundingSphere.w);
+            writeLE<float>(file, lodData.geometricError);
+        }
+
+        return file.good();
+    }
+
+    // ── parseTileMeshletData ─────────────────────────────────────────────
+
+    bool TerrainSerializer::parseTileMeshletData(std::ifstream& file, TileLoadResult& result)
+    {
+        // LOD count headers
+        struct LODHeader
+        {
+            uint32_t meshletCount = 0;
+            uint32_t meshletVertexCount = 0;
+            uint32_t meshletPrimitiveCount = 0;
+        };
+        std::array<LODHeader, TERRAIN_LOD_COUNT> lodHeaders{};
+
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            lodHeaders[lod].meshletCount = readLE<uint32_t>(file);
+            lodHeaders[lod].meshletVertexCount = readLE<uint32_t>(file);
+            lodHeaders[lod].meshletPrimitiveCount = readLE<uint32_t>(file);
+        }
+
+        if (!file.good())
+            return false;
+
+        // Per-LOD vertices
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            uint32_t vertexCount = readLE<uint32_t>(file);
+            result.lodData[lod].vertices.resize(vertexCount);
+
+            for (uint32_t i = 0; i < vertexCount; ++i)
+            {
+                auto& vertex = result.lodData[lod].vertices[i];
+                vertex.position.x = readLE<float>(file);
+                vertex.position.y = readLE<float>(file);
+                vertex.position.z = readLE<float>(file);
+                vertex.normal.x = readLE<float>(file);
+                vertex.normal.y = readLE<float>(file);
+                vertex.normal.z = readLE<float>(file);
+                vertex.texCoords.x = readLE<float>(file);
+                vertex.texCoords.y = readLE<float>(file);
+                vertex.boneIndices.x = readLE<int32_t>(file);
+                vertex.boneIndices.y = readLE<int32_t>(file);
+                vertex.boneIndices.z = readLE<int32_t>(file);
+                vertex.boneIndices.w = readLE<int32_t>(file);
+                vertex.boneWeights.x = readLE<float>(file);
+                vertex.boneWeights.y = readLE<float>(file);
+                vertex.boneWeights.z = readLE<float>(file);
+                vertex.boneWeights.w = readLE<float>(file);
+            }
+        }
+
+        if (!file.good())
+            return false;
+
+        // Per-LOD indices
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            uint32_t indexCount = readLE<uint32_t>(file);
+            readVectorLE(file, result.lodData[lod].indices, indexCount);
+        }
+
+        if (!file.good())
+            return false;
+
+        // Meshlet descriptors + bounds (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            result.lodData[lod].meshlets.resize(lodHeaders[lod].meshletCount);
+            for (uint32_t i = 0; i < lodHeaders[lod].meshletCount; ++i)
+            {
+                auto& meshlet = result.lodData[lod].meshlets[i];
+
+                meshlet.descriptor.vertexOffset = readLE<uint32_t>(file);
+                meshlet.descriptor.primitiveOffset = readLE<uint32_t>(file);
+                meshlet.descriptor.vertexCount = readLE<uint8_t>(file);
+                meshlet.descriptor.primitiveCount = readLE<uint8_t>(file);
+                meshlet.descriptor.padding = readLE<uint16_t>(file);
+
+                meshlet.bounds.boundingSphere.x = readLE<float>(file);
+                meshlet.bounds.boundingSphere.y = readLE<float>(file);
+                meshlet.bounds.boundingSphere.z = readLE<float>(file);
+                meshlet.bounds.boundingSphere.w = readLE<float>(file);
+                meshlet.bounds.cone.x = readLE<float>(file);
+                meshlet.bounds.cone.y = readLE<float>(file);
+                meshlet.bounds.cone.z = readLE<float>(file);
+                meshlet.bounds.cone.w = readLE<float>(file);
+            }
+        }
+
+        if (!file.good())
+            return false;
+
+        // Meshlet vertex indices (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            readVectorLE(file, result.lodData[lod].meshletVertices, lodHeaders[lod].meshletVertexCount);
+        }
+
+        if (!file.good())
+            return false;
+
+        // Meshlet primitives (all LODs concatenated)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            readVectorLE(file, result.lodData[lod].meshletPrimitives, lodHeaders[lod].meshletPrimitiveCount);
+        }
+
+        if (!file.good())
+            return false;
+
+        // Per-LOD metadata: AABB, boundingSphere, geometricError
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            auto& lodData = result.lodData[lod];
+            lodData.aabb.min.x = readLE<float>(file);
+            lodData.aabb.min.y = readLE<float>(file);
+            lodData.aabb.min.z = readLE<float>(file);
+            lodData.aabb.max.x = readLE<float>(file);
+            lodData.aabb.max.y = readLE<float>(file);
+            lodData.aabb.max.z = readLE<float>(file);
+            lodData.boundingSphere.x = readLE<float>(file);
+            lodData.boundingSphere.y = readLE<float>(file);
+            lodData.boundingSphere.z = readLE<float>(file);
+            lodData.boundingSphere.w = readLE<float>(file);
+            lodData.geometricError = readLE<float>(file);
+        }
+
+        if (!file.good())
+            return false;
+
+        result.hasLODCache = true;
+        return true;
+    }
+
+    // ── readTileLODData (streaming: single tile) ─────────────────────────
+
+    bool TerrainSerializer::readTileLODData(
+        std::string_view path,
+        const TileIndexEntry& entry,
+        std::array<TileLODData, TERRAIN_LOD_COUNT>& outLODData)
+    {
+        if (entry.meshletDataOffset == 0)
+        {
+            // No meshlet data for this tile
+            return false;
+        }
+
+        try
+        {
+            std::ifstream file(fs::path(path), std::ios::binary);
+            if (!file.is_open())
+            {
+                vfLogError("TerrainSerializer: Failed to open file: {}", path);
+                return false;
+            }
+
+            file.seekg(static_cast<std::streamoff>(entry.meshletDataOffset));
+
+            TileLoadResult tempResult;
+            if (!parseTileMeshletData(file, tempResult))
+            {
+                vfLogError("TerrainSerializer: Failed to read LOD data for tile ({}, {})",
+                           entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            outLODData = std::move(tempResult.lodData);
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("TerrainSerializer: Failed to read LOD data for tile ({}, {}): {}",
                        entry.coordX, entry.coordZ, e.what());
             return false;
         }
