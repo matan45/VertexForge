@@ -118,6 +118,7 @@ namespace terrain
         TerrainTile(const TileCoord& coord, const TerrainTileConfig& config);
 
         void initializeFromHeights(const std::vector<float>& heights);
+        void initializeMetadataOnly();
 
         [[nodiscard]] glm::vec3 computeWorldOrigin() const;
         [[nodiscard]] float getHeight(uint32_t x, uint32_t z) const;
@@ -127,6 +128,10 @@ namespace terrain
 
         [[nodiscard]] bool stitchingChanged() const;
         void saveStitchState();
+
+        [[nodiscard]] bool hasHeightData() const { return !heightData.empty(); }
+        [[nodiscard]] bool hasLODData(uint32_t lod) const { return lod < TERRAIN_LOD_COUNT && !lodLevels[lod].isEmpty(); }
+        [[nodiscard]] bool hasAnyLODData() const;
 
         [[nodiscard]] TileLODData& getCurrentLODData();
         [[nodiscard]] const TileLODData& getCurrentLODData() const;

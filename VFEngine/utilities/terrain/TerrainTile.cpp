@@ -39,6 +39,44 @@ namespace terrain
         updateWorldBounds();
     }
 
+    void TerrainTile::initializeMetadataOnly()
+    {
+        // Clear heightData allocated by constructor's initializeFlat() call.
+        // Metadata-only tiles must have empty heightData so ensureHeightsLoaded()
+        // knows to read from file.
+        std::vector<float>().swap(heightData);
+
+        worldOrigin = computeWorldOrigin();
+
+        // Conservative bounds using config min/max height (no heightData available)
+        constexpr float MIN_AABB_HEIGHT = 1.0f;
+        float minH = config.minHeight;
+        float maxH = config.maxHeight;
+
+        if (maxH - minH < MIN_AABB_HEIGHT)
+        {
+            float center = (minH + maxH) * 0.5f;
+            minH = center - MIN_AABB_HEIGHT * 0.5f;
+            maxH = center + MIN_AABB_HEIGHT * 0.5f;
+        }
+
+        worldBounds = math::AABB(
+            glm::vec3(worldOrigin.x, minH, worldOrigin.z),
+            glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)
+        );
+
+        isDirty = false;
+    }
+
+    bool TerrainTile::hasAnyLODData() const
+    {
+        for (const auto& lod : lodLevels)
+        {
+            if (!lod.isEmpty()) return true;
+        }
+        return false;
+    }
+
     glm::vec3 TerrainTile::computeWorldOrigin() const
     {
         return glm::vec3(

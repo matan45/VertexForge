@@ -167,6 +167,18 @@ namespace render::gpudriven
             terrainAdapter = std::make_unique<TerrainGPUAdapter>(*terrainMeshBuffer);
             terrainStreamManager = std::make_unique<TerrainStreamManager>(*terrainMeshBuffer, *terrainAdapter);
 
+            // Apply pending callbacks that were set before init()
+            if (pendingTileDataLoader_)
+            {
+                terrainStreamManager->setTileDataLoader(std::move(pendingTileDataLoader_));
+                pendingTileDataLoader_ = nullptr;
+            }
+            if (pendingTileRAMEvictor_)
+            {
+                terrainStreamManager->setTileRAMEvictor(std::move(pendingTileRAMEvictor_));
+                pendingTileRAMEvictor_ = nullptr;
+            }
+
             terrainPipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
             terrainPipeline->init(
                 iblDescriptorSetLayout,
@@ -1407,6 +1419,30 @@ namespace render::gpudriven
         if (terrainPipeline)
         {
             terrainPipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
+        }
+    }
+
+    void GPUDrivenRenderer::setTileDataLoader(TerrainStreamManager::TileDataLoader loader)
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->setTileDataLoader(std::move(loader));
+        }
+        else
+        {
+            pendingTileDataLoader_ = std::move(loader);
+        }
+    }
+
+    void GPUDrivenRenderer::setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor)
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->setTileRAMEvictor(std::move(evictor));
+        }
+        else
+        {
+            pendingTileRAMEvictor_ = std::move(evictor);
         }
     }
 

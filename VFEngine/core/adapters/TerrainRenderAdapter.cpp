@@ -25,4 +25,16 @@ namespace core
         if (!terrainService) return {};
         return terrainService->getTerrainMaterialPath();
     }
+
+    bool TerrainRenderAdapter::ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel)
+    {
+        if (!terrainService) return false;
+        return terrainService->ensureTileLODData(tile, lodLevel);
+    }
+
+    void TerrainRenderAdapter::releaseTileRAMData(terrain::TerrainTile& tile)
+    {
+        if (!terrainService) return;
+        terrainService->releaseTileRAMData(tile);
+    }
 }
