@@ -643,10 +643,19 @@ namespace services
         if (terrainGrids.empty())
             return;
 
+        // Track which terrains had colliders before remap and clean up old bodies
+        std::vector<bool> hadCollider;
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
         std::vector<std::shared_ptr<terrain::TerrainFileCache>> caches;
         for (auto& [id, grid] : terrainGrids)
         {
+            bool hasCollider = physicsProvider && physicsProvider->hasTerrainCollider(EntityHandle{id});
+            hadCollider.push_back(hasCollider);
+
+            // Remove old physics bodies keyed to old entity ID
+            if (hasCollider)
+                physicsProvider->removeTerrainCollider(EntityHandle{id});
+
             grids.push_back(std::move(grid));
             auto cacheIt = fileCaches.find(id);
             caches.push_back(cacheIt != fileCaches.end() ? std::move(cacheIt->second) : nullptr);
@@ -667,6 +676,11 @@ namespace services
             terrainGrids[newId] = std::move(grids[gridIndex]);
             if (caches[gridIndex])
                 fileCaches[newId] = std::move(caches[gridIndex]);
+
+            // Re-add collider under the new entity ID
+            if (gridIndex < hadCollider.size() && hadCollider[gridIndex])
+                addTerrainCollider(EntityHandle{newId});
+
             gridIndex++;
         }
     }
