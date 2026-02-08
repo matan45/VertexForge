@@ -52,7 +52,6 @@ namespace windows
 
     void TerrainMaterialEditorWindow::removeLayer(int removeIndex, int currentCount)
     {
-        // Shift layers down
         for (int i = removeIndex; i < currentCount - 1; ++i)
         {
             materialData->layers[i] = materialData->layers[i + 1];
@@ -207,7 +206,6 @@ namespace windows
 
         int layerCount = materialData->activeLayerCount;
 
-        // Layer count display + Add button
         ImGui::Text("Layers: %d / %d", layerCount, terrain::MAX_TERRAIN_LAYERS);
         ImGui::SameLine();
         if (layerCount < terrain::MAX_TERRAIN_LAYERS)
@@ -232,27 +230,23 @@ namespace windows
         ImGui::Spacing();
         ImGui::Separator();
 
-        // Per-layer properties
         for (int i = 0; i < layerCount; ++i)
         {
             auto& layer = materialData->layers[i];
 
             ImGui::PushID(i);
 
-            // Enabled checkbox
             if (ImGui::Checkbox("##enabled", &layer.enabled))
             {
                 onChanged();
             }
             ImGui::SameLine();
 
-            // Layer header
             std::string headerLabel = std::format("{} ({})", layer.name, i);
             if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent(8.0f);
 
-                // Layer name
                 {
                     char nameBuffer[64];
                     std::strncpy(nameBuffer, layer.name.c_str(), sizeof(nameBuffer) - 1);
@@ -279,7 +273,6 @@ namespace windows
                     }
                 }
 
-                // Albedo texture
                 {
                     ImGui::Text("Albedo:");
                     ImGui::SameLine();
@@ -315,7 +308,6 @@ namespace windows
                     }
                 }
 
-                // Normal texture
                 {
                     ImGui::Text("Normal:");
                     ImGui::SameLine();
@@ -351,13 +343,11 @@ namespace windows
                     }
                 }
 
-                // Tiling scale
                 if (ImGui::DragFloat("Tiling", &layer.tilingScale, 0.01f, 0.01f, 100.0f))
                 {
                     onChanged();
                 }
 
-                // Remove layer button
                 ImGui::Spacing();
                 ImGui::BeginDisabled(layerCount <= 1);
                 bool removeClicked = ImGui::SmallButton("Remove Layer");

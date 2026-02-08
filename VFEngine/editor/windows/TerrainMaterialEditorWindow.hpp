@@ -28,8 +28,6 @@ namespace windows
         void draw() override;
         bool shouldClose() const override { return !isOpen; }
 
-        const std::string& getMaterialPath() const { return materialPath; }
-
     private:
         void loadMaterial();
         void saveMaterial();

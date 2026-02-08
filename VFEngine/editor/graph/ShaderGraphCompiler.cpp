@@ -6,27 +6,20 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <string_view>
 #include <format>
 
 namespace editor::graph {
 
-    // Static member initialization
     std::string ShaderGraphCompiler::s_vertexTemplate;
     std::string ShaderGraphCompiler::s_fragmentHeader;
     std::string ShaderGraphCompiler::s_fragmentFooter;
     bool ShaderGraphCompiler::s_templatesLoaded = false;
-
-    CompilationResult ShaderGraphCompiler::compile(const material::MaterialData& material) {
-        return compileGraph(material.graph);
-    }
 
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
         int layerCount = std::clamp(static_cast<int>(material.activeLayerCount), 1, terrain::MAX_TERRAIN_LAYERS);
 
-        // Separate Linear from Overlay layers
         struct LayerInfo {
             int index;
             std::string blendMode;
@@ -81,7 +74,6 @@ namespace editor::graph {
             code += "}\n";
         }
 
-        // Normalize base layers
         code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
         code += "ls_Albedo *= ls_InvW;\n";
         code += "ls_Normal = normalize(ls_Normal);\n";
@@ -120,7 +112,6 @@ namespace editor::graph {
             code += "}\n";
         }
 
-        // Terrain PBR Output
         code += "// Terrain material properties\n";
         code += "vec3 mat_albedo = ls_Albedo;\n";
         code += "vec3 mat_normalTS = ls_Normal;\n";
@@ -136,7 +127,6 @@ namespace editor::graph {
     CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph) {
         CompilationResult result;
 
-        // Load templates if not already loaded
         if (!loadTemplates()) {
             result.success = false;
             result.errorMessage = "Failed to load shader templates from files";
@@ -150,7 +140,6 @@ namespace editor::graph {
             return result;
         }
 
-        // Find output node
         const material::ShaderNode* outputNode = graph.findOutputNode();
         if (!outputNode) {
             result.success = false;
@@ -158,7 +147,6 @@ namespace editor::graph {
             return result;
         }
 
-        // Check for cycles/depth issues before generating shaders
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);
         if (sortedNodes.empty() && !graph.nodes.empty()) {
             result.success = false;
@@ -173,7 +161,6 @@ namespace editor::graph {
             return result;
         }
 
-        // Generate shaders
         result.vertexShader = generateVertexShader();
         result.fragmentShader = generateFragmentShader(graph);
         result.success = true;
@@ -190,7 +177,6 @@ namespace editor::graph {
             fs::path requestedPath = fs::weakly_canonical(pathStr);
             fs::path allowedDir = fs::weakly_canonical(std::string(ALLOWED_SHADER_DIR));
 
-            // Check that the requested path starts with the allowed directory
             auto [reqIt, allowIt] = std::mismatch(
                 requestedPath.begin(), requestedPath.end(),
                 allowedDir.begin(), allowedDir.end()
@@ -219,21 +205,18 @@ namespace editor::graph {
             return true;
         }
 
-        // Load vertex shader template
         s_vertexTemplate = readTextFile(VERTEX_TEMPLATE_PATH);
         if (s_vertexTemplate.empty()) {
             vfLogError("Failed to load vertex shader template from: {}", VERTEX_TEMPLATE_PATH);
             return false;
         }
 
-        // Load fragment shader header
         s_fragmentHeader = readTextFile(FRAGMENT_HEADER_PATH);
         if (s_fragmentHeader.empty()) {
             vfLogError("Failed to load fragment shader header from: {}", FRAGMENT_HEADER_PATH);
             return false;
         }
 
-        // Load fragment shader footer
         s_fragmentFooter = readTextFile(FRAGMENT_FOOTER_PATH);
         if (s_fragmentFooter.empty()) {
             vfLogError("Failed to load fragment shader footer from: {}", FRAGMENT_FOOTER_PATH);
@@ -243,14 +226,6 @@ namespace editor::graph {
         s_templatesLoaded = true;
         vfLogInfo("Loaded shader templates from files");
         return true;
-    }
-
-    void ShaderGraphCompiler::reloadTemplates() {
-        s_templatesLoaded = false;
-        s_vertexTemplate.clear();
-        s_fragmentHeader.clear();
-        s_fragmentFooter.clear();
-        loadTemplates();
     }
 
     std::string ShaderGraphCompiler::generateVertexShader() {
@@ -295,10 +270,7 @@ namespace editor::graph {
             code += s_fragmentHeader;
         }
 
-        // Get topologically sorted nodes
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);
-
-        // Generate code for each node in order
         std::map<uint32_t, std::map<std::string, std::string>> nodeOutputVars;
 
         code += "    // Generated shader graph code\n";
@@ -331,7 +303,6 @@ namespace editor::graph {
             dependencies[link.targetNodeId].insert(link.sourceNodeId);
         }
 
-        // Track which node caused the issue for debugging
         uint32_t problemNodeId = 0;
         std::string problemReason;
 
@@ -340,13 +311,11 @@ namespace editor::graph {
             if (cycleDetected) return;
             if (visited.count(nodeId)) return;
 
-            // Check if node exists in graph
             if (dependencies.find(nodeId) == dependencies.end()) {
                 vfLogWarning("Link references non-existent node {}, skipping", nodeId);
                 return;
             }
 
-            // Check depth limit to prevent stack overflow
             if (depth > MAX_RECURSION_DEPTH) {
                 cycleDetected = true;
                 problemNodeId = nodeId;
@@ -355,7 +324,6 @@ namespace editor::graph {
             }
 
             if (inStack.count(nodeId)) {
-                // Cycle detected
                 cycleDetected = true;
                 problemNodeId = nodeId;
                 problemReason = "cycle detected";
@@ -374,13 +342,11 @@ namespace editor::graph {
             result.push_back(nodeId);
         };
 
-        // Visit all nodes, starting from output node
         const material::ShaderNode* startNode = outputNode ? outputNode : graph.findOutputNode();
         if (startNode) {
             visit(startNode->id, 0);
         }
 
-        // If cycle detected, log detailed error
         if (cycleDetected) {
             const material::ShaderNode* problemNode = graph.findNode(problemNodeId);
             std::string nodeName = problemNode ? problemNode->name : "unknown";
@@ -405,19 +371,15 @@ namespace editor::graph {
             if (visited.contains(currentId)) continue;
             visited.insert(currentId);
 
-            // Find all links where this node is the source
             for (const auto& link : graph.links) {
                 if (link.sourceNodeId == currentId) {
-                    // Check if target is PBR output node
                     const material::ShaderNode* targetNode = graph.findNode(link.targetNodeId);
                     if (targetNode && targetNode->type == material::NodeType::PBROutput) {
-                        // Found connection to PBR output - return the index for this pin
                         auto it = pbrPinToIndex.find(link.targetPin);
                         if (it != pbrPinToIndex.end()) {
                             return it->second;
                         }
                     }
-                    // Continue searching through this node
                     toVisit.push(link.targetNodeId);
                 }
             }
@@ -465,7 +427,6 @@ namespace editor::graph {
             }
         }
 
-        // Store output variable names
         for (const auto& pin : node->getOutputPins()) {
             nodeOutputVars[nodeId][pin.name] = node->getOutputVarName(prefix, pin.name);
         }
@@ -477,10 +438,8 @@ namespace editor::graph {
                                                      uint32_t nodeId,
                                                      const std::string& pinName,
                                                      const std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars) {
-        // Find link connected to this input
         for (const auto& link : graph.links) {
             if (link.targetNodeId == nodeId && link.targetPin == pinName) {
-                // Found a connection - use the source node's output variable
                 auto it = nodeOutputVars.find(link.sourceNodeId);
                 if (it != nodeOutputVars.end()) {
                     auto pinIt = it->second.find(link.sourcePin);
@@ -498,7 +457,6 @@ namespace editor::graph {
             if (node) {
                 for (const auto& pin : node->getInputPins()) {
                     if (pin.name == pinName && pin.defaultValue) {
-                        // Format default value as GLSL
                         return std::visit([](auto&& arg) -> std::string {
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, float>) {
@@ -522,7 +480,6 @@ namespace editor::graph {
 
     bool ShaderGraphCompiler::validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage) {
         for (const auto& link : graph.links) {
-            // Find source and target nodes
             const material::ShaderNode* sourceNode = graph.findNode(link.sourceNodeId);
             const material::ShaderNode* targetNode = graph.findNode(link.targetNodeId);
 
@@ -531,7 +488,6 @@ namespace editor::graph {
                 return false;
             }
 
-            // Find source pin (output)
             material::PinType sourceType = material::PinType::Float;
             bool foundSource = false;
             for (const auto& pin : sourceNode->outputs) {
@@ -542,7 +498,6 @@ namespace editor::graph {
                 }
             }
 
-            // Find target pin (input)
             material::PinType targetType = material::PinType::Float;
             bool foundTarget = false;
             for (const auto& pin : targetNode->inputs) {
@@ -558,7 +513,6 @@ namespace editor::graph {
                 return false;
             }
 
-            // Check type match
             if (sourceType != targetType) {
                 errorMessage = "Type mismatch in link from '" + sourceNode->name + "' (" + link.sourcePin +
                               ") to '" + targetNode->name + "' (" + link.targetPin + ").\n" +

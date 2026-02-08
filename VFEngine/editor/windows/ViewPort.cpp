@@ -17,7 +17,6 @@
 #include "../dragdrop/DragDropManager.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
-#include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
 
 namespace windows
@@ -344,7 +343,6 @@ namespace windows
             return;
         }
 
-        // Apply brush on left-click/drag
         bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
         bool shiftHeld = ImGui::GetIO().KeyShift;
 

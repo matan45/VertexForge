@@ -19,7 +19,7 @@ layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragTileIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
 layout(location = 5) flat out uint fragLODLevel[];
-layout(location = 6) out vec2 fragWorldUV[];  // For terrain texture tiling
+layout(location = 6) out vec2 fragWorldUV[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -64,7 +64,7 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
     float lodBias;
     float errorThreshold;
-    float terrainTextureScale;  // Scale for world-space UV tiling
+    float terrainTextureScale;
     float padding;
     // Brush overlay (world space)
     float brushWorldX;
@@ -76,7 +76,6 @@ layout(push_constant) uniform PushConstants {
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
-// Shared memory for vertex caching
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
 shared vec3 sharedNormals[MESHLET_MAX_VERTICES];
 shared vec2 sharedTexCoords[MESHLET_MAX_VERTICES];
@@ -114,7 +113,6 @@ void main() {
 
     float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
 
-    // Load vertices into shared memory
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -146,7 +144,6 @@ void main() {
 
     barrier();
 
-    // Output vertices
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (localVertexIndex < vertexCount) {
@@ -166,7 +163,6 @@ void main() {
         }
     }
 
-    // Output primitives
     uint numPrimIterations = (primitiveCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numPrimIterations; iter++) {
         uint localPrimIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -217,7 +213,6 @@ layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
 
-// Read a single byte from the weight map SSBO
 float readWeightByte(uint byteOffset) {
     uint wordIndex = byteOffset / 4u;
     uint byteIndex = byteOffset % 4u;
@@ -225,7 +220,6 @@ float readWeightByte(uint byteOffset) {
     return float((word >> (byteIndex * 8u)) & 0xFFu) / 255.0;
 }
 
-// Sample a single texel from weight map for a specific layer
 float sampleWeightTexel(uint tileOffset, uint res, uint layer, uint x, uint z) {
     uint texIdx = layer / 4u;
     uint channel = layer % 4u;
@@ -324,10 +318,6 @@ layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 //-----------------------------------------------------------------------------
 const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
 const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
-
-//-----------------------------------------------------------------------------
-// Shadow Sampling Functions
-//-----------------------------------------------------------------------------
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     // Bounds validation to prevent GPU crash from invalid indices
@@ -533,17 +523,12 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // Direct lighting with shadows
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
-    // Linearize depth for cluster lookup and shadow cascades
     float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
-
-    // Cache cluster index - used for lighting and debug visualization
     uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
 
-    // Cluster-based point and spot light evaluation
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
         uint clusterPointCount = getClusterPointLightCount(clusterData);
@@ -575,11 +560,9 @@ void main() {
         }
     }
 
-    // Directional lights with CSM shadows
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        // Sample directional light shadow (CSM) - only if shadow system is available
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
             shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
@@ -590,7 +573,6 @@ void main() {
         directLighting += lightContrib * shadow;
     }
 
-    // Apply shadow intensity to ambient
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
     float adjustedShadow = pow(minShadow, shadowContrast);
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
@@ -602,7 +584,6 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
-    // View mode debug visualization
     uint viewModeValue = pc.viewMode & 0xFFu;
 
     if (viewModeValue == 1u) {

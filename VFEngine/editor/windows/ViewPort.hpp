@@ -21,20 +21,15 @@ namespace windows
     private:
         std::unique_ptr<editor::EditorCamera> editorCamera;
 
-        // Sub-components
         ViewPortPicker picker;
         ViewPortGizmo gizmo;
         ViewPortOverlay overlay;
 
-        // Mouse tracking for camera look
         bool isFirstMouseInput = true;
         float lastMouseX = 0.0f;
         float lastMouseY = 0.0f;
 
-        // Sculpt brush dragging state
         bool sculptDragging = false;
-
-        // Paint brush dragging state
         bool paintDragging = false;
 
     public:

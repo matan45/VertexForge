@@ -3,7 +3,6 @@
 #include "events/PaintModeEvents.hpp"
 #include "events/PaintBrushEvents.hpp"
 #include "events/TerrainEvents.hpp"
-#include "terrain/TerrainMaterialAsset.hpp"
 #include "resource/ResourceManager.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
@@ -73,7 +72,6 @@ namespace windows
                 visible = n.isActive;
                 if (n.isActive)
                 {
-                    // Sync with current state
                     auto& d = events::EventDispatcher::instance();
                     auto params = d.query(events::paintBrush::GetPaintBrushParamsQuery{});
                     brushRadius = params.radius;
@@ -163,10 +161,8 @@ namespace windows
         ImGui::Text("Terrain Material");
         ImGui::Separator();
 
-        // Show current material path or browse button
         if (!materialPath.empty())
         {
-            // Extract filename from path
             std::string displayName = materialPath;
             auto lastSlash = displayName.find_last_of("/\\");
             if (lastSlash != std::string::npos)
@@ -190,7 +186,6 @@ namespace windows
                     std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                     selectedPath.end());
 
-                // Update the terrain component's material path
                 auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{});
                 if (targetEntity.has_value())
                 {
@@ -199,7 +194,6 @@ namespace windows
                     cmd.materialPath = selectedPath;
                     dispatcher.execute(cmd);
 
-                    // Reload material data
                     materialPath = selectedPath;
                     materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
                 }

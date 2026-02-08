@@ -46,20 +46,15 @@ namespace editor::graph {
         // Allowed base directory for shader files (relative to executable)
         static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
 
-        // Cached shader templates
         static std::string s_vertexTemplate;
         static std::string s_fragmentHeader;
         static std::string s_fragmentFooter;
         static bool s_templatesLoaded;
     public:
         
-        static CompilationResult compile(const material::MaterialData& material);
-
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
 
         static TerrainCompilationResult compileTerrainMaterial(const terrain::TerrainMaterialData& material);
-
-        static void reloadTemplates();
 
     private:
         static std::string generateVertexShader();

@@ -116,7 +116,6 @@ namespace controllers::offscreen
             stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
             stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
 
-            // Terrain profiling stats
             stats.terrain.updateTerrainUs = gpuDrivenRenderer->getTerrainUpdateUs();
             stats.terrain.streamingUs = gpuDrivenRenderer->getTerrainStreamingUs();
             stats.terrain.buildTileDataUs = gpuDrivenRenderer->getTerrainBuildTileDataUs();
