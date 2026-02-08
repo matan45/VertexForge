@@ -39,19 +39,15 @@ namespace terrain
                 return false;
             }
 
-            // Magic
             file.write(WEIGHT_MAP_MAGIC.data(), 4);
 
-            // Version
             writeLE(file, FORMAT_VERSION_MAJOR);
             writeLE(file, FORMAT_VERSION_MINOR);
             writeLE(file, FORMAT_VERSION_PATCH);
 
-            // Tile count and resolution
             writeLE(file, static_cast<uint32_t>(tileWeights.size()));
             writeLE(file, resolution);
 
-            // Per tile
             for (const auto& [coord, weightData] : tileWeights)
             {
                 writeLE(file, coord.x);
@@ -118,7 +114,6 @@ namespace terrain
                 return result;
             }
 
-            // Validate magic
             std::array<char, 4> magic{};
             file.read(magic.data(), 4);
             if (magic != WEIGHT_MAP_MAGIC)
@@ -127,7 +122,6 @@ namespace terrain
                 return result;
             }
 
-            // Read version
             uint32_t major = readLE<uint32_t>(file);
             uint32_t minor = readLE<uint32_t>(file);
             uint32_t patch = readLE<uint32_t>(file);
@@ -142,7 +136,6 @@ namespace terrain
             uint32_t tileCount = readLE<uint32_t>(file);
             uint32_t resolution = readLE<uint32_t>(file);
 
-            // Validate
             if (tileCount > MAX_REASONABLE_TILE_COUNT)
             {
                 vfLogError("TerrainWeightMapAsset: Unreasonable tile count {} in {}", tileCount, path);

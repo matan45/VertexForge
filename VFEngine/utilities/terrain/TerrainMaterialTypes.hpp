@@ -10,8 +10,8 @@ namespace terrain
 
     enum class TerrainLayerBlendMode : uint8_t
     {
-        Linear = 0,      // Standard weighted linear blend
-        Overlay = 1       // Detail overlay
+        Linear = 0,
+        Overlay = 1
     };
 
     inline std::string blendModeToString(TerrainLayerBlendMode mode)
@@ -47,7 +47,7 @@ namespace terrain
         std::array<TerrainMaterialLayer, MAX_TERRAIN_LAYERS> layers;
         uint8_t activeLayerCount = 1;
 
-        std::string cachedMaterialSnippet; // Compiled GLSL snippet
+        std::string cachedMaterialSnippet;
         bool needsRecompile = true;
     };
 }

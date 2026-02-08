@@ -6,19 +6,6 @@
 
 namespace terrain
 {
-    // 16 layers / 4 RGBA channels = 4 weight textures per tile
-    constexpr int WEIGHT_TEXTURES_PER_TILE = 4;
-
-    inline uint32_t getWeightTextureIndex(uint32_t layerIndex)
-    {
-        return layerIndex / 4;
-    }
-
-    inline uint32_t getWeightChannelIndex(uint32_t layerIndex)
-    {
-        return layerIndex % 4;
-    }
-
     struct TileWeightMapData
     {
         // layerWeights[layerIndex] = flat vector of size resolution*resolution
@@ -48,6 +35,5 @@ namespace terrain
         void packRGBA(uint32_t textureIndex, uint32_t x, uint32_t z,
                       float& r, float& g, float& b, float& a) const;
 
-        void clear();
     };
 }

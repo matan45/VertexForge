@@ -46,8 +46,7 @@ namespace terrain
         }
         else
         {
-            // All weights zero — reset to layer 0 = 1.0
-            for (auto& layer : layerWeights)
+                for (auto& layer : layerWeights)
             {
                 layer[idx] = 0.0f;
             }
@@ -75,7 +74,6 @@ namespace terrain
         layerWeights.clear();
         layerWeights.resize(activeLayerCount);
 
-        // Layer 0 = 1.0 (base layer), all others = 0.0
         layerWeights[0].assign(texelCount, 1.0f);
         for (uint8_t i = 1; i < activeLayerCount; ++i)
         {
@@ -100,17 +98,14 @@ namespace terrain
 
         if (newCount > oldCount)
         {
-            // Growing: add zero-filled layers
             layerWeights.resize(newCount);
             for (uint8_t i = oldCount; i < newCount; ++i)
             {
                 layerWeights[i].assign(texelCount, 0.0f);
             }
-            // No renormalization needed — existing weights still sum to 1.0
         }
         else if (newCount < oldCount)
         {
-            // Shrinking: remove layers and renormalize
             layerWeights.resize(newCount);
             normalizeAll();
         }
@@ -126,10 +121,4 @@ namespace terrain
         a = (baseLayer + 3 < layerWeights.size()) ? getWeight(baseLayer + 3, x, z) : 0.0f;
     }
 
-    void TileWeightMapData::clear()
-    {
-        layerWeights.clear();
-        resolution = 0;
-        activeLayerCount = 0;
-    }
 }

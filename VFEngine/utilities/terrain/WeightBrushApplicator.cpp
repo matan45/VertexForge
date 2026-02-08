@@ -16,7 +16,6 @@ namespace terrain
             return false;
         }
 
-        // Determine effective brush type (shift-invert swaps paint/erase)
         PaintBrushType effectiveType = params.brushType;
         if (params.invert)
         {

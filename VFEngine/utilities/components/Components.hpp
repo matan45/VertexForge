@@ -331,8 +331,6 @@ namespace components
         }
     };
 
-    // Non-owning pointer to AnimatorStateMachine (owned by RuntimeAnimatorSystem)
-    // Cast to animation::AnimatorStateMachine* when needed
     struct AnimatorComponent
     {
         void* stateMachine = nullptr;
@@ -410,10 +408,9 @@ namespace components
         bool showGizmo = false;
     };
 
-    // Terrain component - attached to parent terrain entity
     struct TerrainComponent
     {
-        uint8_t resolution = 0;  // 0=Low(33x33), 1=Medium(65x65), 2=High(129x129), 3=Ultra(257x257)
+        uint8_t resolution = 0;
         float worldTileSize = 32.0f;
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
@@ -425,24 +422,17 @@ namespace components
 
         std::array<float, 4> lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
 
-        // Heightmap source path (for regeneration/serialization)
         std::string heightmapPath;
-
-        // Terrain material asset path (.vfTerrainMat)
         std::string terrainMaterialPath;
-
-        // Weight map data path (.vfTerrainWeights)
         std::string weightMapPath;
 
-        bool isActive = true;       // Global terrain enable/disable
-        bool isDirty = false;       // Config changed, needs regeneration
+        bool isActive = true;
+        bool isDirty = false;
 
-        // Runtime statistics (read-only - updated by TerrainService)
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
     };
 
-    // Terrain tile component - attached to each tile child entity
     struct TerrainTileComponent
     {
         int32_t tileX = 0;
@@ -451,10 +441,9 @@ namespace components
         uint8_t currentLOD = 0;
         bool isVisible = true;
 
-        bool isDirty = false;           // Needs geometry regeneration
-        bool isGPUResident = false;     // Currently uploaded to GPU
+        bool isDirty = false;
+        bool isGPUResident = false;
 
-        // Cached bounds for inspector display
         float boundingMinY = 0.0f;
         float boundingMaxY = 0.0f;
     };

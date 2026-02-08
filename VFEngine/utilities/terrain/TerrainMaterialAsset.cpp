@@ -150,7 +150,6 @@ namespace terrain
                 }
             }
 
-            // Parse cached shader snippet
             material.cachedMaterialSnippet = j.value("cachedMaterialSnippet", "");
             material.needsRecompile = material.cachedMaterialSnippet.empty();
 
@@ -196,7 +195,6 @@ namespace terrain
         }
         j["layers"] = layersJson;
 
-        // Cached shader snippet
         if (!material.cachedMaterialSnippet.empty())
         {
             j["cachedMaterialSnippet"] = material.cachedMaterialSnippet;

@@ -41,28 +41,6 @@ namespace material
         Color
     };
 
-    inline std::string paramTypeToString(ParameterType type)
-    {
-        switch (type)
-        {
-        case ParameterType::Scalar: return "scalar";
-        case ParameterType::Vec2: return "vec2";
-        case ParameterType::Vec3: return "vec3";
-        case ParameterType::Vec4: return "vec4";
-        case ParameterType::Color: return "color";
-        default: return "scalar";
-        }
-    }
-
-    inline ParameterType stringToParamType(const std::string& str)
-    {
-        if (str == "vec2") return ParameterType::Vec2;
-        if (str == "vec3") return ParameterType::Vec3;
-        if (str == "vec4") return ParameterType::Vec4;
-        if (str == "color") return ParameterType::Color;
-        return ParameterType::Scalar;
-    }
-
     using ParameterValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4>;
 
     struct MaterialParameter
@@ -130,21 +108,18 @@ namespace material
         std::string name;
         PinType type = PinType::Float;
         PinKind kind = PinKind::Input;
-        std::optional<ParameterValue> defaultValue; // Default value if not connected
+        std::optional<ParameterValue> defaultValue;
     };
 
     enum class NodeType : uint8_t
     {
-        // Output
         PBROutput,
 
-        // Constants
         ConstantScalar,
         ConstantVec2,
         ConstantVec3,
         ConstantColor,
 
-        // Math operations
         Add,
         Subtract,
         Multiply,
@@ -165,10 +140,8 @@ namespace material
         Normalize,
         Length,
 
-        // Mix/Blend
-        MixColor, // Mix two Vec3 colors by alpha factor
+        MixColor,
 
-        // Utilities
         MakeVec2,
         MakeVec3,
         MakeVec4,
@@ -177,16 +150,13 @@ namespace material
         SplitVec4,
         Fresnel,
 
-        // Input (vertex data)
         VertexNormal,
         VertexUV,
         Time,
 
-        // Texture
         TextureSample,
-        OrmSample, // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
+        OrmSample,
 
-        // Type Conversions
         FloatToVec2,
         FloatToVec3,
         FloatToVec4,
