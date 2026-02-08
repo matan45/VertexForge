@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TerrainTypes.hpp"
+#include "TerrainWeightMap.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
@@ -86,6 +87,10 @@ namespace terrain
 
         std::vector<float> heightData;
 
+        TileWeightMapData weightMap;
+        bool weightMapDirty = false;
+        bool weightMapGPUDirty = false;
+
         bool isDirty = true;
         bool isVisible = true;
 
@@ -129,6 +134,9 @@ namespace terrain
         [[nodiscard]] const TileLODData& getLODData(uint32_t level) const;
 
         void updateWorldBounds();
+
+        void initializeWeightMap(uint8_t layerCount);
+        [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
     private:
         void initializeFlat(float height = 0.0f);

@@ -8,6 +8,7 @@
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "material/MaterialManager.hpp"
 #include "components/Components.hpp"
@@ -18,6 +19,7 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <unordered_map>
 #include <memory>
 
@@ -559,6 +561,7 @@ namespace render::gpudriven
             terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
         {
             terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
+            terrainPipeline->updateWeightMapDescriptor(terrainMeshBuffer->getWeightMapBuffer());
         }
     }
 
@@ -812,8 +815,6 @@ namespace render::gpudriven
             if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
                 terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
             {
-                // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
-                // Just verify descriptor sets are valid before using them
                 vk::DescriptorSet terrainDataSet = terrainPipeline->getTerrainDataDescriptorSet();
                 vk::DescriptorSet terrainMeshletSet = terrainPipeline->getTerrainMeshletDescriptorSet();
                 vk::DescriptorSet terrainVertexSet = terrainPipeline->getTerrainVertexDescriptorSet();
@@ -990,6 +991,59 @@ namespace render::gpudriven
         }
 
         return registered;
+    }
+
+    void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
+    {
+        if (materialPath.empty() || materialPath == currentTerrainMaterialPath_)
+        {
+            return;
+        }
+
+        if (!bindlessTextures || !materialTextureCache)
+        {
+            return;
+        }
+
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        if (!materialData)
+        {
+            return;
+        }
+
+        terrainLayerData_.clear();
+        terrainLayerData_.resize(materialData->activeLayerCount);
+
+        for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+        {
+            const auto& layer = materialData->layers[i];
+            TerrainLayerGPUData& gpuLayer = terrainLayerData_[i];
+            gpuLayer = {};
+
+            auto tryRegisterLayerTex = [&](const std::string& texPath) -> uint32_t
+            {
+                if (texPath.empty()) return 0;
+                if (!materialTextureCache->loadTexture(texPath)) return 0;
+                vk::ImageView view = materialTextureCache->getViewForPath(texPath);
+                vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
+                if (!view || !sampler) return 0;
+                return bindlessTextures->registerTexture(texPath, view, sampler);
+            };
+
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTexturePath);
+            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTexturePath);
+
+            gpuLayer.tilingScale = layer.tilingScale;
+        }
+
+        if (terrainPipeline)
+        {
+            terrainPipeline->updateTerrainLayerInfo(terrainLayerData_);
+        }
+
+        currentTerrainMaterialPath_ = materialPath;
+        loggerInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
+                   materialData->activeLayerCount, materialPath);
     }
 
     void GPUDrivenRenderer::updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels)
@@ -1232,7 +1286,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
     {
-        terrainFrustumCullingEnabled = enabled;
         if (terrainPipeline)
         {
             terrainPipeline->setFrustumCullingEnabled(enabled);
@@ -1241,7 +1294,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
     {
-        terrainMeshletCullingEnabled = enabled;
         if (terrainPipeline)
         {
             terrainPipeline->setMeshletCullingEnabled(enabled);
@@ -1249,11 +1301,19 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
-                                          const glm::vec3& cameraPosition)
+                                          const glm::vec3& cameraPosition,
+                                          const std::string& terrainMaterialPath)
     {
+        auto frameStart = std::chrono::high_resolution_clock::now();
+
         if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
         {
             return;
+        }
+
+        if (!terrainMaterialPath.empty())
+        {
+            registerTerrainLayerTextures(terrainMaterialPath);
         }
 
         if (visibleTiles.empty())
@@ -1261,6 +1321,8 @@ namespace render::gpudriven
             terrainTileData.clear();
             return;
         }
+
+        auto streamStart = std::chrono::high_resolution_clock::now();
 
         if (terrainStreamManager)
         {
@@ -1284,12 +1346,35 @@ namespace render::gpudriven
             }
         }
 
-        terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+        auto streamEnd = std::chrono::high_resolution_clock::now();
+        terrainStreamingUs_ = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        if (!terrainTileData.empty())
+        // Always rebuild tile data from current visible set — the build itself
+        // is cheap (vector population from existing allocations) and the previous
+        // first/last/count heuristic missed mid-set visibility changes.
+        terrainAdapter->markGPUTileDataDirty();
+
+        auto buildStart = std::chrono::high_resolution_clock::now();
+        const auto& newTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+        auto buildEnd = std::chrono::high_resolution_clock::now();
+        terrainBuildTileDataUs_ = std::chrono::duration<float, std::micro>(buildEnd - buildStart).count();
+
+        auto uploadStart = std::chrono::high_resolution_clock::now();
+
+        if (!newTileData.empty())
         {
+            terrainTileData = newTileData;
             terrainPipeline->updateTileData(terrainTileData);
         }
+        else
+        {
+            terrainTileData.clear();
+        }
+
+        auto uploadEnd = std::chrono::high_resolution_clock::now();
+        terrainUploadTileDataUs_ = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
+
+        terrainUpdateUs_ = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 
     void GPUDrivenRenderer::clearTerrainData()
@@ -1303,6 +1388,7 @@ namespace render::gpudriven
             terrainAdapter->clear();
         }
         terrainTileData.clear();
+        currentTerrainMaterialPath_.clear();
 
         // Reset terrain pipeline tile count to prevent rendering stale data
         if (terrainPipeline)
@@ -1324,6 +1410,24 @@ namespace render::gpudriven
         }
     }
 
+    const TerrainStreamingStats* GPUDrivenRenderer::getTerrainStreamingStats() const
+    {
+        if (terrainStreamManager)
+        {
+            return &terrainStreamManager->getStats();
+        }
+        return nullptr;
+    }
+
+    TerrainCullingStats GPUDrivenRenderer::getTerrainCullingStats()
+    {
+        if (terrainPipeline)
+        {
+            return terrainPipeline->readStats();
+        }
+        return {};
+    }
+
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
@@ -1336,7 +1440,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
         terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),

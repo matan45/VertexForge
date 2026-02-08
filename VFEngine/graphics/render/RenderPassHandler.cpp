@@ -829,7 +829,8 @@ namespace render
             if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
             {
                 auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
-                gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition);
+                auto matPath = terrainRenderProvider->getTerrainMaterialPath();
+                gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
             }
         }
 

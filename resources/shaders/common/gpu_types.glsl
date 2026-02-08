@@ -98,8 +98,8 @@ struct MeshTasksCommand {
 struct TerrainTileGPUData {
     mat4 modelMatrix;           // Usually identity for world-space terrain
     vec4 boundingSphere;        // xyz = world center, w = radius
-    vec4 aabbMin;               // xyz = world AABB min, w = unused
-    vec4 aabbMax;               // xyz = world AABB max, w = unused
+    vec4 aabbMin;               // xyz = world AABB min, w = weightMapResolution (33/65/129)
+    vec4 aabbMax;               // xyz = world AABB max, w = activeLayerCount (1-16)
     uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
     uvec4 lod1MeshletData;      // Same layout
     uvec4 lod2MeshletData;      // Same layout
@@ -108,7 +108,15 @@ struct TerrainTileGPUData {
     int coordX;                 // Tile coordinate X
     int coordZ;                 // Tile coordinate Z
     uint flags;                 // Rendering flags
-    uint materialIndex;         // Index into terrain material array
+    uint weightMapOffset;       // Byte offset into weight map SSBO
+};
+
+// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (16 bytes)
+struct TerrainLayerGPUData {
+    uint albedoTextureIndex;    // Bindless index (0 = default white)
+    uint normalTextureIndex;    // Bindless index (0 = default)
+    float tilingScale;          // UV tiling multiplier
+    uint padding;
 };
 
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {

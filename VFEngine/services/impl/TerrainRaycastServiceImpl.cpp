@@ -4,6 +4,8 @@
 #include "../events/TerrainRaycastEvents.hpp"
 #include "../events/SculptModeEvents.hpp"
 #include "../events/BrushEvents.hpp"
+#include "../events/PaintModeEvents.hpp"
+#include "../events/PaintBrushEvents.hpp"
 
 namespace services
 {
@@ -21,9 +23,19 @@ namespace services
             dispatcher.unsubscribe(sculptModeToken);
         }
 
+        if (paintModeToken.isValid())
+        {
+            dispatcher.unsubscribe(paintModeToken);
+        }
+
         if (brushParamsToken.isValid())
         {
             dispatcher.unsubscribe(brushParamsToken);
+        }
+
+        if (paintBrushParamsToken.isValid())
+        {
+            dispatcher.unsubscribe(paintBrushParamsToken);
         }
     }
 
@@ -34,7 +46,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if (!sculptModeActive || !provider)
+                if ((!sculptModeActive && !paintModeActive) || !provider)
                 {
                     return;
                 }
@@ -93,6 +105,45 @@ namespace services
             [this](const events::brush::BrushParamsChangedNotification& n)
             {
                 if (sculptModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        static_cast<float>(n.params.shape));
+                }
+            });
+
+        paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
+            [this](const events::paint::PaintModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    paintModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::paintBrush::GetPaintBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff),
+                            static_cast<float>(brushParams.shape));
+                    }
+                }
+                else
+                {
+                    paintModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
+                }
+            });
+
+        paintBrushParamsToken = dispatcher.subscribe<events::paintBrush::PaintBrushParamsChangedNotification>(
+            [this](const events::paintBrush::PaintBrushParamsChangedNotification& n)
+            {
+                if (paintModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

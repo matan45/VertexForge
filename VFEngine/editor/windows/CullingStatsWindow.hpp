@@ -10,8 +10,6 @@ namespace windows
     public:
         void draw();
 
-        void show() { visible = true; }
-        void hide() { visible = false; }
         void toggle() { visible = !visible; }
         bool isVisible() const { return visible; }
     };

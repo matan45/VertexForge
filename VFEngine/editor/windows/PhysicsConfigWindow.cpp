@@ -5,6 +5,7 @@
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <vector>
+#include <cstring>
 
 namespace windows
 {
@@ -195,7 +196,8 @@ namespace windows
                 else
                 {
                     char nameBuffer[64];
-                    strncpy_s(nameBuffer, layer.name.c_str(), sizeof(nameBuffer) - 1);
+                    std::strncpy(nameBuffer, layer.name.c_str(), sizeof(nameBuffer) - 1);
+                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
                     ImGui::PushItemWidth(150);
                     if (ImGui::InputText("##LayerName", nameBuffer, sizeof(nameBuffer)))
                     {

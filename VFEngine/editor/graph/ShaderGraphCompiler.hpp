@@ -1,5 +1,6 @@
 #pragma once
 #include "material/MaterialTypes.hpp"
+#include <terrain/TerrainMaterialTypes.hpp>
 #include <string>
 #include <string_view>
 
@@ -10,6 +11,12 @@ namespace editor::graph {
         bool success = false;
         std::string vertexShader;
         std::string fragmentShader;
+        std::string errorMessage;
+    };
+
+    struct TerrainCompilationResult {
+        bool success = false;
+        std::string materialSnippet; // GLSL body (no header/footer templates)
         std::string errorMessage;
     };
     
@@ -39,18 +46,15 @@ namespace editor::graph {
         // Allowed base directory for shader files (relative to executable)
         static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
 
-        // Cached shader templates
         static std::string s_vertexTemplate;
         static std::string s_fragmentHeader;
         static std::string s_fragmentFooter;
         static bool s_templatesLoaded;
     public:
         
-        static CompilationResult compile(const material::MaterialData& material);
-        
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
-        
-        static void reloadTemplates();
+
+        static TerrainCompilationResult compileTerrainMaterial(const terrain::TerrainMaterialData& material);
 
     private:
         static std::string generateVertexShader();
@@ -62,7 +66,9 @@ namespace editor::graph {
         static std::string readTextFile(std::string_view path);
 
         // Topological sort of nodes for proper evaluation order
-        static std::vector<uint32_t> topologicalSort(const material::ShaderGraph& graph);
+        // If outputNode is null, uses graph.findOutputNode() (for regular materials)
+        static std::vector<uint32_t> topologicalSort(const material::ShaderGraph& graph,
+                                                      const material::ShaderNode* outputNode = nullptr);
         
         static std::string generateNodeCode(const material::ShaderGraph& graph,
                                            uint32_t nodeId,

@@ -35,14 +35,39 @@ namespace render::gpudriven
             }
         }
 
+        // Sort visible tiles by distance to camera (nearest first) for fallback budgeting
+        struct TileWithDistance
+        {
+            terrain::TerrainTile* tile;
+            float distance;
+        };
+        std::vector<TileWithDistance> sortedTiles;
+        sortedTiles.reserve(visibleTiles.size());
+
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
                 continue;
 
-            TerrainTileKey key{tile->coord.x, tile->coord.z};
             glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
             float distance = glm::length(tileCenter - cameraPosition);
+            sortedTiles.push_back({tile, distance});
+        }
+
+        std::sort(sortedTiles.begin(), sortedTiles.end(),
+                  [](const TileWithDistance& a, const TileWithDistance& b) {
+                      return a.distance < b.distance;
+                  });
+
+        uint32_t fallbackUploads = 0;
+        size_t fallbackBytes = 0;
+
+        for (const auto& entry : sortedTiles)
+        {
+            terrain::TerrainTile* tile = entry.tile;
+            float distance = entry.distance;
+
+            TerrainTileKey key{tile->coord.x, tile->coord.z};
 
             auto infoIt = tileInfos.find(key);
             if (infoIt == tileInfos.end())
@@ -66,6 +91,12 @@ namespace render::gpudriven
 
             if (!infoIt->second.hasLODLoaded(3))
             {
+                if (fallbackUploads >= config.maxFallbackUploadsPerFrame ||
+                    fallbackBytes >= config.maxFallbackBytesPerFrame)
+                {
+                    continue;
+                }
+
                 if (adapter.uploadTileAddLOD(*tile, 3))
                 {
                     infoIt->second.setLODLoaded(3);
@@ -80,11 +111,20 @@ namespace render::gpudriven
                     currentMemoryUsage += lodMemory;
                     stats.uploadsThisFrame++;
                     stats.bytesUploadedThisFrame += lodMemory;
+                    fallbackUploads++;
+                    fallbackBytes += lodMemory;
+                }
+            }
+
+                if (tile->hasWeightMap() && tile->weightMapGPUDirty)
+            {
+                if (adapter.uploadWeightMap(*tile))
+                {
+                    tile->weightMapGPUDirty = false;
                 }
             }
         }
 
-        // Handle dirty tiles (brush sculpting) - re-upload regenerated LODs
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->hasAnyGPUDirtyLOD())
@@ -98,13 +138,10 @@ namespace render::gpudriven
                 if (!tile->isLODGPUDirty(lod))
                     continue;
 
-                // Only re-upload if this LOD was previously loaded on GPU
                 if (infoIt != tileInfos.end() && infoIt->second.hasLODLoaded(lod))
                 {
-                    // Evict stale GPU data
                     evictTileLOD(key, lod);
 
-                    // Re-upload with regenerated meshlet data
                     if (adapter.uploadTileAddLOD(*tile, lod))
                     {
                         auto& info = tileInfos[key];
@@ -119,6 +156,15 @@ namespace render::gpudriven
 
                 tile->clearLODGPUDirty(lod);
             }
+        }
+
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap())
+                continue;
+
+            adapter.uploadWeightMap(*tile);
+            tile->weightMapGPUDirty = false;
         }
 
         while (!uploadQueue.empty())
@@ -261,7 +307,7 @@ namespace render::gpudriven
         {
             TerrainTileKey key;
             uint8_t lodLevel;
-            float evictionScore; // Higher = more likely to evict
+            float evictionScore;
             size_t memorySize;
         };
 
@@ -290,7 +336,7 @@ namespace render::gpudriven
                       return a.evictionScore > b.evictionScore;
                   });
 
-        size_t targetMemory = static_cast<size_t>(config.memoryBudgetBytes * 0.8f); // Target 80% usage
+        size_t targetMemory = static_cast<size_t>(config.memoryBudgetBytes * 0.8f);
 
         for (const auto& candidate : candidates)
         {
@@ -298,7 +344,6 @@ namespace render::gpudriven
                 break;
 
             evictTileLOD(candidate.key, candidate.lodLevel);
-            stats.tilesEvicted++;
         }
     }
 
@@ -326,7 +371,6 @@ namespace render::gpudriven
         }
         else
         {
-            // Update current loaded LOD to finest available
             for (uint8_t lod = 0; lod < 4; ++lod)
             {
                 if (info.hasLODLoaded(lod))

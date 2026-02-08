@@ -13,7 +13,8 @@ namespace windows
         Rotate = 2,
         Scale = 3,
         Translate = 4,
-        Sculpt = 5
+        Sculpt = 5,
+        Paint = 6
     };
 
     class ViewPortOverlay

@@ -56,7 +56,6 @@ namespace material
             }
             else if (j.is_array())
             {
-                // Validate array elements are numbers
                 for (size_t i = 0; i < j.size(); ++i)
                 {
                     if (!j[i].is_number())
@@ -95,7 +94,7 @@ namespace material
             vfLogWarning("Failed to parse property{}: {}",
                          context.empty() ? "" : " '" + context + "'", e.what());
         }
-        return 0.0f; // Default
+        return 0.0f;
     }
 
     json MaterialAsset::serializeParamValue(const ParameterValue& val)
@@ -165,7 +164,6 @@ namespace material
         catch (const json::exception& e)
         {
             vfLogWarning("Failed to parse parameter '{}': {}", paramName, e.what());
-            // Return type-appropriate default
             switch (type)
             {
             case ParameterType::Vec2: return glm::vec2(0.0f);
@@ -181,14 +179,12 @@ namespace material
     {
         fs::path filePath(path);
 
-        // Validate file exists
         if (!fs::exists(filePath))
         {
             vfLogError("Material file not found: {}", path);
             return std::nullopt;
         }
 
-        // Check file size (sanity check - materials shouldn't be huge)
         std::error_code ec;
         auto fileSize = fs::file_size(filePath, ec);
         if (ec)
@@ -211,7 +207,6 @@ namespace material
             return std::nullopt;
         }
 
-        // Parse JSON with detailed error handling
         json j;
         try
         {
@@ -224,7 +219,6 @@ namespace material
             return std::nullopt;
         }
 
-        // Validate root is an object
         if (!j.is_object())
         {
             vfLogError("Material file '{}' must contain a JSON object at root level", path);
@@ -233,7 +227,7 @@ namespace material
 
         MaterialData material;
         int warningCount = 0;
-        constexpr int MAX_WARNINGS = 20; // Limit warning spam
+        constexpr int MAX_WARNINGS = 20;
 
         auto logWarningLimited = [&](const std::string& msg)
         {
@@ -250,7 +244,6 @@ namespace material
 
         try
         {
-            // Check version compatibility
             std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION);
             bool needsMigration = (fileVersion != MATERIAL_FORMAT_VERSION);
             if (needsMigration)
@@ -260,7 +253,6 @@ namespace material
                     std::string(path), fileVersion, MATERIAL_FORMAT_VERSION));
             }
 
-            // Basic properties with validation
             material.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));
             material.name = j.value("name", "Unnamed Material");
 
@@ -272,7 +264,6 @@ namespace material
 
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
 
-            // Shader graph with comprehensive validation
             if (j.contains("graph"))
             {
                 if (!j["graph"].is_object())
@@ -282,8 +273,8 @@ namespace material
                 else
                 {
                     const auto& graphJson = j["graph"];
+                    std::unordered_map<uint32_t, uint32_t> nodeIdRemap; // oldId -> newId for duplicates
 
-                    // Parse nodes
                     if (graphJson.contains("nodes"))
                     {
                         if (!graphJson["nodes"].is_array())
@@ -292,7 +283,7 @@ namespace material
                         }
                         else
                         {
-                            std::unordered_set<uint32_t> nodeIds; // Track for duplicate detection
+                            std::unordered_set<uint32_t> nodeIds;
 
                             for (size_t i = 0; i < graphJson["nodes"].size(); ++i)
                             {
@@ -307,21 +298,21 @@ namespace material
                                 try
                                 {
                                     ShaderNode node;
-                                    node.id = nodeJson.value("id", 0u);
+                                    uint32_t originalId = nodeJson.value("id", 0u);
+                                    node.id = originalId;
 
-                                    // Check for duplicate node IDs
                                     if (nodeIds.count(node.id))
                                     {
-                                        logWarningLimited(std::format(
-                                            "Duplicate node ID {} at index {}, assigning new ID", node.id, i));
                                         node.id = material.graph.nextNodeId++;
+                                        nodeIdRemap[originalId] = node.id;
+                                        logWarningLimited(std::format(
+                                            "Duplicate node ID {} at index {}, remapped to {}", originalId, i, node.id));
                                     }
                                     nodeIds.insert(node.id);
 
                                     node.type = stringToNodeType(nodeJson.value("type", "ConstantScalar"));
                                     node.name = nodeJson.value("name", "");
 
-                                    // Parse position with validation
                                     if (nodeJson.contains("position"))
                                     {
                                         const auto& posJson = nodeJson["position"];
@@ -339,7 +330,6 @@ namespace material
                                         }
                                     }
 
-                                    // Parse properties
                                     if (nodeJson.contains("properties"))
                                     {
                                         if (nodeJson["properties"].is_object())
@@ -369,7 +359,6 @@ namespace material
                         }
                     }
 
-                    // Build maps for link validation
                     std::unordered_set<uint32_t> validNodeIds;
                     std::unordered_map<uint32_t, NodeType> nodeTypeMap;
                     for (const auto& node : material.graph.nodes)
@@ -423,7 +412,12 @@ namespace material
                             pin == "EmissionStrength" || pin == "Opacity";
                     };
 
-                    // Parse links with validation
+                    auto remapNodeId = [&](uint32_t id) -> uint32_t
+                    {
+                        auto it = nodeIdRemap.find(id);
+                        return (it != nodeIdRemap.end()) ? it->second : id;
+                    };
+
                     if (graphJson.contains("links"))
                     {
                         if (!graphJson["links"].is_array())
@@ -446,12 +440,11 @@ namespace material
                                 {
                                     NodeLink link;
                                     link.id = linkJson.value("id", 0u);
-                                    link.sourceNodeId = linkJson.value("sourceNode", 0u);
-                                    link.targetNodeId = linkJson.value("targetNode", 0u);
+                                    link.sourceNodeId = remapNodeId(linkJson.value("sourceNode", 0u));
+                                    link.targetNodeId = remapNodeId(linkJson.value("targetNode", 0u));
                                     link.sourcePin = linkJson.value("sourcePin", "");
                                     link.targetPin = linkJson.value("targetPin", "");
 
-                                    // Validate link references existing nodes
                                     if (!validNodeIds.count(link.sourceNodeId))
                                     {
                                         logWarningLimited(std::format(
@@ -467,7 +460,6 @@ namespace material
                                         continue;
                                     }
 
-                                    // Validate pin names are not empty
                                     if (link.sourcePin.empty() || link.targetPin.empty())
                                     {
                                         logWarningLimited(std::format(
@@ -475,7 +467,6 @@ namespace material
                                         continue;
                                     }
 
-                                    // Validate link direction - source node must have output pins
                                     NodeType sourceType = nodeTypeMap[link.sourceNodeId];
                                     NodeType targetType = nodeTypeMap[link.targetNodeId];
 
@@ -487,7 +478,6 @@ namespace material
                                         continue;
                                     }
 
-                                    // Target node must have input pins
                                     if (isNodeTypeWithNoInputs(targetType))
                                     {
                                         logWarningLimited(std::format(
@@ -496,7 +486,6 @@ namespace material
                                         continue;
                                     }
 
-                                    // Check if link appears to be reversed (source pin is an input, target pin is an output)
                                     bool sourceIsActuallyInput = (sourceType == NodeType::PBROutput &&
                                         isPBROutputInputPin(link.sourcePin));
                                     bool targetIsActuallyOutput = isOutputOnlyPin(targetType, link.targetPin);
@@ -544,7 +533,6 @@ namespace material
                 material.graph.nodes.push_back(std::move(outputNode));
             }
 
-            // Parse cached shaders
             if (j.contains("cachedShader"))
             {
                 if (j["cachedShader"].is_object())
@@ -571,10 +559,8 @@ namespace material
                         if (!isOutdated)
                         {
                             std::string expectedDecl = "u_Textures[" + std::to_string(MAX_MATERIAL_TEXTURES) + "]";
-                            // If we don't find the expected declaration, it might be outdated
                             if (material.cachedFragmentShader.find(expectedDecl) == std::string::npos)
                             {
-                                // Double-check by looking for any other size
                                 for (int size = 1; size < MAX_MATERIAL_TEXTURES; ++size)
                                 {
                                     std::string declPattern = "u_Textures[" + std::to_string(size) + "]";
@@ -589,7 +575,6 @@ namespace material
 
                         if (isOutdated || needsMigration)
                         {
-                            // Force recompile for version upgrade
                             logWarningLimited(
                                 "Material has outdated cached shader (texture array size changed), clearing for recompile");
                             material.needsRecompile = true;
@@ -631,7 +616,6 @@ namespace material
         j["name"] = material.name;
         j["blendMode"] = blendModeToString(material.blendMode);
 
-        // Shader graph
         json graphJson;
         json nodesJson = json::array();
         for (const auto& node : material.graph.nodes)
@@ -670,7 +654,6 @@ namespace material
         graphJson["links"] = linksJson;
         j["graph"] = graphJson;
 
-        // Cached shaders
         if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())
         {
             json cachedJson;
@@ -679,7 +662,6 @@ namespace material
             j["cachedShader"] = cachedJson;
         }
 
-        // Write to file
         try
         {
             fs::path filePath(path);
@@ -692,7 +674,7 @@ namespace material
                 return false;
             }
 
-            file << j.dump(4); // Pretty print with 4-space indent
+            file << j.dump(4);
 
             // Flush to OS buffers before closing to avoid race conditions
             // where readers might see incomplete/stale data

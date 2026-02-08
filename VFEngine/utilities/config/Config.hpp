@@ -30,6 +30,8 @@ struct FileExtension
     inline static const std::string prefab = "vfPrefab";
     inline static const std::string font = "vfFont";
     inline static const std::string project = "vfproj";
+    inline static const std::string terrainMaterial = "vfTerrainMat";
+    inline static const std::string terrainWeights = "vfTerrainWeights";
 };
 
 namespace importConfig

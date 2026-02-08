@@ -65,8 +65,10 @@ namespace render::gpudriven
         glm::vec3 aabbMax{0.0f};
         glm::vec4 boundingSphere{0.0f}; // xyz = center, w = radius
 
-        // Geometric error per LOD for GPU LOD selection
         std::array<float, LOD_LEVEL_COUNT> geometricErrors{0.0f};
+
+        uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
+        bool weightMapUploaded = false;
 
         bool isUploaded = false;
 
@@ -92,6 +94,9 @@ namespace render::gpudriven
 
         std::unordered_map<TerrainTileKey, TerrainTileAllocation, TerrainTileKeyHash> allocations_;
 
+        std::vector<TerrainTileGPUData> cachedGPUTileData_;
+        bool gpuTileDataDirty_ = true;
+
     public:
         explicit TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer);
         ~TerrainGPUAdapter();
@@ -103,6 +108,8 @@ namespace render::gpudriven
 
         bool uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
 
+        bool uploadWeightMap(const terrain::TerrainTile& tile);
+
         // Keeps other LODs intact
         void removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel);
 
@@ -110,8 +117,10 @@ namespace render::gpudriven
 
         void clear();
 
-        std::vector<TerrainTileGPUData> buildGPUTileData(
-            const std::vector<terrain::TerrainTile*>& tiles) const;
+        void markGPUTileDataDirty() { gpuTileDataDirty_ = true; }
+
+        const std::vector<TerrainTileGPUData>& buildGPUTileData(
+            const std::vector<terrain::TerrainTile*>& tiles);
 
     private:
         bool uploadLODData(

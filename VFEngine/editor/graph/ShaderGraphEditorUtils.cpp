@@ -14,18 +14,6 @@ namespace editor::graph {
         return nullptr;
     }
 
-    material::ShaderNode* ShaderGraphEditor::findNodeByPinId(uint32_t pinId) {
-        for (auto& node : currentGraph->nodes) {
-            for (const auto& pin : node.inputs) {
-                if (pin.id == pinId) return &node;
-            }
-            for (const auto& pin : node.outputs) {
-                if (pin.id == pinId) return &node;
-            }
-        }
-        return nullptr;
-    }
-
     bool ShaderGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
 
         const material::NodePin* startPin = findPin(startPinId);
@@ -33,10 +21,8 @@ namespace editor::graph {
 
         if (!startPin || !endPin) return false;
 
-        // Can't connect input to input or output to output
         if (startPin->kind == endPin->kind) return false;
 
-        // Determine source (output) and target (input) pins
         const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
         const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
 
@@ -50,7 +36,6 @@ namespace editor::graph {
 
         if (!startPin || !endPin) return "";
 
-        // Determine source and target
         const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
         const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
 
@@ -66,7 +51,6 @@ namespace editor::graph {
 
 
     std::string ShaderGraphEditor::getConversionNodeName(material::PinType srcType, material::PinType dstType) const {
-        // Return the appropriate conversion node name
         if (srcType == material::PinType::Float) {
             switch (dstType) {
                 case material::PinType::Vec2: return "Float To Vec2";
@@ -111,51 +95,6 @@ namespace editor::graph {
             case material::PinType::Vec4:      return IM_COL32(255, 150, 200, 255);
             case material::PinType::Texture2D: return IM_COL32(200, 150, 255, 255);
             default:                           return IM_COL32(200, 200, 200, 255);
-        }
-    }
-
-    ImU32 ShaderGraphEditor::getNodeHeaderColor(material::NodeType type) const {
-        switch (type) {
-            case material::NodeType::PBROutput:
-                return IM_COL32(150, 80, 80, 255);
-            case material::NodeType::ConstantScalar:
-            case material::NodeType::ConstantVec2:
-            case material::NodeType::ConstantVec3:
-            case material::NodeType::ConstantColor:
-                return IM_COL32(80, 150, 80, 255);
-            case material::NodeType::Add:
-            case material::NodeType::Subtract:
-            case material::NodeType::Multiply:
-            case material::NodeType::Divide:
-            case material::NodeType::Lerp:
-            case material::NodeType::Power:
-                return IM_COL32(80, 80, 150, 255);
-            case material::NodeType::VertexNormal:
-            case material::NodeType::VertexUV:
-            case material::NodeType::Time:
-                return IM_COL32(150, 150, 80, 255);
-            case material::NodeType::TextureSample:
-                return IM_COL32(180, 100, 180, 255);
-            case material::NodeType::OrmSample:
-                return IM_COL32(180, 100, 180, 255);
-            case material::NodeType::MixColor:
-                return IM_COL32(100, 180, 100, 255);
-            // Type Conversions (VK-56) - Cyan/Teal
-            case material::NodeType::FloatToVec2:
-            case material::NodeType::FloatToVec3:
-            case material::NodeType::FloatToVec4:
-            case material::NodeType::Vec2ToFloat:
-            case material::NodeType::Vec3ToFloat:
-            case material::NodeType::Vec4ToFloat:
-            case material::NodeType::Vec2ToVec3:
-            case material::NodeType::Vec2ToVec4:
-            case material::NodeType::Vec3ToVec2:
-            case material::NodeType::Vec3ToVec4:
-            case material::NodeType::Vec4ToVec2:
-            case material::NodeType::Vec4ToVec3:
-                return IM_COL32(100, 180, 180, 255);
-            default:
-                return IM_COL32(100, 100, 100, 255);
         }
     }
 

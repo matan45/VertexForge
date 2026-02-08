@@ -8,6 +8,7 @@
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>
+#include <terrain/TerrainMaterialAsset.hpp>
 
 namespace windows
 {
@@ -71,6 +72,12 @@ namespace windows
         }
         drawCreateVFXModal(currentPath);
 
+        if (showCreateTerrainMaterialModal)
+        {
+            ImGui::OpenPopup("Create New Terrain Material");
+        }
+        drawCreateTerrainMaterialModal(currentPath);
+
         if (showSavePrefabModal)
         {
             ImGui::OpenPopup("Save Prefab");
@@ -121,6 +128,11 @@ namespace windows
                 {
                     showCreateVFXModal = true;
                     newVFXName.clear();
+                }
+                if (ImGui::MenuItem("Terrain Material"))
+                {
+                    showCreateTerrainMaterialModal = true;
+                    newTerrainMaterialName.clear();
                 }
                 ImGui::EndMenu();
             }
@@ -345,6 +357,53 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateVFXModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateTerrainMaterialModal(const fs::path& currentPath)
+    {
+        if (showCreateTerrainMaterialModal &&
+            ImGui::BeginPopupModal("Create New Terrain Material", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newTerrainMaterialName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Material Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newTerrainMaterialName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newTerrainMaterialName.empty())
+                {
+                    std::string extension = ".vfTerrainMat";
+                    fs::path newPath = currentPath / (newTerrainMaterialName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = currentPath / (newTerrainMaterialName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+                    auto defaultMat = terrain::TerrainMaterialAsset::createDefault(newTerrainMaterialName);
+                    if (terrain::TerrainMaterialAsset::save(pathStr, defaultMat))
+                    {
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateTerrainMaterialModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateTerrainMaterialModal = false;
             }
             ImGui::EndPopup();
         }

@@ -18,6 +18,8 @@
 #include "interfaces/ITerrainService.hpp"
 #include "interfaces/ISculptModeService.hpp"
 #include "interfaces/IBrushService.hpp"
+#include "interfaces/IPaintModeService.hpp"
+#include "interfaces/IPaintBrushService.hpp"
 #include "interfaces/ITerrainRaycastService.hpp"
 #include "events/EventTypes.hpp"
 
@@ -60,6 +62,8 @@ namespace handlers {
 		std::shared_ptr<services::ITerrainService> terrainService;
 		std::shared_ptr<services::ISculptModeService> sculptModeService;
 		std::shared_ptr<services::IBrushService> brushService;
+		std::shared_ptr<services::IPaintModeService> paintModeService;
+		std::shared_ptr<services::IPaintBrushService> paintBrushService;
 	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;

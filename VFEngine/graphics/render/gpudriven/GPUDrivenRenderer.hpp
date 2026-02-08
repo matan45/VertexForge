@@ -99,8 +99,6 @@ namespace render::gpudriven
 
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
-        bool terrainFrustumCullingEnabled = true;
-        bool terrainMeshletCullingEnabled = true;
         bool meshShaderSupported = false;
         uint32_t currentViewMode = 0;
 
@@ -236,7 +234,8 @@ namespace render::gpudriven
         void readBackLightOcclusionResults();
 
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
-                           const glm::vec3& cameraPosition);
+                           const glm::vec3& cameraPosition,
+                           const std::string& terrainMaterialPath = "");
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearTerrainData();
 
@@ -249,8 +248,26 @@ namespace render::gpudriven
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
+        // Terrain profiling
+        float getTerrainUpdateUs() const { return terrainUpdateUs_; }
+        float getTerrainStreamingUs() const { return terrainStreamingUs_; }
+        float getTerrainBuildTileDataUs() const { return terrainBuildTileDataUs_; }
+        float getTerrainUploadTileDataUs() const { return terrainUploadTileDataUs_; }
+        const TerrainStreamingStats* getTerrainStreamingStats() const;
+        TerrainCullingStats getTerrainCullingStats();
+
     private:
+        std::string currentTerrainMaterialPath_;
+        std::vector<TerrainLayerGPUData> terrainLayerData_;
+
+        // CPU profiling timings (microseconds)
+        float terrainUpdateUs_ = 0.0f;
+        float terrainStreamingUs_ = 0.0f;
+        float terrainBuildTileDataUs_ = 0.0f;
+        float terrainUploadTileDataUs_ = 0.0f;
+
         bool registerMaterialTextures(const std::string& materialPath);
+        void registerTerrainLayerTextures(const std::string& materialPath);
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);

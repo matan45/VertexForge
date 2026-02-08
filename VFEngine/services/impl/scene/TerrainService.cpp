@@ -8,10 +8,16 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
 #include "terrain/BrushSampler.hpp"
+#include "terrain/TerrainWeightMapAsset.hpp"
+#include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/BrushEvents.hpp"
+#include "../../events/PaintBrushEvents.hpp"
+#include "../../events/PaintModeEvents.hpp"
 #include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -30,6 +36,10 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
         dispatcher.unregisterCommandHandler<events::brush::ApplyBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::paintBrush::ApplyPaintBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainMaterialPathCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SaveWeightMapsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::LoadWeightMapsCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -98,6 +108,37 @@ namespace services
             [this](const events::brush::ApplyBrushCommand& cmd)
             {
                 applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::paintBrush::ApplyPaintBrushCommand>(
+            [this](const events::paintBrush::ApplyPaintBrushCommand& cmd)
+            {
+                applyPaintBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainMaterialPathCommand>(
+            [this](const events::terrain::SetTerrainMaterialPathCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.terrainEntity);
+                if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+                {
+                    registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
+
+                    syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SaveWeightMapsCommand>(
+            [this](const events::terrain::SaveWeightMapsCommand& cmd)
+            {
+                return saveWeightMaps(cmd.terrainEntity.id, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadWeightMapsCommand>(
+            [this](const events::terrain::LoadWeightMapsCommand& cmd)
+            {
+                return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -198,6 +239,8 @@ namespace services
         terrainComp.gridMaxZ = maxZ;
         terrainComp.lodDistances = config.lodDistances;
         terrainComp.heightmapPath = config.heightmapPath;
+        terrainComp.terrainMaterialPath = config.terrainMaterialPath;
+        terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
         terrainComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
@@ -208,6 +251,16 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
+
+        if (!config.weightMapPath.empty())
+        {
+            loadWeightMaps(parentHandle.id, config.weightMapPath);
+        }
+
+        if (!config.terrainMaterialPath.empty())
+        {
+            syncWeightMapLayerCount(parentHandle.id, config.terrainMaterialPath);
+        }
 
         events::terrain::TerrainCreatedNotification notification;
         notification.terrainEntity = parentHandle;
@@ -297,6 +350,8 @@ namespace services
         data.gridMaxX = comp.gridMaxX;
         data.gridMaxZ = comp.gridMaxZ;
         data.heightmapPath = comp.heightmapPath;
+        data.terrainMaterialPath = comp.terrainMaterialPath;
+        data.weightMapPath = comp.weightMapPath;
         data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
                                                 (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;
@@ -319,6 +374,21 @@ namespace services
             return false;
 
         return registry.all_of<components::TerrainComponent>(ent);
+    }
+
+    std::string TerrainService::getTerrainMaterialPath() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TerrainComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::TerrainComponent>(entity);
+            if (!comp.terrainMaterialPath.empty())
+            {
+                return comp.terrainMaterialPath;
+            }
+        }
+        return {};
     }
 
     bool TerrainService::hasTerrainTileComponent(EntityHandle entity) const
@@ -374,7 +444,6 @@ namespace services
         {
             (void)grid->updateLODs(cameraPosition);
 
-            // Regenerate meshlets for tiles modified by brush sculpting
             grid->regenerateDirtyTiles(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
@@ -400,7 +469,6 @@ namespace services
         if (terrainGrids.empty())
             return;
 
-        // Collect existing grids (keyed by stale entity IDs)
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
         for (auto& [id, grid] : terrainGrids)
         {
@@ -408,7 +476,6 @@ namespace services
         }
         terrainGrids.clear();
 
-        // Find restored entities with TerrainComponent and re-associate
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::TerrainComponent>();
 
@@ -474,11 +541,6 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
-        // The GPU compute shader handles direction per brush type,
-        // Shift-invert is passed through directly.
-        bool effectiveInvert = invert;
-
-        // For Flatten: capture target height on first click
         if (brushType == terrain::BrushType::Flatten)
         {
             if (isFirstApplication)
@@ -532,7 +594,7 @@ namespace services
             gpuParams.targetHeight = flattenTargetHeight;
             gpuParams.minHeight = tile->config.minHeight;
             gpuParams.maxHeight = tile->config.maxHeight;
-            gpuParams.invert = effectiveInvert;
+            gpuParams.invert = invert;
 
             if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
             {
@@ -551,5 +613,212 @@ namespace services
         notification.position = worldPosition;
         notification.type = brushType;
         dispatcher.publish(notification);
+    }
+
+    void TerrainService::applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{});
+        if (!targetEntity.has_value())
+        {
+            return;
+        }
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        auto brushParams = dispatcher.query(events::paintBrush::GetPaintBrushParamsQuery{});
+        auto brushType = dispatcher.query(events::paintBrush::GetPaintBrushTypeQuery{});
+
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+
+        // Build overlay bitmask from terrain material blend modes
+        uint16_t overlayMask = 0;
+        std::string materialPath = getTerrainMaterialPath();
+        if (!materialPath.empty())
+        {
+            auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+            if (materialData)
+            {
+                for (uint8_t i = 0; i < materialData->activeLayerCount && i < 16; ++i)
+                {
+                    if (materialData->layers[i].blendMode == terrain::TerrainLayerBlendMode::Overlay)
+                    {
+                        overlayMask |= (1u << i);
+                    }
+                }
+            }
+        }
+
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            if (!tile->hasWeightMap())
+            {
+                continue;
+            }
+
+            if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
+            {
+                continue;
+            }
+
+            if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
+            {
+                tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
+                tile->weightMapGPUDirty = true;
+            }
+
+            terrain::WeightBrushApplicator::ApplyParams applyParams;
+            applyParams.brushCenter = brushCenter;
+            applyParams.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            applyParams.brushRadius = brushParams.radius;
+            applyParams.brushStrength = brushParams.strength;
+            applyParams.brushOpacity = brushParams.opacity;
+            applyParams.vertexSpacing = tile->config.getVertexSpacing();
+            applyParams.verticesPerSide = tile->config.getVertexCount();
+            applyParams.falloff = brushParams.falloff;
+            applyParams.shape = brushParams.shape;
+            applyParams.brushType = brushType;
+            applyParams.activeLayer = brushParams.activeLayer;
+            applyParams.deltaTime = deltaTime;
+            applyParams.invert = invert;
+            applyParams.overlayMask = overlayMask;
+
+            if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
+            {
+                tile->weightMapDirty = true;
+                tile->weightMapGPUDirty = true;
+            }
+        }
+
+        events::paintBrush::PaintBrushAppliedNotification paintNotification;
+        paintNotification.position = worldPosition;
+        paintNotification.type = brushType;
+        dispatcher.publish(paintNotification);
+    }
+
+    bool TerrainService::saveWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto allTiles = gridIt->second->getAllTiles();
+        if (allTiles.empty())
+        {
+            vfLogWarning("TerrainService: No tiles to save weight maps for");
+            return true;
+        }
+
+        uint32_t resolution = allTiles[0]->config.getVertexCount();
+
+        std::unordered_map<terrain::TileCoord, terrain::TileWeightMapData, terrain::TileCoordHash> tileWeights;
+        for (const auto* tile : allTiles)
+        {
+            if (tile->hasWeightMap())
+            {
+                tileWeights.emplace(tile->coord, tile->weightMap);
+            }
+        }
+
+        return terrain::TerrainWeightMapAsset::save(path, tileWeights, resolution);
+    }
+
+    bool TerrainService::loadWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto loadedWeights = terrain::TerrainWeightMapAsset::load(path);
+        if (loadedWeights.empty())
+        {
+            return false;
+        }
+
+        auto allTiles = gridIt->second->getAllTiles();
+        uint32_t loadedCount = 0;
+
+        for (auto* tile : allTiles)
+        {
+            auto it = loadedWeights.find(tile->coord);
+            if (it != loadedWeights.end())
+            {
+                if (it->second.resolution == tile->config.getVertexCount())
+                {
+                    tile->weightMap = std::move(it->second);
+                    tile->weightMapDirty = true;
+                    loadedCount++;
+                }
+                else
+                {
+                    vfLogWarning("TerrainService: Weight map resolution mismatch for tile ({}, {}): "
+                                 "expected {}, got {}",
+                                 tile->coord.x, tile->coord.z,
+                                 tile->config.getVertexCount(), it->second.resolution);
+                }
+            }
+        }
+
+        vfLogInfo("TerrainService: Loaded weight maps for {} of {} tiles", loadedCount, allTiles.size());
+        return true;
+    }
+
+    void TerrainService::syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath)
+    {
+        if (materialPath.empty())
+        {
+            return;
+        }
+
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        if (!materialData)
+        {
+            return;
+        }
+
+        uint8_t layerCount = materialData->activeLayerCount;
+        if (layerCount == 0)
+        {
+            layerCount = 1;
+        }
+
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+        grid->updateWeightMapLayerCount(layerCount);
     }
 }

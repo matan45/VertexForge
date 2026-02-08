@@ -18,7 +18,6 @@ namespace services {
         glm::vec3 max{0.0f};
     };
 
-    // Per-camera culling statistics
     struct CameraCullingStats {
         CameraId cameraId = 0;
         bool isActive = false;
@@ -32,7 +31,6 @@ namespace services {
         uint32_t occludedCount = 0;
     };
 
-    // GPU-driven rendering statistics
     struct GPUDrivenDebugStats {
         bool enabled = false;
         bool frustumCullingEnabled = true;
@@ -45,31 +43,26 @@ namespace services {
         uint32_t culledByFrustum = 0;
         uint32_t culledByOcclusion = 0;
 
-        // LOD distribution
         uint32_t objectsLOD0 = 0;
         uint32_t objectsLOD1 = 0;
         uint32_t objectsLOD2 = 0;
         uint32_t objectsLOD3 = 0;
 
-        // Merged buffer stats
         uint32_t mergedVertexCount = 0;
         uint32_t mergedIndexCount = 0;
         uint32_t registeredMeshCount = 0;
         uint32_t registeredTextureCount = 0;
 
-        // Batch rendering stats
         uint32_t batchCount = 0;
         uint32_t commandsPerBatch = 0;
         uint32_t totalCapacity = 0;
         uint32_t drawCalls = 0;
 
-        // Memory usage (in bytes)
         uint64_t drawCommandBufferSize = 0;
         uint64_t drawCountBufferSize = 0;
         uint64_t perDrawDataBufferSize = 0;
         uint64_t totalMemoryUsage = 0;
 
-        // Meshlet culling stats (from task shader)
         bool meshletFrustumCullingEnabled = false;
         bool meshletBackfaceCullingEnabled = false;
         uint32_t totalMeshlets = 0;
@@ -77,7 +70,6 @@ namespace services {
         uint32_t meshletsCulledByBackface = 0;
         uint32_t visibleMeshlets = 0;
 
-        // Light culling stats
         bool bvhLightCullingEnabled = false;
         bool hiZLightOcclusionEnabled = false;
         uint32_t totalLights = 0;
@@ -87,23 +79,48 @@ namespace services {
         uint32_t lightsCulledByHiZ = 0;
     };
 
+    struct TerrainDebugStats {
+        float updateTerrainUs = 0.0f;
+        float streamingUs = 0.0f;
+        float buildTileDataUs = 0.0f;
+        float uploadTileDataUs = 0.0f;
+
+        uint32_t totalTiles = 0;
+        uint32_t culledTiles = 0;
+        uint32_t totalMeshlets = 0;
+        uint32_t culledMeshlets = 0;
+        uint32_t visibleMeshlets = 0;
+        uint32_t lodCount0 = 0;
+        uint32_t lodCount1 = 0;
+        uint32_t lodCount2 = 0;
+        uint32_t lodCount3 = 0;
+
+        uint32_t tilesLoaded = 0;
+        uint32_t tilesStreaming = 0;
+        uint32_t fallbackTiles = 0;
+        uint32_t fullDetailTiles = 0;
+        uint32_t uploadsThisFrame = 0;
+        size_t memoryUsedBytes = 0;
+        size_t memoryBudgetBytes = 0;
+        size_t bytesUploadedThisFrame = 0;
+    };
+
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
 
-        // Mesh BVH statistics
         size_t staticBvhEntityCount = 0;
         size_t dynamicBvhEntityCount = 0;
         size_t staticBvhNodeCount = 0;
         size_t dynamicBvhNodeCount = 0;
 
-        // Light BVH statistics
         size_t staticLightBvhCount = 0;
         size_t dynamicLightBvhCount = 0;
         size_t staticLightBvhNodeCount = 0;
         size_t dynamicLightBvhNodeCount = 0;
 
         GPUDrivenDebugStats gpuDriven;
+        TerrainDebugStats terrain;
     };
 
     struct ShadowStats {
@@ -115,7 +132,7 @@ namespace services {
         uint32_t directionalLightCount = 0;
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
-        uint32_t pointResolution = 512;  // Per-face resolution for VRAM calculation
+        uint32_t pointResolution = 512;
     };
 
     class IOffScreenProvider {

@@ -49,6 +49,10 @@ namespace render::gpudriven
         glm::vec3 aabbMax{0.0f};
         glm::vec4 boundingSphere{0.0f};
 
+        uint32_t weightMapOffset = 0;   // Offset in uint32 elements
+        uint32_t weightMapSize = 0;     // Size in uint32 elements
+        bool weightMapAllocated = false;
+
         bool hasAnyAllocation() const
         {
             for (const auto& lod : lods)
@@ -84,17 +88,17 @@ namespace render::gpudriven
         vk::Buffer meshletPrimitiveBuffer_;
         vk::DeviceMemory meshletPrimitiveBufferMemory_;
 
+        vk::Buffer weightMapBuffer_;
+        vk::DeviceMemory weightMapBufferMemory_;
+
         uint32_t maxVertexCount_ = 0;
         uint32_t maxIndexCount_ = 0;
         uint32_t maxMeshletCount_ = 0;
         uint32_t maxMeshletVertexCount_ = 0;
         uint32_t maxMeshletPrimitiveCount_ = 0;
 
-        uint32_t currentVertexCount_ = 0;
-        uint32_t currentIndexCount_ = 0;
-        uint32_t currentMeshletCount_ = 0;
-        uint32_t currentMeshletVertexCount_ = 0;
-        uint32_t currentMeshletPrimitiveCount_ = 0;
+        uint32_t maxWeightMapElements_ = 0;     // In uint32 elements (4 bytes each)
+        FreeListAllocator weightMapAllocator_;
 
         FreeListAllocator vertexAllocator_;
         FreeListAllocator indexAllocator_;
@@ -168,10 +172,15 @@ namespace render::gpudriven
 
         void clear();
 
+        // Weight map buffer management
+        uint32_t allocateWeightMap(const std::string& tileKey, uint32_t sizeBytes);
+        bool uploadWeightMapData(const std::string& tileKey, const void* data, uint32_t sizeBytes);
+
         vk::Buffer getVertexBuffer() const { return vertexBuffer_; }
         vk::Buffer getMeshletBuffer() const { return meshletBuffer_; }
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer_; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer_; }
+        vk::Buffer getWeightMapBuffer() const { return weightMapBuffer_; }
 
         bool isInitialized() const { return initialized_; }
 

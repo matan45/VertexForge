@@ -28,7 +28,6 @@ namespace services
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
 
-        // Key: terrain parent entity handle value
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainGrid>> terrainGrids;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
@@ -58,15 +57,21 @@ namespace services
             const glm::vec3& cameraPosition);
 
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
+        std::string getTerrainMaterialPath() const;
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+        void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
+
+        bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
+        bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+        void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
     };
 }

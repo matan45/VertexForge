@@ -20,6 +20,7 @@ namespace windows
         Script,
         Font,
         Project,
+        TerrainMaterial,
         Other
     };
 

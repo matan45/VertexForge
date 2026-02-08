@@ -19,7 +19,7 @@ layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragTileIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
 layout(location = 5) flat out uint fragLODLevel[];
-layout(location = 6) out vec2 fragWorldUV[];  // For terrain texture tiling
+layout(location = 6) out vec2 fragWorldUV[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -64,7 +64,7 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
     float lodBias;
     float errorThreshold;
-    float terrainTextureScale;  // Scale for world-space UV tiling
+    float terrainTextureScale;
     float padding;
     // Brush overlay (world space)
     float brushWorldX;
@@ -76,7 +76,6 @@ layout(push_constant) uniform PushConstants {
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
-// Shared memory for vertex caching
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
 shared vec3 sharedNormals[MESHLET_MAX_VERTICES];
 shared vec2 sharedTexCoords[MESHLET_MAX_VERTICES];
@@ -114,7 +113,6 @@ void main() {
 
     float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
 
-    // Load vertices into shared memory
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -146,7 +144,6 @@ void main() {
 
     barrier();
 
-    // Output vertices
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (localVertexIndex < vertexCount) {
@@ -166,7 +163,6 @@ void main() {
         }
     }
 
-    // Output primitives
     uint numPrimIterations = (primitiveCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numPrimIterations; iter++) {
         uint localPrimIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -206,6 +202,54 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
+
+// Set 11 - terrain tile data (needed for weight map offsets and layer counts)
+layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
+    TerrainTileGPUData tiles[];
+};
+
+// Weight map SSBO (packed RGBA uint8 data for all tiles)
+layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
+    uint weightMapData[];
+};
+
+float readWeightByte(uint byteOffset) {
+    uint wordIndex = byteOffset / 4u;
+    uint byteIndex = byteOffset % 4u;
+    uint word = weightMapData[wordIndex];
+    return float((word >> (byteIndex * 8u)) & 0xFFu) / 255.0;
+}
+
+float sampleWeightTexel(uint tileOffset, uint res, uint layer, uint x, uint z) {
+    uint texIdx = layer / 4u;
+    uint channel = layer % 4u;
+    uint texSize = res * res * 4u; // 4 bytes per texel (RGBA)
+    return readWeightByte(tileOffset + texIdx * texSize + (z * res + x) * 4u + channel);
+}
+
+// Bilinear interpolation of weight map for a specific layer
+float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
+    if (res == 0u) return (layer == 0u) ? 1.0 : 0.0;
+    uv = clamp(uv, 0.0, 1.0);
+    float fx = uv.x * float(res - 1u);
+    float fz = uv.y * float(res - 1u);
+    uint x0 = uint(floor(fx));
+    uint z0 = uint(floor(fz));
+    uint x1 = min(x0 + 1u, res - 1u);
+    uint z1 = min(z0 + 1u, res - 1u);
+    float sx = fract(fx);
+    float sz = fract(fz);
+    float w00 = sampleWeightTexel(tileOffset, res, layer, x0, z0);
+    float w10 = sampleWeightTexel(tileOffset, res, layer, x1, z0);
+    float w01 = sampleWeightTexel(tileOffset, res, layer, x0, z1);
+    float w11 = sampleWeightTexel(tileOffset, res, layer, x1, z1);
+    return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
+}
+
+// Terrain layer info SSBO (per-layer texture indices and tiling)
+layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
+    TerrainLayerGPUData terrainLayers[];
+};
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
@@ -274,10 +318,6 @@ layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 //-----------------------------------------------------------------------------
 const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
 const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
-
-//-----------------------------------------------------------------------------
-// Shadow Sampling Functions
-//-----------------------------------------------------------------------------
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     // Bounds validation to prevent GPU crash from invalid indices
@@ -459,12 +499,12 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Default terrain material properties
-    // TODO: In future, these will come from terrain material system (VK-178)
-    vec3 albedo = vec3(0.4, 0.35, 0.3);  // Brownish terrain color
-    float metallic = 0.0;
-    float roughness = 0.9;
-    float ao = 1.0;
+    // Terrain material from shader graph (VK-213)
+#include "../material/terrain_material_generated.glsl"
+    vec3 albedo = mat_albedo;
+    float metallic = mat_metallic;
+    float roughness = mat_roughness;
+    float ao = mat_ao;
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
@@ -483,17 +523,12 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // Direct lighting with shadows
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
-    // Linearize depth for cluster lookup and shadow cascades
     float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
-
-    // Cache cluster index - used for lighting and debug visualization
     uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
 
-    // Cluster-based point and spot light evaluation
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
         uint clusterPointCount = getClusterPointLightCount(clusterData);
@@ -525,11 +560,9 @@ void main() {
         }
     }
 
-    // Directional lights with CSM shadows
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        // Sample directional light shadow (CSM) - only if shadow system is available
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
             shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
@@ -540,7 +573,6 @@ void main() {
         directLighting += lightContrib * shadow;
     }
 
-    // Apply shadow intensity to ambient
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
     float adjustedShadow = pow(minShadow, shadowContrast);
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
@@ -552,7 +584,6 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
-    // View mode debug visualization
     uint viewModeValue = pc.viewMode & 0xFFu;
 
     if (viewModeValue == 1u) {
@@ -657,6 +688,28 @@ void main() {
     if (viewModeValue == 8u) {
         // Terrain UV visualization
         color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.0);
+    }
+
+    if (viewModeValue == 9u) {
+        // Weight map debug visualization - distinct color per layer, blended by weight
+        vec3 layerColors[8] = vec3[8](
+            vec3(0.20, 0.55, 0.20),  // Layer 0: green (grass)
+            vec3(0.55, 0.40, 0.20),  // Layer 1: brown (dirt)
+            vec3(0.50, 0.50, 0.50),  // Layer 2: gray (rock)
+            vec3(0.85, 0.80, 0.65),  // Layer 3: sand
+            vec3(0.70, 0.15, 0.15),  // Layer 4: red
+            vec3(0.15, 0.30, 0.70),  // Layer 5: blue
+            vec3(0.80, 0.75, 0.20),  // Layer 6: yellow
+            vec3(0.55, 0.20, 0.60)   // Layer 7: purple
+        );
+        uint wmOff = tiles[fragTileIndex].weightMapOffset;
+        uint wmRes = uint(tiles[fragTileIndex].aabbMin.w);
+        uint layerCount = uint(tiles[fragTileIndex].aabbMax.w);
+        vec3 c = vec3(0.0);
+        for (uint i = 0u; i < min(layerCount, 8u); ++i) {
+            c += layerColors[i] * sampleTileWeight(wmOff, wmRes, i, fragTexCoord);
+        }
+        color = c;
     }
 
     // Brush overlay visualization

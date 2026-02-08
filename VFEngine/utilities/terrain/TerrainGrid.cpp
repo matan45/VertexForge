@@ -236,4 +236,45 @@ namespace terrain
             progress(1.0f, "Complete");
         }
     }
+
+    void TerrainGrid::initializeWeightMaps(uint8_t layerCount)
+    {
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->hasWeightMap())
+            {
+                tile->initializeWeightMap(layerCount);
+            }
+        }
+    }
+
+    void TerrainGrid::updateWeightMapLayerCount(uint8_t newLayerCount)
+    {
+        for (auto& [coord, tile] : tiles)
+        {
+            if (tile->hasWeightMap())
+            {
+                tile->weightMap.setLayerCount(newLayerCount);
+                tile->weightMapDirty = true;
+                tile->weightMapGPUDirty = true;
+            }
+            else
+            {
+                tile->initializeWeightMap(newLayerCount);
+            }
+        }
+    }
+
+    std::vector<TerrainTile*> TerrainGrid::getWeightMapDirtyTiles()
+    {
+        std::vector<TerrainTile*> result;
+        for (auto& [coord, tile] : tiles)
+        {
+            if (tile->weightMapDirty)
+            {
+                result.push_back(tile.get());
+            }
+        }
+        return result;
+    }
 }

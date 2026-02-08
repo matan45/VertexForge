@@ -27,5 +27,7 @@ namespace core
             const glm::vec3& cameraPosition) override;
 
         bool hasActiveTerrain() const override;
+
+        std::string getTerrainMaterialPath() const override;
     };
 }

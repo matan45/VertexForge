@@ -21,18 +21,16 @@ namespace windows
     private:
         std::unique_ptr<editor::EditorCamera> editorCamera;
 
-        // Sub-components
         ViewPortPicker picker;
         ViewPortGizmo gizmo;
         ViewPortOverlay overlay;
 
-        // Mouse tracking for camera look
         bool isFirstMouseInput = true;
         float lastMouseX = 0.0f;
         float lastMouseY = 0.0f;
 
-        // Sculpt brush dragging state
         bool sculptDragging = false;
+        bool paintDragging = false;
 
     public:
         explicit ViewPort();
@@ -50,5 +48,7 @@ namespace windows
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleSculptBrush();
+        void updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handlePaintBrush();
     };
 }
