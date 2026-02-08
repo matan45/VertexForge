@@ -116,8 +116,7 @@ namespace render::gpudriven
                 }
             }
 
-            // Upload weight map only on initial load or when dirty
-            if (tile->hasWeightMap() && tile->weightMapGPUDirty)
+                if (tile->hasWeightMap() && tile->weightMapGPUDirty)
             {
                 if (adapter.uploadWeightMap(*tile))
                 {
@@ -126,7 +125,6 @@ namespace render::gpudriven
             }
         }
 
-        // Handle dirty tiles (brush sculpting) - re-upload regenerated LODs
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->hasAnyGPUDirtyLOD())
@@ -140,13 +138,10 @@ namespace render::gpudriven
                 if (!tile->isLODGPUDirty(lod))
                     continue;
 
-                // Only re-upload if this LOD was previously loaded on GPU
                 if (infoIt != tileInfos.end() && infoIt->second.hasLODLoaded(lod))
                 {
-                    // Evict stale GPU data
                     evictTileLOD(key, lod);
 
-                    // Re-upload with regenerated meshlet data
                     if (adapter.uploadTileAddLOD(*tile, lod))
                     {
                         auto& info = tileInfos[key];
@@ -163,7 +158,6 @@ namespace render::gpudriven
             }
         }
 
-        // Handle weight map dirty (paint brush updates)
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap())
@@ -313,7 +307,7 @@ namespace render::gpudriven
         {
             TerrainTileKey key;
             uint8_t lodLevel;
-            float evictionScore; // Higher = more likely to evict
+            float evictionScore;
             size_t memorySize;
         };
 
@@ -342,7 +336,7 @@ namespace render::gpudriven
                       return a.evictionScore > b.evictionScore;
                   });
 
-        size_t targetMemory = static_cast<size_t>(config.memoryBudgetBytes * 0.8f); // Target 80% usage
+        size_t targetMemory = static_cast<size_t>(config.memoryBudgetBytes * 0.8f);
 
         for (const auto& candidate : candidates)
         {
@@ -350,7 +344,6 @@ namespace render::gpudriven
                 break;
 
             evictTileLOD(candidate.key, candidate.lodLevel);
-            stats.tilesEvicted++;
         }
     }
 
@@ -378,7 +371,6 @@ namespace render::gpudriven
         }
         else
         {
-            // Update current loaded LOD to finest available
             for (uint8_t lod = 0; lod < 4; ++lod)
             {
                 if (info.hasLODLoaded(lod))

@@ -124,7 +124,6 @@ namespace render::gpudriven
             terrainLayerBufferMapped_ = vkDevice.mapMemory(terrainLayerBufferMemory_, 0, layerBufferSize);
             std::memset(terrainLayerBufferMapped_, 0, layerBufferSize);
 
-            // Write initial descriptor for binding 1
             vk::DescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = terrainLayerBuffer_;
             bufferInfo.offset = 0;
@@ -386,20 +385,6 @@ namespace render::gpudriven
                         hasTask, hasMesh, hasFrag);
             return;
         }
-
-        // Layout order (matching mesh_shader_gpudriven.glsl for sets 0-10):
-        // Set 0: IBL/Camera
-        // Set 1: Weight map SSBO
-        // Set 2: Bindless textures
-        // Set 3: Meshlet data
-        // Set 4: Vertex data
-        // Set 5: (unused - reserved for bones)
-        // Set 6: Light data (same as mesh shader!)
-        // Set 7: Cluster grid params
-        // Set 8: Cluster culling output
-        // Set 9: Shadow data
-        // Set 10: Shadow textures
-        // Set 11: Terrain tile data (terrain-specific)
 
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
@@ -694,7 +679,6 @@ namespace render::gpudriven
         {
             vk::DescriptorSet current = currentSets[i];
 
-            // Null sets break the contiguous batch - must flush and skip
             if (!current)
             {
                 flushBatch();
@@ -721,10 +705,6 @@ namespace render::gpudriven
         if (meshletCullingEnabled)
         {
             effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
-        }
-        if (debugForceLOD0)
-        {
-            effectiveViewMode |= TERRAIN_DEBUG_FORCE_LOD0_BIT;
         }
         pushConstants.viewMode = effectiveViewMode;
         pushConstants.screenWidth = screenWidth;

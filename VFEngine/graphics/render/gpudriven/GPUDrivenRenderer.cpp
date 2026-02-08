@@ -815,8 +815,6 @@ namespace render::gpudriven
             if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
                 terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
             {
-                // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
-                // Just verify descriptor sets are valid before using them
                 vk::DescriptorSet terrainDataSet = terrainPipeline->getTerrainDataDescriptorSet();
                 vk::DescriptorSet terrainMeshletSet = terrainPipeline->getTerrainMeshletDescriptorSet();
                 vk::DescriptorSet terrainVertexSet = terrainPipeline->getTerrainVertexDescriptorSet();
@@ -1288,7 +1286,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
     {
-        terrainFrustumCullingEnabled = enabled;
         if (terrainPipeline)
         {
             terrainPipeline->setFrustumCullingEnabled(enabled);
@@ -1297,7 +1294,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
     {
-        terrainMeshletCullingEnabled = enabled;
         if (terrainPipeline)
         {
             terrainPipeline->setMeshletCullingEnabled(enabled);
@@ -1444,7 +1440,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
         terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),

@@ -59,7 +59,6 @@ namespace services
                 return getTargetEntity();
             });
 
-        // Auto-deactivate on Play mode
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {
@@ -69,7 +68,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate on target terrain deletion
         entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& n)
             {
@@ -79,7 +77,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate on scene clear
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
@@ -89,7 +86,6 @@ namespace services
                 }
             });
 
-        // Mutual exclusivity: deactivate when sculpt mode activates
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
@@ -109,7 +105,6 @@ namespace services
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Deactivate sculpt mode if active (mutual exclusivity)
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
         if (sculptActive)
         {
@@ -126,14 +121,12 @@ namespace services
 
         EntityHandle terrainEntity = *selectedEntity;
 
-        // Check if selected entity is a terrain parent
         events::terrain::HasTerrainComponentQuery terrainQuery;
         terrainQuery.entity = terrainEntity;
         bool isTerrain = dispatcher.query(terrainQuery);
 
         if (!isTerrain)
         {
-            // Check if it's a terrain tile and resolve to parent
             events::terrain::HasTerrainTileComponentQuery tileQuery;
             tileQuery.entity = terrainEntity;
             bool isTile = dispatcher.query(tileQuery);
@@ -148,7 +141,6 @@ namespace services
                 {
                     terrainEntity = *entityData->parent;
 
-                    // Verify the parent is actually a terrain
                     events::terrain::HasTerrainComponentQuery parentTerrainQuery;
                     parentTerrainQuery.entity = terrainEntity;
                     isTerrain = dispatcher.query(parentTerrainQuery);
@@ -164,7 +156,6 @@ namespace services
         targetTerrain = terrainEntity;
         paintActive = true;
 
-        // Force-select the terrain parent entity
         events::scene::SelectEntityCommand selectCmd;
         selectCmd.entity = terrainEntity;
         dispatcher.execute(selectCmd);

@@ -28,7 +28,6 @@ namespace services
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
 
-        // Key: terrain parent entity handle value
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainGrid>> terrainGrids;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;

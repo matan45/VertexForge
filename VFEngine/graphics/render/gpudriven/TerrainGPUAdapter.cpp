@@ -206,7 +206,6 @@ namespace render::gpudriven
         it->second.lodAllocs[lodLevel] = TerrainLODAllocation{};
         gpuTileDataDirty_ = true;
 
-        // If no LODs remain, remove the allocation
         if (!it->second.hasAnyAllocation())
         {
             allocations_.erase(it);
@@ -336,13 +335,10 @@ namespace render::gpudriven
         auto& alloc = it->second;
         const auto& wm = tile.weightMap;
 
-        // numWeightTextures = ceil(activeLayerCount / 4)
         uint32_t numWeightTextures = (wm.activeLayerCount + 3) / 4;
-        // Each weight texture: resolution * resolution * 4 bytes (RGBA uint8)
-        uint32_t texSize = wm.resolution * wm.resolution * 4;
+        uint32_t texSize = wm.resolution * wm.resolution * 4; // RGBA uint8 per texel
         uint32_t totalBytes = numWeightTextures * texSize;
 
-        // Allocate if needed
         std::string tileKey = alloc.getMeshPath();
         uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
         if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
@@ -374,7 +370,6 @@ namespace render::gpudriven
             }
         }
 
-        // Upload to GPU
         if (!terrainBuffer_.uploadWeightMapData(tileKey, packedData.data(), totalBytes))
         {
             vfLogError("TerrainGPUAdapter: Failed to upload weight map for tile ({}, {})",
@@ -384,7 +379,6 @@ namespace render::gpudriven
 
         // Store byte offset (elements * 4) for shader access
         alloc.weightMapOffset = offsetElements * 4;
-        alloc.weightMapSize = totalBytes;
         alloc.weightMapUploaded = true;
         gpuTileDataDirty_ = true;
 

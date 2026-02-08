@@ -125,7 +125,6 @@ namespace services
                 {
                     registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
 
-                    // Sync weight map layer count from the material
                     syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
                 }
             });
@@ -253,13 +252,11 @@ namespace services
 
         terrainGrids[parentHandle.id] = std::move(grid);
 
-        // Load saved weight maps if available
         if (!config.weightMapPath.empty())
         {
             loadWeightMaps(parentHandle.id, config.weightMapPath);
         }
 
-        // Sync weight map layer count from the assigned material
         if (!config.terrainMaterialPath.empty())
         {
             syncWeightMapLayerCount(parentHandle.id, config.terrainMaterialPath);
@@ -447,7 +444,6 @@ namespace services
         {
             (void)grid->updateLODs(cameraPosition);
 
-            // Regenerate meshlets for tiles modified by brush sculpting
             grid->regenerateDirtyTiles(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
@@ -473,7 +469,6 @@ namespace services
         if (terrainGrids.empty())
             return;
 
-        // Collect existing grids (keyed by stale entity IDs)
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
         for (auto& [id, grid] : terrainGrids)
         {
@@ -481,7 +476,6 @@ namespace services
         }
         terrainGrids.clear();
 
-        // Find restored entities with TerrainComponent and re-associate
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::TerrainComponent>();
 
@@ -547,11 +541,6 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
-        // The GPU compute shader handles direction per brush type,
-        // Shift-invert is passed through directly.
-        bool effectiveInvert = invert;
-
-        // For Flatten: capture target height on first click
         if (brushType == terrain::BrushType::Flatten)
         {
             if (isFirstApplication)
@@ -605,7 +594,7 @@ namespace services
             gpuParams.targetHeight = flattenTargetHeight;
             gpuParams.minHeight = tile->config.minHeight;
             gpuParams.maxHeight = tile->config.maxHeight;
-            gpuParams.invert = effectiveInvert;
+            gpuParams.invert = invert;
 
             if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
             {
@@ -671,13 +660,11 @@ namespace services
                 continue;
             }
 
-            // Validate layer index against shader/material limit
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
             {
                 continue;
             }
 
-            // Expand weight map if the active layer exceeds current layer count
             if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
             {
                 tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
@@ -767,7 +754,6 @@ namespace services
             auto it = loadedWeights.find(tile->coord);
             if (it != loadedWeights.end())
             {
-                // Verify resolution matches
                 if (it->second.resolution == tile->config.getVertexCount())
                 {
                     tile->weightMap = std::move(it->second);

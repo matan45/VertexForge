@@ -3,7 +3,6 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
-#include <array>
 #include "GPUDrivenTypes.hpp"
 
 namespace core
@@ -27,9 +26,8 @@ namespace render::gpudriven
         float errorThreshold;    // Screen-space error threshold in pixels
         float terrainTextureScale; // Scale for world-space UV tiling
         float padding;
-        // Brush overlay in world space
-        glm::vec2 brushWorldPos;   // World XZ position of brush center
-        float brushWorldRadius;    // World-space radius (0.0 = inactive)
+        glm::vec2 brushWorldPos;
+        float brushWorldRadius;    // 0.0 = inactive
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
         float _pad1, _pad2, _pad3; // Align mat4 to 16-byte boundary (offset 64)
@@ -39,7 +37,6 @@ namespace render::gpudriven
     // Terrain culling bits (same as regular mesh shader bits)
     constexpr uint32_t TERRAIN_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t TERRAIN_CULL_BACKFACE_BIT = 0x200;
-    constexpr uint32_t TERRAIN_DEBUG_FORCE_LOD0_BIT = 0x400;
 
     class TerrainMeshShaderPipeline
     {
@@ -76,10 +73,9 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
 
-        // Empty descriptor set layout and sets for unused sets (5)
         vk::DescriptorSetLayout emptyLayout;
         vk::DescriptorPool emptyDescriptorPool;
-        vk::DescriptorSet emptyDescriptorSet5;  // For Set 5
+        vk::DescriptorSet emptyDescriptorSet5;
 
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout_;
@@ -105,14 +101,8 @@ namespace render::gpudriven
         vk::DescriptorSet terrainMeshletDescriptorSet;
         vk::DescriptorSet terrainVertexDescriptorSet;
 
-        // Descriptor binding tracking - tracks last bound sets per command buffer
-        // Reset when pipeline is bound, used to skip redundant bindings
-        vk::CommandBuffer lastBoundCommandBuffer;
-        std::array<vk::DescriptorSet, 12> lastBoundSets{};
-
         bool initialized = false;
 
-        // Brush overlay state (world space)
         glm::vec2 brushWorldPos_{0.0f};
         float brushWorldRadius_ = 0.0f;
         float brushFalloff_ = 0.0f;
@@ -175,7 +165,6 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
-        void setDebugForceLOD0(bool enabled) { debugForceLOD0 = enabled; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {
@@ -193,7 +182,6 @@ namespace render::gpudriven
     private:
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
-        bool debugForceLOD0 = false;
 
         void createTileDataBuffer();
         void createStatsBuffer();

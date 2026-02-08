@@ -32,10 +32,6 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    constexpr float LOD_THRESHOLD_0 = 400.0f;
-    constexpr float LOD_THRESHOLD_1 = 200.0f;
-    constexpr float LOD_THRESHOLD_2 = 100.0f;
-
     struct alignas(16) LODDrawInfo
     {
         uint32_t vertexOffset;

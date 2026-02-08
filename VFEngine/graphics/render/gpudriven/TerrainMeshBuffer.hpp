@@ -97,14 +97,7 @@ namespace render::gpudriven
         uint32_t maxMeshletVertexCount_ = 0;
         uint32_t maxMeshletPrimitiveCount_ = 0;
 
-        uint32_t currentVertexCount_ = 0;
-        uint32_t currentIndexCount_ = 0;
-        uint32_t currentMeshletCount_ = 0;
-        uint32_t currentMeshletVertexCount_ = 0;
-        uint32_t currentMeshletPrimitiveCount_ = 0;
-
         uint32_t maxWeightMapElements_ = 0;     // In uint32 elements (4 bytes each)
-        uint32_t currentWeightMapElements_ = 0;
         FreeListAllocator weightMapAllocator_;
 
         FreeListAllocator vertexAllocator_;
@@ -182,7 +175,6 @@ namespace render::gpudriven
         // Weight map buffer management
         uint32_t allocateWeightMap(const std::string& tileKey, uint32_t sizeBytes);
         bool uploadWeightMapData(const std::string& tileKey, const void* data, uint32_t sizeBytes);
-        void freeWeightMap(const std::string& tileKey);
 
         vk::Buffer getVertexBuffer() const { return vertexBuffer_; }
         vk::Buffer getMeshletBuffer() const { return meshletBuffer_; }

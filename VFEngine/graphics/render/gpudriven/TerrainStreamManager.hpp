@@ -27,7 +27,7 @@ namespace render::gpudriven
     {
         TerrainTileKey key;
         TerrainTileStreamState state = TerrainTileStreamState::NotLoaded;
-        uint8_t currentLoadedLOD = 255;   // 255 = none
+        uint8_t currentLoadedLOD = 255;
         uint8_t targetLOD = 3;
         float distanceToCamera = 0.0f;
         float priority = 0.0f;
@@ -58,7 +58,6 @@ namespace render::gpudriven
         size_t memoryBudgetBytes = 0;
         uint32_t tilesLoaded = 0;
         uint32_t tilesStreaming = 0;
-        uint32_t tilesEvicted = 0;
         uint32_t uploadsThisFrame = 0;
         size_t bytesUploadedThisFrame = 0;
         uint32_t fallbackTiles = 0;

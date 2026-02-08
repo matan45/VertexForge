@@ -65,12 +65,9 @@ namespace render::gpudriven
         glm::vec3 aabbMax{0.0f};
         glm::vec4 boundingSphere{0.0f}; // xyz = center, w = radius
 
-        // Geometric error per LOD for GPU LOD selection
         std::array<float, LOD_LEVEL_COUNT> geometricErrors{0.0f};
 
-        // Weight map allocation
         uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
-        uint32_t weightMapSize = 0;        // Size in bytes
         bool weightMapUploaded = false;
 
         bool isUploaded = false;

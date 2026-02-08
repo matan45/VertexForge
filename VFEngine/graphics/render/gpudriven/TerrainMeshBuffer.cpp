@@ -69,13 +69,6 @@ namespace render::gpudriven
         tileAllocations_.clear();
         destroyBuffers();
 
-        currentVertexCount_ = 0;
-        currentIndexCount_ = 0;
-        currentMeshletCount_ = 0;
-        currentMeshletVertexCount_ = 0;
-        currentMeshletPrimitiveCount_ = 0;
-        currentWeightMapElements_ = 0;
-
         initialized_ = false;
         vfLogInfo("TerrainMeshBuffer cleaned up");
     }
@@ -315,12 +308,6 @@ namespace render::gpudriven
         lod.meshletPrimitiveCount = meshletPrimitiveCount;
         lod.isAllocated = true;
 
-        currentVertexCount_ += vertexCount;
-        currentIndexCount_ += indexCount;
-        currentMeshletCount_ += meshletCount;
-        currentMeshletVertexCount_ += meshletVertexCount;
-        currentMeshletPrimitiveCount_ += meshletPrimitiveCount;
-
         return true;
     }
 
@@ -331,31 +318,26 @@ namespace render::gpudriven
         if (lod.vertexCount > 0)
         {
             vertexAllocator_.free(lod.vertexOffset, lod.vertexCount);
-            currentVertexCount_ -= lod.vertexCount;
         }
 
         if (lod.indexCount > 0)
         {
             indexAllocator_.free(lod.indexOffset, lod.indexCount);
-            currentIndexCount_ -= lod.indexCount;
         }
 
         if (lod.meshletCount > 0)
         {
             meshletAllocator_.free(lod.meshletOffset, lod.meshletCount);
-            currentMeshletCount_ -= lod.meshletCount;
         }
 
         if (lod.meshletVertexCount > 0)
         {
             meshletVertexAllocator_.free(lod.meshletVertexOffset, lod.meshletVertexCount);
-            currentMeshletVertexCount_ -= lod.meshletVertexCount;
         }
 
         if (lod.meshletPrimitiveCount > 0)
         {
             meshletPrimitiveAllocator_.free(lod.meshletPrimitiveOffset, lod.meshletPrimitiveCount);
-            currentMeshletPrimitiveCount_ -= lod.meshletPrimitiveCount;
         }
 
         lod = TerrainLODGeometry{};
@@ -471,11 +453,9 @@ namespace render::gpudriven
             freeLODSpace(lod);
         }
 
-        // Free weight map allocation
         if (it->second.weightMapAllocated && it->second.weightMapSize > 0)
         {
             weightMapAllocator_.free(it->second.weightMapOffset, it->second.weightMapSize);
-            currentWeightMapElements_ -= it->second.weightMapSize;
         }
 
         tileAllocations_.erase(it);
@@ -533,7 +513,6 @@ namespace render::gpudriven
 
         freeLODSpace(it->second.lods[lodLevel]);
 
-        // If no LODs remain, remove the tile entry
         if (!it->second.hasAnyAllocation())
         {
             tileAllocations_.erase(it);
@@ -565,7 +544,6 @@ namespace render::gpudriven
             if (tile.weightMapAllocated && tile.weightMapSize > 0)
             {
                 weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
-                currentWeightMapElements_ -= tile.weightMapSize;
             }
         }
         tileAllocations_.clear();
@@ -580,7 +558,6 @@ namespace render::gpudriven
 
         auto& tile = it->second;
 
-        // Free existing allocation if size changed
         if (tile.weightMapAllocated)
         {
             uint32_t newElements = (sizeBytes + 3) / 4;
@@ -589,7 +566,6 @@ namespace render::gpudriven
                 return tile.weightMapOffset;
             }
             weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
-            currentWeightMapElements_ -= tile.weightMapSize;
             tile.weightMapAllocated = false;
         }
 
@@ -604,7 +580,6 @@ namespace render::gpudriven
         tile.weightMapOffset = offset;
         tile.weightMapSize = elementCount;
         tile.weightMapAllocated = true;
-        currentWeightMapElements_ += elementCount;
 
         return offset;
     }
@@ -619,22 +594,6 @@ namespace render::gpudriven
         vk::DeviceSize byteOffset = static_cast<vk::DeviceSize>(it->second.weightMapOffset) * sizeof(uint32_t);
         transferManager_->copyToBufferAsync(weightMapBuffer_, data, sizeBytes, byteOffset);
         return true;
-    }
-
-    void TerrainMeshBuffer::freeWeightMap(const std::string& tileKey)
-    {
-        auto it = tileAllocations_.find(tileKey);
-        if (it == tileAllocations_.end()) return;
-
-        auto& tile = it->second;
-        if (tile.weightMapAllocated && tile.weightMapSize > 0)
-        {
-            weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
-            currentWeightMapElements_ -= tile.weightMapSize;
-            tile.weightMapOffset = 0;
-            tile.weightMapSize = 0;
-            tile.weightMapAllocated = false;
-        }
     }
 
 }

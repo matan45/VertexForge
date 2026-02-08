@@ -99,8 +99,6 @@ namespace render::gpudriven
 
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
-        bool terrainFrustumCullingEnabled = true;
-        bool terrainMeshletCullingEnabled = true;
         bool meshShaderSupported = false;
         uint32_t currentViewMode = 0;
 
