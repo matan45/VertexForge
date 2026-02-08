@@ -9,6 +9,7 @@
 #include "terrain/HeightmapLoader.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
+#include "terrain/TerrainSerializer.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "resource/ResourceManager.hpp"
@@ -40,6 +41,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainMaterialPathCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SaveWeightMapsCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::LoadWeightMapsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SaveTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::LoadTerrainCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -139,6 +142,18 @@ namespace services
             [this](const events::terrain::LoadWeightMapsCommand& cmd)
             {
                 return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SaveTerrainCommand>(
+            [this](const events::terrain::SaveTerrainCommand& cmd)
+            {
+                return saveTerrain(cmd.terrainEntity.id, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadTerrainCommand>(
+            [this](const events::terrain::LoadTerrainCommand& cmd)
+            {
+                return loadTerrain(cmd.path);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -738,6 +753,15 @@ namespace services
 
         uint32_t resolution = allTiles[0]->config.getVertexCount();
 
+        // Get material path from TerrainComponent
+        std::string materialPath;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            materialPath = registry.get<components::TerrainComponent>(ent).terrainMaterialPath;
+        }
+
         std::unordered_map<terrain::TileCoord, terrain::TileWeightMapData, terrain::TileCoordHash> tileWeights;
         for (const auto* tile : allTiles)
         {
@@ -747,7 +771,7 @@ namespace services
             }
         }
 
-        return terrain::TerrainWeightMapAsset::save(path, tileWeights, resolution);
+        return terrain::TerrainWeightMapAsset::save(path, tileWeights, resolution, materialPath);
     }
 
     bool TerrainService::loadWeightMaps(uint64_t terrainEntityId, const std::string& path)
@@ -759,10 +783,23 @@ namespace services
             return false;
         }
 
-        auto loadedWeights = terrain::TerrainWeightMapAsset::load(path);
+        std::string materialPath;
+        auto loadedWeights = terrain::TerrainWeightMapAsset::load(path, &materialPath);
         if (loadedWeights.empty())
         {
             return false;
+        }
+
+        // Restore material path if present
+        if (!materialPath.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).terrainMaterialPath = materialPath;
+                syncWeightMapLayerCount(terrainEntityId, materialPath);
+            }
         }
 
         auto allTiles = gridIt->second->getAllTiles();
@@ -777,6 +814,7 @@ namespace services
                 {
                     tile->weightMap = std::move(it->second);
                     tile->weightMapDirty = true;
+                    tile->weightMapGPUDirty = true;
                     loadedCount++;
                 }
                 else
@@ -820,5 +858,133 @@ namespace services
 
         terrain::TerrainGrid* grid = gridIt->second.get();
         grid->updateWeightMapLayerCount(layerCount);
+    }
+
+    bool TerrainService::saveTerrain(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+        {
+            vfLogError("TerrainService: Entity {} has no TerrainComponent", terrainEntityId);
+            return false;
+        }
+
+        const auto& comp = registry.get<components::TerrainComponent>(ent);
+
+        terrain::TerrainTileConfig tileConfig;
+        switch (comp.resolution)
+        {
+        case 0: tileConfig.resolution = terrain::TileResolution::Low; break;
+        case 1: tileConfig.resolution = terrain::TileResolution::Medium; break;
+        case 2: tileConfig.resolution = terrain::TileResolution::High; break;
+        default: tileConfig.resolution = terrain::TileResolution::Low; break;
+        }
+        tileConfig.worldTileSize = comp.worldTileSize;
+        tileConfig.maxHeight = comp.maxHeight;
+        tileConfig.minHeight = comp.minHeight;
+        for (int i = 0; i < 4; ++i)
+            tileConfig.lodDistances[i] = comp.lodDistances[i];
+
+        bool result = terrain::TerrainSerializer::save(
+            path, *gridIt->second, tileConfig,
+            comp.gridMinX, comp.gridMinZ, comp.gridMaxX, comp.gridMaxZ,
+            comp.terrainMaterialPath);
+
+        if (result)
+        {
+            vfLogInfo("TerrainService: Saved terrain to {}", path);
+        }
+
+        return result;
+    }
+
+    EntityHandle TerrainService::loadTerrain(const std::string& path)
+    {
+        terrain::TerrainFileHeader header;
+        std::vector<terrain::TileLoadResult> tiles;
+
+        if (!terrain::TerrainSerializer::loadAll(path, header, tiles))
+        {
+            vfLogError("TerrainService: Failed to load terrain from {}", path);
+            return {};
+        }
+
+        terrain::TerrainTileConfig tileConfig;
+        tileConfig.resolution = static_cast<terrain::TileResolution>(header.resolution);
+        tileConfig.worldTileSize = header.worldTileSize;
+        tileConfig.maxHeight = header.maxHeight;
+        tileConfig.minHeight = header.minHeight;
+        tileConfig.lodDistances = header.lodDistances;
+        tileConfig.skirtDepth = header.skirtDepth;
+
+        auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
+        grid->loadFromSerialized(tiles);
+
+        // Mark weight maps GPU dirty so TerrainStreamManager uploads them
+        for (auto* tile : grid->getAllTiles())
+        {
+            if (tile->hasWeightMap())
+            {
+                tile->weightMapGPUDirty = true;
+            }
+        }
+
+        scene::Entity parentEntity("Terrain");
+        sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
+
+        auto& terrainComp = parentEntity.addComponent<components::TerrainComponent>();
+        terrainComp.resolution = header.resolution;
+        terrainComp.worldTileSize = header.worldTileSize;
+        terrainComp.maxHeight = header.maxHeight;
+        terrainComp.minHeight = header.minHeight;
+        terrainComp.gridMinX = header.gridMinX;
+        terrainComp.gridMinZ = header.gridMinZ;
+        terrainComp.gridMaxX = header.gridMaxX;
+        terrainComp.gridMaxZ = header.gridMaxZ;
+        terrainComp.lodDistances = header.lodDistances;
+        terrainComp.terrainMaterialPath = header.materialPath;
+        terrainComp.isActive = true;
+        terrainComp.isDirty = false;
+        terrainComp.activeTileCount = header.tileCount;
+        terrainComp.visibleTileCount = 0;
+
+        EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
+
+        createTileEntities(parentHandle, *grid);
+
+        terrainGrids[parentHandle.id] = std::move(grid);
+
+        // Rebind material: sync weight map layer count with material layers
+        if (!header.materialPath.empty())
+        {
+            syncWeightMapLayerCount(parentHandle.id, header.materialPath);
+        }
+
+        // Publish notification so GPU adapter picks up the new terrain
+        events::terrain::TerrainCreatedNotification notification;
+        notification.terrainEntity = parentHandle;
+        notification.config.resolution = header.resolution;
+        notification.config.worldTileSize = header.worldTileSize;
+        notification.config.maxHeight = header.maxHeight;
+        notification.config.minHeight = header.minHeight;
+        notification.config.terrainMaterialPath = header.materialPath;
+        notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
+        notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
+        for (int i = 0; i < 4; ++i)
+            notification.config.lodDistances[i] = header.lodDistances[i];
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
+
+        return parentHandle;
     }
 }

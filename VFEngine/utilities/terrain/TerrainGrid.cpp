@@ -264,6 +264,7 @@ namespace terrain
             if (loaded.weightMap.isInitialized())
             {
                 tile->weightMap = loaded.weightMap;
+                tile->weightMapGPUDirty = true;
             }
 
             // Use cached LOD data or fallback to regeneration
