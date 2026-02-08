@@ -54,6 +54,67 @@ namespace terrain
         }
     }
 
+    void TileWeightMapData::normalizeAt(uint32_t x, uint32_t z, uint16_t overlayMask)
+    {
+        if (overlayMask == 0)
+        {
+            normalizeAt(x, z);
+            return;
+        }
+
+        if (x >= resolution || z >= resolution || layerWeights.empty())
+            return;
+
+        size_t idx = static_cast<size_t>(z) * resolution + x;
+        uint32_t layerCount = static_cast<uint32_t>(layerWeights.size());
+
+        // Clamp overlay layers independently to [0,1]
+        for (uint32_t i = 0; i < layerCount; ++i)
+        {
+            if (i < 16 && (overlayMask & (1u << i)))
+            {
+                layerWeights[i][idx] = std::clamp(layerWeights[i][idx], 0.0f, 1.0f);
+            }
+        }
+
+        // Normalize only base (non-overlay) layers to sum=1.0
+        float baseSum = 0.0f;
+        for (uint32_t i = 0; i < layerCount; ++i)
+        {
+            if (i >= 16 || !(overlayMask & (1u << i)))
+            {
+                baseSum += layerWeights[i][idx];
+            }
+        }
+
+        if (baseSum > 0.001f)
+        {
+            float invSum = 1.0f / baseSum;
+            for (uint32_t i = 0; i < layerCount; ++i)
+            {
+                if (i >= 16 || !(overlayMask & (1u << i)))
+                {
+                    layerWeights[i][idx] *= invSum;
+                }
+            }
+        }
+        else
+        {
+            // Fallback: reset base layer 0 to 1.0
+            for (uint32_t i = 0; i < layerCount; ++i)
+            {
+                if (i >= 16 || !(overlayMask & (1u << i)))
+                {
+                    layerWeights[i][idx] = 0.0f;
+                }
+            }
+            if (!layerWeights.empty() && !(overlayMask & 1u))
+            {
+                layerWeights[0][idx] = 1.0f;
+            }
+        }
+    }
+
     void TileWeightMapData::normalizeAll()
     {
         for (uint32_t z = 0; z < resolution; ++z)
@@ -61,6 +122,17 @@ namespace terrain
             for (uint32_t x = 0; x < resolution; ++x)
             {
                 normalizeAt(x, z);
+            }
+        }
+    }
+
+    void TileWeightMapData::normalizeAll(uint16_t overlayMask)
+    {
+        for (uint32_t z = 0; z < resolution; ++z)
+        {
+            for (uint32_t x = 0; x < resolution; ++x)
+            {
+                normalizeAt(x, z, overlayMask);
             }
         }
     }

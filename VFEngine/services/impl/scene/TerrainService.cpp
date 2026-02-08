@@ -643,6 +643,24 @@ namespace services
             worldTileSize = allTiles[0]->config.worldTileSize;
         }
 
+        // Build overlay bitmask from terrain material blend modes
+        uint16_t overlayMask = 0;
+        std::string materialPath = getTerrainMaterialPath();
+        if (!materialPath.empty())
+        {
+            auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+            if (materialData)
+            {
+                for (uint8_t i = 0; i < materialData->activeLayerCount && i < 16; ++i)
+                {
+                    if (materialData->layers[i].blendMode == terrain::TerrainLayerBlendMode::Overlay)
+                    {
+                        overlayMask |= (1u << i);
+                    }
+                }
+            }
+        }
+
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
@@ -687,6 +705,7 @@ namespace services
             applyParams.activeLayer = brushParams.activeLayer;
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
+            applyParams.overlayMask = overlayMask;
 
             if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
             {

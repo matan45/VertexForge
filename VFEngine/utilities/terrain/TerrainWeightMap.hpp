@@ -22,7 +22,10 @@ namespace terrain
 
         // Normalize all layer weights at texel (x, z) so they sum to 1.0
         void normalizeAt(uint32_t x, uint32_t z);
+        // Overlay-aware: normalize only base layers to sum=1.0, clamp overlay layers independently
+        void normalizeAt(uint32_t x, uint32_t z, uint16_t overlayMask);
         void normalizeAll();
+        void normalizeAll(uint16_t overlayMask);
 
         // Initialize with default weights: layer 0 = 1.0, rest = 0.0
         void initializeDefault(uint32_t vertexResolution, uint8_t layerCount);

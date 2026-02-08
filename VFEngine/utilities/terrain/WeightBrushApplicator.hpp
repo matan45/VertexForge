@@ -24,6 +24,7 @@ namespace terrain
             uint32_t activeLayer;
             float deltaTime;
             bool invert;
+            uint16_t overlayMask = 0;    // Bitmask: bit N = 1 means layer N uses Overlay blend
         };
 
         // Apply brush to a single tile's weight map. Returns true if any texels were modified.
@@ -42,13 +43,15 @@ namespace terrain
         // Input t is normalized distance [0,1]. Returns influence [0,1].
         static float applyFalloff(float t, BrushFalloff falloff);
 
+        static bool isOverlay(uint16_t mask, uint32_t layer) { return layer < 16 && (mask & (1u << layer)) != 0; }
+
         static void paintLayer(TileWeightMapData& wm, uint32_t x, uint32_t z,
-                               uint32_t layer, float influence);
+                               uint32_t layer, float influence, uint16_t overlayMask);
         static void eraseLayer(TileWeightMapData& wm, uint32_t x, uint32_t z,
-                               uint32_t layer, float influence);
+                               uint32_t layer, float influence, uint16_t overlayMask);
         static void smoothWeights(TileWeightMapData& wm, uint32_t x, uint32_t z,
-                                  float influence);
+                                  float influence, uint16_t overlayMask);
         static void fillLayer(TileWeightMapData& wm, uint32_t x, uint32_t z,
-                              uint32_t layer, float influence);
+                              uint32_t layer, float influence, uint16_t overlayMask);
     };
 }
