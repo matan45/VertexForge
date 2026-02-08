@@ -13,9 +13,11 @@ namespace terrain
         static bool save(
             std::string_view path,
             const std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash>& tileWeights,
-            uint32_t resolution);
+            uint32_t resolution,
+            const std::string& materialPath = "");
 
         static std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash> load(
-            std::string_view path);
+            std::string_view path,
+            std::string* outMaterialPath = nullptr);
     };
 }

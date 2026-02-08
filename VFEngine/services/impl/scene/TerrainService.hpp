@@ -67,6 +67,9 @@ namespace services
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
+        bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
+        EntityHandle loadTerrain(const std::string& path);
+
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
