@@ -43,6 +43,9 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::LoadWeightMapsCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SaveTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::LoadTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainSaveLockCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -154,6 +157,87 @@ namespace services
             [this](const events::terrain::LoadTerrainCommand& cmd)
             {
                 return loadTerrain(cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainSaveLockCommand>(
+            [this](const events::terrain::SetTerrainSaveLockCommand& cmd)
+            {
+                saveInProgress.store(cmd.locked, std::memory_order_release);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::BeginTerrainLoadCommand>(
+            [this](const events::terrain::BeginTerrainLoadCommand& cmd) -> bool
+            {
+                if (pendingLoad)
+                {
+                    vfLogWarning("TerrainService: Load already in progress");
+                    return false;
+                }
+
+                // Block brush input during load
+                saveInProgress.store(true, std::memory_order_release);
+
+                // Delete all existing terrains
+                std::vector<uint64_t> toDelete;
+                for (auto& [id, grid] : terrainGrids)
+                    toDelete.push_back(id);
+                for (auto id : toDelete)
+                    deleteTerrain(EntityHandle{id});
+
+                pendingLoad = std::make_unique<PendingTerrainLoad>();
+                pendingLoad->path = cmd.path;
+
+                auto* pending = pendingLoad.get();
+                pendingLoad->ioFuture = std::async(std::launch::async,
+                    [pending]()
+                    {
+                        return terrain::TerrainSerializer::loadAll(
+                            pending->path, pending->header, pending->tiles);
+                    });
+
+                events::terrain::TerrainLoadStartedNotification notification;
+                notification.path = cmd.path;
+                events::EventDispatcher::instance().publish(notification);
+
+                vfLogInfo("TerrainService: Started async terrain load from {}", cmd.path);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::PollTerrainLoadCommand>(
+            [this](const events::terrain::PollTerrainLoadCommand&) -> std::optional<EntityHandle>
+            {
+                if (!pendingLoad)
+                    return std::nullopt;
+
+                if (pendingLoad->ioFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+                    return std::nullopt;
+
+                bool success = pendingLoad->ioFuture.get();
+
+                if (!success)
+                {
+                    vfLogError("TerrainService: Async terrain load failed for {}", pendingLoad->path);
+                    pendingLoad.reset();
+                    saveInProgress.store(false, std::memory_order_release);
+                    return EntityHandle{};
+                }
+
+                EntityHandle result = finishLoadTerrain(
+                    pendingLoad->header, pendingLoad->tiles, pendingLoad->path);
+
+                std::string loadPath = pendingLoad->path;
+                pendingLoad.reset();
+                saveInProgress.store(false, std::memory_order_release);
+
+                if (result.id != 0)
+                {
+                    events::terrain::TerrainLoadedNotification notification;
+                    notification.terrainEntity = result;
+                    notification.path = loadPath;
+                    events::EventDispatcher::instance().publish(notification);
+                }
+
+                return result;
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -373,6 +457,8 @@ namespace services
         data.isDirty = comp.isDirty;
         data.activeTileCount = comp.activeTileCount;
         data.visibleTileCount = comp.visibleTileCount;
+        data.savePath = comp.savePath;
+        data.saveDirty = comp.saveDirty;
 
         return data;
     }
@@ -537,6 +623,9 @@ namespace services
 
     void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
+        if (saveInProgress.load(std::memory_order_acquire))
+            return;
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         auto targetEntity = dispatcher.query(events::sculpt::GetSculptTargetEntityQuery{});
@@ -628,10 +717,23 @@ namespace services
         notification.position = worldPosition;
         notification.type = brushType;
         dispatcher.publish(notification);
+
+        if (!modifiedTiles.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(*targetEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
     }
 
     void TerrainService::applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
+        if (saveInProgress.load(std::memory_order_acquire))
+            return;
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{});
@@ -733,6 +835,15 @@ namespace services
         paintNotification.position = worldPosition;
         paintNotification.type = brushType;
         dispatcher.publish(paintNotification);
+
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(*targetEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
     }
 
     bool TerrainService::saveWeightMaps(uint64_t terrainEntityId, const std::string& path)
@@ -901,6 +1012,15 @@ namespace services
 
         if (result)
         {
+            auto& mutableComp = registry.get<components::TerrainComponent>(ent);
+            mutableComp.savePath = path;
+            mutableComp.saveDirty = false;
+
+            events::terrain::TerrainSavedNotification savedNotification;
+            savedNotification.terrainEntity = EntityHandle{terrainEntityId};
+            savedNotification.path = path;
+            events::EventDispatcher::instance().publish(savedNotification);
+
             vfLogInfo("TerrainService: Saved terrain to {}", path);
         }
 
@@ -918,6 +1038,14 @@ namespace services
             return {};
         }
 
+        return finishLoadTerrain(header, tiles, path);
+    }
+
+    EntityHandle TerrainService::finishLoadTerrain(
+        terrain::TerrainFileHeader& header,
+        std::vector<terrain::TileLoadResult>& tiles,
+        const std::string& path)
+    {
         terrain::TerrainTileConfig tileConfig;
         tileConfig.resolution = static_cast<terrain::TileResolution>(header.resolution);
         tileConfig.worldTileSize = header.worldTileSize;
@@ -956,6 +1084,8 @@ namespace services
         terrainComp.isDirty = false;
         terrainComp.activeTileCount = header.tileCount;
         terrainComp.visibleTileCount = 0;
+        terrainComp.savePath = path;
+        terrainComp.saveDirty = false;
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
 

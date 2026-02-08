@@ -9,6 +9,7 @@
 #include "events/PaintModeEvents.hpp"
 #include "events/PaintBrushEvents.hpp"
 #include "events/AudioEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -186,8 +187,17 @@ namespace windows
             for (const auto& path : dragPaths)
             {
                 std::filesystem::path fsPath(path);
+                auto ext = fsPath.extension().string();
 
-                if (fsPath.extension() != ".vfPrefab")
+                if (ext == ".vfTerrain")
+                {
+                    events::terrain::BeginTerrainLoadCommand loadCmd;
+                    loadCmd.path = path;
+                    dispatcher.execute(loadCmd);
+                    continue;
+                }
+
+                if (ext != ".vfPrefab")
                 {
                     continue;
                 }

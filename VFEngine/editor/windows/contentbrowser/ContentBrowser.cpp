@@ -217,7 +217,7 @@ namespace windows
                     }
                     else if (selectedType == AssetType::Terrain)
                     {
-                        events::terrain::LoadTerrainCommand cmd;
+                        events::terrain::BeginTerrainLoadCommand cmd;
                         cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
                         events::EventDispatcher::instance().execute(cmd);
                     }

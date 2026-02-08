@@ -42,6 +42,9 @@ namespace services
         bool isDirty = false;
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
+
+        std::string savePath;
+        bool saveDirty = false;
     };
 
     struct TerrainTileData
