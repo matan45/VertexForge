@@ -128,6 +128,16 @@ namespace render::gpudriven
                   vk::RenderPass renderPass);
 
         void cleanup();
+        void recreate(vk::DescriptorSetLayout iblLayout,
+                      vk::DescriptorSetLayout bindlessTextureLayout,
+                      vk::DescriptorSetLayout meshletDataLayout,
+                      vk::DescriptorSetLayout vertexDataLayout,
+                      vk::DescriptorSetLayout lightDataLayout,
+                      vk::DescriptorSetLayout clusterGridLayout,
+                      vk::DescriptorSetLayout cullingOutputLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout,
+                      vk::RenderPass renderPass);
 
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 

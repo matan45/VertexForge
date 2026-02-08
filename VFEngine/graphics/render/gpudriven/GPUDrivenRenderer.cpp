@@ -1274,6 +1274,20 @@ namespace render::gpudriven
                                          shadowSystem->getShadowDataLayout(),
                                          shadowSystem->getShadowTextureLayout(),
                                          cachedRenderPass);
+
+            if (terrainPipeline)
+            {
+                terrainPipeline->recreate(cachedIBLLayout,
+                                          bindlessTextures->getDescriptorSetLayout(),
+                                          meshShaderPipeline->getMeshletDataLayout(),
+                                          meshShaderPipeline->getVertexDataLayout(),
+                                          lightBufferManager->getDescriptorSetLayout(),
+                                          clusterGridManager->getDescriptorSetLayout(),
+                                          lightCullingPipeline->getDescriptorSetLayout(),
+                                          shadowSystem->getShadowDataLayout(),
+                                          shadowSystem->getShadowTextureLayout(),
+                                          cachedRenderPass);
+            }
         }
         else
         {

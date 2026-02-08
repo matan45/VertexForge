@@ -151,6 +151,54 @@ namespace render::gpudriven
         loggerInfo("TerrainMeshShaderPipeline: Initialized successfully");
     }
 
+    void TerrainMeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
+                                              vk::DescriptorSetLayout bindlessTextureLayout,
+                                              vk::DescriptorSetLayout meshletDataLayout,
+                                              vk::DescriptorSetLayout vertexDataLayout,
+                                              vk::DescriptorSetLayout lightDataLayout,
+                                              vk::DescriptorSetLayout clusterGridLayout,
+                                              vk::DescriptorSetLayout cullingOutputLayout,
+                                              vk::DescriptorSetLayout shadowDataLayout,
+                                              vk::DescriptorSetLayout shadowTextureLayout,
+                                              vk::RenderPass renderPass)
+    {
+        if (!initialized) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+        vkDevice.waitIdle();
+
+        // Update cached layouts with fresh handles
+        cachedIBLLayout = iblLayout;
+        cachedBindlessLayout = bindlessTextureLayout;
+        cachedMeshletLayout = meshletDataLayout;
+        cachedVertexLayout = vertexDataLayout;
+        cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
+
+        if (graphicsPipeline)
+        {
+            vkDevice.destroyPipeline(graphicsPipeline);
+            graphicsPipeline = nullptr;
+        }
+
+        if (pipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(pipelineLayout);
+            pipelineLayout = nullptr;
+        }
+
+        createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout,
+                                      meshletDataLayout, vertexDataLayout,
+                                      lightDataLayout, clusterGridLayout,
+                                      cullingOutputLayout, shadowDataLayout,
+                                      shadowTextureLayout, renderPass);
+
+        loggerInfo("TerrainMeshShaderPipeline: Recreated pipeline with updated viewport");
+    }
+
     void TerrainMeshShaderPipeline::cleanup()
     {
         vk::Device vkDevice = device.getLogicalDevice();
