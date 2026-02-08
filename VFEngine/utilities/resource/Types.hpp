@@ -35,6 +35,7 @@ namespace resource
         FONT,
         SKELETON,
         ANIMATOR,
+        TERRAIN,
         UNKNOWN
     };
 

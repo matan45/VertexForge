@@ -144,6 +144,7 @@
     <ClInclude Include="terrain\TerrainHitResult.hpp" />
     <ClInclude Include="terrain\TerrainMaterialAsset.hpp" />
     <ClInclude Include="terrain\TerrainMaterialTypes.hpp" />
+    <ClInclude Include="terrain\TerrainSerializer.hpp" />
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
     <ClInclude Include="terrain\TerrainTypes.hpp" />
@@ -199,6 +200,7 @@
     <ClCompile Include="terrain\HeightmapLoader.cpp" />
     <ClCompile Include="terrain\TerrainGrid.cpp" />
     <ClCompile Include="terrain\TerrainMaterialAsset.cpp" />
+    <ClCompile Include="terrain\TerrainSerializer.cpp" />
     <ClCompile Include="terrain\TerrainTile.cpp" />
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />

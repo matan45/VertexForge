@@ -432,6 +432,10 @@ namespace windows
                     {
                         asset.type = TerrainMaterial;
                     }
+                    else if (extension == ".vfTerrain")
+                    {
+                        asset.type = Terrain;
+                    }
                     else if (extension == ".mt")
                     {
                         asset.type = Script;
