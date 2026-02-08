@@ -89,8 +89,6 @@ namespace windows
             ImGui::Spacing();
 
             float buttonWidth = 120.0f;
-            float availableWidth = ImGui::GetContentRegionAvail().x;
-            float spacing = availableWidth - buttonWidth * 2;
 
             if (ImGui::Button("Create", ImVec2(buttonWidth, 0)))
             {
@@ -99,7 +97,14 @@ namespace windows
             }
 
             ImGui::SameLine();
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + spacing - ImGui::GetStyle().ItemSpacing.x);
+
+            if (ImGui::Button("Load Terrain...", ImVec2(buttonWidth, 0)))
+            {
+                loadTerrain();
+                visible = false;
+            }
+
+            ImGui::SameLine();
 
             if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
             {
@@ -146,6 +151,21 @@ namespace windows
         events::terrain::CreateTerrainCommand cmd;
         cmd.config = config;
         events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void TerrainCreationWindow::loadTerrain()
+    {
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Terrain (*.vfTerrain)", L"*.vfTerrain"}
+        };
+
+        std::string path = fileDialog.openFileDialog(fileTypes);
+        if (!path.empty())
+        {
+            events::terrain::BeginTerrainLoadCommand cmd;
+            cmd.path = path;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     void TerrainCreationWindow::browseHeightmap()

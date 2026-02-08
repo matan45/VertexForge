@@ -173,10 +173,10 @@ namespace windows::details {
     void TerrainDrawer::startSaveAs(services::EntityHandle handle)
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"VF Terrain (*.vfterrain)", L"*.vfterrain"}
+            {L"VF Terrain (*.vfTerrain)", L"*.vfTerrain"}
         };
 
-        std::string path = fileDialog.saveFileDialog(fileTypes, L"vfterrain");
+        std::string path = fileDialog.saveFileDialog(fileTypes, L"vfTerrain");
         if (!path.empty())
         {
             startSave(handle, path);
@@ -186,7 +186,7 @@ namespace windows::details {
     void TerrainDrawer::startLoad()
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"VF Terrain (*.vfterrain)", L"*.vfterrain"}
+            {L"VF Terrain (*.vfTerrain)", L"*.vfTerrain"}
         };
 
         std::string path = fileDialog.openFileDialog(fileTypes);

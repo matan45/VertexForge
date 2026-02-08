@@ -29,5 +29,6 @@ namespace windows
         void resetDefaults();
         void createTerrain();
         void browseHeightmap();
+        void loadTerrain();
     };
 }
