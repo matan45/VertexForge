@@ -6,7 +6,10 @@
 #include "terrain/TerrainTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
+#include "terrain/TerrainSerializer.hpp"
 #include <glm/glm.hpp>
+#include <atomic>
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -37,6 +40,15 @@ namespace services
         bool flattenTargetCaptured = false;
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
+        std::atomic<bool> saveInProgress{false};
+
+        struct PendingTerrainLoad {
+            std::future<bool> ioFuture;
+            terrain::TerrainFileHeader header;
+            std::vector<terrain::TileLoadResult> tiles;
+            std::string path;
+        };
+        std::unique_ptr<PendingTerrainLoad> pendingLoad;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -76,5 +88,8 @@ namespace services
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
+        EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
+                                       std::vector<terrain::TileLoadResult>& tiles,
+                                       const std::string& path);
     };
 }

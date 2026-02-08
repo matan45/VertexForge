@@ -106,4 +106,40 @@ namespace events::terrain
 
         std::string_view getName() const override { return "LoadTerrain"; }
     };
+
+    struct SetTerrainSaveLockCommand : ICommand<> {
+        bool locked = false;
+
+        std::string_view getName() const override { return "SetTerrainSaveLock"; }
+    };
+
+    struct TerrainSavedNotification : INotification {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainSaved"; }
+    };
+
+    struct BeginTerrainLoadCommand : ICommand<bool> {
+        std::string path;
+
+        std::string_view getName() const override { return "BeginTerrainLoad"; }
+    };
+
+    struct PollTerrainLoadCommand : ICommand<std::optional<services::EntityHandle>> {
+        std::string_view getName() const override { return "PollTerrainLoad"; }
+    };
+
+    struct TerrainLoadStartedNotification : INotification {
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainLoadStarted"; }
+    };
+
+    struct TerrainLoadedNotification : INotification {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainLoaded"; }
+    };
 }
