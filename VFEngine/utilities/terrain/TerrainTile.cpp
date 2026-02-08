@@ -41,6 +41,11 @@ namespace terrain
 
     void TerrainTile::initializeMetadataOnly()
     {
+        // Clear heightData allocated by constructor's initializeFlat() call.
+        // Metadata-only tiles must have empty heightData so ensureHeightsLoaded()
+        // knows to read from file.
+        std::vector<float>().swap(heightData);
+
         worldOrigin = computeWorldOrigin();
 
         // Conservative bounds using config min/max height (no heightData available)

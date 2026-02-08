@@ -41,7 +41,10 @@ namespace terrain
                 tile.lodLevels = std::move(lodData);
                 tile.isDirty = false;
                 tile.dirtyLODMask = 0;
-                tile.updateWorldBounds();
+                // Only update bounds if heights are loaded; otherwise keep the
+                // conservative metadata bounds from initializeMetadataOnly()
+                if (tile.hasHeightData())
+                    tile.updateWorldBounds();
 
                 size_t newUsage = estimateTileRAMUsage(tile);
                 currentRAMUsage += (newUsage - oldUsage);
@@ -87,8 +90,9 @@ namespace terrain
 
         tile.initializeFromHeights(heights);
 
-        // Also load weight data if present
-        if (entry->weightDataOffset != 0 && !tile.hasWeightMap())
+        // Also load weight data if present (always overwrite default-initialized weight maps
+        // since file data is the authoritative source for loaded tiles)
+        if (entry->weightDataOffset != 0)
         {
             TileWeightMapData weights;
             if (TerrainSerializer::readTileWeights(filePath, *entry, weights))

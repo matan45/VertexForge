@@ -270,6 +270,10 @@ namespace render::gpudriven
         float terrainBuildTileDataUs_ = 0.0f;
         float terrainUploadTileDataUs_ = 0.0f;
 
+        // Pending callbacks (stored until terrainStreamManager is created)
+        TerrainStreamManager::TileDataLoader pendingTileDataLoader_;
+        TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor_;
+
         bool registerMaterialTextures(const std::string& materialPath);
         void registerTerrainLayerTextures(const std::string& materialPath);
 

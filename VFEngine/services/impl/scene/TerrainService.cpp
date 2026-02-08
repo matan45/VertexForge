@@ -567,11 +567,15 @@ namespace services
             return;
 
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
+        std::vector<std::shared_ptr<terrain::TerrainFileCache>> caches;
         for (auto& [id, grid] : terrainGrids)
         {
             grids.push_back(std::move(grid));
+            auto cacheIt = fileCaches.find(id);
+            caches.push_back(cacheIt != fileCaches.end() ? std::move(cacheIt->second) : nullptr);
         }
         terrainGrids.clear();
+        fileCaches.clear();
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::TerrainComponent>();
@@ -584,6 +588,8 @@ namespace services
 
             uint64_t newId = internal::toHandle(entity).id;
             terrainGrids[newId] = std::move(grids[gridIndex]);
+            if (caches[gridIndex])
+                fileCaches[newId] = std::move(caches[gridIndex]);
             gridIndex++;
         }
     }
@@ -1025,6 +1031,26 @@ namespace services
         tileConfig.minHeight = comp.minHeight;
         for (int i = 0; i < 4; ++i)
             tileConfig.lodDistances[i] = comp.lodDistances[i];
+
+        // Ensure all tiles have data loaded from file before saving.
+        // The serializer needs heightData + lodLevels for every tile.
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt != fileCaches.end() && cacheIt->second)
+        {
+            auto& grid = *gridIt->second;
+            auto& generator = grid.getGenerator();
+            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+                return grid.getTile(coord);
+            };
+
+            for (auto* tile : grid.getAllTiles())
+            {
+                if (tile && !tile->hasHeightData())
+                    cacheIt->second->ensureHeightsLoaded(*tile);
+                if (tile && !tile->hasAnyLODData())
+                    cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
+            }
+        }
 
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
