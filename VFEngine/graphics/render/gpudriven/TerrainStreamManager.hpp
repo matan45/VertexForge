@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <queue>
+#include <functional>
 
 namespace terrain
 {
@@ -78,12 +79,24 @@ namespace render::gpudriven
 
     class TerrainStreamManager
     {
+    public:
+        // Callback to load tile LOD data on demand from file.
+        // Returns true if data is now available in tile->lodLevels[lod].
+        using TileDataLoader = std::function<bool(terrain::TerrainTile&, uint8_t lodLevel)>;
+
+        // Callback to release tile RAM data after GPU eviction.
+        using TileRAMEvictor = std::function<void(terrain::TerrainTile&)>;
+
     private:
         TerrainMeshBuffer& terrainBuffer;
         TerrainGPUAdapter& adapter;
 
         TerrainStreamConfig config;
         TerrainStreamingStats stats;
+
+        TileDataLoader tileDataLoader;
+        TileRAMEvictor tileRAMEvictor;
+        uint32_t maxFileReadsPerFrame = 4;
 
         std::unordered_map<TerrainTileKey, TerrainTileStreamInfo, TerrainTileKeyHash> tileInfos;
         std::priority_queue<StreamPriorityEntry> uploadQueue;
@@ -112,6 +125,9 @@ namespace render::gpudriven
         void setMemoryBudget(size_t bytes) { config.memoryBudgetBytes = bytes; }
         size_t getMemoryBudget() const { return config.memoryBudgetBytes; }
 
+        void setTileDataLoader(TileDataLoader loader) { tileDataLoader = std::move(loader); }
+        void setTileRAMEvictor(TileRAMEvictor evictor) { tileRAMEvictor = std::move(evictor); }
+
         const TerrainStreamingStats& getStats() const { return stats; }
 
         void clear();
@@ -123,7 +139,8 @@ namespace render::gpudriven
 
         uint8_t selectTargetLOD(float distance) const;
 
-        void processEvictions(const glm::vec3& cameraPosition);
+        void processEvictions(const glm::vec3& cameraPosition,
+                              const std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash>& tileMap);
 
         void evictTileLOD(const TerrainTileKey& key, uint8_t lodLevel);
 

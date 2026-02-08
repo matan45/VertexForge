@@ -3,6 +3,7 @@
 #include "TerrainTile.hpp"
 #include "TerrainTileGenerator.hpp"
 #include "TerrainSerializer.hpp"
+#include "TerrainFileCache.hpp"
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -15,6 +16,7 @@ namespace terrain
         TerrainTileConfig config;
         std::unique_ptr<TerrainTileGenerator> generator;
         std::unordered_map<TileCoord, std::unique_ptr<TerrainTile>, TileCoordHash> tiles;
+        std::shared_ptr<TerrainFileCache> fileCache;
 
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
@@ -43,6 +45,15 @@ namespace terrain
         // Load from serialized data (skips meshlet regeneration when LOD cache is available)
         bool loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
                                 ProgressCallback progress = nullptr);
+
+        // Streaming: create tiles with only metadata (no geometry, no heights).
+        // Tile geometry is loaded on-demand from file via TerrainFileCache.
+        bool loadMetadataOnly(const TerrainFileHeader& header,
+                              const std::vector<TileIndexEntry>& index);
+
+        void setFileCache(std::shared_ptr<TerrainFileCache> cache) { fileCache = std::move(cache); }
+        [[nodiscard]] std::shared_ptr<TerrainFileCache> getFileCache() const { return fileCache; }
+        [[nodiscard]] TerrainTileGenerator& getGenerator() { return *generator; }
 
         // Weight map management
         void initializeWeightMaps(uint8_t layerCount);

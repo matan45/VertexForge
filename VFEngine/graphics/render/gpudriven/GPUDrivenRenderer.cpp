@@ -1410,6 +1410,22 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::setTileDataLoader(TerrainStreamManager::TileDataLoader loader)
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->setTileDataLoader(std::move(loader));
+        }
+    }
+
+    void GPUDrivenRenderer::setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor)
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->setTileRAMEvictor(std::move(evictor));
+        }
+    }
+
     const TerrainStreamingStats* GPUDrivenRenderer::getTerrainStreamingStats() const
     {
         if (terrainStreamManager)

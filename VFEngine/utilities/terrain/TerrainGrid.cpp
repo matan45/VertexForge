@@ -62,6 +62,10 @@ namespace terrain
             if (!tile->edgeSyncDirty)
                 continue;
 
+            // Ensure height data is loaded from file if needed
+            if (fileCache && !tile->hasHeightData())
+                fileCache->ensureHeightsLoaded(*tile);
+
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
             {
                 if (tile->isLODDirty(lod))
@@ -83,6 +87,10 @@ namespace terrain
 
             if (tileRegenCount >= MAX_TILE_REGEN)
                 continue;
+
+            // Ensure height data is loaded from file if needed
+            if (fileCache && !tile->hasHeightData())
+                fileCache->ensureHeightsLoaded(*tile);
 
             bool anyRegenerated = false;
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
@@ -296,6 +304,26 @@ namespace terrain
         }
 
         vfLogInfo("TerrainGrid: Loaded {} tiles from serialized data", tiles.size());
+        return !tiles.empty();
+    }
+
+    bool TerrainGrid::loadMetadataOnly(const TerrainFileHeader& header,
+                                       const std::vector<TileIndexEntry>& index)
+    {
+        tiles.clear();
+
+        for (const auto& entry : index)
+        {
+            TileCoord coord{entry.coordX, entry.coordZ};
+            auto tile = std::make_unique<TerrainTile>(coord, config);
+            // Only set metadata - no heightData, no LOD geometry
+            tile->initializeMetadataOnly();
+            tiles.emplace(coord, std::move(tile));
+        }
+
+        updateAllNeighborReferences();
+
+        vfLogInfo("TerrainGrid: Created {} metadata-only tiles for streaming", tiles.size());
         return !tiles.empty();
     }
 

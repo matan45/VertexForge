@@ -191,8 +191,8 @@ namespace services
                 pendingLoad->ioFuture = std::async(std::launch::async,
                     [pending]()
                     {
-                        return terrain::TerrainSerializer::loadAll(
-                            pending->path, pending->header, pending->tiles);
+                        return terrain::TerrainSerializer::readHeader(
+                            pending->path, pending->header, pending->index);
                     });
 
                 events::terrain::TerrainLoadStartedNotification notification;
@@ -223,7 +223,7 @@ namespace services
                 }
 
                 EntityHandle result = finishLoadTerrain(
-                    pendingLoad->header, pendingLoad->tiles, pendingLoad->path);
+                    pendingLoad->header, pendingLoad->index, pendingLoad->path);
 
                 std::string loadPath = pendingLoad->path;
                 pendingLoad.reset();
@@ -553,11 +553,7 @@ namespace services
             {
                 if (tile && tile->isVisible)
                 {
-                    const auto& lodData = tile->getCurrentLODData();
-                    if (!lodData.isEmpty() && lodData.hasMeshlets())
-                    {
-                        result.push_back(tile);
-                    }
+                    result.push_back(tile);
                 }
             }
         }
@@ -601,6 +597,7 @@ namespace services
         if (it != terrainGrids.end())
         {
             terrainGrids.erase(it);
+            fileCaches.erase(entity.id);
 
             events::terrain::TerrainDeletedNotification notification;
             notification.terrainEntity = entity;
@@ -617,6 +614,7 @@ namespace services
         events::EventDispatcher::instance().publish(notification);
 
         terrainGrids.clear();
+        fileCaches.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }
@@ -668,6 +666,10 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
+        // Get file cache for on-demand height loading
+        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
         std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
         {
@@ -681,6 +683,15 @@ namespace services
             {
                 continue;
             }
+
+            // Ensure height data is loaded from file for sculpting
+            if (fileCache && !tile->hasHeightData())
+            {
+                if (!fileCache->ensureHeightsLoaded(*tile))
+                    continue;
+            }
+            if (fileCache)
+                fileCache->markDirty(coord);
 
             terrain::BrushGPUParams gpuParams;
             gpuParams.brushCenter = brushCenter;
@@ -782,6 +793,10 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
+        // Get file cache for on-demand weight loading
+        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto paintFileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
         for (const auto& coord : affectedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
@@ -789,6 +804,12 @@ namespace services
             {
                 continue;
             }
+
+            // Ensure height/weight data is loaded from file for painting
+            if (paintFileCache && !tile->hasHeightData())
+                paintFileCache->ensureHeightsLoaded(*tile);
+            if (paintFileCache)
+                paintFileCache->markDirty(coord);
 
             if (!tile->hasWeightMap())
             {
@@ -1016,6 +1037,25 @@ namespace services
             mutableComp.savePath = path;
             mutableComp.saveDirty = false;
 
+            // Refresh file cache index after save (offsets changed, dirty tiles now clean)
+            auto cacheIt = fileCaches.find(terrainEntityId);
+            if (cacheIt != fileCaches.end() && cacheIt->second)
+            {
+                cacheIt->second->refreshIndex(path);
+            }
+            else
+            {
+                // First save of a newly created terrain - create a file cache
+                terrain::TerrainFileHeader newHeader;
+                std::vector<terrain::TileIndexEntry> newIndex;
+                if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex))
+                {
+                    auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex);
+                    fileCaches[terrainEntityId] = cache;
+                    gridIt->second->setFileCache(cache);
+                }
+            }
+
             events::terrain::TerrainSavedNotification savedNotification;
             savedNotification.terrainEntity = EntityHandle{terrainEntityId};
             savedNotification.path = path;
@@ -1030,20 +1070,20 @@ namespace services
     EntityHandle TerrainService::loadTerrain(const std::string& path)
     {
         terrain::TerrainFileHeader header;
-        std::vector<terrain::TileLoadResult> tiles;
+        std::vector<terrain::TileIndexEntry> index;
 
-        if (!terrain::TerrainSerializer::loadAll(path, header, tiles))
+        if (!terrain::TerrainSerializer::readHeader(path, header, index))
         {
-            vfLogError("TerrainService: Failed to load terrain from {}", path);
+            vfLogError("TerrainService: Failed to read terrain header from {}", path);
             return {};
         }
 
-        return finishLoadTerrain(header, tiles, path);
+        return finishLoadTerrain(header, index, path);
     }
 
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
-        std::vector<terrain::TileLoadResult>& tiles,
+        std::vector<terrain::TileIndexEntry>& index,
         const std::string& path)
     {
         terrain::TerrainTileConfig tileConfig;
@@ -1055,16 +1095,11 @@ namespace services
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
-        grid->loadFromSerialized(tiles);
+        grid->loadMetadataOnly(header, index);
 
-        // Mark weight maps GPU dirty so TerrainStreamManager uploads them
-        for (auto* tile : grid->getAllTiles())
-        {
-            if (tile->hasWeightMap())
-            {
-                tile->weightMapGPUDirty = true;
-            }
-        }
+        // Create file cache for on-demand streaming
+        auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index);
+        grid->setFileCache(cache);
 
         scene::Entity parentEntity("Terrain");
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
@@ -1092,6 +1127,7 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
+        fileCaches[parentHandle.id] = cache;
 
         // Rebind material: sync weight map layer count with material layers
         if (!header.materialPath.empty())
@@ -1116,5 +1152,43 @@ namespace services
         vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
         return parentHandle;
+    }
+
+    bool TerrainService::ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel)
+    {
+        // Find the grid that owns this tile
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            if (!grid->getTile(tile.coord))
+                continue;
+
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt == fileCaches.end() || !cacheIt->second)
+                return false;
+
+            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+                return grid->getTile(coord);
+            };
+
+            return cacheIt->second->ensureLODsLoaded(tile, grid->getGenerator(), getTile);
+        }
+
+        return false;
+    }
+
+    void TerrainService::releaseTileRAMData(terrain::TerrainTile& tile)
+    {
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            if (!grid->getTile(tile.coord))
+                continue;
+
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt != fileCaches.end() && cacheIt->second)
+            {
+                cacheIt->second->evictTileGeometry(tile);
+            }
+            return;
+        }
     }
 }

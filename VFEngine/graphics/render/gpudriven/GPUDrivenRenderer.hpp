@@ -248,6 +248,10 @@ namespace render::gpudriven
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
+        // File-based terrain streaming callbacks
+        void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
+        void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
+
         // Terrain profiling
         float getTerrainUpdateUs() const { return terrainUpdateUs_; }
         float getTerrainStreamingUs() const { return terrainStreamingUs_; }

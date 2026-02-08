@@ -7,6 +7,7 @@
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
+#include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <future>
@@ -42,10 +43,13 @@ namespace services
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
 
+        // File caches for streaming (key = entity ID)
+        std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
+
         struct PendingTerrainLoad {
             std::future<bool> ioFuture;
             terrain::TerrainFileHeader header;
-            std::vector<terrain::TileLoadResult> tiles;
+            std::vector<terrain::TileIndexEntry> index;
             std::string path;
         };
         std::unique_ptr<PendingTerrainLoad> pendingLoad;
@@ -82,6 +86,11 @@ namespace services
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 
+        // File-based streaming: load tile LOD data on demand from .vfterrain file
+        bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
+        // File-based streaming: release tile RAM data after GPU eviction
+        void releaseTileRAMData(terrain::TerrainTile& tile);
+
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
@@ -89,7 +98,7 @@ namespace services
         void onSceneCleared();
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
-                                       std::vector<terrain::TileLoadResult>& tiles,
+                                       std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path);
     };
 }
