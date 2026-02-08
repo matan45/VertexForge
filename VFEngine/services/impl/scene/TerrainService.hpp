@@ -6,6 +6,7 @@
 #include "terrain/TerrainTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
+#include "../../providers/IPhysicsProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>
@@ -41,6 +42,7 @@ namespace services
         bool flattenTargetCaptured = false;
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
+        IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
 
         // File caches for streaming (key = entity ID)
@@ -79,6 +81,11 @@ namespace services
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
+        void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+
+        bool addTerrainCollider(EntityHandle terrainEntity);
+        void removeTerrainCollider(EntityHandle terrainEntity);
+        bool hasTerrainCollider(EntityHandle terrainEntity) const;
 
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);

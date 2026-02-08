@@ -450,4 +450,12 @@ namespace components
         float boundingMinY = 0.0f;
         float boundingMaxY = 0.0f;
     };
+
+    struct TerrainColliderComponent
+    {
+        bool hasCollider = false;
+        uint8_t collisionLayer = 0;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+    };
 }

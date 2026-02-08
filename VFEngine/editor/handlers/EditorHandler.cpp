@@ -217,6 +217,12 @@ namespace handlers
         // Wire GPU brush compute provider to TerrainService
         terrainServiceImpl->setBrushComputeProvider(bootstrap->getTerrainBrushComputeProvider());
 
+        // Wire physics provider to TerrainService for terrain collider operations
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            terrainServiceImpl->setPhysicsProvider(physicsProvider);
+        }
+
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();

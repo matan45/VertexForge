@@ -55,6 +55,17 @@ namespace core::physics
         float distance = 0.0f;
     };
 
+    struct TerrainHeightFieldCreateInfo
+    {
+        const float* heightSamples = nullptr;
+        uint32_t sampleCount = 0;
+        glm::vec3 offset{0.0f};
+        glm::vec3 scale{1.0f};
+        float friction = 0.5f;
+        float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
+    };
+
     class PhysicsWorld
     {
     private:
@@ -70,6 +81,10 @@ namespace core::physics
         
         std::unordered_map<uint64_t, JPH::BodyID> entityToBody;
         std::unordered_map<uint32_t, uint64_t> bodyToEntity; // BodyID index to entity
+
+        using TileCoordKey = uint64_t;
+        std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
+        static TileCoordKey makeTileKey(int32_t x, int32_t z);
 
         bool initialized = false;
 
@@ -126,6 +141,13 @@ namespace core::physics
 
         JPH::BodyID getBodyForEntity(uint64_t entityId) const;
         uint64_t getEntityForBody(JPH::BodyID bodyId) const;
+
+        // Terrain heightfield body operations
+        JPH::BodyID addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                                        const TerrainHeightFieldCreateInfo& info);
+        void removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
+        void removeAllTerrainBodies(uint64_t entityId);
+        bool hasTerrainBodies(uint64_t entityId) const;
 
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);

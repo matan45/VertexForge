@@ -2,6 +2,7 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/TerrainEvents.hpp"
+#include "events/PhysicsEvents.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <chrono>
@@ -138,6 +139,37 @@ namespace windows::details {
                         ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
                         : ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
                     ImGui::TextColored(color, "%s", saveStatusMessage.c_str());
+                }
+            }
+
+            // Physics collider section
+            ImGui::Separator();
+            ImGui::Text("Physics");
+
+            events::physics::HasTerrainColliderQuery hasColliderQuery;
+            hasColliderQuery.terrainEntity = handle;
+            bool hasCollider = dispatcher.query(hasColliderQuery);
+
+            if (!hasCollider)
+            {
+                if (ImGui::Button("Add Collider"))
+                {
+                    events::physics::AddTerrainColliderCommand cmd;
+                    cmd.terrainEntity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Creates a static HeightField collider for all tiles");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Collider Active");
+                ImGui::SameLine();
+                if (ImGui::Button("Remove Collider"))
+                {
+                    events::physics::RemoveTerrainColliderCommand cmd;
+                    cmd.terrainEntity = handle;
+                    dispatcher.execute(cmd);
                 }
             }
 

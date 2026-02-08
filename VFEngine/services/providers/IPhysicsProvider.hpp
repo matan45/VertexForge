@@ -6,9 +6,22 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
+#include <vector>
 
 namespace services
 {
+    struct TerrainTileColliderInfo
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        const float* heightSamples = nullptr;
+        uint32_t sampleCount = 0;
+        glm::vec3 worldOrigin{0.0f};
+        float vertexSpacing = 1.0f;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+    };
+
     class IPhysicsProvider
     {
     public:
@@ -78,5 +91,14 @@ namespace services
 
         // Get current physics settings
         virtual types::PhysicsSettings getCurrentSettings() const = 0;
+
+        // === Terrain Collider Operations ===
+
+        virtual void addTerrainCollider(EntityHandle entity,
+                                         const std::vector<TerrainTileColliderInfo>& tiles) = 0;
+        virtual void removeTerrainCollider(EntityHandle entity) = 0;
+        virtual void rebuildTerrainTileCollider(EntityHandle entity,
+                                                 const TerrainTileColliderInfo& tile) = 0;
+        virtual bool hasTerrainCollider(EntityHandle entity) const = 0;
     };
 }

@@ -590,4 +590,62 @@ namespace core
         std::lock_guard<std::mutex> lock(settingsMutex);
         return currentSettings;
     }
+
+    void PhysicsAdapter::addTerrainCollider(services::EntityHandle entity,
+                                             const std::vector<services::TerrainTileColliderInfo>& tiles)
+    {
+        if (!physicsWorld)
+            return;
+
+        for (const auto& tile : tiles)
+        {
+            physics::TerrainHeightFieldCreateInfo info;
+            info.heightSamples = tile.heightSamples;
+            info.sampleCount = tile.sampleCount;
+            info.offset = glm::vec3(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
+            info.scale = glm::vec3(tile.vertexSpacing, 1.0f, tile.vertexSpacing);
+            info.friction = tile.friction;
+            info.restitution = tile.restitution;
+            info.collisionLayer = 0; // STATIC
+
+            physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
+        }
+    }
+
+    void PhysicsAdapter::removeTerrainCollider(services::EntityHandle entity)
+    {
+        if (physicsWorld)
+        {
+            physicsWorld->removeAllTerrainBodies(entity.id);
+        }
+    }
+
+    void PhysicsAdapter::rebuildTerrainTileCollider(services::EntityHandle entity,
+                                                     const services::TerrainTileColliderInfo& tile)
+    {
+        if (!physicsWorld)
+            return;
+
+        physicsWorld->removeTerrainTileBody(entity.id, tile.tileX, tile.tileZ);
+
+        physics::TerrainHeightFieldCreateInfo info;
+        info.heightSamples = tile.heightSamples;
+        info.sampleCount = tile.sampleCount;
+        info.offset = glm::vec3(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
+        info.scale = glm::vec3(tile.vertexSpacing, 1.0f, tile.vertexSpacing);
+        info.friction = tile.friction;
+        info.restitution = tile.restitution;
+        info.collisionLayer = 0;
+
+        physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
+    }
+
+    bool PhysicsAdapter::hasTerrainCollider(services::EntityHandle entity) const
+    {
+        if (physicsWorld)
+        {
+            return physicsWorld->hasTerrainBodies(entity.id);
+        }
+        return false;
+    }
 }

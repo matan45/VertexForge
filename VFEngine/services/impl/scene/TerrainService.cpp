@@ -21,6 +21,7 @@
 #include "../../events/PaintModeEvents.hpp"
 #include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
+#include "../../events/PhysicsEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -163,6 +164,24 @@ namespace services
             [this](const events::terrain::SetTerrainSaveLockCommand& cmd)
             {
                 saveInProgress.store(cmd.locked, std::memory_order_release);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::AddTerrainColliderCommand>(
+            [this](const events::physics::AddTerrainColliderCommand& cmd)
+            {
+                return addTerrainCollider(cmd.terrainEntity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::RemoveTerrainColliderCommand>(
+            [this](const events::physics::RemoveTerrainColliderCommand& cmd)
+            {
+                removeTerrainCollider(cmd.terrainEntity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::HasTerrainColliderQuery>(
+            [this](const events::physics::HasTerrainColliderQuery& query)
+            {
+                return hasTerrainCollider(query.terrainEntity);
             });
 
         dispatcher.registerCommandHandler<events::terrain::BeginTerrainLoadCommand>(
@@ -411,6 +430,9 @@ namespace services
         if (!registry.all_of<components::TerrainComponent>(entity))
             return false;
 
+        if (physicsProvider)
+            physicsProvider->removeTerrainCollider(terrainEntity);
+
         terrainGrids.erase(terrainEntity.id);
 
         scene::Entity terrainEnt(entity);
@@ -602,6 +624,9 @@ namespace services
         auto it = terrainGrids.find(entity.id);
         if (it != terrainGrids.end())
         {
+            if (physicsProvider)
+                physicsProvider->removeTerrainCollider(entity);
+
             terrainGrids.erase(it);
             fileCaches.erase(entity.id);
 
@@ -616,6 +641,12 @@ namespace services
         if (terrainGrids.empty())
             return;
 
+        if (physicsProvider)
+        {
+            for (auto& [id, _] : terrainGrids)
+                physicsProvider->removeTerrainCollider(EntityHandle{id});
+        }
+
         events::terrain::TerrainDeletedNotification notification;
         events::EventDispatcher::instance().publish(notification);
 
@@ -623,6 +654,95 @@ namespace services
         fileCaches.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
+    }
+
+    bool TerrainService::addTerrainCollider(EntityHandle terrainEntity)
+    {
+        if (!physicsProvider || !terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto* grid = gridIt->second.get();
+        const auto& allTiles = grid->getAllTiles();
+
+        // Ensure height data is loaded for streaming tiles
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        std::vector<TerrainTileColliderInfo> tileInfos;
+        tileInfos.reserve(allTiles.size());
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile)
+                continue;
+
+            if (fileCache && !tile->hasHeightData())
+            {
+                if (!fileCache->ensureHeightsLoaded(*tile))
+                    continue;
+            }
+
+            if (!tile->hasHeightData())
+                continue;
+
+            TerrainTileColliderInfo info;
+            info.tileX = tile->coord.x;
+            info.tileZ = tile->coord.z;
+            info.heightSamples = tile->heightData.data();
+            info.sampleCount = tile->config.getVertexCount();
+            info.worldOrigin = tile->worldOrigin;
+            info.vertexSpacing = tile->config.getVertexSpacing();
+
+            tileInfos.push_back(info);
+        }
+
+        if (tileInfos.empty())
+            return false;
+
+        physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (registry.valid(ent))
+        {
+            if (!registry.all_of<components::TerrainColliderComponent>(ent))
+            {
+                registry.emplace<components::TerrainColliderComponent>(ent);
+            }
+            registry.get<components::TerrainColliderComponent>(ent).hasCollider = true;
+        }
+
+        vfLogInfo("TerrainService: Added terrain collider with {} tiles", tileInfos.size());
+        return true;
+    }
+
+    void TerrainService::removeTerrainCollider(EntityHandle terrainEntity)
+    {
+        if (!physicsProvider || !terrainEntity.isValid())
+            return;
+
+        physicsProvider->removeTerrainCollider(terrainEntity);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            registry.remove<components::TerrainColliderComponent>(ent);
+        }
+
+        vfLogInfo("TerrainService: Removed terrain collider");
+    }
+
+    bool TerrainService::hasTerrainCollider(EntityHandle terrainEntity) const
+    {
+        if (!physicsProvider || !terrainEntity.isValid())
+            return false;
+
+        return physicsProvider->hasTerrainCollider(terrainEntity);
     }
 
     void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
@@ -742,6 +862,26 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+
+            // Rebuild colliders for modified tiles
+            if (physicsProvider && physicsProvider->hasTerrainCollider(*targetEntity))
+            {
+                for (const auto& coord : modifiedTiles)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile && tile->hasHeightData())
+                    {
+                        TerrainTileColliderInfo info;
+                        info.tileX = coord.x;
+                        info.tileZ = coord.z;
+                        info.heightSamples = tile->heightData.data();
+                        info.sampleCount = tile->config.getVertexCount();
+                        info.worldOrigin = tile->worldOrigin;
+                        info.vertexSpacing = tile->config.getVertexSpacing();
+                        physicsProvider->rebuildTerrainTileCollider(*targetEntity, info);
+                    }
+                }
             }
         }
     }
