@@ -10,7 +10,6 @@ namespace services
 
 namespace core
 {
-    // Provides access to raw terrain tiles for GPU-driven rendering
     class TerrainRenderAdapter : public services::ITerrainRenderProvider
     {
     private:
@@ -29,5 +28,8 @@ namespace core
         bool hasActiveTerrain() const override;
 
         std::string getTerrainMaterialPath() const override;
+
+        bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) override;
+        void releaseTileRAMData(terrain::TerrainTile& tile) override;
     };
 }

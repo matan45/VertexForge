@@ -2,6 +2,8 @@
 
 #include "TerrainTile.hpp"
 #include "TerrainTileGenerator.hpp"
+#include "TerrainSerializer.hpp"
+#include "TerrainFileCache.hpp"
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -14,6 +16,7 @@ namespace terrain
         TerrainTileConfig config;
         std::unique_ptr<TerrainTileGenerator> generator;
         std::unordered_map<TileCoord, std::unique_ptr<TerrainTile>, TileCoordHash> tiles;
+        std::shared_ptr<TerrainFileCache> fileCache;
 
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
@@ -26,10 +29,7 @@ namespace terrain
 
         [[nodiscard]] std::vector<TerrainTile*> getVisibleTiles(const math::Frustum& frustum);
 
-        // Returns coordinates of tiles whose LOD or stitching state changed
         [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
-
-        // Regenerate meshlets for dirty tiles (active LOD + one additional per frame)
         void regenerateDirtyTiles(const glm::vec3& cameraPosition);
 
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();
@@ -39,7 +39,16 @@ namespace terrain
         void createGrid(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ,
                         ProgressCallback progress = nullptr);
 
-        // Weight map management
+        bool loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
+                                ProgressCallback progress = nullptr);
+
+        bool loadMetadataOnly(const TerrainFileHeader& header,
+                              const std::vector<TileIndexEntry>& index);
+
+        void setFileCache(std::shared_ptr<TerrainFileCache> cache) { fileCache = std::move(cache); }
+        [[nodiscard]] std::shared_ptr<TerrainFileCache> getFileCache() const { return fileCache; }
+        [[nodiscard]] TerrainTileGenerator& getGenerator() { return *generator; }
+
         void initializeWeightMaps(uint8_t layerCount);
         void updateWeightMapLayerCount(uint8_t newLayerCount);
         [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();

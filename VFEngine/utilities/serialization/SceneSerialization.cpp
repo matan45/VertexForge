@@ -1154,6 +1154,12 @@ namespace serialization
             cleanNullTerminators(cleanWeightPath);
             j["weightMapPath"] = cleanWeightPath;
         }
+        if (!terrain.savePath.empty())
+        {
+            std::string cleanSavePath = terrain.savePath;
+            cleanNullTerminators(cleanSavePath);
+            j["savePath"] = cleanSavePath;
+        }
         // State flags
         j["isActive"] = terrain.isActive;
         return j;
@@ -1190,6 +1196,8 @@ namespace serialization
             terrain.terrainMaterialPath = it->get<std::string>();
         if (auto it = j.find("weightMapPath"); it != j.end() && it->is_string())
             terrain.weightMapPath = it->get<std::string>();
+        if (auto it = j.find("savePath"); it != j.end() && it->is_string())
+            terrain.savePath = it->get<std::string>();
         // State flags (with backward-compatible defaults)
         if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
             terrain.isActive = it->get<bool>();

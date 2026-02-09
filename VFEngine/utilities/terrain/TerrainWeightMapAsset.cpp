@@ -12,14 +12,15 @@ namespace terrain
 
     static constexpr std::array<char, 4> WEIGHT_MAP_MAGIC = {'V', 'F', 'W', 'M'};
     static constexpr uint32_t FORMAT_VERSION_MAJOR = 0;
-    static constexpr uint32_t FORMAT_VERSION_MINOR = 0;
-    static constexpr uint32_t FORMAT_VERSION_PATCH = 1;
+    static constexpr uint32_t FORMAT_VERSION_MINOR = 1;
+    static constexpr uint32_t FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TILE_COUNT = 10000;
 
     bool TerrainWeightMapAsset::save(
         std::string_view path,
         const std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash>& tileWeights,
-        uint32_t resolution)
+        uint32_t resolution,
+        const std::string& materialPath)
     {
         if (tileWeights.empty())
         {
@@ -48,6 +49,11 @@ namespace terrain
             writeLE(file, static_cast<uint32_t>(tileWeights.size()));
             writeLE(file, resolution);
 
+            uint32_t pathLen = static_cast<uint32_t>(materialPath.size());
+            writeLE(file, pathLen);
+            if (pathLen > 0)
+                file.write(materialPath.data(), pathLen);
+
             for (const auto& [coord, weightData] : tileWeights)
             {
                 writeLE(file, coord.x);
@@ -62,7 +68,6 @@ namespace terrain
                     }
                     else
                     {
-                        // Pad with zeros if layer data is missing
                         std::vector<float> zeros(static_cast<size_t>(resolution) * resolution, 0.0f);
                         writeVectorLE(file, zeros);
                     }
@@ -94,7 +99,8 @@ namespace terrain
     }
 
     std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash> TerrainWeightMapAsset::load(
-        std::string_view path)
+        std::string_view path,
+        std::string* outMaterialPath)
     {
         std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash> result;
 
@@ -136,6 +142,18 @@ namespace terrain
             uint32_t tileCount = readLE<uint32_t>(file);
             uint32_t resolution = readLE<uint32_t>(file);
 
+            if (minor >= 1 || major > 0)
+            {
+                uint32_t pathLen = readLE<uint32_t>(file);
+                if (pathLen > 0)
+                {
+                    std::string matPath(pathLen, '\0');
+                    file.read(matPath.data(), pathLen);
+                    if (outMaterialPath)
+                        *outMaterialPath = std::move(matPath);
+                }
+            }
+
             if (tileCount > MAX_REASONABLE_TILE_COUNT)
             {
                 vfLogError("TerrainWeightMapAsset: Unreasonable tile count {} in {}", tileCount, path);
@@ -166,7 +184,6 @@ namespace terrain
                 {
                     vfLogWarning("TerrainWeightMapAsset: Invalid layer count {} for tile ({}, {}), skipping",
                                  layerCount, coordX, coordZ);
-                    // Skip this tile's data
                     file.seekg(static_cast<std::streamoff>(layerCount) * texelCount * sizeof(float),
                                std::ios::cur);
                     continue;

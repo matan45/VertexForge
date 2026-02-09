@@ -232,6 +232,36 @@ namespace services
                 }
             }
 
+            {
+                std::vector<std::string> terrainPaths;
+                std::vector<EntityHandle> terrainEntitiesToDelete;
+
+                auto terrainView = registry.view<components::TerrainComponent>();
+                for (auto entity : terrainView)
+                {
+                    const auto& terrainComp = terrainView.get<components::TerrainComponent>(entity);
+                    if (!terrainComp.savePath.empty())
+                    {
+                        terrainPaths.push_back(terrainComp.savePath);
+                        terrainEntitiesToDelete.push_back(internal::toHandle(entity));
+                    }
+                }
+
+                for (auto handle : terrainEntitiesToDelete)
+                {
+                    events::terrain::DeleteTerrainCommand delCmd;
+                    delCmd.terrainEntity = handle;
+                    dispatcher.execute(delCmd);
+                }
+
+                for (const auto& path : terrainPaths)
+                {
+                    events::terrain::LoadTerrainCommand loadCmd;
+                    loadCmd.path = path;
+                    dispatcher.execute(loadCmd);
+                }
+            }
+
             events::physics::ApplyPhysicsSettingsCommand physicsCmd;
             physicsCmd.settings = sceneGraph->getPhysicsSettings();
             dispatcher.execute(physicsCmd);

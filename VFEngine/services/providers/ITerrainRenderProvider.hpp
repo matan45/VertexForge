@@ -16,7 +16,6 @@ namespace terrain
 
 namespace services
 {
-    // Bridges TerrainService (which owns terrain data) to the graphics layer
     class ITerrainRenderProvider
     {
     public:
@@ -29,5 +28,8 @@ namespace services
         virtual bool hasActiveTerrain() const = 0;
 
         virtual std::string getTerrainMaterialPath() const = 0;
+
+        virtual bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) = 0;
+        virtual void releaseTileRAMData(terrain::TerrainTile& tile) = 0;
     };
 }

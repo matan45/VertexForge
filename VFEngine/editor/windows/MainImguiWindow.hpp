@@ -13,6 +13,7 @@
 #include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/TerrainEvents.hpp"
 
 namespace editor
 {
@@ -41,6 +42,8 @@ namespace windows
 
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken openImportDialogToken;
+        events::SubscriptionToken terrainLoadStartedToken;
+        bool isLoadingTerrain = false;
 
     public:
         explicit MainImguiWindow();
@@ -56,5 +59,6 @@ namespace windows
     private:
         void subscribeToEvents();
         void onSceneCleared();
+        void pollTerrainLoad();
     };
 }

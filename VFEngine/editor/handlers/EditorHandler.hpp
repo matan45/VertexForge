@@ -42,7 +42,6 @@ namespace handlers {
 	class EditorHandler
 	{
 	private:
-		// Bootstrap encapsulates Core/Graphics initialization and provides service adapters
 		std::unique_ptr<core::EditorBootstrap> bootstrap;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;

@@ -654,6 +654,18 @@ namespace render
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
     {
         terrainRenderProvider = provider;
+
+        if (provider && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTileDataLoader(
+                [provider](terrain::TerrainTile& tile, uint8_t lod) -> bool {
+                    return provider->ensureTileLODData(tile, lod);
+                });
+            gpuDrivenRenderer->setTileRAMEvictor(
+                [provider](terrain::TerrainTile& tile) {
+                    provider->releaseTileRAMData(tile);
+                });
+        }
     }
 
     void RenderPassHandler::clearTerrainData()
@@ -948,7 +960,6 @@ namespace render
                 terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
                 terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
 
-                // Transition depth image back to attachment layout
                 vk::ImageMemoryBarrier toAttachment{};
                 toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;

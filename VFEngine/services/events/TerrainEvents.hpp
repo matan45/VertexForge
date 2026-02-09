@@ -66,20 +66,6 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainMaterialPath"; }
     };
 
-    struct CompileTerrainMaterialCommand : ICommand<bool> {
-        std::string materialPath;
-
-        std::string_view getName() const override { return "CompileTerrainMaterial"; }
-    };
-
-    struct TerrainMaterialCompiledNotification : INotification {
-        std::string materialPath;
-        bool success = false;
-        std::string generatedSnippet;
-
-        std::string_view getName() const override { return "TerrainMaterialCompiled"; }
-    };
-
     struct SaveWeightMapsCommand : ICommand<bool> {
         services::EntityHandle terrainEntity;
         std::string path;
@@ -92,5 +78,54 @@ namespace events::terrain
         std::string path;
 
         std::string_view getName() const override { return "LoadWeightMaps"; }
+    };
+
+    struct SaveTerrainCommand : ICommand<bool> {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "SaveTerrain"; }
+    };
+
+    struct LoadTerrainCommand : ICommand<services::EntityHandle> {
+        std::string path;
+
+        std::string_view getName() const override { return "LoadTerrain"; }
+    };
+
+    struct SetTerrainSaveLockCommand : ICommand<> {
+        bool locked = false;
+
+        std::string_view getName() const override { return "SetTerrainSaveLock"; }
+    };
+
+    struct TerrainSavedNotification : INotification {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainSaved"; }
+    };
+
+    struct BeginTerrainLoadCommand : ICommand<bool> {
+        std::string path;
+
+        std::string_view getName() const override { return "BeginTerrainLoad"; }
+    };
+
+    struct PollTerrainLoadCommand : ICommand<std::optional<services::EntityHandle>> {
+        std::string_view getName() const override { return "PollTerrainLoad"; }
+    };
+
+    struct TerrainLoadStartedNotification : INotification {
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainLoadStarted"; }
+    };
+
+    struct TerrainLoadedNotification : INotification {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "TerrainLoaded"; }
     };
 }

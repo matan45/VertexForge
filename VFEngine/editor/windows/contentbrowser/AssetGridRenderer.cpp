@@ -200,6 +200,9 @@ namespace windows
         case TerrainMaterial:
             icon = AtlasIcon::Material;
             break;
+        case Terrain:
+            icon = AtlasIcon::Terrain;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

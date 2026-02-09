@@ -1,4 +1,5 @@
 #include "TerrainGrid.hpp"
+#include "../print/EditorLogger.hpp"
 #include <algorithm>
 
 namespace terrain
@@ -52,14 +53,13 @@ namespace terrain
             return this->getTile(coord);
         };
 
-        // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
-        // These tiles had their boundary heights changed and must regenerate this frame
-        // to prevent cracks. Count is naturally bounded (typically 2-6).
-        // Regenerate ALL dirty LODs so the GPU task shader can safely select any LOD.
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->edgeSyncDirty)
                 continue;
+
+            if (fileCache && !tile->hasHeightData())
+                fileCache->ensureHeightsLoaded(*tile);
 
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
             {
@@ -72,9 +72,6 @@ namespace terrain
             tile->edgeSyncDirty = false;
         }
 
-        // Pass 1: regenerate dirty tiles (budgeted per-tile).
-        // Regenerate ALL dirty LODs per tile so the GPU task shader can select any LOD
-        // without encountering stale pre-sculpt geometry.
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->isDirty)
@@ -82,6 +79,9 @@ namespace terrain
 
             if (tileRegenCount >= MAX_TILE_REGEN)
                 continue;
+
+            if (fileCache && !tile->hasHeightData())
+                fileCache->ensureHeightsLoaded(*tile);
 
             bool anyRegenerated = false;
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
@@ -164,7 +164,6 @@ namespace terrain
 
         updateAllNeighborReferences();
 
-        // Update edge stitching and mark tiles dirty if stitching requirements changed
         for (auto& [coord, tile] : tiles)
         {
             generator->updateEdgeStitching(*tile);
@@ -235,6 +234,84 @@ namespace terrain
         {
             progress(1.0f, "Complete");
         }
+    }
+
+    bool TerrainGrid::loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
+                                          ProgressCallback progress)
+    {
+        tiles.clear();
+        uint32_t total = static_cast<uint32_t>(loadedTiles.size());
+        uint32_t current = 0;
+
+        for (const auto& loaded : loadedTiles)
+        {
+            if (!loaded.success)
+                continue;
+
+            if (progress)
+            {
+                progress(static_cast<float>(current) / static_cast<float>(total),
+                         "Loading tile (" + std::to_string(loaded.coord.x) + ", " +
+                         std::to_string(loaded.coord.z) + ")");
+            }
+
+            auto tile = std::make_unique<TerrainTile>(loaded.coord, config);
+            tile->initializeFromHeights(loaded.heightData);
+
+            if (loaded.weightMap.isInitialized())
+            {
+                tile->weightMap = loaded.weightMap;
+                tile->weightMapGPUDirty = true;
+            }
+
+            if (loaded.hasLODCache)
+            {
+                tile->lodLevels = loaded.lodData;
+                tile->isDirty = false;
+                tile->dirtyLODMask = 0;
+                tile->updateWorldBounds();
+                vfLogInfo("TerrainGrid: Loaded cached LODs for tile ({}, {})",
+                          loaded.coord.x, loaded.coord.z);
+            }
+            else
+            {
+                generator->generateAllLODs(*tile, nullptr);
+                vfLogInfo("TerrainGrid: Regenerated LODs for tile ({}, {})",
+                          loaded.coord.x, loaded.coord.z);
+            }
+
+            tiles.emplace(loaded.coord, std::move(tile));
+            ++current;
+        }
+
+        updateAllNeighborReferences();
+
+        if (progress)
+        {
+            progress(1.0f, "Complete");
+        }
+
+        vfLogInfo("TerrainGrid: Loaded {} tiles from serialized data", tiles.size());
+        return !tiles.empty();
+    }
+
+    bool TerrainGrid::loadMetadataOnly(const TerrainFileHeader& header,
+                                       const std::vector<TileIndexEntry>& index)
+    {
+        tiles.clear();
+
+        for (const auto& entry : index)
+        {
+            TileCoord coord{entry.coordX, entry.coordZ};
+            auto tile = std::make_unique<TerrainTile>(coord, config);
+            tile->initializeMetadataOnly();
+            tiles.emplace(coord, std::move(tile));
+        }
+
+        updateAllNeighborReferences();
+
+        vfLogInfo("TerrainGrid: Created {} metadata-only tiles for streaming", tiles.size());
+        return !tiles.empty();
     }
 
     void TerrainGrid::initializeWeightMaps(uint8_t layerCount)

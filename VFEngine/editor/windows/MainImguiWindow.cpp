@@ -1,6 +1,7 @@
 #include "MainImguiWindow.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -26,6 +27,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unsubscribe(sceneClearedToken);
         dispatcher.unsubscribe(openImportDialogToken);
+        dispatcher.unsubscribe(terrainLoadStartedToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -42,6 +44,12 @@ namespace windows
             [this](const events::application::OpenImportDialogNotification&)
             {
                 importDialog.openImportDialog();
+            });
+
+        terrainLoadStartedToken = dispatcher.subscribe<events::terrain::TerrainLoadStartedNotification>(
+            [this](const events::terrain::TerrainLoadStartedNotification&)
+            {
+                isLoadingTerrain = true;
             });
     }
 
@@ -74,7 +82,36 @@ namespace windows
             terrainCreationWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
+
+            pollTerrainLoad();
         }
         ImGui::End();
+    }
+
+    void MainImguiWindow::pollTerrainLoad()
+    {
+        if (!isLoadingTerrain)
+            return;
+
+        // Show loading indicator
+        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() * 0.5f - 60.0f, ImGui::GetWindowHeight() * 0.5f));
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Loading terrain...");
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::terrain::PollTerrainLoadCommand pollCmd;
+        auto result = dispatcher.execute(pollCmd);
+
+        if (!result.has_value())
+            return;
+
+        isLoadingTerrain = false;
+
+        auto handle = result.value();
+        if (handle.id != 0)
+        {
+            events::scene::SelectEntityCommand selectCmd;
+            selectCmd.entity = handle;
+            dispatcher.execute(selectCmd);
+        }
     }
 }

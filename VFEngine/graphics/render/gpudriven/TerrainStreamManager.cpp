@@ -26,6 +26,8 @@ namespace render::gpudriven
         stats.bytesUploadedThisFrame = 0;
         stats.tilesStreaming = 0;
 
+        uint32_t fileReadsThisFrame = 0;
+
         std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash> tileMap;
         for (terrain::TerrainTile* tile : visibleTiles)
         {
@@ -35,7 +37,6 @@ namespace render::gpudriven
             }
         }
 
-        // Sort visible tiles by distance to camera (nearest first) for fallback budgeting
         struct TileWithDistance
         {
             terrain::TerrainTile* tile;
@@ -97,6 +98,15 @@ namespace render::gpudriven
                     continue;
                 }
 
+                if (tile->lodLevels[3].isEmpty())
+                {
+                    if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
+                        continue;
+                    if (!tileDataLoader(*tile, 3))
+                        continue;
+                    fileReadsThisFrame++;
+                }
+
                 if (adapter.uploadTileAddLOD(*tile, 3))
                 {
                     infoIt->second.setLODLoaded(3);
@@ -140,6 +150,15 @@ namespace render::gpudriven
 
                 if (infoIt != tileInfos.end() && infoIt->second.hasLODLoaded(lod))
                 {
+                    if (tile->lodLevels[lod].isEmpty())
+                    {
+                        if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
+                            continue;
+                        if (!tileDataLoader(*tile, lod))
+                            continue;
+                        fileReadsThisFrame++;
+                    }
+
                     evictTileLOD(key, lod);
 
                     if (adapter.uploadTileAddLOD(*tile, lod))
@@ -221,6 +240,15 @@ namespace render::gpudriven
             if (currentMemoryUsage + lodMemory > config.memoryBudgetBytes)
                 continue;
 
+            if (tile->lodLevels[entry.targetLOD].isEmpty())
+            {
+                if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
+                    continue;
+                if (!tileDataLoader(*tile, entry.targetLOD))
+                    continue;
+                fileReadsThisFrame++;
+            }
+
             if (adapter.uploadTileAddLOD(*tile, entry.targetLOD))
             {
                 infoIt->second.setLODLoaded(entry.targetLOD);
@@ -249,7 +277,7 @@ namespace render::gpudriven
             }
         }
 
-        processEvictions(cameraPosition);
+        processEvictions(cameraPosition, tileMap);
 
         stats.memoryUsedBytes = currentMemoryUsage;
         stats.memoryBudgetBytes = config.memoryBudgetBytes;
@@ -296,7 +324,8 @@ namespace render::gpudriven
         return distancePriority * lodUrgency;
     }
 
-    void TerrainStreamManager::processEvictions(const glm::vec3& cameraPosition)
+    void TerrainStreamManager::processEvictions(const glm::vec3& cameraPosition,
+                                                 const std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash>& tileMap)
     {
         if (currentMemoryUsage < config.memoryBudgetBytes * config.evictionThreshold)
         {
@@ -344,6 +373,19 @@ namespace render::gpudriven
                 break;
 
             evictTileLOD(candidate.key, candidate.lodLevel);
+
+            if (tileRAMEvictor)
+            {
+                auto infoIt = tileInfos.find(candidate.key);
+                if (infoIt != tileInfos.end() && infoIt->second.loadedLODMask == 0)
+                {
+                    auto tileIt = tileMap.find(candidate.key);
+                    if (tileIt != tileMap.end() && tileIt->second)
+                    {
+                        tileRAMEvictor(*tileIt->second);
+                    }
+                }
+            }
         }
     }
 
@@ -398,7 +440,7 @@ namespace render::gpudriven
 
         const auto& lodData = tile.lodLevels[lodLevel];
         if (lodData.isEmpty())
-            return 0;
+            return LOD_MEMORY_ESTIMATE[lodLevel]; // Use static estimate for unloaded LODs
 
         size_t vertexMemory = lodData.vertices.size() * sizeof(resource::Vertex);
         size_t indexMemory = lodData.indices.size() * sizeof(uint32_t);

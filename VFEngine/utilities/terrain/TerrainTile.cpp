@@ -39,6 +39,40 @@ namespace terrain
         updateWorldBounds();
     }
 
+    void TerrainTile::initializeMetadataOnly()
+    {
+        std::vector<float>().swap(heightData);
+
+        worldOrigin = computeWorldOrigin();
+
+        constexpr float MIN_AABB_HEIGHT = 1.0f;
+        float minH = config.minHeight;
+        float maxH = config.maxHeight;
+
+        if (maxH - minH < MIN_AABB_HEIGHT)
+        {
+            float center = (minH + maxH) * 0.5f;
+            minH = center - MIN_AABB_HEIGHT * 0.5f;
+            maxH = center + MIN_AABB_HEIGHT * 0.5f;
+        }
+
+        worldBounds = math::AABB(
+            glm::vec3(worldOrigin.x, minH, worldOrigin.z),
+            glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)
+        );
+
+        isDirty = false;
+    }
+
+    bool TerrainTile::hasAnyLODData() const
+    {
+        for (const auto& lod : lodLevels)
+        {
+            if (!lod.isEmpty()) return true;
+        }
+        return false;
+    }
+
     glm::vec3 TerrainTile::computeWorldOrigin() const
     {
         return glm::vec3(
@@ -105,7 +139,6 @@ namespace terrain
 
     void TerrainTile::updateWorldBounds()
     {
-        // Minimum AABB height to prevent frustum culling issues with flat terrain
         constexpr float MIN_AABB_HEIGHT = 1.0f;
 
         if (heightData.empty())
@@ -132,8 +165,6 @@ namespace terrain
             maxH = center + MIN_AABB_HEIGHT * 0.5f;
         }
 
-        // Height values are already absolute world heights;
-        // only X and Z need worldOrigin offset
         worldBounds = math::AABB(
             glm::vec3(worldOrigin.x, minH, worldOrigin.z),
             glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)

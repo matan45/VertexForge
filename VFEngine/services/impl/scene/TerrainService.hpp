@@ -6,7 +6,12 @@
 #include "terrain/TerrainTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
+#include "../../providers/IPhysicsProvider.hpp"
+#include "terrain/TerrainSerializer.hpp"
+#include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>
+#include <atomic>
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -37,6 +42,18 @@ namespace services
         bool flattenTargetCaptured = false;
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
+        IPhysicsProvider* physicsProvider = nullptr;
+        std::atomic<bool> saveInProgress{false};
+
+        std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
+
+        struct PendingTerrainLoad {
+            std::future<bool> ioFuture;
+            terrain::TerrainFileHeader header;
+            std::vector<terrain::TileIndexEntry> index;
+            std::string path;
+        };
+        std::unique_ptr<PendingTerrainLoad> pendingLoad;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -63,9 +80,20 @@ namespace services
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
+        void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+
+        bool addTerrainCollider(EntityHandle terrainEntity);
+        void removeTerrainCollider(EntityHandle terrainEntity);
+        bool hasTerrainCollider(EntityHandle terrainEntity) const;
 
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
+
+        bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
+        EntityHandle loadTerrain(const std::string& path);
+
+        bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
+        void releaseTileRAMData(terrain::TerrainTile& tile);
 
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
@@ -73,5 +101,8 @@ namespace services
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
+        EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
+                                       std::vector<terrain::TileIndexEntry>& index,
+                                       const std::string& path);
     };
 }

@@ -9,6 +9,7 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include "PhysicsMeshLoader.hpp"
@@ -127,6 +128,19 @@ namespace core::physics
             bodyInterface.DestroyBody(bodyId);
         }
         entityToBody.clear();
+
+        for (auto& [entityId, tileMap] : terrainBodies)
+        {
+            for (auto& [tileKey, bodyId] : tileMap)
+            {
+                if (bodyInterface.IsAdded(bodyId))
+                {
+                    bodyInterface.RemoveBody(bodyId);
+                }
+                bodyInterface.DestroyBody(bodyId);
+            }
+        }
+        terrainBodies.clear();
         bodyToEntity.clear();
 
         contactListener.reset();
@@ -637,11 +651,9 @@ namespace core::physics
                     return new JPH::BoxShape(toJolt(safeExtents));
                 }
 
-                // First try to load pre-computed convex decomposition
                 auto decomposition = PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
                 if (decomposition && !decomposition->hulls.empty())
                 {
-                    // Create compound shape from multiple convex hulls
                     JPH::StaticCompoundShapeSettings compoundSettings;
 
                     for (const auto& hull : decomposition->hulls)
@@ -676,10 +688,8 @@ namespace core::physics
                             return result.Get();
                         }
                     }
-                    // Fall through to single hull if compound creation failed
                 }
 
-                // Fallback: create single convex hull from mesh vertices
                 auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
                 if (!meshData || meshData->vertices.empty())
                 {
@@ -767,26 +777,6 @@ namespace core::physics
         }
     }
 
-    JPH::ObjectLayer PhysicsWorld::getObjectLayer(BodyType type, bool isTrigger)
-    {
-        if (isTrigger)
-        {
-            return Layers::SENSOR;
-        }
-
-        switch (type)
-        {
-        case BodyType::Static:
-            return Layers::STATIC;
-        case BodyType::Dynamic:
-            return Layers::DYNAMIC;
-        case BodyType::Kinematic:
-            return Layers::KINEMATIC;
-        default:
-            return Layers::DYNAMIC;
-        }
-    }
-
     JPH::EMotionType PhysicsWorld::getMotionType(BodyType type)
     {
         switch (type)
@@ -839,5 +829,126 @@ namespace core::physics
     glm::quat PhysicsWorld::toGlm(const JPH::Quat& q)
     {
         return glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+    }
+
+    PhysicsWorld::TileCoordKey PhysicsWorld::makeTileKey(int32_t x, int32_t z)
+    {
+        return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32)
+             | static_cast<uint64_t>(static_cast<uint32_t>(z));
+    }
+
+    JPH::BodyID PhysicsWorld::addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                                                  const TerrainHeightFieldCreateInfo& info)
+    {
+        if (!initialized || !physicsSystem || !info.heightSamples || info.sampleCount == 0)
+        {
+            return JPH::BodyID();
+        }
+
+        JPH::HeightFieldShapeSettings shapeSettings(
+            info.heightSamples,
+            JPH::Vec3(info.offset.x, info.offset.y, info.offset.z),
+            JPH::Vec3(info.scale.x, info.scale.y, info.scale.z),
+            info.sampleCount
+        );
+
+        auto shapeResult = shapeSettings.Create();
+        if (!shapeResult.IsValid())
+        {
+            loggerError("Failed to create HeightFieldShape for terrain tile ({}, {}): {}",
+                        tileX, tileZ, shapeResult.GetError().c_str());
+            return JPH::BodyID();
+        }
+
+        JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(info.collisionLayer);
+
+        JPH::BodyCreationSettings bodySettings(
+            shapeResult.Get(),
+            JPH::RVec3::sZero(),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Static,
+            layer
+        );
+
+        bodySettings.mFriction = info.friction;
+        bodySettings.mRestitution = info.restitution;
+        bodySettings.mUserData = entityId;
+
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(
+            bodySettings,
+            JPH::EActivation::DontActivate
+        );
+
+        if (!bodyId.IsInvalid())
+        {
+            TileCoordKey key = makeTileKey(tileX, tileZ);
+            terrainBodies[entityId][key] = bodyId;
+            bodyToEntity[bodyId.GetIndex()] = entityId;
+        }
+
+        return bodyId;
+    }
+
+    void PhysicsWorld::removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ)
+    {
+        if (!initialized || !physicsSystem)
+            return;
+
+        auto entityIt = terrainBodies.find(entityId);
+        if (entityIt == terrainBodies.end())
+            return;
+
+        TileCoordKey key = makeTileKey(tileX, tileZ);
+        auto tileIt = entityIt->second.find(key);
+        if (tileIt == entityIt->second.end())
+            return;
+
+        JPH::BodyID bodyId = tileIt->second;
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+
+        bodyToEntity.erase(bodyId.GetIndex());
+
+        if (bodyInterface.IsAdded(bodyId))
+        {
+            bodyInterface.RemoveBody(bodyId);
+        }
+        bodyInterface.DestroyBody(bodyId);
+
+        entityIt->second.erase(tileIt);
+        if (entityIt->second.empty())
+        {
+            terrainBodies.erase(entityIt);
+        }
+    }
+
+    void PhysicsWorld::removeAllTerrainBodies(uint64_t entityId)
+    {
+        if (!initialized || !physicsSystem)
+            return;
+
+        auto entityIt = terrainBodies.find(entityId);
+        if (entityIt == terrainBodies.end())
+            return;
+
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+        for (auto& [tileKey, bodyId] : entityIt->second)
+        {
+            bodyToEntity.erase(bodyId.GetIndex());
+
+            if (bodyInterface.IsAdded(bodyId))
+            {
+                bodyInterface.RemoveBody(bodyId);
+            }
+            bodyInterface.DestroyBody(bodyId);
+        }
+
+        terrainBodies.erase(entityIt);
+    }
+
+    bool PhysicsWorld::hasTerrainBodies(uint64_t entityId) const
+    {
+        auto it = terrainBodies.find(entityId);
+        return it != terrainBodies.end() && !it->second.empty();
     }
 }

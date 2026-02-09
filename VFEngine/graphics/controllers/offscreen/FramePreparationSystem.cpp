@@ -135,7 +135,7 @@ namespace controllers::offscreen
             render::mesh::MeshRenderData
         {
             render::mesh::MeshRenderData renderData;
-            renderData.entity = entity;  // Track source entity for animation lookup
+            renderData.entity = entity;
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
 
@@ -537,6 +537,25 @@ namespace controllers::offscreen
             {
                 renderData.bodyType = 0;
             }
+
+            colliderDrawList.push_back(renderData);
+        }
+
+        auto terrainDebugView = registry.view<components::TerrainTileColliderDebugComponent>();
+        for (auto entity : terrainDebugView)
+        {
+            const auto& debugComp = terrainDebugView.get<components::TerrainTileColliderDebugComponent>(entity);
+            if (debugComp.debugData.vertices.empty() || debugComp.debugData.lineIndices.empty())
+                continue;
+
+            render::mesh::PhysicsColliderRenderData renderData;
+            renderData.worldMatrix = glm::mat4(1.0f); // identity - vertices are world-space
+            renderData.shape = types::ColliderShape::HeightField;
+            renderData.bodyType = 0; // static
+            renderData.heightfieldVertices = &debugComp.debugData.vertices;
+            renderData.heightfieldLineIndices = &debugComp.debugData.lineIndices;
+            renderData.heightfieldCacheKey = std::to_string(static_cast<uint32_t>(entity)) + "_" + std::to_string(debugComp.tileX) + "_" + std::to_string(debugComp.tileZ);
+            renderData.heightfieldVersion = debugComp.debugData.version;
 
             colliderDrawList.push_back(renderData);
         }
