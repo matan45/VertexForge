@@ -49,7 +49,6 @@ namespace terrain
             writeLE(file, static_cast<uint32_t>(tileWeights.size()));
             writeLE(file, resolution);
 
-            // Material path (length-prefixed string)
             uint32_t pathLen = static_cast<uint32_t>(materialPath.size());
             writeLE(file, pathLen);
             if (pathLen > 0)
@@ -69,7 +68,6 @@ namespace terrain
                     }
                     else
                     {
-                        // Pad with zeros if layer data is missing
                         std::vector<float> zeros(static_cast<size_t>(resolution) * resolution, 0.0f);
                         writeVectorLE(file, zeros);
                     }
@@ -144,7 +142,6 @@ namespace terrain
             uint32_t tileCount = readLE<uint32_t>(file);
             uint32_t resolution = readLE<uint32_t>(file);
 
-            // Material path (added in v0.1.0)
             if (minor >= 1 || major > 0)
             {
                 uint32_t pathLen = readLE<uint32_t>(file);
@@ -187,7 +184,6 @@ namespace terrain
                 {
                     vfLogWarning("TerrainWeightMapAsset: Invalid layer count {} for tile ({}, {}), skipping",
                                  layerCount, coordX, coordZ);
-                    // Skip this tile's data
                     file.seekg(static_cast<std::streamoff>(layerCount) * texelCount * sizeof(float),
                                std::ios::cur);
                     continue;

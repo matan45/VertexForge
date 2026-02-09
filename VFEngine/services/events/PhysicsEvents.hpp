@@ -181,8 +181,6 @@ namespace events::physics {
         std::string_view getName() const override { return "TriggerExit"; }
     };
 
-    // === Terrain Collider Events ===
-
     struct AddTerrainColliderCommand : ::events::ICommand<bool> {
         services::EntityHandle terrainEntity;
         std::string_view getName() const override { return "AddTerrainCollider"; }

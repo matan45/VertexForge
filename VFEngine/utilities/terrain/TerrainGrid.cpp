@@ -53,16 +53,11 @@ namespace terrain
             return this->getTile(coord);
         };
 
-        // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
-        // These tiles had their boundary heights changed and must regenerate this frame
-        // to prevent cracks. Count is naturally bounded (typically 2-6).
-        // Regenerate ALL dirty LODs so the GPU task shader can safely select any LOD.
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->edgeSyncDirty)
                 continue;
 
-            // Ensure height data is loaded from file if needed
             if (fileCache && !tile->hasHeightData())
                 fileCache->ensureHeightsLoaded(*tile);
 
@@ -77,9 +72,6 @@ namespace terrain
             tile->edgeSyncDirty = false;
         }
 
-        // Pass 1: regenerate dirty tiles (budgeted per-tile).
-        // Regenerate ALL dirty LODs per tile so the GPU task shader can select any LOD
-        // without encountering stale pre-sculpt geometry.
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->isDirty)
@@ -88,7 +80,6 @@ namespace terrain
             if (tileRegenCount >= MAX_TILE_REGEN)
                 continue;
 
-            // Ensure height data is loaded from file if needed
             if (fileCache && !tile->hasHeightData())
                 fileCache->ensureHeightsLoaded(*tile);
 
@@ -173,7 +164,6 @@ namespace terrain
 
         updateAllNeighborReferences();
 
-        // Update edge stitching and mark tiles dirty if stitching requirements changed
         for (auto& [coord, tile] : tiles)
         {
             generator->updateEdgeStitching(*tile);
@@ -268,14 +258,12 @@ namespace terrain
             auto tile = std::make_unique<TerrainTile>(loaded.coord, config);
             tile->initializeFromHeights(loaded.heightData);
 
-            // Assign weight map if present
             if (loaded.weightMap.isInitialized())
             {
                 tile->weightMap = loaded.weightMap;
                 tile->weightMapGPUDirty = true;
             }
 
-            // Use cached LOD data or fallback to regeneration
             if (loaded.hasLODCache)
             {
                 tile->lodLevels = loaded.lodData;
@@ -316,7 +304,6 @@ namespace terrain
         {
             TileCoord coord{entry.coordX, entry.coordZ};
             auto tile = std::make_unique<TerrainTile>(coord, config);
-            // Only set metadata - no heightData, no LOD geometry
             tile->initializeMetadataOnly();
             tiles.emplace(coord, std::move(tile));
         }

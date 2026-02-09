@@ -164,10 +164,8 @@ namespace render
         void updateBrushOverlayFromHitResult();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
-        services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
-        services::ITerrainRenderProvider* getTerrainRenderProvider() const { return terrainRenderProvider; }
         void clearTerrainData();
 
         void setViewMode(uint32_t mode);

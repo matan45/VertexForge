@@ -29,10 +29,7 @@ namespace terrain
 
         [[nodiscard]] std::vector<TerrainTile*> getVisibleTiles(const math::Frustum& frustum);
 
-        // Returns coordinates of tiles whose LOD or stitching state changed
         [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
-
-        // Regenerate meshlets for dirty tiles (active LOD + one additional per frame)
         void regenerateDirtyTiles(const glm::vec3& cameraPosition);
 
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();
@@ -42,12 +39,9 @@ namespace terrain
         void createGrid(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ,
                         ProgressCallback progress = nullptr);
 
-        // Load from serialized data (skips meshlet regeneration when LOD cache is available)
         bool loadFromSerialized(const std::vector<TileLoadResult>& loadedTiles,
                                 ProgressCallback progress = nullptr);
 
-        // Streaming: create tiles with only metadata (no geometry, no heights).
-        // Tile geometry is loaded on-demand from file via TerrainFileCache.
         bool loadMetadataOnly(const TerrainFileHeader& header,
                               const std::vector<TileIndexEntry>& index);
 
@@ -55,7 +49,6 @@ namespace terrain
         [[nodiscard]] std::shared_ptr<TerrainFileCache> getFileCache() const { return fileCache; }
         [[nodiscard]] TerrainTileGenerator& getGenerator() { return *generator; }
 
-        // Weight map management
         void initializeWeightMaps(uint8_t layerCount);
         void updateWeightMapLayerCount(uint8_t newLayerCount);
         [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();

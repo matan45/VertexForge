@@ -22,8 +22,8 @@ namespace render::mesh
         glm::mat4 worldMatrix;
         types::ColliderShape shape = types::ColliderShape::Box;
         glm::vec3 size{1.0f}; // Box half-extents
-        float radius = 0.5f; // Sphere/capsule radius
-        float height = 2.0f; // Capsule total height
+        float radius = 0.5f;
+        float height = 2.0f;
         uint8_t bodyType = 1; // 0=Static, 1=Dynamic, 2=Kinematic
         bool isTrigger = false;
         std::string meshPath; // Path to mesh for ConvexMesh/TriangleMesh shapes
@@ -35,7 +35,6 @@ namespace render::mesh
         uint32_t heightfieldVersion = 0;
     };
 
-    // Cached mesh data for debug rendering
     struct MeshDebugData
     {
         vk::Buffer vertexBuffer;
@@ -63,31 +62,26 @@ namespace render::mesh
         vk::Pipeline wireframePipeline;
         vk::PipelineLayout wireframePipelineLayout;
 
-        // Box geometry buffers
         vk::Buffer boxVertexBuffer;
         vk::DeviceMemory boxVertexMemory;
         vk::Buffer boxIndexBuffer;
         vk::DeviceMemory boxIndexMemory;
         uint32_t boxIndexCount = 0;
 
-        // Sphere geometry buffers
         vk::Buffer sphereVertexBuffer;
         vk::DeviceMemory sphereVertexMemory;
         vk::Buffer sphereIndexBuffer;
         vk::DeviceMemory sphereIndexMemory;
         uint32_t sphereIndexCount = 0;
 
-        // Capsule geometry buffers
         vk::Buffer capsuleVertexBuffer;
         vk::DeviceMemory capsuleVertexMemory;
         vk::Buffer capsuleIndexBuffer;
         vk::DeviceMemory capsuleIndexMemory;
         uint32_t capsuleIndexCount = 0;
 
-        // Mesh collider cache (path -> buffers)
         mutable std::unordered_map<std::string, MeshDebugData> meshCache;
 
-        // HeightField tile cache (cacheKey -> buffers + version)
         struct HeightFieldCacheEntry
         {
             MeshDebugData buffers;
@@ -122,11 +116,9 @@ namespace render::mesh
         void createSphereBuffers();
         void createCapsuleBuffers();
 
-        // Get or create mesh debug buffers from cache
         const MeshDebugData* getOrCreateMeshBuffers(const std::string& meshPath) const;
         void cleanupMeshCache();
 
-        // Get or create HeightField wireframe buffers from cache
         const MeshDebugData* getOrCreateHeightFieldBuffers(const PhysicsColliderRenderData& data) const;
         void cleanupHeightFieldCache();
 

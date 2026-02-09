@@ -31,7 +31,6 @@ namespace terrain
             return false;
         }
 
-        // If meshlet cache exists in file, load directly
         if (hasMeshletCache() && entry->meshletDataOffset != 0)
         {
             std::array<TileLODData, TERRAIN_LOD_COUNT> lodData;
@@ -41,8 +40,6 @@ namespace terrain
                 tile.lodLevels = std::move(lodData);
                 tile.isDirty = false;
                 tile.dirtyLODMask = 0;
-                // Only update bounds if heights are loaded; otherwise keep the
-                // conservative metadata bounds from initializeMetadataOnly()
                 if (tile.hasHeightData())
                     tile.updateWorldBounds();
 
@@ -55,7 +52,6 @@ namespace terrain
                          tile.coord.x, tile.coord.z);
         }
 
-        // Fallback: load heights and regenerate LODs
         if (!ensureHeightsLoaded(tile))
             return false;
 
@@ -90,8 +86,6 @@ namespace terrain
 
         tile.initializeFromHeights(heights);
 
-        // Also load weight data if present (always overwrite default-initialized weight maps
-        // since file data is the authoritative source for loaded tiles)
         if (entry->weightDataOffset != 0)
         {
             TileWeightMapData weights;
@@ -109,17 +103,14 @@ namespace terrain
 
     void TerrainFileCache::evictTileGeometry(TerrainTile& tile)
     {
-        // Never evict dirty tiles - they have in-memory modifications
         if (dirtyCoords.count(tile.coord))
             return;
 
         size_t oldUsage = estimateTileRAMUsage(tile);
 
-        // Clear all LOD geometry
         for (auto& lod : tile.lodLevels)
         {
             lod.clear();
-            // Force deallocation via swap idiom
             std::vector<resource::Vertex>().swap(lod.vertices);
             std::vector<uint32_t>().swap(lod.indices);
             std::vector<resource::Meshlet>().swap(lod.meshlets);
@@ -127,10 +118,7 @@ namespace terrain
             std::vector<uint32_t>().swap(lod.meshletPrimitives);
         }
 
-        // Clear height data (can be reloaded from file)
         std::vector<float>().swap(tile.heightData);
-
-        // Clear weight map data (can be reloaded from file)
         tile.weightMap = TileWeightMapData{};
 
         size_t newUsage = estimateTileRAMUsage(tile);
@@ -143,16 +131,6 @@ namespace terrain
     void TerrainFileCache::markDirty(const TileCoord& coord)
     {
         dirtyCoords.insert(coord);
-    }
-
-    void TerrainFileCache::clearDirty(const TileCoord& coord)
-    {
-        dirtyCoords.erase(coord);
-    }
-
-    bool TerrainFileCache::isDirty(const TileCoord& coord) const
-    {
-        return dirtyCoords.count(coord) > 0;
     }
 
     bool TerrainFileCache::refreshIndex(const std::string& newPath)
@@ -196,11 +174,8 @@ namespace terrain
     size_t TerrainFileCache::estimateTileRAMUsage(const TerrainTile& tile) const
     {
         size_t usage = 0;
-
-        // Height data
         usage += tile.heightData.capacity() * sizeof(float);
 
-        // LOD geometry
         for (const auto& lod : tile.lodLevels)
         {
             usage += lod.vertices.capacity() * sizeof(resource::Vertex);
@@ -210,7 +185,6 @@ namespace terrain
             usage += lod.meshletPrimitives.capacity() * sizeof(uint32_t);
         }
 
-        // Weight map
         for (const auto& layer : tile.weightMap.layerWeights)
         {
             usage += layer.capacity() * sizeof(float);

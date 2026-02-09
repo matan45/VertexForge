@@ -655,7 +655,6 @@ namespace render
     {
         terrainRenderProvider = provider;
 
-        // Wire up file-based streaming callbacks
         if (provider && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->setTileDataLoader(
@@ -961,7 +960,6 @@ namespace render
                 terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
                 terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
 
-                // Transition depth image back to attachment layout
                 vk::ImageMemoryBarrier toAttachment{};
                 toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;

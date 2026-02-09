@@ -461,9 +461,9 @@ namespace components
 
     struct TerrainColliderDebugData
     {
-        std::vector<glm::vec3> vertices;   // World-space wireframe vertices
-        std::vector<uint32_t> lineIndices; // Line-list indices
-        uint32_t version = 0;              // Incremented on rebuild (cache invalidation)
+        std::vector<glm::vec3> vertices;
+        std::vector<uint32_t> lineIndices;
+        uint32_t version = 0;
     };
 
     struct TerrainTileColliderDebugComponent

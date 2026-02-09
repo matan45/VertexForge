@@ -20,10 +20,7 @@ namespace terrain
         std::vector<uint32_t> meshletPrimitives;
 
         math::AABB aabb;
-        glm::vec4 boundingSphere{0.0f};  // xyz = center (local space), w = radius
-
-        // Max vertical deviation from previous LOD (world units)
-        // LOD 0 = 0.0 (highest detail), LOD N = max deviation from LOD N-1
+        glm::vec4 boundingSphere{0.0f};
         float geometricError = 0.0f;
 
         [[nodiscard]] bool isEmpty() const { return vertices.empty(); }
@@ -44,7 +41,7 @@ namespace terrain
     struct EdgeVertices
     {
         std::vector<uint32_t> indices;
-        std::vector<glm::vec3> positions;  // World-space positions for neighbor comparison
+        std::vector<glm::vec3> positions;
 
         void clear()
         {
@@ -79,10 +76,7 @@ namespace terrain
 
         std::array<NeighborInfo, 4> neighbors;
 
-        // [lodLevel][edge] -> EdgeVertices
         std::array<std::array<EdgeVertices, 4>, TERRAIN_LOD_COUNT> edgeVertices;
-
-        // Used when neighbor has coarser LOD to snap edge vertex heights
         std::array<EdgeStitchInfo, 4> edgeStitchInfo;
 
         std::vector<float> heightData;
@@ -94,14 +88,8 @@ namespace terrain
         bool isDirty = true;
         bool isVisible = true;
 
-        // Set when only edge heights changed (neighbor of a sculpted tile).
-        // These tiles get priority regeneration to prevent frame-lag cracks.
         bool edgeSyncDirty = false;
-
-        // Per-LOD dirty tracking for incremental sculpt updates
-        // Bit N = LOD N needs CPU meshlet regeneration from heightData
         uint8_t dirtyLODMask = 0;
-        // Bit N = LOD N was regenerated on CPU but not yet re-uploaded to GPU
         uint8_t gpuDirtyLODMask = 0;
 
         bool isLODDirty(uint32_t lod) const { return (dirtyLODMask & (1 << lod)) != 0; }

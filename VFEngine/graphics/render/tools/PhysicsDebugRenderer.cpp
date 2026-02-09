@@ -197,7 +197,6 @@ namespace render::mesh
             return it->second.buffers.isValid ? &it->second.buffers : nullptr;
         }
 
-        // Invalidate old entry
         if (it != heightfieldCache.end())
         {
             auto& dev = device.getLogicalDevice();
@@ -290,21 +289,17 @@ namespace render::mesh
         std::vector<glm::vec3> positions;
         std::vector<uint32_t> lineIndices;
 
-        // First try to load convex decomposition data for accurate debug visualization
         resource::ConvexDecompositionData convexData;
         if (streamHandle->readConvexDecomposition(0, convexData) && convexData.isValid())
         {
-            // Build wireframe from convex hulls
             uint32_t vertexOffset = 0;
             for (const auto& hull : convexData.hulls)
             {
-                // Add hull vertices
                 for (const auto& v : hull.vertices)
                 {
                     positions.push_back(v);
                 }
 
-                // Convert hull triangles to line indices
                 for (size_t i = 0; i + 2 < hull.indices.size(); i += 3)
                 {
                     uint32_t i0 = hull.indices[i] + vertexOffset;
@@ -324,7 +319,6 @@ namespace render::mesh
         }
         else
         {
-            // Fallback: use mesh LOD data
             std::vector<resource::Vertex> vertices;
             std::vector<uint32_t> triangleIndices;
 

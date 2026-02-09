@@ -45,7 +45,6 @@ namespace services
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
 
-        // File caches for streaming (key = entity ID)
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
 
         struct PendingTerrainLoad {
@@ -93,9 +92,7 @@ namespace services
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 
-        // File-based streaming: load tile LOD data on demand from .vfterrain file
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
-        // File-based streaming: release tile RAM data after GPU eviction
         void releaseTileRAMData(terrain::TerrainTile& tile);
 
     private:

@@ -11,8 +11,6 @@ namespace terrain
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
-    // ── helpers ──────────────────────────────────────────────────────────
-
     static bool validateResolution(uint8_t res)
     {
         return res <= static_cast<uint8_t>(TileResolution::High);
@@ -22,8 +20,6 @@ namespace terrain
     {
         return TILE_VERTEX_COUNTS[res];
     }
-
-    // ── writeHeader ─────────────────────────────────────────────────────
 
     bool TerrainSerializer::writeHeader(std::ofstream& file, const TerrainFileHeader& header)
     {
@@ -49,13 +45,11 @@ namespace terrain
         writeLE(file, header.gridMaxX);
         writeLE(file, header.gridMaxZ);
 
-        // Material path (length-prefixed string)
         uint32_t pathLen = static_cast<uint32_t>(header.materialPath.size());
         writeLE(file, pathLen);
         if (pathLen > 0)
             file.write(header.materialPath.data(), pathLen);
 
-        // Physics collider config (conditional on flag)
         if (hasFlag(header.flags, TerrainFormatFlags::HAS_PHYSICS_DATA))
         {
             writeLE<uint8_t>(file, header.physicsConfig.hasCollider ? 1 : 0);
@@ -66,8 +60,6 @@ namespace terrain
 
         return file.good();
     }
-
-    // ── writeIndexTable ─────────────────────────────────────────────────
 
     bool TerrainSerializer::writeIndexTable(std::ofstream& file,
                                             const std::vector<TileIndexEntry>& index)
@@ -84,8 +76,6 @@ namespace terrain
         return file.good();
     }
 
-    // ── writeTileData ───────────────────────────────────────────────────
-
     bool TerrainSerializer::writeTileData(std::ofstream& file,
                                           const TerrainTile& tile,
                                           TerrainFormatFlags flags,
@@ -94,7 +84,6 @@ namespace terrain
         outEntry.coordX = tile.coord.x;
         outEntry.coordZ = tile.coord.z;
 
-        // Height data section
         outEntry.heightDataOffset = static_cast<uint64_t>(file.tellp());
         uint32_t heightCount = static_cast<uint32_t>(tile.heightData.size());
         writeLE(file, heightCount);
@@ -102,7 +91,6 @@ namespace terrain
         uint64_t afterHeight = static_cast<uint64_t>(file.tellp());
         outEntry.heightDataSize = static_cast<uint32_t>(afterHeight - outEntry.heightDataOffset);
 
-        // Weight map section (optional)
         outEntry.weightDataOffset = 0;
         if (hasFlag(flags, TerrainFormatFlags::HAS_WEIGHT_MAPS) && tile.weightMap.isInitialized())
         {
@@ -118,14 +106,12 @@ namespace terrain
                 }
                 else
                 {
-                    // Pad with zeros for missing layers
                     std::vector<float> zeros(tile.weightMap.getTexelCount(), 0.0f);
                     writeVectorLE(file, zeros);
                 }
             }
         }
 
-        // Meshlet/LOD cache section (optional)
         outEntry.meshletDataOffset = 0;
         if (hasFlag(flags, TerrainFormatFlags::HAS_MESHLET_CACHE))
         {
@@ -135,8 +121,6 @@ namespace terrain
 
         return file.good();
     }
-
-    // ── save ────────────────────────────────────────────────────────────
 
     bool TerrainSerializer::save(
         std::string_view path,
@@ -154,7 +138,6 @@ namespace terrain
             return true;
         }
 
-        // Sort tiles by coordinate for deterministic output
         std::sort(allTiles.begin(), allTiles.end(),
                   [](const TerrainTile* a, const TerrainTile* b)
                   {
@@ -162,7 +145,6 @@ namespace terrain
                       return a->coord.z < b->coord.z;
                   });
 
-        // Determine flags
         TerrainFormatFlags flags = TerrainFormatFlags::NONE;
         for (const auto* tile : allTiles)
         {
@@ -185,7 +167,6 @@ namespace terrain
             flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
         }
 
-        // Build header
         TerrainFileHeader header;
         header.flags = flags;
         header.tileCount = static_cast<uint32_t>(allTiles.size());
@@ -207,7 +188,6 @@ namespace terrain
             fs::path filePath(path);
             fs::create_directories(filePath.parent_path());
 
-            // Write to temp file for atomic replacement
             fs::path tmpPath = filePath;
             tmpPath += ".tmp";
 
@@ -218,14 +198,12 @@ namespace terrain
                 return false;
             }
 
-            // 1. Write header
             if (!writeHeader(file, header))
             {
                 vfLogError("TerrainSerializer: Failed to write header");
                 return false;
             }
 
-            // 2. Record index table position, write placeholder zeros
             auto indexTablePos = file.tellp();
             constexpr size_t INDEX_ENTRY_SIZE = 36; // 4+4+8+4+8+8
             std::vector<char> placeholder(header.tileCount * INDEX_ENTRY_SIZE, 0);
@@ -237,7 +215,6 @@ namespace terrain
                 return false;
             }
 
-            // 3. Write tile data, recording offsets
             std::vector<TileIndexEntry> indexEntries(header.tileCount);
             for (uint32_t i = 0; i < header.tileCount; ++i)
             {
@@ -249,7 +226,6 @@ namespace terrain
                 }
             }
 
-            // 4. Seek back and write the real index table
             file.seekp(indexTablePos);
             if (!writeIndexTable(file, indexEntries))
             {
@@ -265,7 +241,6 @@ namespace terrain
             }
             file.close();
 
-            // Atomic replace
             if (fs::exists(filePath))
                 fs::remove(filePath);
             fs::rename(tmpPath, filePath);
@@ -280,11 +255,8 @@ namespace terrain
         }
     }
 
-    // ── parseHeader ─────────────────────────────────────────────────────
-
     bool TerrainSerializer::parseHeader(std::ifstream& file, TerrainFileHeader& outHeader)
     {
-        // Magic bytes
         std::array<char, 4> magic{};
         file.read(magic.data(), 4);
         if (magic != TERRAIN_MAGIC)
@@ -333,7 +305,6 @@ namespace terrain
         outHeader.gridMaxX = readLE<int32_t>(file);
         outHeader.gridMaxZ = readLE<int32_t>(file);
 
-        // Material path
         uint32_t pathLen = readLE<uint32_t>(file);
         if (pathLen > 0)
         {
@@ -341,7 +312,6 @@ namespace terrain
             file.read(outHeader.materialPath.data(), pathLen);
         }
 
-        // Physics collider config (conditional on flag)
         if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_PHYSICS_DATA))
         {
             outHeader.physicsConfig.hasCollider = readLE<uint8_t>(file) != 0;
@@ -352,8 +322,6 @@ namespace terrain
 
         return file.good();
     }
-
-    // ── parseIndexTable ─────────────────────────────────────────────────
 
     bool TerrainSerializer::parseIndexTable(std::ifstream& file, uint32_t tileCount,
                                             std::vector<TileIndexEntry>& outIndex)
@@ -370,8 +338,6 @@ namespace terrain
         }
         return file.good();
     }
-
-    // ── loadAll ─────────────────────────────────────────────────────────
 
     bool TerrainSerializer::loadAll(
         std::string_view path,
@@ -414,7 +380,6 @@ namespace terrain
                 const auto& entry = index[i];
                 result.coord = TileCoord(entry.coordX, entry.coordZ);
 
-                // Seek to height data
                 file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
                 uint32_t heightCount = readLE<uint32_t>(file);
                 if (heightCount != expectedHeightCount)
@@ -425,7 +390,6 @@ namespace terrain
                 }
                 readVectorLE(file, result.heightData, heightCount);
 
-                // Weight map (optional)
                 if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_WEIGHT_MAPS)
                     && entry.weightDataOffset != 0)
                 {
@@ -452,7 +416,6 @@ namespace terrain
                     }
                 }
 
-                // Meshlet/LOD cache (optional, non-fatal)
                 if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_MESHLET_CACHE)
                     && entry.meshletDataOffset != 0)
                 {
@@ -485,8 +448,6 @@ namespace terrain
             return false;
         }
     }
-
-    // ── readHeader (streaming: header + index only) ─────────────────────
 
     bool TerrainSerializer::readHeader(
         std::string_view path,
@@ -526,8 +487,6 @@ namespace terrain
             return false;
         }
     }
-
-    // ── readTileHeights (streaming: single tile) ────────────────────────
 
     bool TerrainSerializer::readTileHeights(
         std::string_view path,
@@ -570,8 +529,6 @@ namespace terrain
         }
     }
 
-    // ── readTileWeights (streaming: single tile) ────────────────────────
-
     bool TerrainSerializer::readTileWeights(
         std::string_view path,
         const TileIndexEntry& entry,
@@ -579,7 +536,6 @@ namespace terrain
     {
         if (entry.weightDataOffset == 0)
         {
-            // No weight data for this tile
             outWeights = TileWeightMapData{};
             return true;
         }
@@ -629,13 +585,10 @@ namespace terrain
         }
     }
 
-    // ── writeTileMeshletData ─────────────────────────────────────────────
-
     bool TerrainSerializer::writeTileMeshletData(std::ofstream& file,
                                                   const TerrainTile& tile,
                                                   TileIndexEntry& outEntry)
     {
-        // Check if this tile has meshlet data
         bool hasMeshlets = false;
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
@@ -651,7 +604,6 @@ namespace terrain
 
         outEntry.meshletDataOffset = static_cast<uint64_t>(file.tellp());
 
-        // LOD count headers: per LOD meshletCount, meshletVertexCount, meshletPrimitiveCount
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
@@ -660,7 +612,6 @@ namespace terrain
             writeLE<uint32_t>(file, static_cast<uint32_t>(lodData.meshletPrimitives.size()));
         }
 
-        // Per-LOD vertices: vertexCount + field-by-field vertex data
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
@@ -687,7 +638,6 @@ namespace terrain
             }
         }
 
-        // Per-LOD indices
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
@@ -695,7 +645,6 @@ namespace terrain
             writeVectorLE(file, lodData.indices);
         }
 
-        // Meshlet descriptors + bounds (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             for (const auto& meshlet : tile.lodLevels[lod].meshlets)
@@ -717,19 +666,16 @@ namespace terrain
             }
         }
 
-        // Meshlet vertex indices (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             writeVectorLE(file, tile.lodLevels[lod].meshletVertices);
         }
 
-        // Meshlet primitives (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             writeVectorLE(file, tile.lodLevels[lod].meshletPrimitives);
         }
 
-        // Per-LOD metadata: AABB, boundingSphere, geometricError
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
@@ -749,11 +695,8 @@ namespace terrain
         return file.good();
     }
 
-    // ── parseTileMeshletData ─────────────────────────────────────────────
-
     bool TerrainSerializer::parseTileMeshletData(std::ifstream& file, TileLoadResult& result)
     {
-        // LOD count headers
         struct LODHeader
         {
             uint32_t meshletCount = 0;
@@ -772,7 +715,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Per-LOD vertices
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             uint32_t vertexCount = readLE<uint32_t>(file);
@@ -803,7 +745,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Per-LOD indices
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             uint32_t indexCount = readLE<uint32_t>(file);
@@ -813,7 +754,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Meshlet descriptors + bounds (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             result.lodData[lod].meshlets.resize(lodHeaders[lod].meshletCount);
@@ -841,7 +781,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Meshlet vertex indices (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             readVectorLE(file, result.lodData[lod].meshletVertices, lodHeaders[lod].meshletVertexCount);
@@ -850,7 +789,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Meshlet primitives (all LODs concatenated)
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             readVectorLE(file, result.lodData[lod].meshletPrimitives, lodHeaders[lod].meshletPrimitiveCount);
@@ -859,7 +797,6 @@ namespace terrain
         if (!file.good())
             return false;
 
-        // Per-LOD metadata: AABB, boundingSphere, geometricError
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             auto& lodData = result.lodData[lod];
@@ -883,8 +820,6 @@ namespace terrain
         return true;
     }
 
-    // ── readTileLODData (streaming: single tile) ─────────────────────────
-
     bool TerrainSerializer::readTileLODData(
         std::string_view path,
         const TileIndexEntry& entry,
@@ -892,7 +827,6 @@ namespace terrain
     {
         if (entry.meshletDataOffset == 0)
         {
-            // No meshlet data for this tile
             return false;
         }
 

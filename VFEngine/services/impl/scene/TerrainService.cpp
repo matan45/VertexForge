@@ -38,7 +38,6 @@ namespace
         float originX = tile.worldOrigin.x;
         float originZ = tile.worldOrigin.z;
 
-        // World-space vertices using Jolt's formula: offset + scale * (x, height, z)
         out.vertices.resize(vertexCount * vertexCount);
         for (uint32_t z = 0; z < vertexCount; ++z)
         {
@@ -53,7 +52,6 @@ namespace
             }
         }
 
-        // Line indices: horizontal + vertical grid lines
         uint32_t lineCount = vertexCount * (vertexCount - 1) * 2;
         out.lineIndices.clear();
         out.lineIndices.reserve(lineCount * 2);
@@ -248,10 +246,8 @@ namespace services
                     return false;
                 }
 
-                // Block brush input during load
                 saveInProgress.store(true, std::memory_order_release);
 
-                // Delete all existing terrains
                 std::vector<uint64_t> toDelete;
                 for (auto& [id, grid] : terrainGrids)
                     toDelete.push_back(id);
@@ -485,7 +481,6 @@ namespace services
         if (!registry.all_of<components::TerrainComponent>(entity))
             return false;
 
-        // Invalidate terrain material cache before removing entity
         const auto& comp = registry.get<components::TerrainComponent>(entity);
         if (!comp.terrainMaterialPath.empty())
             resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
@@ -649,7 +644,6 @@ namespace services
         if (terrainGrids.empty())
             return;
 
-        // Track which terrains had colliders before remap and clean up old bodies
         std::vector<bool> hadCollider;
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
         std::vector<std::shared_ptr<terrain::TerrainFileCache>> caches;
@@ -658,7 +652,6 @@ namespace services
             bool hasCollider = physicsProvider && physicsProvider->hasTerrainCollider(EntityHandle{id});
             hadCollider.push_back(hasCollider);
 
-            // Remove old physics bodies keyed to old entity ID
             if (hasCollider)
                 physicsProvider->removeTerrainCollider(EntityHandle{id});
 
@@ -683,7 +676,6 @@ namespace services
             if (caches[gridIndex])
                 fileCaches[newId] = std::move(caches[gridIndex]);
 
-            // Re-add collider under the new entity ID
             if (gridIndex < hadCollider.size() && hadCollider[gridIndex])
                 addTerrainCollider(EntityHandle{newId});
 
@@ -699,7 +691,6 @@ namespace services
         auto it = terrainGrids.find(entity.id);
         if (it != terrainGrids.end())
         {
-            // Invalidate terrain material cache
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(entity);
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
@@ -733,7 +724,6 @@ namespace services
             if (physicsProvider)
                 physicsProvider->removeTerrainCollider(EntityHandle{id});
 
-            // Invalidate terrain material cache
             entt::entity ent = internal::fromHandle(EntityHandle{id});
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
@@ -764,11 +754,9 @@ namespace services
         auto* grid = gridIt->second.get();
         const auto& allTiles = grid->getAllTiles();
 
-        // Ensure height data is loaded for streaming tiles
         auto cacheIt = fileCaches.find(terrainEntity.id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
-        // Read material properties from collider component if present
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(terrainEntity);
         float friction = 0.5f;
@@ -826,7 +814,6 @@ namespace services
             }
             registry.get<components::TerrainColliderComponent>(ent).hasCollider = true;
 
-            // Generate debug wireframe on tile child entities
             if (registry.all_of<components::ChildrenComponent>(ent))
             {
                 const auto& children = registry.get<components::ChildrenComponent>(ent).children;
@@ -868,7 +855,6 @@ namespace services
             if (registry.all_of<components::TerrainColliderComponent>(ent))
                 registry.remove<components::TerrainColliderComponent>(ent);
 
-            // Remove debug wireframe from tile child entities
             if (registry.all_of<components::ChildrenComponent>(ent))
             {
                 const auto& children = registry.get<components::ChildrenComponent>(ent).children;
@@ -941,7 +927,6 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
-        // Get file cache for on-demand height loading
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
@@ -959,7 +944,6 @@ namespace services
                 continue;
             }
 
-            // Ensure height data is loaded from file for sculpting
             if (fileCache && !tile->hasHeightData())
             {
                 if (!fileCache->ensureHeightsLoaded(*tile))
@@ -1013,7 +997,6 @@ namespace services
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
             }
 
-            // Rebuild colliders for modified tiles
             if (physicsProvider && physicsProvider->hasTerrainCollider(*targetEntity))
             {
                 entt::entity terrainEnt = internal::fromHandle(*targetEntity);
@@ -1032,7 +1015,6 @@ namespace services
                         info.vertexSpacing = tile->config.getVertexSpacing();
                         physicsProvider->rebuildTerrainTileCollider(*targetEntity, info);
 
-                        // Regenerate debug wireframe for this tile
                         if (registry.valid(terrainEnt) &&
                             registry.all_of<components::ChildrenComponent>(terrainEnt))
                         {
@@ -1088,7 +1070,6 @@ namespace services
             worldTileSize = allTiles[0]->config.worldTileSize;
         }
 
-        // Build overlay bitmask from terrain material blend modes
         uint16_t overlayMask = 0;
         std::string materialPath = getTerrainMaterialPath();
         if (!materialPath.empty())
@@ -1110,7 +1091,6 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
-        // Get file cache for on-demand weight loading
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto paintFileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
@@ -1122,7 +1102,6 @@ namespace services
                 continue;
             }
 
-            // Ensure height/weight data is loaded from file for painting
             if (paintFileCache && !tile->hasHeightData())
                 paintFileCache->ensureHeightsLoaded(*tile);
             if (paintFileCache)
@@ -1202,7 +1181,6 @@ namespace services
 
         uint32_t resolution = allTiles[0]->config.getVertexCount();
 
-        // Get material path from TerrainComponent
         std::string materialPath;
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
@@ -1239,7 +1217,6 @@ namespace services
             return false;
         }
 
-        // Restore material path if present
         if (!materialPath.empty())
         {
             auto& registry = scene::EntityRegistry::getRegistry();
@@ -1343,8 +1320,6 @@ namespace services
         for (int i = 0; i < 4; ++i)
             tileConfig.lodDistances[i] = comp.lodDistances[i];
 
-        // Ensure all tiles have data loaded from file before saving.
-        // The serializer needs heightData + lodLevels for every tile.
         auto cacheIt = fileCaches.find(terrainEntityId);
         if (cacheIt != fileCaches.end() && cacheIt->second)
         {
@@ -1384,7 +1359,6 @@ namespace services
             mutableComp.savePath = path;
             mutableComp.saveDirty = false;
 
-            // Refresh file cache index after save (offsets changed, dirty tiles now clean)
             auto cacheIt = fileCaches.find(terrainEntityId);
             if (cacheIt != fileCaches.end() && cacheIt->second)
             {
@@ -1392,7 +1366,6 @@ namespace services
             }
             else
             {
-                // First save of a newly created terrain - create a file cache
                 terrain::TerrainFileHeader newHeader;
                 std::vector<terrain::TileIndexEntry> newIndex;
                 if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex))
@@ -1444,7 +1417,6 @@ namespace services
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
         grid->loadMetadataOnly(header, index);
 
-        // Create file cache for on-demand streaming
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index);
         grid->setFileCache(cache);
 
@@ -1476,13 +1448,11 @@ namespace services
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
 
-        // Rebind material: sync weight map layer count with material layers
         if (!header.materialPath.empty())
         {
             syncWeightMapLayerCount(parentHandle.id, header.materialPath);
         }
 
-        // Publish notification so GPU adapter picks up the new terrain
         events::terrain::TerrainCreatedNotification notification;
         notification.terrainEntity = parentHandle;
         notification.config.resolution = header.resolution;
@@ -1496,7 +1466,6 @@ namespace services
             notification.config.lodDistances[i] = header.lodDistances[i];
         events::EventDispatcher::instance().publish(notification);
 
-        // Rebuild physics collider if the saved terrain had one
         if (header.physicsConfig.hasCollider && physicsProvider)
         {
             auto& cc = parentEntity.addComponent<components::TerrainColliderComponent>();
@@ -1513,7 +1482,6 @@ namespace services
 
     bool TerrainService::ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel)
     {
-        // Find the grid that owns this tile
         for (auto& [entityId, grid] : terrainGrids)
         {
             if (!grid->getTile(tile.coord))

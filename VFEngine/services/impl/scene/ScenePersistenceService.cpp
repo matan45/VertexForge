@@ -232,7 +232,6 @@ namespace services
                 }
             }
 
-            // Reload terrain from .vfTerrain files
             {
                 std::vector<std::string> terrainPaths;
                 std::vector<EntityHandle> terrainEntitiesToDelete;
@@ -248,7 +247,6 @@ namespace services
                     }
                 }
 
-                // Delete deserialized shell entities (no runtime grid/GPU data)
                 for (auto handle : terrainEntitiesToDelete)
                 {
                     events::terrain::DeleteTerrainCommand delCmd;
@@ -256,7 +254,6 @@ namespace services
                     dispatcher.execute(delCmd);
                 }
 
-                // Reload terrain properly from saved files
                 for (const auto& path : terrainPaths)
                 {
                     events::terrain::LoadTerrainCommand loadCmd;
