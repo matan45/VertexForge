@@ -485,10 +485,16 @@ namespace services
         if (!registry.all_of<components::TerrainComponent>(entity))
             return false;
 
+        // Invalidate terrain material cache before removing entity
+        const auto& comp = registry.get<components::TerrainComponent>(entity);
+        if (!comp.terrainMaterialPath.empty())
+            resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+
         if (physicsProvider)
             physicsProvider->removeTerrainCollider(terrainEntity);
 
         terrainGrids.erase(terrainEntity.id);
+        fileCaches.erase(terrainEntity.id);
 
         scene::Entity terrainEnt(entity);
         sceneGraph->removeEntity(terrainEnt);
@@ -693,6 +699,16 @@ namespace services
         auto it = terrainGrids.find(entity.id);
         if (it != terrainGrids.end())
         {
+            // Invalidate terrain material cache
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(entity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                const auto& comp = registry.get<components::TerrainComponent>(ent);
+                if (!comp.terrainMaterialPath.empty())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+            }
+
             if (physicsProvider)
                 physicsProvider->removeTerrainCollider(entity);
 
@@ -710,10 +726,21 @@ namespace services
         if (terrainGrids.empty())
             return;
 
-        if (physicsProvider)
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (auto& [id, _] : terrainGrids)
         {
-            for (auto& [id, _] : terrainGrids)
+            if (physicsProvider)
                 physicsProvider->removeTerrainCollider(EntityHandle{id});
+
+            // Invalidate terrain material cache
+            entt::entity ent = internal::fromHandle(EntityHandle{id});
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                const auto& comp = registry.get<components::TerrainComponent>(ent);
+                if (!comp.terrainMaterialPath.empty())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+            }
         }
 
         events::terrain::TerrainDeletedNotification notification;

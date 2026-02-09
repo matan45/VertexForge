@@ -1415,11 +1415,13 @@ namespace render::gpudriven
         }
         terrainTileData.clear();
         currentTerrainMaterialPath_.clear();
+        terrainLayerData_.clear();
 
-        // Reset terrain pipeline tile count to prevent rendering stale data
+        // Reset terrain pipeline to prevent rendering stale data
         if (terrainPipeline)
         {
             terrainPipeline->updateTileData({});
+            terrainPipeline->updateTerrainLayerInfo({});
         }
 
         if (terrainMeshBuffer)
