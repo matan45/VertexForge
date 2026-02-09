@@ -1274,6 +1274,20 @@ namespace render::gpudriven
                                          shadowSystem->getShadowDataLayout(),
                                          shadowSystem->getShadowTextureLayout(),
                                          cachedRenderPass);
+
+            if (terrainPipeline)
+            {
+                terrainPipeline->recreate(cachedIBLLayout,
+                                          bindlessTextures->getDescriptorSetLayout(),
+                                          meshShaderPipeline->getMeshletDataLayout(),
+                                          meshShaderPipeline->getVertexDataLayout(),
+                                          lightBufferManager->getDescriptorSetLayout(),
+                                          clusterGridManager->getDescriptorSetLayout(),
+                                          lightCullingPipeline->getDescriptorSetLayout(),
+                                          shadowSystem->getShadowDataLayout(),
+                                          shadowSystem->getShadowTextureLayout(),
+                                          cachedRenderPass);
+            }
         }
         else
         {
@@ -1401,11 +1415,13 @@ namespace render::gpudriven
         }
         terrainTileData.clear();
         currentTerrainMaterialPath_.clear();
+        terrainLayerData_.clear();
 
-        // Reset terrain pipeline tile count to prevent rendering stale data
+        // Reset terrain pipeline to prevent rendering stale data
         if (terrainPipeline)
         {
             terrainPipeline->updateTileData({});
+            terrainPipeline->updateTerrainLayerInfo({});
         }
 
         if (terrainMeshBuffer)

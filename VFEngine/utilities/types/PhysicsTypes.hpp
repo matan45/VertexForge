@@ -14,7 +14,8 @@ namespace types
         Sphere = 1,
         Capsule = 2,
         ConvexMesh = 3,
-        TriangleMesh = 4
+        TriangleMesh = 4,
+        HeightField = 5
     };
 
     enum class RigidBodyType : uint8_t

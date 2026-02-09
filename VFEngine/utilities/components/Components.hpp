@@ -450,4 +450,26 @@ namespace components
         float boundingMinY = 0.0f;
         float boundingMaxY = 0.0f;
     };
+
+    struct TerrainColliderComponent
+    {
+        bool hasCollider = false;
+        uint8_t collisionLayer = 0;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+    };
+
+    struct TerrainColliderDebugData
+    {
+        std::vector<glm::vec3> vertices;   // World-space wireframe vertices
+        std::vector<uint32_t> lineIndices; // Line-list indices
+        uint32_t version = 0;              // Incremented on rebuild (cache invalidation)
+    };
+
+    struct TerrainTileColliderDebugComponent
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        TerrainColliderDebugData debugData;
+    };
 }

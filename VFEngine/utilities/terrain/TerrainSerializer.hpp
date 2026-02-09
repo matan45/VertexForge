@@ -25,7 +25,7 @@ namespace terrain
     {
         NONE              = 0,
         HAS_WEIGHT_MAPS   = 1 << 0,
-        HAS_PHYSICS_DATA  = 1 << 1,  // Reserved for VK-228
+        HAS_PHYSICS_DATA  = 1 << 1,
         HAS_MESHLET_CACHE = 1 << 2,  // Reserved for VK-226
     };
 
@@ -45,6 +45,15 @@ namespace terrain
     {
         return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(flag)) != 0;
     }
+
+    // --- Physics collider configuration (serialized when HAS_PHYSICS_DATA flag is set) ---
+    struct TerrainPhysicsConfig
+    {
+        bool hasCollider = false;
+        uint8_t collisionLayer = 0;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+    };
 
     // --- File header (parsed from the start of a .vfTerrain file) ---
     struct TerrainFileHeader
@@ -69,6 +78,8 @@ namespace terrain
         int32_t gridMaxZ = 0;
 
         std::string materialPath;
+
+        TerrainPhysicsConfig physicsConfig;
     };
 
     // --- Per-tile index entry (kept in memory for random-access seeking) ---
@@ -106,7 +117,8 @@ namespace terrain
             const TerrainTileConfig& config,
             int32_t gridMinX, int32_t gridMinZ,
             int32_t gridMaxX, int32_t gridMaxZ,
-            const std::string& materialPath);
+            const std::string& materialPath,
+            const TerrainPhysicsConfig& physicsConfig = {});
 
         // Full load: deserialize all tiles at once
         static bool loadAll(

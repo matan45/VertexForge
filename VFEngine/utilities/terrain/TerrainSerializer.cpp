@@ -55,6 +55,15 @@ namespace terrain
         if (pathLen > 0)
             file.write(header.materialPath.data(), pathLen);
 
+        // Physics collider config (conditional on flag)
+        if (hasFlag(header.flags, TerrainFormatFlags::HAS_PHYSICS_DATA))
+        {
+            writeLE<uint8_t>(file, header.physicsConfig.hasCollider ? 1 : 0);
+            writeLE<uint8_t>(file, header.physicsConfig.collisionLayer);
+            writeLE(file, header.physicsConfig.friction);
+            writeLE(file, header.physicsConfig.restitution);
+        }
+
         return file.good();
     }
 
@@ -135,7 +144,8 @@ namespace terrain
         const TerrainTileConfig& config,
         int32_t gridMinX, int32_t gridMinZ,
         int32_t gridMaxX, int32_t gridMaxZ,
-        const std::string& materialPath)
+        const std::string& materialPath,
+        const TerrainPhysicsConfig& physicsConfig)
     {
         auto allTiles = grid.getAllTiles();
         if (allTiles.empty())
@@ -170,6 +180,10 @@ namespace terrain
                 break;
             }
         }
+        if (physicsConfig.hasCollider)
+        {
+            flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
+        }
 
         // Build header
         TerrainFileHeader header;
@@ -186,6 +200,7 @@ namespace terrain
         header.gridMaxX = gridMaxX;
         header.gridMaxZ = gridMaxZ;
         header.materialPath = materialPath;
+        header.physicsConfig = physicsConfig;
 
         try
         {
@@ -324,6 +339,15 @@ namespace terrain
         {
             outHeader.materialPath.resize(pathLen);
             file.read(outHeader.materialPath.data(), pathLen);
+        }
+
+        // Physics collider config (conditional on flag)
+        if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_PHYSICS_DATA))
+        {
+            outHeader.physicsConfig.hasCollider = readLE<uint8_t>(file) != 0;
+            outHeader.physicsConfig.collisionLayer = readLE<uint8_t>(file);
+            outHeader.physicsConfig.friction = readLE<float>(file);
+            outHeader.physicsConfig.restitution = readLE<float>(file);
         }
 
         return file.good();

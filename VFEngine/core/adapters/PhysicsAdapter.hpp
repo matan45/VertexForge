@@ -64,6 +64,13 @@ namespace core
         void applySettings(const types::PhysicsSettings& settings) override;
         types::PhysicsSettings getCurrentSettings() const override;
 
+        void addTerrainCollider(services::EntityHandle entity,
+                                 const std::vector<services::TerrainTileColliderInfo>& tiles) override;
+        void removeTerrainCollider(services::EntityHandle entity) override;
+        void rebuildTerrainTileCollider(services::EntityHandle entity,
+                                         const services::TerrainTileColliderInfo& tile) override;
+        bool hasTerrainCollider(services::EntityHandle entity) const override;
+
     private:
         physics::RigidBodyCreateInfo toPhysicsBodyInfo(const services::RigidBodyData& data) const;
         physics::ColliderCreateInfo toPhysicsColliderInfo(const services::ColliderData& data) const;
