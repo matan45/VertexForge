@@ -606,7 +606,7 @@ namespace core
             info.scale = glm::vec3(tile.vertexSpacing, 1.0f, tile.vertexSpacing);
             info.friction = tile.friction;
             info.restitution = tile.restitution;
-            info.collisionLayer = 0; // STATIC
+            info.collisionLayer = tile.collisionLayer;
 
             physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
         }
@@ -635,7 +635,7 @@ namespace core
         info.scale = glm::vec3(tile.vertexSpacing, 1.0f, tile.vertexSpacing);
         info.friction = tile.friction;
         info.restitution = tile.restitution;
-        info.collisionLayer = 0;
+        info.collisionLayer = tile.collisionLayer;
 
         physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
     }

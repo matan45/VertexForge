@@ -773,11 +773,13 @@ namespace services
         entt::entity ent = internal::fromHandle(terrainEntity);
         float friction = 0.5f;
         float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
         if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
         {
             const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
             friction = cc.friction;
             restitution = cc.restitution;
+            collisionLayer = cc.collisionLayer;
         }
 
         std::vector<TerrainTileColliderInfo> tileInfos;
@@ -806,6 +808,7 @@ namespace services
             info.vertexSpacing = tile->config.getVertexSpacing();
             info.friction = friction;
             info.restitution = restitution;
+            info.collisionLayer = collisionLayer;
 
             tileInfos.push_back(info);
         }

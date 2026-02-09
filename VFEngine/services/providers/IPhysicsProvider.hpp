@@ -20,6 +20,7 @@ namespace services
         float vertexSpacing = 1.0f;
         float friction = 0.5f;
         float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
     };
 
     class IPhysicsProvider
