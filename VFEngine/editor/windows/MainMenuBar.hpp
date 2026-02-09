@@ -11,6 +11,7 @@ namespace windows
     class AudioConfigWindow;
     class RenderConfigWindow;
     class ProjectSettingsWindow;
+    class TerrainCreationWindow;
 
     class MainMenuBar
     {
@@ -25,6 +26,7 @@ namespace windows
         AudioConfigWindow* audioConfigWindow = nullptr;
         RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
+        TerrainCreationWindow* terrainCreationWindow = nullptr;
 
     public:
         void draw();
@@ -46,6 +48,11 @@ namespace windows
         void setProjectSettingsWindow(ProjectSettingsWindow* window)
         {
             projectSettingsWindow = window;
+        }
+
+        void setTerrainCreationWindow(TerrainCreationWindow* window)
+        {
+            terrainCreationWindow = window;
         }
 
     private:

@@ -8,11 +8,9 @@ namespace editor::graph {
 
     std::unique_ptr<ShaderNodeBase> ShaderNodeFactory::createNode(material::NodeType type) {
         switch (type) {
-            // Output
             case material::NodeType::PBROutput:
                 return std::make_unique<PBROutputNode>();
 
-            // Constants
             case material::NodeType::ConstantScalar:
                 return std::make_unique<ConstantScalarNode>();
             case material::NodeType::ConstantVec2:
@@ -22,7 +20,6 @@ namespace editor::graph {
             case material::NodeType::ConstantColor:
                 return std::make_unique<ConstantColorNode>();
 
-            // Vertex inputs
             case material::NodeType::VertexUV:
                 return std::make_unique<VertexUVNode>();
             case material::NodeType::VertexNormal:
@@ -30,7 +27,6 @@ namespace editor::graph {
             case material::NodeType::Time:
                 return std::make_unique<TimeNode>();
 
-            // Math operations
             case material::NodeType::Add:
                 return std::make_unique<AddNode>();
             case material::NodeType::Subtract:
@@ -78,7 +74,6 @@ namespace editor::graph {
             case material::NodeType::Fresnel:
                 return std::make_unique<FresnelNode>();
 
-            // Texture
             case material::NodeType::TextureSample:
                 return std::make_unique<TextureSampleNode>();
             case material::NodeType::OrmSample:
@@ -122,7 +117,6 @@ namespace editor::graph {
             node->setName(data.name.empty() ? node->getName() : data.name);
             node->setPosition(data.position);
 
-            // Copy properties
             for (const auto& [key, value] : data.properties) {
                 node->setProperty(key, value);
             }
@@ -131,11 +125,9 @@ namespace editor::graph {
     }
 
     void ShaderNodeFactory::initializeNode(material::ShaderNode& node, uint32_t& nextPinId) {
-        // Create a temporary node to get the pin definitions
         auto tempNode = createNode(node.type);
         if (!tempNode) return;
 
-        // Copy input pins with assigned IDs
         node.inputs.clear();
         for (const auto& pin : tempNode->getInputPins()) {
             material::NodePin newPin = pin;
@@ -143,7 +135,6 @@ namespace editor::graph {
             node.inputs.push_back(newPin);
         }
 
-        // Copy output pins with assigned IDs
         node.outputs.clear();
         for (const auto& pin : tempNode->getOutputPins()) {
             material::NodePin newPin = pin;
@@ -151,7 +142,6 @@ namespace editor::graph {
             node.outputs.push_back(newPin);
         }
 
-        // Copy default properties
         for (const auto& [key, value] : tempNode->getProperties()) {
             if (node.properties.find(key) == node.properties.end()) {
                 node.properties[key] = value;

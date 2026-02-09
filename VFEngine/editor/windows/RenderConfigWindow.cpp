@@ -4,6 +4,7 @@
 #include "events/RenderEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <cmath>
 
 namespace windows
 {
@@ -21,6 +22,25 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         events::scene::GetRenderSettingsQuery query;
         settings = dispatcher.query(query);
+
+        // Validate terrain settings (may be uninitialized in old scene files)
+        if (!std::isfinite(settings.terrain.lodBias) || settings.terrain.lodBias < 0.1f || settings.terrain.lodBias > 10.0f)
+        {
+            settings.terrain.lodBias = 1.0f;
+        }
+        if (!std::isfinite(settings.terrain.errorThreshold) || settings.terrain.errorThreshold < 0.1f || settings.terrain.errorThreshold > 20.0f)
+        {
+            settings.terrain.errorThreshold = 2.0f;
+        }
+        if (!std::isfinite(settings.terrain.textureScale) || settings.terrain.textureScale < 0.001f || settings.terrain.textureScale > 10.0f)
+        {
+            settings.terrain.textureScale = 0.1f;
+        }
+        if (settings.terrain.shadowLOD > 3)
+        {
+            settings.terrain.shadowLOD = 2;
+        }
+
         settingsLoaded = true;
         isDirty = false;
     }
@@ -320,6 +340,122 @@ namespace windows
                 ImGui::SetTooltip("Cull meshlet clusters facing away from camera using cone culling.");
             }
 
+            ImGui::Separator();
+            ImGui::Text("Terrain Culling");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Terrain Frustum Culling", &settings.culling.terrainFrustumCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetTerrainFrustumCullingCommand cmd;
+                cmd.enabled = settings.culling.terrainFrustumCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull terrain tiles outside camera frustum.");
+            }
+
+            if (ImGui::Checkbox("Terrain Meshlet Culling", &settings.culling.terrainMeshletCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetTerrainMeshletCullingCommand cmd;
+                cmd.enabled = settings.culling.terrainMeshletCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull individual terrain meshlets for finer-grained culling.");
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
+    void RenderConfigWindow::drawTerrainSection()
+    {
+        if (ImGui::CollapsingHeader("Terrain", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            if (ImGui::Checkbox("Enable Terrain Rendering", &settings.terrain.enabled))
+            {
+                isDirty = true;
+                events::render::SetTerrainRenderingEnabledCommand cmd;
+                cmd.enabled = settings.terrain.enabled;
+                dispatcher.execute(cmd);
+            }
+
+            if (settings.terrain.enabled)
+            {
+                ImGui::Spacing();
+                ImGui::Text("LOD Settings");
+                ImGui::Spacing();
+
+                if (ImGui::DragFloat("LOD Bias", &settings.terrain.lodBias, 0.1f, 0.1f, 5.0f, "%.1f"))
+                {
+                    isDirty = true;
+                    events::render::SetTerrainLODBiasCommand cmd;
+                    cmd.bias = settings.terrain.lodBias;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Controls terrain LOD selection.\nHigher = more detail, Lower = less detail.");
+                }
+
+                if (ImGui::DragFloat("Error Threshold", &settings.terrain.errorThreshold, 0.1f, 0.5f, 10.0f, "%.1f"))
+                {
+                    isDirty = true;
+                    events::render::SetTerrainErrorThresholdCommand cmd;
+                    cmd.threshold = settings.terrain.errorThreshold;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum allowed geometric error in pixels.\nLower = higher quality, Higher = better performance.");
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Texture Settings");
+                ImGui::Spacing();
+
+                if (ImGui::DragFloat("Texture Scale", &settings.terrain.textureScale, 0.01f, 0.01f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                    events::render::SetTerrainTextureScaleCommand cmd;
+                    cmd.scale = settings.terrain.textureScale;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Shadow Settings");
+                ImGui::Spacing();
+
+                int shadowLOD = static_cast<int>(settings.terrain.shadowLOD);
+                if (ImGui::SliderInt("Shadow LOD", &shadowLOD, 0, 3))
+                {
+                    settings.terrain.shadowLOD = static_cast<uint32_t>(shadowLOD);
+                    isDirty = true;
+                    events::render::SetTerrainShadowLODCommand cmd;
+                    cmd.lod = settings.terrain.shadowLOD;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("LOD level used for terrain shadow rendering.\n"
+                                      "0 = Highest detail (slowest)\n"
+                                      "3 = Lowest detail (fastest)\n"
+                                      "Recommended: 2 (shadows don't need high detail)");
+                }
+            }
+
             ImGui::Unindent(10.0f);
         }
     }
@@ -336,6 +472,7 @@ namespace windows
         if (ImGui::Begin("Render Configuration", &visible))
         {
             drawCullingSection();
+            drawTerrainSection();
             drawShadowSection();
 
             ImGui::Spacing();

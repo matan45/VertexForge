@@ -3,7 +3,13 @@
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
+#include "events/TerrainRaycastEvents.hpp"
+#include "events/BrushEvents.hpp"
+#include "events/PaintModeEvents.hpp"
+#include "events/PaintBrushEvents.hpp"
 #include "events/AudioEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -12,7 +18,6 @@
 #include "../dragdrop/DragDropManager.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
-#include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
 
 namespace windows
@@ -49,6 +54,13 @@ namespace windows
 
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
+            glm::vec2 vp(viewportPos.x, viewportPos.y);
+            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
+
+            // Update sculpt/paint cursor UV BEFORE render so raycast uses current mouse position
+            updateSculptCursorUV(vp, vs);
+            updatePaintCursorUV(vp, vs);
+
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
             if (texture.isValid())
@@ -60,9 +72,6 @@ namespace windows
             overlay.draw(gizmo);
             gizmo.draw(*editorCamera);
 
-            glm::vec2 vp(viewportPos.x, viewportPos.y);
-            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
-
             if (!isPlayMode)
             {
                 picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
@@ -70,6 +79,8 @@ namespace windows
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
+            handleSculptBrush();
+            handlePaintBrush();
         }
         ImGui::End();
     }
@@ -169,7 +180,6 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Accept drops from content browser
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
         {
             const auto& dragPaths = DragDropManager::instance().getDragPaths();
@@ -177,9 +187,17 @@ namespace windows
             for (const auto& path : dragPaths)
             {
                 std::filesystem::path fsPath(path);
+                auto ext = fsPath.extension().string();
 
-                // Only handle prefab files
-                if (fsPath.extension() != ".vfPrefab")
+                if (ext == ".vfTerrain")
+                {
+                    events::terrain::BeginTerrainLoadCommand loadCmd;
+                    loadCmd.path = path;
+                    dispatcher.execute(loadCmd);
+                    continue;
+                }
+
+                if (ext != ".vfPrefab")
                 {
                     continue;
                 }
@@ -224,6 +242,11 @@ namespace windows
     void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         if (isPlayMode) return;
+
+        auto& sculptDispatcher = events::EventDispatcher::instance();
+        if (sculptDispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;
+        if (sculptDispatcher.query(events::paint::IsPaintModeActiveQuery{})) return;
+
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
         if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) return;
@@ -289,6 +312,130 @@ namespace windows
         else
         {
             isFirstMouseInput = true;
+        }
+    }
+
+    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            // Only clear cursor if paint mode is also not active
+            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+            if (!paintActive)
+            {
+                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            }
+            return;
+        }
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handleSculptBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            sculptDragging = false;
+            return;
+        }
+
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        bool shiftHeld = ImGui::GetIO().KeyShift;
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::brush::ApplyBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = shiftHeld;
+                applyCmd.isFirstApplication = !sculptDragging;
+                dispatcher.execute(applyCmd);
+
+                sculptDragging = true;
+            }
+        }
+        else
+        {
+            sculptDragging = false;
+        }
+    }
+
+    void ViewPort::updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+
+        if (!paintActive || !ImGui::IsWindowHovered())
+        {
+            // Only clear cursor if sculpt mode is also not active
+            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            if (!sculptActive)
+            {
+                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            }
+            return;
+        }
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handlePaintBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+
+        if (!paintActive || !ImGui::IsWindowHovered())
+        {
+            paintDragging = false;
+            return;
+        }
+
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        bool shiftHeld = ImGui::GetIO().KeyShift;
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::paintBrush::ApplyPaintBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = shiftHeld;
+                applyCmd.isFirstApplication = !paintDragging;
+                dispatcher.execute(applyCmd);
+
+                paintDragging = true;
+            }
+        }
+        else
+        {
+            paintDragging = false;
         }
     }
 }

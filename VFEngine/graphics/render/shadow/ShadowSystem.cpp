@@ -33,15 +33,12 @@ namespace render::shadow
         atlasManager = std::make_unique<ShadowAtlasManager>(device);
         atlasManager->init();
 
-        // Initialize resource pool (for CSM arrays and point light cube maps)
         resourcePool = std::make_unique<ShadowResourcePool>(device);
         resourcePool->init();
 
-        // Initialize GPU data manager (buffers and descriptors)
         gpuDataManager = std::make_unique<ShadowGPUDataManager>(device);
         gpuDataManager->init();
 
-        // Initialize pass recorder
         passRecorder = std::make_unique<ShadowPassRecorder>(device);
 
         // Transition atlas image to shader-read-optimal for initial binding
@@ -79,7 +76,6 @@ namespace render::shadow
             passRecorder->resetAtlasFirstUse();
         }
 
-        // Initialize with placeholder bindings to avoid validation errors before first uploadToGPU
         gpuDataManager->updateShadowTextureDescriptor(atlasManager.get(), resourcePool.get(), lightShadowData);
 
         initialized = true;
@@ -93,37 +89,37 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         logicalDevice.waitIdle();
 
-        // Cleanup shadow pass pipeline
         if (shadowPassPipeline)
         {
             shadowPassPipeline->cleanup();
             shadowPassPipeline.reset();
         }
 
-        // Cleanup GPU data manager
+        if (terrainShadowPipeline)
+        {
+            terrainShadowPipeline->cleanup();
+            terrainShadowPipeline.reset();
+        }
+
         if (gpuDataManager)
         {
             gpuDataManager->cleanup();
             gpuDataManager.reset();
         }
 
-        // Cleanup pass recorder
         passRecorder.reset();
 
-        // Cleanup per-light data
         lightShadowData.clear();
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
 
-        // Cleanup resource pool
         if (resourcePool)
         {
             resourcePool->cleanup();
             resourcePool.reset();
         }
 
-        // Cleanup atlas manager
         if (atlasManager)
         {
             atlasManager->cleanup();
@@ -131,12 +127,6 @@ namespace render::shadow
         }
 
         initialized = false;
-    }
-
-    void ShadowSystem::recreate()
-    {
-        cleanup();
-        init();
     }
 
     void ShadowSystem::initShadowPass(vk::DescriptorSetLayout perDrawLayout,
@@ -160,12 +150,40 @@ namespace render::shadow
         shadowPassPipeline->init(perDrawLayout, meshletDataLayout, vertexDataLayout, boneMatrixLayout,
                                  atlasManager->getDepthFormat());
 
-        // Create framebuffer for atlas rendering
         shadowPassPipeline->createFramebuffer(
             atlasManager->getAtlasImageView(),
             atlasManager->getAtlasWidth(),
             atlasManager->getAtlasHeight()
         );
+    }
+
+    void ShadowSystem::initTerrainShadowPass(vk::DescriptorSetLayout terrainDataLayout,
+                                              vk::DescriptorSetLayout terrainMeshletLayout,
+                                              vk::DescriptorSetLayout terrainVertexLayout)
+    {
+        if (!initialized)
+        {
+            loggerError("ShadowSystem::initTerrainShadowPass() called before init()");
+            return;
+        }
+
+        if (!shadowPassPipeline || !shadowPassPipeline->isInitialized())
+        {
+            loggerError("ShadowSystem::initTerrainShadowPass() called before initShadowPass()");
+            return;
+        }
+
+        if (terrainShadowPipeline)
+        {
+            loggerWarning("ShadowSystem::initTerrainShadowPass() called when already initialized");
+            return;
+        }
+
+        terrainShadowPipeline = std::make_unique<TerrainShadowPipeline>(device);
+        terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
+                                     shadowPassPipeline->getRenderPass());
+
+        loggerInfo("ShadowSystem: Terrain shadow pass initialized");
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
@@ -185,7 +203,6 @@ namespace render::shadow
         data.matricesDirty = true;
         data.settingsDirty = true;
 
-        // Determine number of views based on type
         uint32_t viewCount = 1;
         switch (type)
         {
@@ -193,7 +210,7 @@ namespace render::shadow
             viewCount = settings.cascadeCount;
             break;
         case ShadowMapType::PointCube:
-            viewCount = 6; // Cube faces
+            viewCount = 6;
             break;
         case ShadowMapType::Spot2D:
         case ShadowMapType::Directional2D:
@@ -205,7 +222,6 @@ namespace render::shadow
 
         data.views.resize(viewCount);
 
-        // Allocate shadow maps in atlas
         if (!allocateShadowMaps(data))
         {
             loggerError("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
@@ -242,23 +258,6 @@ namespace render::shadow
         }
     }
 
-    bool ShadowSystem::hasLightShadow(uint32_t entityId) const
-    {
-        return lightShadowData.contains(entityId);
-    }
-
-    const LightShadowData* ShadowSystem::getLightShadowData(uint32_t entityId) const
-    {
-        auto it = lightShadowData.find(entityId);
-        return (it != lightShadowData.end()) ? &it->second : nullptr;
-    }
-
-    LightShadowData* ShadowSystem::getLightShadowData(uint32_t entityId)
-    {
-        auto it = lightShadowData.find(entityId);
-        return (it != lightShadowData.end()) ? &it->second : nullptr;
-    }
-
     int32_t ShadowSystem::getShadowViewIndex(uint32_t entityId) const
     {
         if (!shadowsEnabled)
@@ -280,7 +279,6 @@ namespace render::shadow
         case ShadowMapType::Spot2D:
         case ShadowMapType::Directional2D:
             {
-                // Use atlas for 2D shadow maps
                 if (!atlasManager || !atlasManager->isInitialized())
                     return false;
 
@@ -314,7 +312,6 @@ namespace render::shadow
 
         case ShadowMapType::DirectionalCSM:
             {
-                // Use atlas tiles for CSM cascades (same as spot lights)
                 if (!atlasManager || !atlasManager->isInitialized())
                 {
                     loggerError("ShadowSystem: Atlas manager not available for CSM allocation");
@@ -353,7 +350,6 @@ namespace render::shadow
 
         case ShadowMapType::PointCube:
             {
-                // Use resource pool for cube map
                 if (!resourcePool || !resourcePool->isInitialized())
                     return false;
 
@@ -367,12 +363,11 @@ namespace render::shadow
 
                 data.resourceHandle = handle;
 
-                // Set up view metadata for each cube face
                 for (size_t i = 0; i < data.views.size(); ++i)
                 {
                     auto& view = data.views[i];
                     view.handle.type = ShadowMapType::PointCube;
-                    view.handle.layer = static_cast<uint32_t>(i); // Cube face index
+                    view.handle.layer = static_cast<uint32_t>(i);
                     // For cubes, atlasViewport.w stores the face index
                     view.atlasViewport = glm::vec4(0.0f, 0.0f, 1.0f, static_cast<float>(i));
                 }
@@ -387,14 +382,12 @@ namespace render::shadow
 
     void ShadowSystem::freeShadowMaps(LightShadowData& data)
     {
-        // Free dedicated resource (CSM array or cube map)
         if (data.resourceHandle.isValid() && resourcePool)
         {
             resourcePool->free(data.resourceHandle);
             data.resourceHandle.invalidate();
         }
 
-        // Free atlas tiles (for Spot2D and Directional2D)
         if (atlasManager)
         {
             for (auto& view : data.views)
@@ -417,22 +410,17 @@ namespace render::shadow
         if (!shadowsEnabled)
             return;
 
-        // Clear previous frame's data
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
 
-        // Update shadow matrices for all registered lights
-        // For point/spot lights, this extracts position from WorldTransformComponent
-        // For directional lights, this uses camera params for CSM cascade calculations
         auto& registry = scene::EntityRegistry::getRegistry();
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            // Point lights: update cube face matrices from current world transform
             if (data.type == ShadowMapType::PointCube)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -443,7 +431,6 @@ namespace render::shadow
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
                 glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
 
-                // Get radius from PointLightComponent (used as far plane)
                 float farPlane = data.settings.farPlane;
                 if (registry.all_of<components::PointLightComponent>(entity))
                 {
@@ -452,11 +439,9 @@ namespace render::shadow
                 }
                 float nearPlane = data.settings.nearPlane;
 
-                // Compute all 6 cube face matrices
                 auto faceMatrices = PointShadowCalculator::computeCubeFaceMatrices(
                     lightPosition, nearPlane, farPlane);
 
-                // Update each face view
                 for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT && face < data.views.size(); ++face)
                 {
                     auto& view = data.views[face];
@@ -470,14 +455,12 @@ namespace render::shadow
                     view.lightPosition = glm::vec4(lightPosition, 1.0f);
                     view.handle.layer = face;
 
-                    // Update bias values from settings
                     view.depthBias = data.settings.depthBias;
                     view.slopeBias = data.settings.slopeBias;
                     view.normalBias = data.settings.normalBias;
                 }
             }
 
-            // Spot lights: update shadow matrix from current world transform
             if (data.type == ShadowMapType::Spot2D)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -488,13 +471,10 @@ namespace render::shadow
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
                 glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
 
-                // Extract light direction from world transform matrix
-                // Spot lights point along negative Z axis in local space
                 glm::vec3 lightDirection = glm::normalize(
                     glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
                 );
 
-                // Get spot light parameters
                 float outerAngle = 45.0f;
                 float range = 20.0f;
                 if (registry.all_of<components::SpotLightComponent>(entity))
@@ -506,11 +486,9 @@ namespace render::shadow
 
                 float nearPlane = data.settings.nearPlane;
 
-                // Compute spot light shadow matrices
                 auto shadowData = SpotShadowCalculator::computeSpotLightMatrices(
                     lightPosition, lightDirection, outerAngle, nearPlane, range);
 
-                // Update the view
                 if (!data.views.empty())
                 {
                     auto& view = data.views[0];
@@ -522,14 +500,12 @@ namespace render::shadow
                     view.lightPosition = glm::vec4(lightPosition, 1.0f);
                     view.lightDirection = glm::vec4(lightDirection, 0.0f);
 
-                    // Update bias values from settings
                     view.depthBias = data.settings.depthBias;
                     view.slopeBias = data.settings.slopeBias;
                     view.normalBias = data.settings.normalBias;
                 }
             }
 
-            // Directional lights (CSM): update cascade matrices using camera params
             if (data.type == ShadowMapType::DirectionalCSM)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -542,13 +518,10 @@ namespace render::shadow
 
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
 
-                // Extract light direction from world transform matrix
-                // Light points along negative Z axis in local space
                 glm::vec3 lightDirection = glm::normalize(
                     glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
                 );
 
-                // Compute cascade split distances using global split mode setting
                 auto splits = CascadeShadowCalculator::computeSplitDistances(
                     cameraNear, cameraFar,
                     data.settings.cascadeCount,
@@ -556,7 +529,6 @@ namespace render::shadow
                     data.settings.cascadeSplitLambda
                 );
 
-                // Update each cascade view
                 uint32_t viewCount = std::min(static_cast<uint32_t>(data.views.size()),
                                               data.settings.cascadeCount);
 
@@ -567,15 +539,12 @@ namespace render::shadow
                     float cascadeNear = splits[i];
                     float cascadeFar = splits[i + 1];
 
-                    // Get frustum corners in world space for this cascade range
                     auto frustumCorners = CascadeShadowCalculator::getFrustumCornersWorldSpace(
                         cameraView, cameraProjection, cascadeNear, cascadeFar);
 
-                    // Compute stable cascade matrix with texel snapping
                     auto cascadeData = CascadeShadowCalculator::computeCascadeMatrix(
                         frustumCorners, lightDirection, data.settings.resolution);
 
-                    // Update view data
                     view.viewMatrix = cascadeData.viewMatrix;
                     view.projectionMatrix = cascadeData.projMatrix;
                     view.viewProjectionMatrix = cascadeData.viewProjMatrix;
@@ -586,7 +555,6 @@ namespace render::shadow
                     view.lightDirection = glm::vec4(lightDirection, 0.0f);
                     view.handle.cascadeIndex = static_cast<uint16_t>(i);
 
-                    // Update bias values from settings
                     view.depthBias = data.settings.depthBias;
                     view.slopeBias = data.settings.slopeBias;
                     view.normalBias = data.settings.normalBias;
@@ -594,18 +562,15 @@ namespace render::shadow
             }
         }
 
-        // Temporary maps to track per-type indices for each entity
         std::unordered_map<uint32_t, int32_t> directionalIndices;
         std::unordered_map<uint32_t, int32_t> pointIndices;
         std::unordered_map<uint32_t, int32_t> spotIndices;
 
-        // Collect active shadow views from registered lights
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            // Skip culled lights (but always include directional lights - they're global)
             bool isDirectional = (data.type == ShadowMapType::DirectionalCSM ||
                 data.type == ShadowMapType::Directional2D);
             if (visibleLightIds && !isDirectional && !visibleLightIds->contains(entityId))
@@ -615,7 +580,6 @@ namespace render::shadow
             {
             case ShadowMapType::Directional2D:
                 {
-                    // Atlas-based: each view has its own atlas tile
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
                     for (const auto& view : data.views)
                     {
@@ -623,7 +587,7 @@ namespace render::shadow
                             continue;
 
                         ShadowView viewCopy = view;
-                        viewCopy.entityId = entityId; // Set entity ID for GPU data lookup
+                        viewCopy.entityId = entityId;
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -641,10 +605,8 @@ namespace render::shadow
 
             case ShadowMapType::DirectionalCSM:
                 {
-                    // CSM: uses atlas tiles, each cascade has its own tile
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
 
-                    // Add all cascade views (each becomes an entry in shadow data buffer)
                     for (size_t i = 0; i < data.views.size(); ++i)
                     {
                         const auto& view = data.views[i];
@@ -655,7 +617,7 @@ namespace render::shadow
                         }
 
                         ShadowView viewCopy = view;
-                        viewCopy.entityId = entityId; // Set entity ID for GPU data lookup
+                        viewCopy.entityId = entityId;
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -673,7 +635,6 @@ namespace render::shadow
 
             case ShadowMapType::Spot2D:
                 {
-                    // Atlas-based: single view per spot light
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
                     for (const auto& view : data.views)
                     {
@@ -681,7 +642,7 @@ namespace render::shadow
                             continue;
 
                         ShadowView viewCopy = view;
-                        viewCopy.entityId = entityId; // Set entity ID for GPU data lookup
+                        viewCopy.entityId = entityId;
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -717,7 +678,7 @@ namespace render::shadow
                     viewCopy.pcfKernelRadius = globalPcfKernel;
                     viewCopy.pcfSoftness = data.settings.softness;
                     viewCopy.filterEnabled = globalSoftShadowsEnabled;
-                    viewCopy.entityId = entityId; // Set entity ID for cube map index lookup
+                    viewCopy.entityId = entityId;
 
                     pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
                     pointShadowViews.push_back(viewCopy);
@@ -748,7 +709,6 @@ namespace render::shadow
         if (!initialized || !shadowsEnabled || !gpuDataManager)
             return;
 
-        // Build entity to cube map index mapping (matches order in updateShadowTextureDescriptor)
         std::unordered_map<uint32_t, uint32_t> entityToCubeIndex;
         uint32_t cubeIdx = 0;
         for (const auto& [entityId, data] : lightShadowData)
@@ -775,23 +735,16 @@ namespace render::shadow
         needsUpdate = false;
     }
 
-    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
+    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd,
+                                         const ShadowPassParams& params,
+                                         const TerrainShadowPassParams* terrainParams)
     {
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, atlasManager.get(), resourcePool.get(),
-            shadowPassPipeline.get(), directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
-    }
-
-    vk::DescriptorSetLayout ShadowSystem::getAtlasDescriptorLayout() const
-    {
-        return atlasManager ? atlasManager->getDescriptorSetLayout() : nullptr;
-    }
-
-    vk::DescriptorSet ShadowSystem::getAtlasDescriptorSet() const
-    {
-        return atlasManager ? atlasManager->getDescriptorSet() : nullptr;
+        passRecorder->recordShadowPass(cmd, params, terrainParams, atlasManager.get(), resourcePool.get(),
+            shadowPassPipeline.get(), terrainShadowPipeline.get(),
+            directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
     }
 
     vk::DescriptorSetLayout ShadowSystem::getShadowDataLayout() const
@@ -824,8 +777,8 @@ namespace render::shadow
 
         const auto& shadowSettings = settings.shadows;
 
-        // Update enabled state, global bias, and cascade settings
-        setShadowsEnabled(shadowSettings.enabled);
+        shadowsEnabled = shadowSettings.enabled;
+        needsUpdate = true;
         globalDepthBias = shadowSettings.shadowBias;
         globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
@@ -835,15 +788,12 @@ namespace render::shadow
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;
 
-        // Get atlas config from quality or use direct config
         types::ShadowAtlasConfig atlasConfig = shadowSettings.atlas;
         if (atlasConfig.atlasSize == 0)
         {
-            // If no explicit config, derive from quality
             atlasConfig = types::ShadowAtlasConfig::fromQuality(shadowSettings.quality);
         }
 
-        // Check if atlas resize is needed
         bool needsResize = atlasManager &&
         (atlasManager->getAtlasWidth() != atlasConfig.atlasSize ||
             atlasManager->getAtlasHeight() != atlasConfig.atlasSize);
@@ -852,7 +802,6 @@ namespace render::shadow
         {
             auto resizeStartTime = std::chrono::high_resolution_clock::now();
 
-            // Store existing light registrations
             struct LightRegInfo
             {
                 uint32_t entityId;
@@ -866,16 +815,13 @@ namespace render::shadow
                 existingLights.push_back({entityId, data.type, data.settings});
             }
 
-            // Free all shadow maps (but keep registration data)
             for (auto& [entityId, data] : lightShadowData)
             {
                 freeShadowMaps(data);
             }
 
-            // Clear tracked handles in atlas
             lightShadowData.clear();
 
-            // Resize atlas
             auto resizeResult = atlasManager->applyQualitySettings(atlasConfig);
             if (!resizeResult.success)
             {
@@ -883,7 +829,6 @@ namespace render::shadow
                 return;
             }
 
-            // Recreate framebuffer if shadow pass pipeline exists
             if (shadowPassPipeline && shadowPassPipeline->isInitialized())
             {
                 shadowPassPipeline->createFramebuffer(
@@ -893,7 +838,6 @@ namespace render::shadow
                 );
             }
 
-            // Re-register lights with new resolutions
             uint32_t registeredCount = 0;
             uint32_t failedCount = 0;
 
@@ -901,7 +845,6 @@ namespace render::shadow
             {
                 ShadowSettings newSettings = info.settings;
 
-                // Update resolution based on light type and new quality config
                 switch (info.type)
                 {
                 case ShadowMapType::DirectionalCSM:
@@ -918,7 +861,6 @@ namespace render::shadow
                     break;
                 }
 
-                // Update cascade count and bias settings from render settings
                 newSettings.cascadeCount = shadowSettings.cascadeCount;
                 newSettings.depthBias = shadowSettings.shadowBias;
                 newSettings.slopeBias = shadowSettings.slopeBias;
@@ -941,7 +883,6 @@ namespace render::shadow
                              registeredCount, existingLights.size(), failedCount);
             }
 
-            // Measure and warn about expensive resize operations
             auto resizeEndTime = std::chrono::high_resolution_clock::now();
             float resizeMs = std::chrono::duration<float, std::milli>(resizeEndTime - resizeStartTime).count();
             if (resizeMs > FRAME_BUDGET_WARNING_MS)
@@ -952,18 +893,14 @@ namespace render::shadow
         }
         else
         {
-            // No resize needed, just update quality and bias settings
             globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
 
             for (auto& [entityId, data] : lightShadowData)
             {
-                // Update bias settings
                 data.settings.depthBias = shadowSettings.shadowBias;
                 data.settings.slopeBias = shadowSettings.slopeBias;
                 data.settings.normalBias = shadowSettings.normalBias;
 
-                // Update cascade count if changed (requires reallocation for CSM)
-                // NOTE: This is an expensive operation that reallocates shadow maps
                 if (data.type == ShadowMapType::DirectionalCSM &&
                     data.settings.cascadeCount != shadowSettings.cascadeCount)
                 {
@@ -989,12 +926,10 @@ namespace render::shadow
             }
         }
 
-        // Reset atlas first use flag to ensure proper layout transitions
         if (passRecorder)
             passRecorder->resetAtlasFirstUse();
         needsUpdate = true;
 
-        // Apply PCF filtering settings
         globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
         globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
     }
@@ -1031,14 +966,12 @@ namespace render::shadow
         if (!shadowsEnabled)
             return debugInfos;
 
-        // Reserve approximate capacity
         debugInfos.reserve(
             directionalShadowViews.size() +
             pointShadowViews.size() +
             spotShadowViews.size()
         );
 
-        // Collect directional shadow debug info (CSM cascades)
         for (const auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
@@ -1063,7 +996,6 @@ namespace render::shadow
             }
         }
 
-        // Collect point light shadow debug info (spheres)
         for (const auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
@@ -1071,8 +1003,6 @@ namespace render::shadow
 
             if (data.type == ShadowMapType::PointCube)
             {
-                // Point lights use cube maps - we just need one debug info per light
-                // showing the sphere radius (farPlane)
                 if (!data.views.empty())
                 {
                     const auto& view = data.views[0];
@@ -1082,15 +1012,14 @@ namespace render::shadow
                     info.entityId = entityId;
                     info.viewProjectionMatrix = view.viewProjectionMatrix;
                     info.lightPosition = glm::vec3(view.lightPosition);
-                    info.lightDirection = glm::vec3(0.0f, -1.0f, 0.0f); // Not applicable for point
+                    info.lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
                     info.nearPlane = view.nearPlane;
-                    info.farPlane = view.farPlane; // This is the sphere radius
+                    info.farPlane = view.farPlane;
                     debugInfos.push_back(info);
                 }
             }
         }
 
-        // Collect spot light shadow debug info (frustums)
         for (const auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)

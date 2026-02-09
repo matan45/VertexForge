@@ -3,6 +3,7 @@
 #include <nfd/FileDialog.hpp>
 #include "imgui.h"
 #include <algorithm>
+#include <cstring>
 
 namespace editor::materialeditor
 {
@@ -192,7 +193,8 @@ namespace editor::materialeditor
                     }
                 } else {
                     char buffer[256];
-                    strncpy_s(buffer, value.c_str(), sizeof(buffer) - 1);
+                    std::strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+                    buffer[sizeof(buffer) - 1] = '\0';
                     if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer))) {
                         propValue = std::string(buffer);
                         changed = true;

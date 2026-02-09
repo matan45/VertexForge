@@ -1,5 +1,7 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include "terrain/TerrainHitResult.hpp"
+#include <glm/glm.hpp>
 #include <vector>
 #include <memory>
 #include <functional>
@@ -40,6 +42,12 @@ namespace render
 
         void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
+
+        void setRaycastCursorUV(const glm::vec2& uv);
+        void clearRaycastCursor();
+        terrain::TerrainHitResult getTerrainHitResult() const;
+
+        void setBrushOverlayParams(float radius, float falloff, float shape);
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

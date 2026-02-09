@@ -116,6 +116,35 @@ namespace controllers::offscreen
             stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
             stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
 
+            stats.terrain.updateTerrainUs = gpuDrivenRenderer->getTerrainUpdateUs();
+            stats.terrain.streamingUs = gpuDrivenRenderer->getTerrainStreamingUs();
+            stats.terrain.buildTileDataUs = gpuDrivenRenderer->getTerrainBuildTileDataUs();
+            stats.terrain.uploadTileDataUs = gpuDrivenRenderer->getTerrainUploadTileDataUs();
+
+            auto terrainCulling = gpuDrivenRenderer->getTerrainCullingStats();
+            stats.terrain.totalTiles = terrainCulling.totalTiles;
+            stats.terrain.culledTiles = terrainCulling.culledTiles;
+            stats.terrain.totalMeshlets = terrainCulling.totalMeshlets;
+            stats.terrain.culledMeshlets = terrainCulling.culledMeshlets;
+            stats.terrain.visibleMeshlets = terrainCulling.visibleMeshlets;
+            stats.terrain.lodCount0 = terrainCulling.lodCount0;
+            stats.terrain.lodCount1 = terrainCulling.lodCount1;
+            stats.terrain.lodCount2 = terrainCulling.lodCount2;
+            stats.terrain.lodCount3 = terrainCulling.lodCount3;
+
+            const auto* streamStats = gpuDrivenRenderer->getTerrainStreamingStats();
+            if (streamStats)
+            {
+                stats.terrain.tilesLoaded = streamStats->tilesLoaded;
+                stats.terrain.tilesStreaming = streamStats->tilesStreaming;
+                stats.terrain.fallbackTiles = streamStats->fallbackTiles;
+                stats.terrain.fullDetailTiles = streamStats->fullDetailTiles;
+                stats.terrain.uploadsThisFrame = streamStats->uploadsThisFrame;
+                stats.terrain.memoryUsedBytes = streamStats->memoryUsedBytes;
+                stats.terrain.memoryBudgetBytes = streamStats->memoryBudgetBytes;
+                stats.terrain.bytesUploadedThisFrame = streamStats->bytesUploadedThisFrame;
+            }
+
             stats.gpuDriven.bvhLightCullingEnabled = gpuDrivenRenderer->isBVHLightCullingEnabled();
             stats.gpuDriven.hiZLightOcclusionEnabled = gpuDrivenRenderer->isLightOcclusionCullingEnabled();
             stats.gpuDriven.totalLights = gpuDrivenRenderer->getTotalSceneLights();

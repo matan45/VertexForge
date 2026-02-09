@@ -119,5 +119,11 @@ namespace serialization
 
         static std::string cascadeSplitModeToString(types::CascadeSplitMode mode);
         static types::CascadeSplitMode stringToCascadeSplitMode(const std::string& str);
+
+        static json serializeTerrain(const components::TerrainComponent& terrain);
+        static void deserializeTerrain(const json& j, components::TerrainComponent& terrain);
+
+        static json serializeTerrainTile(const components::TerrainTileComponent& tile);
+        static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
     };
 }

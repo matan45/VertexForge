@@ -2,6 +2,10 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
+#include "events/PaintModeEvents.hpp"
+#include "events/SceneEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -72,6 +76,11 @@ namespace windows
 
                 ImGui::SameLine();
 
+                bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+                bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+
+                ImGui::BeginDisabled(isSculptMode || isPaintMode);
+
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
                     gizmo.toggleOperation(GizmoOperation::Rotate);
@@ -90,6 +99,68 @@ namespace windows
                 {
                     gizmo.toggleOperation(GizmoOperation::Translate);
                 }
+
+                ImGui::EndDisabled();
+
+                // Sculpt mode toggle - enabled when terrain is selected or already sculpting
+                bool canSculpt = isSculptMode;
+                if (!canSculpt)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery;
+                        terrainQuery.entity = *selectedEntity;
+                        canSculpt = dispatcher.query(terrainQuery);
+
+                        if (!canSculpt)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery;
+                            tileQuery.entity = *selectedEntity;
+                            canSculpt = dispatcher.query(tileQuery);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canSculpt);
+                if (iconButton(ViewportIcon::Sculpt, isSculptMode, isSculptMode ? "Exit Sculpt Mode" : "Enter Sculpt Mode"))
+                {
+                    events::sculpt::SetSculptModeActiveCommand cmd;
+                    cmd.active = !isSculptMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Paint mode toggle - enabled when terrain is selected or already painting
+                bool canPaint = isPaintMode;
+                if (!canPaint)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery2;
+                        terrainQuery2.entity = *selectedEntity;
+                        canPaint = dispatcher.query(terrainQuery2);
+
+                        if (!canPaint)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery2;
+                            tileQuery2.entity = *selectedEntity;
+                            canPaint = dispatcher.query(tileQuery2);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canPaint);
+                if (iconButton(ViewportIcon::Paint, isPaintMode, isPaintMode ? "Exit Paint Mode" : "Enter Paint Mode"))
+                {
+                    events::paint::SetPaintModeActiveCommand cmd;
+                    cmd.active = !isPaintMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
             }
         }
         ImGui::End();
@@ -108,9 +179,19 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
+            const char* viewModeLabels[] = {
+                "Color",        // 0: Normal rendering
+                "Meshlet",      // 1: Meshlet visualization
+                "LOD",          // 2: LOD level colors
+                "Mipmap",       // 3: Texture mip level
+                "Cluster",      // 4: Light cluster visualization
+                "Depth",        // 5: Depth visualization
+                "Shadow",       // 6: Shadow visualization
+                "Terrain Tile", // 7: Terrain tile visualization (color per tile)
+                "Terrain UV"    // 8: Terrain world UV visualization
+            };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 9))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

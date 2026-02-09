@@ -15,8 +15,7 @@ namespace render::gpudriven
         Queued,
         Streaming,
         Uploading,
-        Ready,
-        Evicted
+        Ready
     };
 
     constexpr uint32_t MAX_GPU_OBJECTS = 65536;
@@ -71,13 +70,55 @@ namespace render::gpudriven
     };
     static_assert(sizeof(GPUObjectData) == 336);
 
-
     namespace ObjectFlags
     {
         constexpr uint32_t AlphaMask = 1 << 4;
         constexpr uint32_t UniformScale = 1 << 9;
+        constexpr uint32_t TerrainTile = 1 << 12;
     }
 
+    struct alignas(16) TerrainTileGPUData
+    {
+        glm::mat4 modelMatrix;          // Usually identity for world-space terrain
+        glm::vec4 boundingSphere;       // xyz = world center, w = radius
+        glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = activeLayerCount (1-16)
+        glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+        glm::uvec4 lod1MeshletData;     // Same layout
+        glm::uvec4 lod2MeshletData;     // Same layout
+        glm::uvec4 lod3MeshletData;     // Same layout
+        glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds (world units)
+        int32_t coordX;
+        int32_t coordZ;
+        uint32_t flags;
+        uint32_t weightMapOffset;       // Byte offset into weight map SSBO
+    };
+    static_assert(sizeof(TerrainTileGPUData) == 208);
+
+    // Per-layer texture indices for terrain material layers (16 bytes per layer)
+    struct TerrainLayerGPUData
+    {
+        uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
+        uint32_t normalTextureIndex;   // Bindless index (0 = default)
+        float tilingScale;             // UV tiling multiplier
+        uint32_t padding;
+    };
+    static_assert(sizeof(TerrainLayerGPUData) == 16);
+
+    struct alignas(16) TerrainCullingStats
+    {
+        uint32_t totalTiles;
+        uint32_t culledTiles;
+        uint32_t totalMeshlets;
+        uint32_t culledMeshlets;
+        uint32_t visibleMeshlets;
+        uint32_t lodCount0;
+        uint32_t lodCount1;
+        uint32_t lodCount2;
+        uint32_t lodCount3;
+        uint32_t padding[3];
+    };
+    static_assert(sizeof(TerrainCullingStats) == 48);
 
     struct alignas(16) PerDrawData
     {
@@ -154,19 +195,6 @@ namespace render::gpudriven
             return false;
         }
 
-        uint32_t getBestAvailableLOD(uint32_t requestedLOD) const
-        {
-            for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                if (lodStates[lod] == LODStreamState::Ready) return lod;
-            }
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                if (lodStates[lod] == LODStreamState::Ready) return lod;
-            }
-            return LOD_LEVEL_COUNT;
-        }
-
         uint32_t getAvailableLODMask() const
         {
             uint32_t mask = 0;
@@ -189,26 +217,6 @@ namespace render::gpudriven
             return false;
         }
 
-        uint32_t getBestAvailableMeshletLOD(uint32_t requestedLOD) const
-        {
-            for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                if (meshletLods[lod].meshletCount > 0 &&
-                    lodStates[lod] == LODStreamState::Ready)
-                {
-                    return lod;
-                }
-            }
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                if (meshletLods[lod].meshletCount > 0 &&
-                    lodStates[lod] == LODStreamState::Ready)
-                {
-                    return lod;
-                }
-            }
-            return LOD_LEVEL_COUNT;
-        }
     };
 
     struct MergedMeshInfo

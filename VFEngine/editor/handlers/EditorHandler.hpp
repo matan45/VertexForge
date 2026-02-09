@@ -15,6 +15,12 @@
 #include "interfaces/IFileOperationsService.hpp"
 #include "interfaces/IPhysicsService.hpp"
 #include "interfaces/IProjectService.hpp"
+#include "interfaces/ITerrainService.hpp"
+#include "interfaces/ISculptModeService.hpp"
+#include "interfaces/IBrushService.hpp"
+#include "interfaces/IPaintModeService.hpp"
+#include "interfaces/IPaintBrushService.hpp"
+#include "interfaces/ITerrainRaycastService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -36,7 +42,6 @@ namespace handlers {
 	class EditorHandler
 	{
 	private:
-		// Bootstrap encapsulates Core/Graphics initialization and provides service adapters
 		std::unique_ptr<core::EditorBootstrap> bootstrap;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
@@ -53,6 +58,12 @@ namespace handlers {
 		std::shared_ptr<services::IFileOperationsService> fileOperationsService;
 		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::shared_ptr<services::IProjectService> projectService;
+		std::shared_ptr<services::ITerrainService> terrainService;
+		std::shared_ptr<services::ISculptModeService> sculptModeService;
+		std::shared_ptr<services::IBrushService> brushService;
+		std::shared_ptr<services::IPaintModeService> paintModeService;
+		std::shared_ptr<services::IPaintBrushService> paintBrushService;
+	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;

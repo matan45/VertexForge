@@ -16,6 +16,13 @@
 #include "impl/VFXPlayModeHandler.hpp"
 #include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
+#include "impl/scene/TerrainService.hpp"
+#include "impl/SculptModeServiceImpl.hpp"
+#include "impl/BrushServiceImpl.hpp"
+#include "impl/PaintModeServiceImpl.hpp"
+#include "impl/PaintBrushServiceImpl.hpp"
+#include "impl/TerrainRaycastServiceImpl.hpp"
+#include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -111,6 +118,7 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
 
+        terrainService.reset();
         projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();
@@ -121,6 +129,11 @@ namespace handlers
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        terrainRaycastService.reset();
+        paintBrushService.reset();
+        paintModeService.reset();
+        brushService.reset();
+        sculptModeService.reset();
         editorModeService.reset();
         windowStateService.reset();
         inputService.reset();
@@ -192,6 +205,21 @@ namespace handlers
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
+        auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+        terrainService = terrainServiceImpl;
+
+        if (auto* terrainAdapter = bootstrap->getTerrainRenderAdapterInternal())
+        {
+            terrainAdapter->setTerrainService(terrainServiceImpl.get());
+        }
+
+        terrainServiceImpl->setBrushComputeProvider(bootstrap->getTerrainBrushComputeProvider());
+
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            terrainServiceImpl->setPhysicsProvider(physicsProvider);
+        }
+
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
@@ -204,7 +232,23 @@ namespace handlers
         fileOperationsService->registerEventHandlers();
         physicsService->registerEventHandlers();
         projectService->registerEventHandlers();
+        terrainService->registerEventHandlers();
 
+        sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
+        sculptModeService->registerEventHandlers();
+
+        brushService = std::make_shared<services::BrushServiceImpl>();
+        brushService->registerEventHandlers();
+
+        paintModeService = std::make_shared<services::PaintModeServiceImpl>();
+        paintModeService->registerEventHandlers();
+
+        paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
+        paintBrushService->registerEventHandlers();
+
+        terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
+            bootstrap->getTerrainRaycastProvider());
+        terrainRaycastService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

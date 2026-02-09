@@ -85,34 +85,9 @@ namespace controllers {
 		offScreenController->prepareFrameMeshes();
 	}
 
-	void OffScreen::rebuildBVH()
-	{
-		offScreenController->rebuildBVH();
-	}
-
-	void OffScreen::markBVHDirty()
-	{
-		offScreenController->markBVHDirty();
-	}
-
-	void OffScreen::createCamera(CameraId id, bool enableOcclusion)
-	{
-		offScreenController->createCamera(id, enableOcclusion);
-	}
-
 	void OffScreen::removeCamera(CameraId id)
 	{
 		offScreenController->removeCamera(id);
-	}
-
-	void OffScreen::setActiveCamera(CameraId id)
-	{
-		offScreenController->setActiveCamera(id);
-	}
-
-	CameraId OffScreen::getActiveCameraId() const
-	{
-		return offScreenController->getActiveCameraId();
 	}
 
 	void OffScreen::prepareFrameCameraFrustums()
@@ -168,11 +143,6 @@ namespace controllers {
 	void OffScreen::setPlayMode(bool playMode)
 	{
 		offScreenController->setPlayMode(playMode);
-	}
-
-	bool OffScreen::isPlayMode() const
-	{
-		return offScreenController->isPlayMode();
 	}
 
 	void OffScreen::setShowDebugRendering(bool show)
@@ -280,8 +250,75 @@ namespace controllers {
 		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
 	}
 
+	void OffScreen::setTerrainFrustumCullingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainFrustumCullingEnabled(enabled);
+	}
+
+	void OffScreen::setTerrainMeshletCullingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainMeshletCullingEnabled(enabled);
+	}
+
+	void OffScreen::setTerrainRenderingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainRenderingEnabled(enabled);
+	}
+
+	void OffScreen::setTerrainLODBias(float bias)
+	{
+		offScreenController->setTerrainLODBias(bias);
+	}
+
+	void OffScreen::setTerrainErrorThreshold(float threshold)
+	{
+		offScreenController->setTerrainErrorThreshold(threshold);
+	}
+
+	void OffScreen::setTerrainTextureScale(float scale)
+	{
+		offScreenController->setTerrainTextureScale(scale);
+	}
+
+	void OffScreen::setTerrainShadowLOD(uint32_t lod)
+	{
+		offScreenController->setTerrainShadowLOD(lod);
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);
+	}
+
+	void OffScreen::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+	{
+		offScreenController->setTerrainRenderProvider(provider);
+	}
+
+	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
+	{
+		offScreenController->setRaycastCursorUV(uv);
+	}
+
+	void OffScreen::clearRaycastCursor()
+	{
+		offScreenController->clearRaycastCursor();
+	}
+
+	terrain::TerrainHitResult OffScreen::getTerrainHitResult() const
+	{
+		return offScreenController->getTerrainHitResult();
+	}
+
+	void OffScreen::setBrushOverlayParams(float radius, float falloff, float shape)
+	{
+		offScreenController->setBrushOverlayParams(radius, falloff, shape);
+	}
+
+	bool OffScreen::applyBrushGPU(
+		std::vector<float>& heightData,
+		const terrain::BrushGPUParams& params)
+	{
+		return offScreenController->applyBrushGPU(heightData, params);
 	}
 }

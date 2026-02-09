@@ -12,6 +12,9 @@
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
+#include "../adapters/TerrainRenderAdapter.hpp"
+#include "../adapters/TerrainRaycastAdapter.hpp"
+#include "../adapters/TerrainBrushComputeAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -41,6 +44,9 @@ namespace core
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
+        terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
+        terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
+        terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
 
         offScreen->init();
         audioAdapter->init();
@@ -50,6 +56,10 @@ namespace core
         // Wire VFX runtime provider to offscreen renderer
         // This allows VFX to be rendered as part of the scene
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
+
+        // Wire terrain render provider to offscreen renderer
+        // TerrainService will be connected later via setTerrainService() in EditorHandler
+        offScreenAdapter->setTerrainRenderProvider(terrainRenderAdapter.get());
 
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
@@ -99,6 +109,8 @@ namespace core
         scriptingAdapter.reset();
         physicsAdapter.reset();
         animatorAdapter.reset();
+        terrainRenderAdapter.reset();
+        terrainRaycastAdapter.reset();
 
         if (coreInterface)
         {
@@ -159,6 +171,21 @@ namespace core
     services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
     {
         return animatorAdapter.get();
+    }
+
+    TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()
+    {
+        return terrainRenderAdapter.get();
+    }
+
+    services::ITerrainRaycastProvider* EditorBootstrap::getTerrainRaycastProvider()
+    {
+        return terrainRaycastAdapter.get();
+    }
+
+    services::ITerrainBrushComputeProvider* EditorBootstrap::getTerrainBrushComputeProvider()
+    {
+        return terrainBrushComputeAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()

@@ -2,6 +2,7 @@
 #include "ShadowAtlasManager.hpp"
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
+#include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "print/Logger.hpp"
 
@@ -15,9 +16,11 @@ namespace render::shadow
     void ShadowPassRecorder::recordShadowPass(
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
+        const TerrainShadowPassParams* terrainParams,
         ShadowAtlasManager* atlasManager,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
+        TerrainShadowPipeline* terrainShadowPipeline,
         const std::vector<ShadowView>& directionalShadowViews,
         const std::vector<ShadowView>& spotShadowViews,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
@@ -30,6 +33,11 @@ namespace render::shadow
                          shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
             return;
         }
+
+        bool hasTerrainShadows = terrainParams != nullptr &&
+                                  terrainParams->tileCount > 0 &&
+                                  terrainShadowPipeline != nullptr &&
+                                  terrainShadowPipeline->isInitialized();
 
         std::vector<const ShadowView*> allViews;
         for (const auto& view : spotShadowViews)
@@ -53,19 +61,16 @@ namespace render::shadow
         if (!hasAtlasViews && !hasPointShadows)
             return;
 
-        if (params.batchCount == 0 || params.commandsPerSection == 0)
+        bool hasMeshBatches = params.batchCount > 0 &&
+                              params.commandsPerSection > 0 &&
+                              params.drawCommandBuffer &&
+                              params.drawCountBuffer;
+
+        if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        if (!params.drawCommandBuffer || !params.drawCountBuffer)
-        {
-            loggerWarning("ShadowPassRecorder::recordShadowPass: Invalid draw buffers");
-            return;
-        }
-
-        // Atlas rendering (spot and directional lights)
         if (hasAtlasViews)
         {
-            // Transition atlas to depth attachment
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -103,7 +108,6 @@ namespace render::shadow
                 );
             }
 
-            // Begin render pass
             vk::ClearValue clearValue{};
             clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
@@ -119,24 +123,26 @@ namespace render::shadow
 
             cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+            if (hasMeshBatches)
+            {
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
 
-            std::array<vk::DescriptorSet, 4> descriptorSets = {
-                params.perDrawDataDescSet,
-                params.meshletDataDescSet,
-                params.vertexDataDescSet,
-                params.boneMatrixDescSet
-            };
-            cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eGraphics,
-                shadowPassPipeline->getPipelineLayout(),
-                0,
-                static_cast<uint32_t>(descriptorSets.size()),
-                descriptorSets.data(),
-                0, nullptr
-            );
+                std::array<vk::DescriptorSet, 4> descriptorSets = {
+                    params.perDrawDataDescSet,
+                    params.meshletDataDescSet,
+                    params.vertexDataDescSet,
+                    params.boneMatrixDescSet
+                };
+                cmd.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    shadowPassPipeline->getPipelineLayout(),
+                    0,
+                    static_cast<uint32_t>(descriptorSets.size()),
+                    descriptorSets.data(),
+                    0, nullptr
+                );
+            }
 
-            // Render each shadow view
             for (const auto* view : allViews)
             {
                 if (!view->handle.isValid())
@@ -153,47 +159,64 @@ namespace render::shadow
 
                 cmd.setDepthBias(view->depthBias, 0.0f, view->slopeBias);
 
-                ShadowPushConstants pc{};
-                pc.lightViewProjection = view->viewProjectionMatrix;
-                pc.baseDrawIndex = 0;
-                pc.depthBias = view->depthBias;
-                pc.slopeBias = view->slopeBias;
-                pc.normalBias = view->normalBias;
-
-                for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
+                if (hasMeshBatches)
                 {
-                    for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                    ShadowPushConstants pc{};
+                    pc.lightViewProjection = view->viewProjectionMatrix;
+                    pc.baseDrawIndex = 0;
+                    pc.depthBias = view->depthBias;
+                    pc.slopeBias = view->slopeBias;
+                    pc.normalBias = view->normalBias;
+
+                    for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                     {
-                        uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
-                        pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
+                        for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                        {
+                            uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                            pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
 
-                        cmd.pushConstants(
-                            shadowPassPipeline->getPipelineLayout(),
-                            vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                            0,
-                            sizeof(ShadowPushConstants),
-                            &pc
-                        );
+                            cmd.pushConstants(
+                                shadowPassPipeline->getPipelineLayout(),
+                                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                                0,
+                                sizeof(ShadowPushConstants),
+                                &pc
+                            );
 
-                        vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
-                            vk::DrawMeshTasksIndirectCommandEXT);
-                        vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
+                            vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
+                                vk::DrawMeshTasksIndirectCommandEXT);
+                            vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
 
-                        cmd.drawMeshTasksIndirectCountEXT(
-                            params.drawCommandBuffer,
-                            commandOffset,
-                            params.drawCountBuffer,
-                            countOffset,
-                            params.commandsPerSection,
-                            sizeof(vk::DrawMeshTasksIndirectCommandEXT)
-                        );
+                            cmd.drawMeshTasksIndirectCountEXT(
+                                params.drawCommandBuffer,
+                                commandOffset,
+                                params.drawCountBuffer,
+                                countOffset,
+                                params.commandsPerSection,
+                                sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                            );
+                        }
                     }
+                }
+
+                if (hasTerrainShadows)
+                {
+                    terrainShadowPipeline->dispatch(
+                        cmd,
+                        terrainParams->terrainDataDescSet,
+                        terrainParams->terrainMeshletDescSet,
+                        terrainParams->terrainVertexDescSet,
+                        view->viewProjectionMatrix,
+                        terrainParams->tileCount,
+                        terrainParams->shadowLOD,
+                        view->depthBias,
+                        view->slopeBias
+                    );
                 }
             }
 
             cmd.endRenderPass();
 
-            // Transition atlas back to shader read
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -222,19 +245,26 @@ namespace render::shadow
             atlasFirstUse = false;
         }
 
-        // Point light cube shadow rendering
-        renderPointLightCubeShadows(cmd, params, resourcePool, shadowPassPipeline, lightShadowData);
+        renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool, shadowPassPipeline,
+                                     terrainShadowPipeline, lightShadowData);
     }
 
     void ShadowPassRecorder::renderPointLightCubeShadows(
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
+        const TerrainShadowPassParams* terrainParams,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
+        TerrainShadowPipeline* terrainShadowPipeline,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
     {
         if (!resourcePool || !shadowPassPipeline)
             return;
+
+        bool hasTerrainShadows = terrainParams != nullptr &&
+                                  terrainParams->tileCount > 0 &&
+                                  terrainShadowPipeline != nullptr &&
+                                  terrainShadowPipeline->isInitialized();
 
         const auto& logicalDevice = device.getLogicalDevice();
 
@@ -257,7 +287,15 @@ namespace render::shadow
         if (pointLightsToRender.empty())
             return;
 
-        std::array<vk::DescriptorSet, 4> descriptorSets = {
+        bool hasMeshBatches = params.batchCount > 0 &&
+                              params.commandsPerSection > 0 &&
+                              params.drawCommandBuffer &&
+                              params.drawCountBuffer;
+
+        if (!hasMeshBatches && !hasTerrainShadows)
+            return;
+
+        std::array<vk::DescriptorSet, 4> meshDescriptorSets = {
             params.perDrawDataDescSet,
             params.meshletDataDescSet,
             params.vertexDataDescSet,
@@ -306,55 +344,72 @@ namespace render::shadow
 
                 cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
-                cmd.bindDescriptorSets(
-                    vk::PipelineBindPoint::eGraphics,
-                    shadowPassPipeline->getPipelineLayout(),
-                    0,
-                    static_cast<uint32_t>(descriptorSets.size()),
-                    descriptorSets.data(),
-                    0, nullptr
-                );
-
                 cmd.setViewport(0, 1, &viewport);
                 cmd.setScissor(0, 1, &scissor);
-
                 cmd.setDepthBias(view.depthBias, 0.0f, view.slopeBias);
 
-                ShadowPushConstants pc{};
-                pc.lightViewProjection = view.viewProjectionMatrix;
-                pc.depthBias = view.depthBias;
-                pc.slopeBias = view.slopeBias;
-                pc.normalBias = view.normalBias;
-
-                for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
+                if (hasMeshBatches)
                 {
-                    for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+                    cmd.bindDescriptorSets(
+                        vk::PipelineBindPoint::eGraphics,
+                        shadowPassPipeline->getPipelineLayout(),
+                        0,
+                        static_cast<uint32_t>(meshDescriptorSets.size()),
+                        meshDescriptorSets.data(),
+                        0, nullptr
+                    );
+
+                    ShadowPushConstants pc{};
+                    pc.lightViewProjection = view.viewProjectionMatrix;
+                    pc.depthBias = view.depthBias;
+                    pc.slopeBias = view.slopeBias;
+                    pc.normalBias = view.normalBias;
+
+                    for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                     {
-                        uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
-                        pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
+                        for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                        {
+                            uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                            pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
 
-                        cmd.pushConstants(
-                            shadowPassPipeline->getPipelineLayout(),
-                            vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                            0,
-                            sizeof(ShadowPushConstants),
-                            &pc
-                        );
+                            cmd.pushConstants(
+                                shadowPassPipeline->getPipelineLayout(),
+                                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                                0,
+                                sizeof(ShadowPushConstants),
+                                &pc
+                            );
 
-                        vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
-                            vk::DrawMeshTasksIndirectCommandEXT);
-                        vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
+                            vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
+                                vk::DrawMeshTasksIndirectCommandEXT);
+                            vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
 
-                        cmd.drawMeshTasksIndirectCountEXT(
-                            params.drawCommandBuffer,
-                            commandOffset,
-                            params.drawCountBuffer,
-                            countOffset,
-                            params.commandsPerSection,
-                            sizeof(vk::DrawMeshTasksIndirectCommandEXT)
-                        );
+                            cmd.drawMeshTasksIndirectCountEXT(
+                                params.drawCommandBuffer,
+                                commandOffset,
+                                params.drawCountBuffer,
+                                countOffset,
+                                params.commandsPerSection,
+                                sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                            );
+                        }
                     }
+                }
+
+                if (hasTerrainShadows)
+                {
+                    terrainShadowPipeline->dispatch(
+                        cmd,
+                        terrainParams->terrainDataDescSet,
+                        terrainParams->terrainMeshletDescSet,
+                        terrainParams->terrainVertexDescSet,
+                        view.viewProjectionMatrix,
+                        terrainParams->tileCount,
+                        terrainParams->shadowLOD,
+                        view.depthBias,
+                        view.slopeBias
+                    );
                 }
 
                 cmd.endRenderPass();

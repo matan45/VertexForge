@@ -15,8 +15,11 @@
 #include "tools/LightGizmoDebugRenderer.hpp"
 #include "tools/ClusterDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
@@ -35,6 +38,7 @@ namespace render
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
+        , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
     {
     }
 
@@ -49,6 +53,12 @@ namespace render
     void RenderPassHandler::init()
     {
         clearColor->init();
+
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->init();
+            terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
+        }
 
         if (!materialChangeCallbackId)
         {
@@ -358,6 +368,65 @@ namespace render
         }
     }
 
+    void RenderPassHandler::readBackTerrainRaycastResults()
+    {
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            terrainRaycastPipeline->readBackResults();
+        }
+    }
+
+    void RenderPassHandler::setRaycastCursorUV(const glm::vec2& uv)
+    {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->setCursorUV(uv);
+        }
+    }
+
+    void RenderPassHandler::clearRaycastCursor()
+    {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->clearCursor();
+        }
+    }
+
+    terrain::TerrainHitResult RenderPassHandler::getTerrainHitResult() const
+    {
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            return terrainRaycastPipeline->getLastResult();
+        }
+        return {};
+    }
+
+    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff, float shape)
+    {
+        brushOverlayRadius_ = radius;
+        brushOverlayFalloff_ = falloff;
+        brushOverlayShape_ = shape;
+    }
+
+    void RenderPassHandler::updateBrushOverlayFromHitResult()
+    {
+        if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)
+        {
+            return;
+        }
+
+        auto hitResult = getTerrainHitResult();
+        if (hitResult.hit && brushOverlayRadius_ > 0.0f)
+        {
+            glm::vec2 worldPos(hitResult.position.x, hitResult.position.z);
+            gpuDrivenRenderer->setBrushOverlay(worldPos, brushOverlayRadius_, brushOverlayFalloff_, brushOverlayShape_);
+        }
+        else
+        {
+            gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f, 0.0f);
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -412,6 +481,62 @@ namespace render
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainRenderingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainLODBias(float bias)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainLODBias(bias);
+        }
+    }
+
+    void RenderPassHandler::setTerrainErrorThreshold(float threshold)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void RenderPassHandler::setTerrainTextureScale(float scale)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainTextureScale(scale);
+        }
+    }
+
+    void RenderPassHandler::setTerrainShadowLOD(uint32_t lod)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainShadowLOD(lod);
         }
     }
 
@@ -526,6 +651,31 @@ namespace render
         vfxRuntimeProvider = provider;
     }
 
+    void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+    {
+        terrainRenderProvider = provider;
+
+        if (provider && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTileDataLoader(
+                [provider](terrain::TerrainTile& tile, uint8_t lod) -> bool {
+                    return provider->ensureTileLODData(tile, lod);
+                });
+            gpuDrivenRenderer->setTileRAMEvictor(
+                [provider](terrain::TerrainTile& tile) {
+                    provider->releaseTileRAMData(tile);
+                });
+        }
+    }
+
+    void RenderPassHandler::clearTerrainData()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearTerrainData();
+        }
+    }
+
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         currentView = view;
@@ -611,10 +761,20 @@ namespace render
                     swapChain.getSwapchainDepthStencilFormat());
             }
         }
+
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
+        }
     }
 
     void RenderPassHandler::cleanUp() const
     {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->cleanup();
+        }
+
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->cleanup();
@@ -660,8 +820,11 @@ namespace render
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
+        bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
+                                  terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes ||
-            hasDebugItems || hasVFX);
+            hasDebugItems || hasVFX || hasTerrainToRender);
 
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
@@ -674,6 +837,13 @@ namespace render
                 currentFarPlane,
                 currentTime
             );
+
+            if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
+            {
+                auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
+                auto matPath = terrainRenderProvider->getTerrainMaterialPath();
+                gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
+            }
         }
 
         if (needsMeshPass)
@@ -685,7 +855,9 @@ namespace render
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            bool hasMeshesToRender = !currentMeshDrawList.empty();
+
+            if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
 
@@ -696,6 +868,11 @@ namespace render
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+                if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+                {
+                    gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+                }
 
                 if (hasCustomShaderMeshes)
                 {
@@ -752,6 +929,57 @@ namespace render
             if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
             {
                 cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
+            }
+
+            if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+            {
+                // Transition depth image to shader-read for the raycast compute shader.
+                // generateHiZ() transitions it back to attachment layout, so we must re-transition.
+                vk::ImageMemoryBarrier toShaderRead{};
+                toShaderRead.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.image = offscreenResources.depthImage.depthImage;
+                toShaderRead.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+                    vk::ImageAspectFlagBits::eStencil;
+                toShaderRead.subresourceRange.baseMipLevel = 0;
+                toShaderRead.subresourceRange.levelCount = 1;
+                toShaderRead.subresourceRange.baseArrayLayer = 0;
+                toShaderRead.subresourceRange.layerCount = 1;
+                toShaderRead.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eLateFragmentTests,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, {}, {}, toShaderRead);
+
+                glm::mat4 invViewProjection = glm::inverse(currentProjection * currentView);
+                auto extent = swapChain.getSwapchainExtent();
+                terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
+                terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
+
+                vk::ImageMemoryBarrier toAttachment{};
+                toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.image = offscreenResources.depthImage.depthImage;
+                toAttachment.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+                    vk::ImageAspectFlagBits::eStencil;
+                toAttachment.subresourceRange.baseMipLevel = 0;
+                toAttachment.subresourceRange.levelCount = 1;
+                toAttachment.subresourceRange.baseArrayLayer = 0;
+                toAttachment.subresourceRange.layerCount = 1;
+                toAttachment.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                toAttachment.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                    vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                    {}, {}, {}, toAttachment);
             }
         }
     }

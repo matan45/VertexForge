@@ -7,6 +7,7 @@
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
 #include "../animator/AnimatorAsset.hpp"
+#include "../terrain/TerrainMaterialAsset.hpp"
 #include <bit>
 #include <algorithm>
 #include <cctype>
@@ -44,6 +45,7 @@ namespace resource
         std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(animationCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(animatorCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(terrainMaterialCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     static FileType getExpectedTypeFromExtension(const std::string& ext)
@@ -227,6 +229,7 @@ namespace resource
         fontCache.clear();
         animationCache.clear();
         animatorCache.clear();
+        terrainMaterialCache.clear();
 
         vfLogInfo("All resource caches cleared");
     }
@@ -297,6 +300,40 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         materialInstanceCache.erase(std::string(path));
+    }
+
+    std::shared_ptr<terrain::TerrainMaterialData> ResourceManager::loadTerrainMaterial(std::string_view path)
+    {
+        {
+            std::scoped_lock lock(cacheMutex);
+            auto it = terrainMaterialCache.find(std::string(path));
+            if (it != terrainMaterialCache.end()) {
+                if (auto existing = it->second.lock()) {
+                    return existing;
+                }
+            }
+        }
+
+        auto result = terrain::TerrainMaterialAsset::load(path);
+        if (!result) {
+            vfLogError("Failed to load terrain material: {}", path);
+            return nullptr;
+        }
+
+        auto terrainMat = std::make_shared<terrain::TerrainMaterialData>(std::move(*result));
+
+        {
+            std::scoped_lock lock(cacheMutex);
+            terrainMaterialCache[std::string(path)] = terrainMat;
+        }
+
+        return terrainMat;
+    }
+
+    void ResourceManager::invalidateTerrainMaterialCache(std::string_view path)
+    {
+        std::scoped_lock lock(cacheMutex);
+        terrainMaterialCache.erase(std::string(path));
     }
 
     std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(std::string_view path)

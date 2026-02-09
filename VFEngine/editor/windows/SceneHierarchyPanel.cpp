@@ -1,6 +1,7 @@
 #include "SceneHierarchyPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -56,7 +57,6 @@ namespace windows
 
             if (!hierarchy.entities.empty())
             {
-                // Root is first entity
                 auto rootHandle = hierarchy.entities[0].handle;
                 drawEntityNode(rootHandle);
             }
@@ -66,7 +66,6 @@ namespace windows
             {
                 if (ImGui::MenuItem("Add New Entity"))
                 {
-                    // Get root for default parent
                     events::scene::GetSceneHierarchyQuery rootQuery;
                     auto rootHierarchy = dispatcher.query(rootQuery);
                     services::EntityHandle parentHandle = selectedHandle.isValid()
@@ -98,7 +97,6 @@ namespace windows
                             auto duplicated = dispatcher.execute(cmd);
                             if (duplicated.isValid())
                             {
-                                // Select the duplicated entity
                                 selectedHandle = duplicated;
                                 events::scene::SelectEntityCommand selectCmd;
                                 selectCmd.entity = duplicated;
@@ -128,7 +126,6 @@ namespace windows
 
         ImGui::PushID(static_cast<int>(handle.id));
 
-        // Query entity data
         events::scene::GetEntityQuery entityQuery;
         entityQuery.entity = handle;
         auto entityDataOpt = dispatcher.query(entityQuery);
@@ -147,15 +144,18 @@ namespace windows
 
         bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", entityName.c_str());
 
-        // Select the entity when clicked
+        // Select the entity when clicked (blocked during sculpt mode)
         if (ImGui::IsItemClicked())
         {
-            selectedHandle = handle;
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            if (!isSculptMode)
+            {
+                selectedHandle = handle;
 
-            // Publish selection through command
-            events::scene::SelectEntityCommand cmd;
-            cmd.entity = handle;
-            dispatcher.execute(cmd);
+                events::scene::SelectEntityCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
         }
 
         if (ImGui::BeginDragDropSource())
@@ -168,7 +168,6 @@ namespace windows
 
         dragDropEntity(handle);
 
-        // If the entity has children, recursively draw them
         if (nodeOpen)
         {
             if (entityDataOpt.has_value())
@@ -209,7 +208,6 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Clear previous expansion state
         expandedHandles.clear();
 
         // Walk up the parent chain and collect all ancestors
@@ -225,11 +223,9 @@ namespace windows
                 break; // Reached root or invalid entity
             }
 
-            // Add parent to expand set
             services::EntityHandle parentHandle = entityDataOpt->parent.value();
             expandedHandles.insert(parentHandle.id);
 
-            // Move up to parent
             current = parentHandle;
         }
     }

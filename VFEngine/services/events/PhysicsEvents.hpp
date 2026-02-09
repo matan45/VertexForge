@@ -181,4 +181,19 @@ namespace events::physics {
         std::string_view getName() const override { return "TriggerExit"; }
     };
 
+    struct AddTerrainColliderCommand : ::events::ICommand<bool> {
+        services::EntityHandle terrainEntity;
+        std::string_view getName() const override { return "AddTerrainCollider"; }
+    };
+
+    struct RemoveTerrainColliderCommand : ::events::ICommand<void> {
+        services::EntityHandle terrainEntity;
+        std::string_view getName() const override { return "RemoveTerrainCollider"; }
+    };
+
+    struct HasTerrainColliderQuery : ::events::IQuery<bool> {
+        services::EntityHandle terrainEntity;
+        std::string_view getName() const override { return "HasTerrainCollider"; }
+    };
+
 }

@@ -14,7 +14,7 @@ namespace core
         std::unique_ptr<physics::PhysicsWorld> physicsWorld;
         std::unique_ptr<physics::FixedTimestep> fixedTimestep;
         types::PhysicsSettings currentSettings;
-        mutable std::mutex settingsMutex; // Protects currentSettings access
+        mutable std::mutex settingsMutex;
 
     public:
         explicit PhysicsAdapter();
@@ -63,6 +63,13 @@ namespace core
 
         void applySettings(const types::PhysicsSettings& settings) override;
         types::PhysicsSettings getCurrentSettings() const override;
+
+        void addTerrainCollider(services::EntityHandle entity,
+                                 const std::vector<services::TerrainTileColliderInfo>& tiles) override;
+        void removeTerrainCollider(services::EntityHandle entity) override;
+        void rebuildTerrainTileCollider(services::EntityHandle entity,
+                                         const services::TerrainTileColliderInfo& tile) override;
+        bool hasTerrainCollider(services::EntityHandle entity) const override;
 
     private:
         physics::RigidBodyCreateInfo toPhysicsBodyInfo(const services::RigidBodyData& data) const;

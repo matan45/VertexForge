@@ -20,6 +20,8 @@ namespace windows
         Script,
         Font,
         Project,
+        TerrainMaterial,
+        Terrain,
         Other
     };
 
@@ -39,7 +41,8 @@ namespace windows
         Font = 11,
         Project = 12,
         Animator = 13,
-        VFX = 14
+        VFX = 14,
+        Terrain = 15
     };
 
     struct Asset

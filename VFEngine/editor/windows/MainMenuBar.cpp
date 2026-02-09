@@ -7,12 +7,14 @@
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
+#include "TerrainCreationWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/ScriptingEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -138,6 +140,10 @@ namespace windows
             }
             else if (ImGui::MenuItem("Terrain"))
             {
+                if (terrainCreationWindow)
+                {
+                    terrainCreationWindow->show();
+                }
             }
             ImGui::EndMenu();
         }
@@ -224,14 +230,12 @@ namespace windows
         auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
         bool isScriptsCompiled = dispatcher.query(events::scripting::IsScriptsCompiledQuery{});
 
-        // Calculate center position
         float menuBarWidth = ImGui::GetWindowWidth();
         float buttonWidth = 60.0f;
         float totalWidth = buttonWidth + 10.0f; // Button + spacing for indicator
         float centerX = (menuBarWidth - totalWidth) * 0.5f;
         ImGui::SetCursorPosX(centerX);
 
-        // Show build status indicator before Play button
         if (!isScriptsCompiled && currentMode == services::EditorMode::Edit)
         {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[!]");
@@ -244,6 +248,9 @@ namespace windows
 
         if (currentMode == services::EditorMode::Edit)
         {
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            ImGui::BeginDisabled(isSculptMode);
+
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
@@ -254,6 +261,13 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopStyleColor(3);
+
+            ImGui::EndDisabled();
+
+            if (isSculptMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("Exit Sculpt Mode before entering Play Mode");
+            }
         }
         else
         {

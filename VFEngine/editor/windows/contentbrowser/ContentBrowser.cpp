@@ -8,6 +8,7 @@
 #include "events/UndoRedoEvents.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/ProjectEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
@@ -213,6 +214,12 @@ namespace windows
                         std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                         std::string args = "\"" + filePath + "\"";
                         ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
+                    }
+                    else if (selectedType == AssetType::Terrain)
+                    {
+                        events::terrain::BeginTerrainLoadCommand cmd;
+                        cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                        events::EventDispatcher::instance().execute(cmd);
                     }
                     else
                     {
@@ -427,6 +434,14 @@ namespace windows
                     else if (extension == ".vfPrefab")
                     {
                         asset.type = Prefab;
+                    }
+                    else if (extension == ".vfTerrainMat")
+                    {
+                        asset.type = TerrainMaterial;
+                    }
+                    else if (extension == ".vfTerrain")
+                    {
+                        asset.type = Terrain;
                     }
                     else if (extension == ".mt")
                     {

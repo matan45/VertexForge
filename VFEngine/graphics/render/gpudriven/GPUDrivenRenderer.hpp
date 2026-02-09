@@ -7,6 +7,10 @@
 #include "GPUCullLODPipeline.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
+#include "TerrainMeshShaderPipeline.hpp"
+#include "TerrainMeshBuffer.hpp"
+#include "TerrainGPUAdapter.hpp"
+#include "TerrainStreamManager.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -48,6 +52,11 @@ namespace render::occlusion
     class HiZBuffer;
 }
 
+namespace terrain
+{
+    class TerrainTile;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -69,6 +78,17 @@ namespace render::gpudriven
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
+
+        std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
+        std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
+        std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
+        std::unique_ptr<TerrainStreamManager> terrainStreamManager;
+        std::vector<TerrainTileGPUData> terrainTileData;
+        bool terrainRenderingEnabled = true;
+        float terrainLODBias = 1.0f;
+        float terrainErrorThreshold = 2.0f;
+        float terrainTextureScale = 0.1f;
+        uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
 
         bool initialized = false;
         bool enabled = false;
@@ -160,6 +180,9 @@ namespace render::gpudriven
         void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
 
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
+
         void setViewMode(uint32_t mode) { currentViewMode = mode; }
         uint32_t getViewMode() const { return currentViewMode; }
 
@@ -182,7 +205,6 @@ namespace render::gpudriven
         uint32_t getRegisteredMeshCount() const;
         uint32_t getRegisteredTextureCount() const;
 
-
         uint32_t getBatchCount() const;
         uint32_t getCommandsPerBatch() const;
         uint32_t getTotalCapacity() const;
@@ -193,7 +215,6 @@ namespace render::gpudriven
 
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
-        lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
@@ -203,9 +224,7 @@ namespace render::gpudriven
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
 
         void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
-        void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
         bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
-        occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
 
         uint32_t getTotalSceneLights() const;
         uint32_t getLightsAfterBVHCull() const;
@@ -213,8 +232,46 @@ namespace render::gpudriven
 
         void readBackLightOcclusionResults();
 
+        void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                           const glm::vec3& cameraPosition,
+                           const std::string& terrainMaterialPath = "");
+        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void clearTerrainData();
+
+        void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
+        bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
+        void setTerrainLODBias(float bias) { terrainLODBias = bias; }
+        void setTerrainErrorThreshold(float threshold) { terrainErrorThreshold = threshold; }
+        void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
+        void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
+
+        void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
+
+        void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
+        void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
+
+        float getTerrainUpdateUs() const { return terrainUpdateUs_; }
+        float getTerrainStreamingUs() const { return terrainStreamingUs_; }
+        float getTerrainBuildTileDataUs() const { return terrainBuildTileDataUs_; }
+        float getTerrainUploadTileDataUs() const { return terrainUploadTileDataUs_; }
+        const TerrainStreamingStats* getTerrainStreamingStats() const;
+        TerrainCullingStats getTerrainCullingStats();
+
     private:
+        std::string currentTerrainMaterialPath_;
+        std::vector<TerrainLayerGPUData> terrainLayerData_;
+
+        float terrainUpdateUs_ = 0.0f;
+        float terrainStreamingUs_ = 0.0f;
+        float terrainBuildTileDataUs_ = 0.0f;
+        float terrainUploadTileDataUs_ = 0.0f;
+
+        // Pending callbacks (stored until terrainStreamManager is created)
+        TerrainStreamManager::TileDataLoader pendingTileDataLoader_;
+        TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor_;
+
         bool registerMaterialTextures(const std::string& materialPath);
+        void registerTerrainLayerTextures(const std::string& materialPath);
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);

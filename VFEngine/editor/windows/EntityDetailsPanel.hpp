@@ -16,6 +16,8 @@
 #include "details/DirectionalLightDrawer.hpp"
 #include "details/PointLightDrawer.hpp"
 #include "details/SpotLightDrawer.hpp"
+#include "details/TerrainDrawer.hpp"
+#include "details/TerrainTileDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -25,7 +27,6 @@ namespace windows
     private:
         events::SubscriptionToken sceneClearedToken;
 
-        // Component drawers
         details::TransformDrawer transformDrawer;
         details::CameraDrawer cameraDrawer;
         details::IBLDrawer iblDrawer;
@@ -40,6 +41,8 @@ namespace windows
         details::DirectionalLightDrawer directionalLightDrawer;
         details::PointLightDrawer pointLightDrawer;
         details::SpotLightDrawer spotLightDrawer;
+        details::TerrainDrawer terrainDrawer;
+        details::TerrainTileDrawer terrainTileDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

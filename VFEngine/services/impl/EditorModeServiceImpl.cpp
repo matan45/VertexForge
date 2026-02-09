@@ -3,6 +3,7 @@
 #include "../events/EditorModeEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../events/RenderEvents.hpp"
+#include "../events/TerrainEvents.hpp"
 #include "../data/EntityConversion.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "scene/SceneGraphSystem.hpp"
@@ -109,6 +110,10 @@ namespace services
                 dispatcher.execute(setIblCmd);
             }
         }
+
+        // Re-map terrain registrations to restored entity IDs
+        events::terrain::RemapTerrainEntitiesCommand remapTerrainCmd;
+        dispatcher.execute(remapTerrainCmd);
 
         // Re-trigger mesh loading for all entities with MeshComponent
         auto meshView = registry.view<components::MeshComponent>();
