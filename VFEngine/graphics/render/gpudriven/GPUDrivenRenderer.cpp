@@ -167,7 +167,6 @@ namespace render::gpudriven
             terrainAdapter = std::make_unique<TerrainGPUAdapter>(*terrainMeshBuffer);
             terrainStreamManager = std::make_unique<TerrainStreamManager>(*terrainMeshBuffer, *terrainAdapter);
 
-            // Apply pending callbacks that were set before init()
             if (pendingTileDataLoader_)
             {
                 terrainStreamManager->setTileDataLoader(std::move(pendingTileDataLoader_));
@@ -541,7 +540,6 @@ namespace render::gpudriven
 
         bool hasMeshes = mergedBuffer->getObjectCount() > 0;
 
-        // Always update meshlet and vertex descriptors - terrain uses these too
         if (meshShaderPipeline)
         {
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
@@ -560,7 +558,6 @@ namespace render::gpudriven
             }
         }
 
-        // Always update lighting descriptors when terrain or meshes may need them
         if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
         {
             meshShaderPipeline->updateLightingDescriptors(
@@ -622,9 +619,6 @@ namespace render::gpudriven
             lightsAfterHiZCull = lightsAfterBVHCull;
         }
 
-        // Light buffer must be updated even if there are no mesh objects,
-        // because terrain rendering also needs light data.
-        // Shadow system must update before light buffer manager so shadow indices are available
         if (shadowSystem && shadowSystem->isInitialized())
         {
             std::unordered_set<uint32_t> shadowVisibleLights;
@@ -636,7 +630,6 @@ namespace render::gpudriven
                 hasShadowFilter = true;
             }
 
-            // Frame N-1 approach: use previous frame's occlusion results
             if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
             {
                 if (hasShadowFilter)
@@ -763,7 +756,6 @@ namespace render::gpudriven
 
                 const auto& camData = cameraBuffer->getData();
                 glm::mat4 viewProj = camData.projection * camData.view;
-                // cameraPosition is vec4: xyz = position, w = nearPlane
                 lightOcclusionCulling->updateCamera(viewProj, glm::vec3(camData.cameraPosition), camData.cameraPosition.w);
 
                 lightOcclusionCulling->cull(cmd);
@@ -1356,7 +1348,6 @@ namespace render::gpudriven
         }
         else
         {
-            // Fallback: upload all tiles directly (legacy behavior)
             for (terrain::TerrainTile* tile : visibleTiles)
             {
                 if (!tile || !tile->isVisible)
@@ -1375,9 +1366,6 @@ namespace render::gpudriven
         auto streamEnd = std::chrono::high_resolution_clock::now();
         terrainStreamingUs_ = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        // Always rebuild tile data from current visible set — the build itself
-        // is cheap (vector population from existing allocations) and the previous
-        // first/last/count heuristic missed mid-set visibility changes.
         terrainAdapter->markGPUTileDataDirty();
 
         auto buildStart = std::chrono::high_resolution_clock::now();
@@ -1417,7 +1405,6 @@ namespace render::gpudriven
         currentTerrainMaterialPath_.clear();
         terrainLayerData_.clear();
 
-        // Reset terrain pipeline to prevent rendering stale data
         if (terrainPipeline)
         {
             terrainPipeline->updateTileData({});

@@ -142,7 +142,6 @@ namespace core::physics
         JPH::BodyID getBodyForEntity(uint64_t entityId) const;
         uint64_t getEntityForBody(JPH::BodyID bodyId) const;
 
-        // Terrain heightfield body operations
         JPH::BodyID addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
                                         const TerrainHeightFieldCreateInfo& info);
         void removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
@@ -153,12 +152,9 @@ namespace core::physics
         void setContactRemovedCallback(ContactCallback callback);
 
     private:
-        // Helper methods
         JPH::Ref<JPH::Shape> createShape(const ColliderCreateInfo& info);
-        JPH::ObjectLayer getObjectLayer(BodyType type, bool isTrigger);
         JPH::EMotionType getMotionType(BodyType type);
 
-        // Type conversions
         static JPH::Vec3 toJolt(const glm::vec3& v);
         static JPH::Quat toJolt(const glm::quat& q);
         static JPH::RVec3 toJoltR(const glm::vec3& v);

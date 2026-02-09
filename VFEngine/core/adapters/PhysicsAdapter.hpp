@@ -14,7 +14,7 @@ namespace core
         std::unique_ptr<physics::PhysicsWorld> physicsWorld;
         std::unique_ptr<physics::FixedTimestep> fixedTimestep;
         types::PhysicsSettings currentSettings;
-        mutable std::mutex settingsMutex; // Protects currentSettings access
+        mutable std::mutex settingsMutex;
 
     public:
         explicit PhysicsAdapter();

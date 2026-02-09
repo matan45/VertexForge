@@ -81,7 +81,6 @@ namespace windows::details {
                 ImGui::TextWrapped("%s", terrain.heightmapPath.c_str());
             }
 
-            // Save section
             ImGui::Separator();
             ImGui::Text("Save");
 
@@ -142,7 +141,6 @@ namespace windows::details {
                 }
             }
 
-            // Physics collider section
             ImGui::Separator();
             ImGui::Text("Physics");
 
@@ -188,7 +186,6 @@ namespace windows::details {
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Lock brush input before launching async save
         events::terrain::SetTerrainSaveLockCommand lockCmd;
         lockCmd.locked = true;
         dispatcher.execute(lockCmd);
@@ -241,7 +238,6 @@ namespace windows::details {
             bool success = pendingSave.get();
             isSaving = false;
 
-            // Unlock brush input
             auto& dispatcher = events::EventDispatcher::instance();
             events::terrain::SetTerrainSaveLockCommand lockCmd;
             lockCmd.locked = false;

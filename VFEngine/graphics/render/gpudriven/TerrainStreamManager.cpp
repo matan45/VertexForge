@@ -37,7 +37,6 @@ namespace render::gpudriven
             }
         }
 
-        // Sort visible tiles by distance to camera (nearest first) for fallback budgeting
         struct TileWithDistance
         {
             terrain::TerrainTile* tile;
@@ -99,7 +98,6 @@ namespace render::gpudriven
                     continue;
                 }
 
-                // On-demand loading: ensure LOD3 data is in RAM
                 if (tile->lodLevels[3].isEmpty())
                 {
                     if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
@@ -152,8 +150,6 @@ namespace render::gpudriven
 
                 if (infoIt != tileInfos.end() && infoIt->second.hasLODLoaded(lod))
                 {
-                    // GPU-dirty tiles should already have LOD data in RAM (from sculpting),
-                    // but check just in case
                     if (tile->lodLevels[lod].isEmpty())
                     {
                         if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
@@ -244,7 +240,6 @@ namespace render::gpudriven
             if (currentMemoryUsage + lodMemory > config.memoryBudgetBytes)
                 continue;
 
-            // On-demand loading: ensure LOD data is in RAM
             if (tile->lodLevels[entry.targetLOD].isEmpty())
             {
                 if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
@@ -379,7 +374,6 @@ namespace render::gpudriven
 
             evictTileLOD(candidate.key, candidate.lodLevel);
 
-            // Also evict from RAM if tile has no LODs on GPU anymore
             if (tileRAMEvictor)
             {
                 auto infoIt = tileInfos.find(candidate.key);

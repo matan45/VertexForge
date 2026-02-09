@@ -135,7 +135,7 @@ namespace controllers::offscreen
             render::mesh::MeshRenderData
         {
             render::mesh::MeshRenderData renderData;
-            renderData.entity = entity;  // Track source entity for animation lookup
+            renderData.entity = entity;
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
 
@@ -541,7 +541,6 @@ namespace controllers::offscreen
             colliderDrawList.push_back(renderData);
         }
 
-        // Collect terrain heightfield collider debug wireframes
         auto terrainDebugView = registry.view<components::TerrainTileColliderDebugComponent>();
         for (auto entity : terrainDebugView)
         {

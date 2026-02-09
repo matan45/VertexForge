@@ -651,11 +651,9 @@ namespace core::physics
                     return new JPH::BoxShape(toJolt(safeExtents));
                 }
 
-                // First try to load pre-computed convex decomposition
                 auto decomposition = PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
                 if (decomposition && !decomposition->hulls.empty())
                 {
-                    // Create compound shape from multiple convex hulls
                     JPH::StaticCompoundShapeSettings compoundSettings;
 
                     for (const auto& hull : decomposition->hulls)
@@ -690,10 +688,8 @@ namespace core::physics
                             return result.Get();
                         }
                     }
-                    // Fall through to single hull if compound creation failed
                 }
 
-                // Fallback: create single convex hull from mesh vertices
                 auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
                 if (!meshData || meshData->vertices.empty())
                 {
@@ -781,26 +777,6 @@ namespace core::physics
         }
     }
 
-    JPH::ObjectLayer PhysicsWorld::getObjectLayer(BodyType type, bool isTrigger)
-    {
-        if (isTrigger)
-        {
-            return Layers::SENSOR;
-        }
-
-        switch (type)
-        {
-        case BodyType::Static:
-            return Layers::STATIC;
-        case BodyType::Dynamic:
-            return Layers::DYNAMIC;
-        case BodyType::Kinematic:
-            return Layers::KINEMATIC;
-        default:
-            return Layers::DYNAMIC;
-        }
-    }
-
     JPH::EMotionType PhysicsWorld::getMotionType(BodyType type)
     {
         switch (type)
@@ -854,8 +830,6 @@ namespace core::physics
     {
         return glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
     }
-
-    // --- Terrain HeightField body operations ---
 
     PhysicsWorld::TileCoordKey PhysicsWorld::makeTileKey(int32_t x, int32_t z)
     {

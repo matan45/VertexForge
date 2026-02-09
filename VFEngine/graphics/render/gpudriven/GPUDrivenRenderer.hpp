@@ -79,7 +79,6 @@ namespace render::gpudriven
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
 
-        // Terrain rendering
         std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
         std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
         std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
@@ -248,11 +247,9 @@ namespace render::gpudriven
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
-        // File-based terrain streaming callbacks
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
 
-        // Terrain profiling
         float getTerrainUpdateUs() const { return terrainUpdateUs_; }
         float getTerrainStreamingUs() const { return terrainStreamingUs_; }
         float getTerrainBuildTileDataUs() const { return terrainBuildTileDataUs_; }
@@ -264,7 +261,6 @@ namespace render::gpudriven
         std::string currentTerrainMaterialPath_;
         std::vector<TerrainLayerGPUData> terrainLayerData_;
 
-        // CPU profiling timings (microseconds)
         float terrainUpdateUs_ = 0.0f;
         float terrainStreamingUs_ = 0.0f;
         float terrainBuildTileDataUs_ = 0.0f;

@@ -80,11 +80,7 @@ namespace render::gpudriven
     class TerrainStreamManager
     {
     public:
-        // Callback to load tile LOD data on demand from file.
-        // Returns true if data is now available in tile->lodLevels[lod].
         using TileDataLoader = std::function<bool(terrain::TerrainTile&, uint8_t lodLevel)>;
-
-        // Callback to release tile RAM data after GPU eviction.
         using TileRAMEvictor = std::function<void(terrain::TerrainTile&)>;
 
     private:
@@ -121,9 +117,6 @@ namespace render::gpudriven
 
         void update(const std::vector<terrain::TerrainTile*>& visibleTiles,
                     const glm::vec3& cameraPosition);
-
-        void setMemoryBudget(size_t bytes) { config.memoryBudgetBytes = bytes; }
-        size_t getMemoryBudget() const { return config.memoryBudgetBytes; }
 
         void setTileDataLoader(TileDataLoader loader) { tileDataLoader = std::move(loader); }
         void setTileRAMEvictor(TileRAMEvictor evictor) { tileRAMEvictor = std::move(evictor); }

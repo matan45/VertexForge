@@ -29,7 +29,7 @@ namespace controllers::offscreen
         bool showGrid = true;
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
-        float deltaTime = 0.0f;  // Time since last frame in seconds
+        float deltaTime = 0.0f;
     };
 
     class FramePreparationSystem

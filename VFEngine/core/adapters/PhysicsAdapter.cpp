@@ -2,11 +2,6 @@
 #include "../../services/events/PhysicsEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 
-// =============================================================================
-// Static assertions to ensure enum synchronization across namespaces
-// =============================================================================
-
-// BodyType enums: core::physics::BodyType <-> services::RigidBodyData::Type
 static_assert(
     static_cast<int>(core::physics::BodyType::Static) ==
     static_cast<int>(services::RigidBodyData::Type::Static),
@@ -20,7 +15,6 @@ static_assert(
     static_cast<int>(services::RigidBodyData::Type::Kinematic),
     "BodyType::Kinematic mismatch between core::physics and services");
 
-// ColliderShape enums: core::physics::ColliderShape <-> services::ColliderData::Shape
 static_assert(
     static_cast<int>(core::physics::ColliderShape::Box) ==
     static_cast<int>(services::ColliderData::Shape::Box),
@@ -67,13 +61,12 @@ namespace core
         {
             auto& dispatcher = events::EventDispatcher::instance();
 
-            // Map body IDs to entity handles
             uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
             uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
 
             if (entityIdA == 0 || entityIdB == 0)
             {
-                return; // Skip if entities not found
+                return;
             }
 
             services::EntityHandle entityA{entityIdA};
@@ -81,7 +74,6 @@ namespace core
 
             if (event.isSensor)
             {
-                // Publish trigger enter notification
                 events::physics::TriggerEnterNotification notification;
                 notification.triggerEntity = entityA;
                 notification.otherEntity = entityB;
@@ -89,7 +81,6 @@ namespace core
             }
             else
             {
-                // Publish collision start notification
                 events::physics::CollisionStartNotification notification;
                 notification.entityA = entityA;
                 notification.entityB = entityB;
@@ -104,13 +95,12 @@ namespace core
         {
             auto& dispatcher = events::EventDispatcher::instance();
 
-            // Map body IDs to entity handles
             uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
             uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
 
             if (entityIdA == 0 || entityIdB == 0)
             {
-                return; // Skip if entities not found
+                return;
             }
 
             services::EntityHandle entityA{entityIdA};
@@ -118,7 +108,6 @@ namespace core
 
             if (event.isSensor)
             {
-                // Publish trigger exit notification
                 events::physics::TriggerExitNotification notification;
                 notification.triggerEntity = entityA;
                 notification.otherEntity = entityB;
@@ -126,7 +115,6 @@ namespace core
             }
             else
             {
-                // Publish collision end notification
                 events::physics::CollisionEndNotification notification;
                 notification.entityA = entityA;
                 notification.entityB = entityB;
@@ -246,7 +234,6 @@ namespace core
             break;
         }
 
-        // Query all properties from Jolt
         data.mass = physicsWorld->getMass(bodyId);
         data.linearDamping = physicsWorld->getLinearDamping(bodyId);
         data.angularDamping = physicsWorld->getAngularDamping(bodyId);

@@ -208,16 +208,13 @@ namespace handlers
         auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
         terrainService = terrainServiceImpl;
 
-        // Wire TerrainService to TerrainRenderAdapter for GPU-driven terrain rendering
         if (auto* terrainAdapter = bootstrap->getTerrainRenderAdapterInternal())
         {
             terrainAdapter->setTerrainService(terrainServiceImpl.get());
         }
 
-        // Wire GPU brush compute provider to TerrainService
         terrainServiceImpl->setBrushComputeProvider(bootstrap->getTerrainBrushComputeProvider());
 
-        // Wire physics provider to TerrainService for terrain collider operations
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             terrainServiceImpl->setPhysicsProvider(physicsProvider);
