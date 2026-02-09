@@ -741,6 +741,18 @@ namespace services
         auto cacheIt = fileCaches.find(terrainEntity.id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
+        // Read material properties from collider component if present
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        float friction = 0.5f;
+        float restitution = 0.0f;
+        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            friction = cc.friction;
+            restitution = cc.restitution;
+        }
+
         std::vector<TerrainTileColliderInfo> tileInfos;
         tileInfos.reserve(allTiles.size());
 
@@ -765,6 +777,8 @@ namespace services
             info.sampleCount = tile->config.getVertexCount();
             info.worldOrigin = tile->worldOrigin;
             info.vertexSpacing = tile->config.getVertexSpacing();
+            info.friction = friction;
+            info.restitution = restitution;
 
             tileInfos.push_back(info);
         }
@@ -774,8 +788,6 @@ namespace services
 
         physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(terrainEntity);
         if (registry.valid(ent))
         {
             if (!registry.all_of<components::TerrainColliderComponent>(ent))
@@ -1321,10 +1333,20 @@ namespace services
             }
         }
 
+        terrain::TerrainPhysicsConfig physicsConfig;
+        if (registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            physicsConfig.hasCollider = cc.hasCollider;
+            physicsConfig.collisionLayer = cc.collisionLayer;
+            physicsConfig.friction = cc.friction;
+            physicsConfig.restitution = cc.restitution;
+        }
+
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
             comp.gridMinX, comp.gridMinZ, comp.gridMaxX, comp.gridMaxZ,
-            comp.terrainMaterialPath);
+            comp.terrainMaterialPath, physicsConfig);
 
         if (result)
         {
@@ -1443,6 +1465,16 @@ namespace services
         for (int i = 0; i < 4; ++i)
             notification.config.lodDistances[i] = header.lodDistances[i];
         events::EventDispatcher::instance().publish(notification);
+
+        // Rebuild physics collider if the saved terrain had one
+        if (header.physicsConfig.hasCollider && physicsProvider)
+        {
+            auto& cc = parentEntity.addComponent<components::TerrainColliderComponent>();
+            cc.collisionLayer = header.physicsConfig.collisionLayer;
+            cc.friction = header.physicsConfig.friction;
+            cc.restitution = header.physicsConfig.restitution;
+            addTerrainCollider(parentHandle);
+        }
 
         vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
