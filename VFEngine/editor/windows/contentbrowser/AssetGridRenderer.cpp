@@ -98,7 +98,6 @@ namespace windows
                     result.clickedType = asset.type;
 
                     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-                        && asset.type != AssetType::Scene
                         && (asset.type != AssetType::Other || !fs::is_directory(asset.path)))
                     {
                         result.wasDoubleClicked = true;

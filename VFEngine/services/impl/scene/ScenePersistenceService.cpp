@@ -173,13 +173,15 @@ namespace services
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
-        events::terrain::TerrainDeletedNotification terrainNotif;
-        dispatcher.publish(terrainNotif);
+        sceneGraph->clearScene();
 
         if (entityStateService)
         {
             entityStateService->clearSelection();
         }
+
+        events::scene::SceneClearedNotification clearedNotif;
+        dispatcher.publish(clearedNotif);
 
         events::scene::SceneLoadingStartedNotification startNotif;
         startNotif.scenePath = filePath;
