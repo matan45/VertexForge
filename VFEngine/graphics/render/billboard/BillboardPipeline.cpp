@@ -325,6 +325,12 @@ namespace render::billboard
         auto texture = std::make_unique<core::Texture>(device);
         texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Unorm, false);
 
+        if (!texture->getImageView())
+        {
+            loggerError("Failed to load billboard texture: {}", texturePath);
+            return false;
+        }
+
         // Allocate a descriptor set for this texture
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;

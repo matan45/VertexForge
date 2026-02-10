@@ -333,6 +333,7 @@ namespace serialization
         case components::BillboardIconType::Audio2D: return "audio2D";
         case components::BillboardIconType::Audio3D: return "audio3D";
         case components::BillboardIconType::Particle: return "particle";
+        case components::BillboardIconType::Billboard: return "billboard";
         default: return "custom";
         }
     }
@@ -346,6 +347,7 @@ namespace serialization
         if (str == "audio2D") return components::BillboardIconType::Audio2D;
         if (str == "audio3D") return components::BillboardIconType::Audio3D;
         if (str == "particle") return components::BillboardIconType::Particle;
+        if (str == "billboard") return components::BillboardIconType::Billboard;
         // Legacy support
         if (str == "light") return components::BillboardIconType::PointLight;
         if (str == "audioSource") return components::BillboardIconType::Audio3D;
