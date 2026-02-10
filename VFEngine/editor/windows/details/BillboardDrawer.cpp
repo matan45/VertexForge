@@ -48,7 +48,7 @@ namespace windows::details
 
             changed |= drawTexturePath(data);
             ImGui::Spacing();
-            changed |= drawSizeSettings(data);
+            changed |= drawSizeInput(data);
             ImGui::Spacing();
             changed |= drawColorTint(data);
 
@@ -148,25 +148,17 @@ namespace windows::details
         return changed;
     }
 
-    bool BillboardDrawer::drawSizeSettings(services::BillboardData& data)
+    bool BillboardDrawer::drawSizeInput(services::BillboardData& data)
     {
         bool changed = false;
-
-        const char* sizeModes[] = {"Screen Space", "World Space"};
-        int currentMode = static_cast<int>(data.sizeMode);
-        if (ImGui::Combo("Size Mode##Billboard", &currentMode, sizeModes, IM_ARRAYSIZE(sizeModes)))
-        {
-            data.sizeMode = static_cast<uint32_t>(currentMode);
-            changed = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Screen Space: constant pixel size\nWorld Space: scales with distance");
-        }
 
         if (ImGui::DragFloat2("Size##Billboard", &data.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
         {
             changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Billboard size in world units");
         }
 
         return changed;

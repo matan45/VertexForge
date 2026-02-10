@@ -38,7 +38,7 @@ namespace services {
         billboard.selectable = true;
         billboard.sizeMode = components::BillboardSizeMode::WorldSpace;
         billboard.size = glm::vec2(1.0f, 1.0f);
-        billboard.iconType = components::BillboardIconType::Custom;
+        billboard.iconType = components::BillboardIconType::Billboard;
         return true;
     }
 
@@ -93,7 +93,6 @@ namespace services {
 
         BillboardData data;
         data.texturePath = comp.texturePath;
-        data.sizeMode = static_cast<uint32_t>(comp.sizeMode);
         data.size = comp.size;
         data.colorTint = comp.colorTint;
         return data;
@@ -116,7 +115,6 @@ namespace services {
         }
 
         comp.texturePath = billboardData.texturePath;
-        comp.sizeMode = static_cast<components::BillboardSizeMode>(billboardData.sizeMode);
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
         return true;

@@ -66,7 +66,14 @@ void main() {
 
     // Map input UV (0-1) to tile UV within atlas
     vec2 tileSize = vec2(1.0 / gridSize);
-    fragTexCoord = (vec2(tileU, tileV) + inTexCoord) * tileSize;
+    vec2 uv = inTexCoord;
+
+    // Custom textures (gridSize == 1) need V flip since .vfImage stores top-to-bottom
+    if (gridSize == 1.0) {
+        uv.y = 1.0 - uv.y;
+    }
+
+    fragTexCoord = (vec2(tileU, tileV) + uv) * tileSize;
 
     // Pass through color tint
     fragColorTint = inColorTint;

@@ -12,7 +12,7 @@ namespace windows::details
     private:
         bool drawHeader(bool& outRemove);
         bool drawTexturePath(services::BillboardData& data);
-        bool drawSizeSettings(services::BillboardData& data);
+        bool drawSizeInput(services::BillboardData& data);
         bool drawColorTint(services::BillboardData& data);
     };
 }

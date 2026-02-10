@@ -208,7 +208,6 @@ namespace services
     struct BillboardData
     {
         std::string texturePath; // Path to .vfImage file
-        uint32_t sizeMode = 1;  // 0 = ScreenSpace, 1 = WorldSpace
         glm::vec2 size{1.0f, 1.0f};
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
     };
