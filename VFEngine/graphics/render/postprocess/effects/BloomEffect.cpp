@@ -147,8 +147,13 @@ namespace render::postprocess
         if (mipLevels.empty())
             return;
 
+        // Use the runtime passes setting, clamped to allocated mip count
+        uint32_t activeMips = std::min(currentPasses, mipCount);
+        if (activeMips == 0)
+            return;
+
         // === Phase 1: Downsample ===
-        for (uint32_t i = 0; i < mipCount; ++i)
+        for (uint32_t i = 0; i < activeMips; ++i)
         {
             auto& mip = mipLevels[i];
 
@@ -203,7 +208,7 @@ namespace render::postprocess
 
         // === Phase 2: Upsample (with additive blend) ===
         // Start from second-to-last mip, upsample onto the mip above
-        for (int32_t i = static_cast<int32_t>(mipCount) - 2; i >= 0; --i)
+        for (int32_t i = static_cast<int32_t>(activeMips) - 2; i >= 0; --i)
         {
             auto& mip = mipLevels[i];
 
