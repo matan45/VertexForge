@@ -367,11 +367,14 @@ namespace render::postprocess
         auto syncEffect = [&](::postprocess::EffectType type, bool enabled,
                               auto makeEffect)
         {
-            if (enabled && !hasEffect(type))
+            // Only add if both globally enabled and per-effect enabled
+            bool shouldBeActive = settings.enabled && enabled;
+
+            if (shouldBeActive && !hasEffect(type))
             {
                 addEffect(makeEffect());
             }
-            else if (!enabled && hasEffect(type))
+            else if (!shouldBeActive && hasEffect(type))
             {
                 removeEffect(type);
             }

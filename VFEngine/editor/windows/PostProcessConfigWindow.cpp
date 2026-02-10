@@ -29,10 +29,6 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        events::postprocess::SetPostProcessEnabledCommand enabledCmd;
-        enabledCmd.enabled = settings.enabled;
-        dispatcher.execute(enabledCmd);
-
         events::postprocess::ApplyPostProcessSettingsCommand settingsCmd;
         settingsCmd.settings = settings;
         dispatcher.execute(settingsCmd);
