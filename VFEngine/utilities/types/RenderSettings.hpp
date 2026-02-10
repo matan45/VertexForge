@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "../postprocess/PostProcessTypes.hpp"
 
 namespace types
 {
@@ -123,6 +124,7 @@ namespace types
         ShadowSettings shadows;
         CullingSettings culling;
         TerrainSettings terrain;
+        postprocess::PostProcessSettings postProcess;
 
         static RenderSettings createDefault()
         {

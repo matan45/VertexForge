@@ -593,6 +593,46 @@ namespace serialization
         return types::CascadeSplitMode::Practical;
     }
 
+    std::string SceneSerialization::toneMappingModeToString(postprocess::ToneMappingMode mode)
+    {
+        switch (mode)
+        {
+        case postprocess::ToneMappingMode::ACES: return "aces";
+        case postprocess::ToneMappingMode::Reinhard: return "reinhard";
+        case postprocess::ToneMappingMode::Uncharted2: return "uncharted2";
+        case postprocess::ToneMappingMode::Linear: return "linear";
+        default: return "aces";
+        }
+    }
+
+    postprocess::ToneMappingMode SceneSerialization::stringToToneMappingMode(const std::string& str)
+    {
+        if (str == "aces") return postprocess::ToneMappingMode::ACES;
+        if (str == "reinhard") return postprocess::ToneMappingMode::Reinhard;
+        if (str == "uncharted2") return postprocess::ToneMappingMode::Uncharted2;
+        if (str == "linear") return postprocess::ToneMappingMode::Linear;
+        return postprocess::ToneMappingMode::ACES;
+    }
+
+    std::string SceneSerialization::fxaaQualityToString(postprocess::FXAAQuality quality)
+    {
+        switch (quality)
+        {
+        case postprocess::FXAAQuality::Low: return "low";
+        case postprocess::FXAAQuality::Medium: return "medium";
+        case postprocess::FXAAQuality::High: return "high";
+        default: return "medium";
+        }
+    }
+
+    postprocess::FXAAQuality SceneSerialization::stringToFXAAQuality(const std::string& str)
+    {
+        if (str == "low") return postprocess::FXAAQuality::Low;
+        if (str == "medium") return postprocess::FXAAQuality::Medium;
+        if (str == "high") return postprocess::FXAAQuality::High;
+        return postprocess::FXAAQuality::Medium;
+    }
+
     json SceneSerialization::serializeCollider(const components::ColliderComponent& collider)
     {
         json j;
@@ -1055,6 +1095,8 @@ namespace serialization
             {"shadowLOD", settings.terrain.shadowLOD}
         };
 
+        j["postProcess"] = serializePostProcessSettings(settings.postProcess);
+
         return j;
     }
 
@@ -1121,6 +1163,144 @@ namespace serialization
         {
             // Initialize terrain settings with defaults for old scene files
             settings.terrain = types::TerrainSettings{};
+        }
+
+        if (j.contains("postProcess") && j["postProcess"].is_object())
+        {
+            deserializePostProcessSettings(j["postProcess"], settings.postProcess);
+        }
+        else
+        {
+            settings.postProcess = postprocess::PostProcessSettings::createDefault();
+        }
+    }
+
+    json SceneSerialization::serializePostProcessSettings(const postprocess::PostProcessSettings& settings)
+    {
+        json j;
+
+        j["enabled"] = settings.enabled;
+
+        j["toneMapping"] = {
+            {"enabled", settings.toneMapping.enabled},
+            {"mode", toneMappingModeToString(settings.toneMapping.mode)},
+            {"exposure", settings.toneMapping.exposure},
+            {"gamma", settings.toneMapping.gamma}
+        };
+
+        j["fxaa"] = {
+            {"enabled", settings.fxaa.enabled},
+            {"quality", fxaaQualityToString(settings.fxaa.quality)},
+            {"edgeThresholdMin", settings.fxaa.edgeThresholdMin},
+            {"edgeThreshold", settings.fxaa.edgeThreshold}
+        };
+
+        j["bloom"] = {
+            {"enabled", settings.bloom.enabled},
+            {"threshold", settings.bloom.threshold},
+            {"intensity", settings.bloom.intensity},
+            {"radius", settings.bloom.radius},
+            {"passes", settings.bloom.passes}
+        };
+
+        j["vignette"] = {
+            {"enabled", settings.vignette.enabled},
+            {"intensity", settings.vignette.intensity},
+            {"radius", settings.vignette.radius},
+            {"softness", settings.vignette.softness}
+        };
+
+        j["chromaticAberration"] = {
+            {"enabled", settings.chromaticAberration.enabled},
+            {"intensity", settings.chromaticAberration.intensity}
+        };
+
+        j["filmGrain"] = {
+            {"enabled", settings.filmGrain.enabled},
+            {"intensity", settings.filmGrain.intensity},
+            {"size", settings.filmGrain.size}
+        };
+
+        return j;
+    }
+
+    void SceneSerialization::deserializePostProcessSettings(const json& j, postprocess::PostProcessSettings& settings)
+    {
+        if (j.contains("enabled") && j["enabled"].is_boolean())
+            settings.enabled = j["enabled"].get<bool>();
+
+        if (j.contains("toneMapping") && j["toneMapping"].is_object())
+        {
+            const auto& tm = j["toneMapping"];
+            if (tm.contains("enabled") && tm["enabled"].is_boolean())
+                settings.toneMapping.enabled = tm["enabled"].get<bool>();
+            if (tm.contains("mode") && tm["mode"].is_string())
+                settings.toneMapping.mode = stringToToneMappingMode(tm["mode"].get<std::string>());
+            if (tm.contains("exposure") && tm["exposure"].is_number())
+                settings.toneMapping.exposure = std::clamp(tm["exposure"].get<float>(), 0.01f, 20.0f);
+            if (tm.contains("gamma") && tm["gamma"].is_number())
+                settings.toneMapping.gamma = std::clamp(tm["gamma"].get<float>(), 0.1f, 5.0f);
+        }
+
+        if (j.contains("fxaa") && j["fxaa"].is_object())
+        {
+            const auto& fxaa = j["fxaa"];
+            if (fxaa.contains("enabled") && fxaa["enabled"].is_boolean())
+                settings.fxaa.enabled = fxaa["enabled"].get<bool>();
+            if (fxaa.contains("quality") && fxaa["quality"].is_string())
+                settings.fxaa.quality = stringToFXAAQuality(fxaa["quality"].get<std::string>());
+            if (fxaa.contains("edgeThresholdMin") && fxaa["edgeThresholdMin"].is_number())
+                settings.fxaa.edgeThresholdMin = std::clamp(fxaa["edgeThresholdMin"].get<float>(), 0.0f, 1.0f);
+            if (fxaa.contains("edgeThreshold") && fxaa["edgeThreshold"].is_number())
+                settings.fxaa.edgeThreshold = std::clamp(fxaa["edgeThreshold"].get<float>(), 0.0f, 1.0f);
+        }
+
+        if (j.contains("bloom") && j["bloom"].is_object())
+        {
+            const auto& bloom = j["bloom"];
+            if (bloom.contains("enabled") && bloom["enabled"].is_boolean())
+                settings.bloom.enabled = bloom["enabled"].get<bool>();
+            if (bloom.contains("threshold") && bloom["threshold"].is_number())
+                settings.bloom.threshold = std::clamp(bloom["threshold"].get<float>(), 0.0f, 10.0f);
+            if (bloom.contains("intensity") && bloom["intensity"].is_number())
+                settings.bloom.intensity = std::clamp(bloom["intensity"].get<float>(), 0.0f, 5.0f);
+            if (bloom.contains("radius") && bloom["radius"].is_number())
+                settings.bloom.radius = std::clamp(bloom["radius"].get<float>(), 0.0f, 1.0f);
+            if (bloom.contains("passes") && bloom["passes"].is_number_unsigned())
+                settings.bloom.passes = std::clamp(bloom["passes"].get<uint32_t>(), 1u, 10u);
+        }
+
+        if (j.contains("vignette") && j["vignette"].is_object())
+        {
+            const auto& vignette = j["vignette"];
+            if (vignette.contains("enabled") && vignette["enabled"].is_boolean())
+                settings.vignette.enabled = vignette["enabled"].get<bool>();
+            if (vignette.contains("intensity") && vignette["intensity"].is_number())
+                settings.vignette.intensity = std::clamp(vignette["intensity"].get<float>(), 0.0f, 1.0f);
+            if (vignette.contains("radius") && vignette["radius"].is_number())
+                settings.vignette.radius = std::clamp(vignette["radius"].get<float>(), 0.0f, 2.0f);
+            if (vignette.contains("softness") && vignette["softness"].is_number())
+                settings.vignette.softness = std::clamp(vignette["softness"].get<float>(), 0.0f, 1.0f);
+        }
+
+        if (j.contains("chromaticAberration") && j["chromaticAberration"].is_object())
+        {
+            const auto& ca = j["chromaticAberration"];
+            if (ca.contains("enabled") && ca["enabled"].is_boolean())
+                settings.chromaticAberration.enabled = ca["enabled"].get<bool>();
+            if (ca.contains("intensity") && ca["intensity"].is_number())
+                settings.chromaticAberration.intensity = std::clamp(ca["intensity"].get<float>(), 0.0f, 0.1f);
+        }
+
+        if (j.contains("filmGrain") && j["filmGrain"].is_object())
+        {
+            const auto& fg = j["filmGrain"];
+            if (fg.contains("enabled") && fg["enabled"].is_boolean())
+                settings.filmGrain.enabled = fg["enabled"].get<bool>();
+            if (fg.contains("intensity") && fg["intensity"].is_number())
+                settings.filmGrain.intensity = std::clamp(fg["intensity"].get<float>(), 0.0f, 1.0f);
+            if (fg.contains("size") && fg["size"].is_number())
+                settings.filmGrain.size = std::clamp(fg["size"].get<float>(), 0.1f, 5.0f);
         }
     }
 
