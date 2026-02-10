@@ -7,6 +7,6 @@ void main()
     // Vertex 1: ( 3, -1)  UV (2, 1)
     // Vertex 2: (-1,  3)  UV (0,-1)
     vec2 pos = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-    texCoord = vec2(pos.x, 1.0 - pos.y);
+    texCoord = pos;
     gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
 }

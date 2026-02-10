@@ -47,7 +47,7 @@ namespace postprocess
     struct BloomSettings
     {
         bool enabled = false;
-        float threshold = 1.0f;
+        float threshold = 0.7f;
         float intensity = 0.5f;
         float radius = 0.5f;
         uint32_t passes = 5;

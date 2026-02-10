@@ -153,13 +153,13 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Threshold", &settings.bloom.threshold, 0.01f, 0.0f, 5.0f, "%.2f"))
+                if (ImGui::DragFloat("Threshold", &settings.bloom.threshold, 0.01f, 0.0f, 1.0f, "%.2f"))
                 {
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Brightness threshold for bloom extraction.\nOnly pixels brighter than this will bloom.");
+                    ImGui::SetTooltip("Brightness threshold for bloom extraction.\nLower values = more bloom (LDR scenes need ~0.5-0.8).");
                 }
 
                 if (ImGui::DragFloat("Intensity", &settings.bloom.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))

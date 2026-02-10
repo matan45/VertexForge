@@ -7,6 +7,7 @@
 #include "../render/DebugRenderer.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
+#include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/tools/ShadowDebugRenderer.hpp"
 #include "types/RenderSettings.hpp"
 #include "offscreen/IBLController.hpp"
@@ -363,7 +364,7 @@ namespace controllers
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
         {
-            pipeline->updateSettings(settings);
+            pipeline->applySettings(settings);
         }
     }
 
@@ -383,7 +384,7 @@ namespace controllers
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
         {
-            pipeline->updateSettings(currentPostProcessSettings);
+            pipeline->applySettings(currentPostProcessSettings);
         }
     }
 

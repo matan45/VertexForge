@@ -1,4 +1,10 @@
 #include "PostProcessPipeline.hpp"
+#include "effects/ToneMappingEffect.hpp"
+#include "effects/FXAAEffect.hpp"
+#include "effects/BloomEffect.hpp"
+#include "effects/VignetteEffect.hpp"
+#include "effects/ChromaticAberrationEffect.hpp"
+#include "effects/FilmGrainEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -348,6 +354,48 @@ namespace render::postprocess
     {
         for (auto& effect : effects)
             effect->updateParameters(settings);
+    }
+
+    void PostProcessPipeline::applySettings(const ::postprocess::PostProcessSettings& settings)
+    {
+        auto hasEffect = [this](::postprocess::EffectType type) -> bool
+        {
+            return std::any_of(effects.begin(), effects.end(),
+                [type](const auto& e) { return e->getType() == type; });
+        };
+
+        auto syncEffect = [&](::postprocess::EffectType type, bool enabled,
+                              auto makeEffect)
+        {
+            if (enabled && !hasEffect(type))
+            {
+                addEffect(makeEffect());
+            }
+            else if (!enabled && hasEffect(type))
+            {
+                removeEffect(type);
+            }
+        };
+
+        syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
+            [this]() { return std::make_unique<ToneMappingEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
+            [this]() { return std::make_unique<FXAAEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,
+            [this]() { return std::make_unique<BloomEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::Vignette, settings.vignette.enabled,
+            [this]() { return std::make_unique<VignetteEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::ChromaticAberration, settings.chromaticAberration.enabled,
+            [this]() { return std::make_unique<ChromaticAberrationEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::FilmGrain, settings.filmGrain.enabled,
+            [this]() { return std::make_unique<FilmGrainEffect>(device); });
+
+        updateSettings(settings);
     }
 
     void PostProcessPipeline::sortEffects()

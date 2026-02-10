@@ -61,6 +61,7 @@ namespace render::postprocess
         void addEffect(std::unique_ptr<PostProcessEffect> effect);
         void removeEffect(::postprocess::EffectType type);
         void updateSettings(const ::postprocess::PostProcessSettings& settings);
+        void applySettings(const ::postprocess::PostProcessSettings& settings);
 
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }

@@ -25,9 +25,9 @@ float hash(vec2 p)
     return fract((p3.x + p3.y) * p3.z);
 }
 
-float grain(vec2 uv, float t)
+float grain(vec2 pixelCoord, float t)
 {
-    return hash(uv * pc.size + t) * 2.0 - 1.0;
+    return hash(floor(pixelCoord / pc.size) + t) * 2.0 - 1.0;
 }
 
 void main()
@@ -37,8 +37,9 @@ void main()
     // Compute luminance for weighting
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
-    // Generate animated grain noise
-    float noise = grain(texCoord, pc.time);
+    // Generate animated grain noise in pixel space
+    vec2 pixelCoord = gl_FragCoord.xy;
+    float noise = grain(pixelCoord, pc.time);
 
     // Luminance-weighted: stronger grain in darker areas
     float weight = (1.0 - luma) * pc.intensity;
