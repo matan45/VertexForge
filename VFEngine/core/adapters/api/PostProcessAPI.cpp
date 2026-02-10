@@ -459,5 +459,213 @@ namespace core::api
                     s.filmGrain.size = extractFloat(args[0], "PostProcess.filmGrain.setSize");
                 });
             });
+
+        // =============================================
+        // God Rays
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.enabled = extractBool(args, 0);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getIntensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.intensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.intensity = extractFloat(args[0], "PostProcess.godRays.setIntensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getDecay",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.decay);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setDecay",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.decay = extractFloat(args[0], "PostProcess.godRays.setDecay");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getDensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.density);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setDensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.density = extractFloat(args[0], "PostProcess.godRays.setDensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getWeight",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.weight);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setWeight",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.weight = extractFloat(args[0], "PostProcess.godRays.setWeight");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getSampleCount",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.godRays.sampleCount));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setSampleCount",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t count = extractInt64(args[0], "PostProcess.godRays.setSampleCount");
+                    if (count >= 16 && count <= 128)
+                    {
+                        s.godRays.sampleCount = static_cast<int>(count);
+                    }
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_getThreshold",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.godRays.threshold);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_godRays_setThreshold",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.godRays.threshold = extractFloat(args[0], "PostProcess.godRays.setThreshold");
+                });
+            });
+
+        // =============================================
+        // Depth of Field
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.enabled = extractBool(args, 0);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocalDistance",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focalDistance);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setFocalDistance",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.focalDistance = extractFloat(args[0], "PostProcess.dof.setFocalDistance");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocalRange",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focalRange);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setFocalRange",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.focalRange = extractFloat(args[0], "PostProcess.dof.setFocalRange");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getMaxBlurRadius",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.maxBlurRadius);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setMaxBlurRadius",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.maxBlurRadius = extractFloat(args[0], "PostProcess.dof.setMaxBlurRadius");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getSampleCount",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.depthOfField.sampleCount));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setSampleCount",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t count = extractInt64(args[0], "PostProcess.dof.setSampleCount");
+                    if (count >= 4 && count <= 32)
+                    {
+                        s.depthOfField.sampleCount = static_cast<int>(count);
+                    }
+                });
+            });
     }
 }

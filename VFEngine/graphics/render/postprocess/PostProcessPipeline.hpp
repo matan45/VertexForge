@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PostProcessEffect.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -13,6 +14,18 @@ namespace core
 
 namespace render::postprocess
 {
+    struct SunInfo
+    {
+        glm::vec2 screenPos{0.5f};
+        bool hasSun = false;
+    };
+
+    struct CameraInfo
+    {
+        float nearPlane = 0.1f;
+        float farPlane = 1000.0f;
+    };
+
     struct PingPongTarget
     {
         vk::Image image;
@@ -45,6 +58,12 @@ namespace render::postprocess
         vk::DescriptorSet descriptorSetB; // samples targetB
         std::vector<vk::DescriptorSet> sceneDescriptorSets; // samples scene color per swapchain image
 
+        // Sun data for effects that need it (God Rays)
+        SunInfo sunInfo{};
+
+        // Camera data for effects that need it (Depth of Field)
+        CameraInfo cameraInfo{};
+
         // Effect chain (sorted by priority)
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
 
@@ -62,6 +81,12 @@ namespace render::postprocess
         void removeEffect(::postprocess::EffectType type);
         void updateSettings(const ::postprocess::PostProcessSettings& settings);
         void applySettings(const ::postprocess::PostProcessSettings& settings);
+
+        void setSunData(const glm::vec2& screenPos, bool hasSun);
+        const SunInfo& getSunData() const { return sunInfo; }
+
+        void setCameraData(float nearPlane, float farPlane);
+        const CameraInfo& getCameraData() const { return cameraInfo; }
 
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }

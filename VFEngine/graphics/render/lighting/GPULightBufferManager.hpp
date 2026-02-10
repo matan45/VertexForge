@@ -2,6 +2,7 @@
 
 #include "GPULightTypes.hpp"
 #include <vulkan/vulkan.hpp>
+#include <optional>
 #include <vector>
 #include <unordered_set>
 
@@ -93,6 +94,12 @@ namespace render::lighting
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
 
         uint32_t getDirectionalLightCount() const { return directionalCount; }
+        std::optional<glm::vec3> getFirstDirectionalLightDirection() const
+        {
+            if (directionalCount > 0)
+                return cpuDirectionalLights[0].direction;
+            return std::nullopt;
+        }
         uint32_t getPointLightCount() const { return pointCount; }
         uint32_t getSpotLightCount() const { return spotCount; }
 

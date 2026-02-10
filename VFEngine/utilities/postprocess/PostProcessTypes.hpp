@@ -10,7 +10,9 @@ namespace postprocess
         Bloom,
         Vignette,
         ChromaticAberration,
-        FilmGrain
+        FilmGrain,
+        GodRays,
+        DepthOfField
     };
 
     enum class ToneMappingMode : uint8_t
@@ -78,6 +80,26 @@ namespace postprocess
         float size = 1.6f;
     };
 
+    struct GodRaysSettings
+    {
+        bool enabled = false;
+        float intensity = 0.8f;
+        float decay = 0.98f;
+        float density = 1.0f;
+        float weight = 1.0f;
+        int sampleCount = 64;
+        float threshold = 0.5f;
+    };
+
+    struct DepthOfFieldSettings
+    {
+        bool enabled = false;
+        float focalDistance = 10.0f;
+        float focalRange = 5.0f;
+        float maxBlurRadius = 5.0f;
+        int sampleCount = 32;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = true;
@@ -88,6 +110,8 @@ namespace postprocess
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;
         FilmGrainSettings filmGrain;
+        GodRaysSettings godRays;
+        DepthOfFieldSettings depthOfField;
 
         static PostProcessSettings createDefault()
         {

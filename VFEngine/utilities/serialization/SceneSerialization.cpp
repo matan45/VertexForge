@@ -1222,6 +1222,24 @@ namespace serialization
             {"size", settings.filmGrain.size}
         };
 
+        j["godRays"] = {
+            {"enabled", settings.godRays.enabled},
+            {"intensity", settings.godRays.intensity},
+            {"decay", settings.godRays.decay},
+            {"density", settings.godRays.density},
+            {"weight", settings.godRays.weight},
+            {"sampleCount", settings.godRays.sampleCount},
+            {"threshold", settings.godRays.threshold}
+        };
+
+        j["depthOfField"] = {
+            {"enabled", settings.depthOfField.enabled},
+            {"focalDistance", settings.depthOfField.focalDistance},
+            {"focalRange", settings.depthOfField.focalRange},
+            {"maxBlurRadius", settings.depthOfField.maxBlurRadius},
+            {"sampleCount", settings.depthOfField.sampleCount}
+        };
+
         return j;
     }
 
@@ -1304,6 +1322,40 @@ namespace serialization
                 settings.filmGrain.intensity = std::clamp(fg["intensity"].get<float>(), 0.0f, 1.0f);
             if (fg.contains("size") && fg["size"].is_number())
                 settings.filmGrain.size = std::clamp(fg["size"].get<float>(), 0.1f, 5.0f);
+        }
+
+        if (j.contains("godRays") && j["godRays"].is_object())
+        {
+            const auto& gr = j["godRays"];
+            if (gr.contains("enabled") && gr["enabled"].is_boolean())
+                settings.godRays.enabled = gr["enabled"].get<bool>();
+            if (gr.contains("intensity") && gr["intensity"].is_number())
+                settings.godRays.intensity = std::clamp(gr["intensity"].get<float>(), 0.0f, 2.0f);
+            if (gr.contains("decay") && gr["decay"].is_number())
+                settings.godRays.decay = std::clamp(gr["decay"].get<float>(), 0.9f, 1.0f);
+            if (gr.contains("density") && gr["density"].is_number())
+                settings.godRays.density = std::clamp(gr["density"].get<float>(), 0.1f, 2.0f);
+            if (gr.contains("weight") && gr["weight"].is_number())
+                settings.godRays.weight = std::clamp(gr["weight"].get<float>(), 0.0f, 2.0f);
+            if (gr.contains("sampleCount") && gr["sampleCount"].is_number_integer())
+                settings.godRays.sampleCount = std::clamp(gr["sampleCount"].get<int>(), 16, 128);
+            if (gr.contains("threshold") && gr["threshold"].is_number())
+                settings.godRays.threshold = std::clamp(gr["threshold"].get<float>(), 0.0f, 1.0f);
+        }
+
+        if (j.contains("depthOfField") && j["depthOfField"].is_object())
+        {
+            const auto& df = j["depthOfField"];
+            if (df.contains("enabled") && df["enabled"].is_boolean())
+                settings.depthOfField.enabled = df["enabled"].get<bool>();
+            if (df.contains("focalDistance") && df["focalDistance"].is_number())
+                settings.depthOfField.focalDistance = std::clamp(df["focalDistance"].get<float>(), 0.1f, 1000.0f);
+            if (df.contains("focalRange") && df["focalRange"].is_number())
+                settings.depthOfField.focalRange = std::clamp(df["focalRange"].get<float>(), 0.1f, 100.0f);
+            if (df.contains("maxBlurRadius") && df["maxBlurRadius"].is_number())
+                settings.depthOfField.maxBlurRadius = std::clamp(df["maxBlurRadius"].get<float>(), 0.0f, 20.0f);
+            if (df.contains("sampleCount") && df["sampleCount"].is_number_integer())
+                settings.depthOfField.sampleCount = std::clamp(df["sampleCount"].get<int>(), 4, 32);
         }
     }
 
