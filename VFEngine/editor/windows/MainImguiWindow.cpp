@@ -27,6 +27,7 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unsubscribe(sceneClearedToken);
+        dispatcher.unsubscribe(sceneLoadedToken);
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(terrainLoadStartedToken);
     }
@@ -39,6 +40,12 @@ namespace windows
             [this](const events::scene::SceneClearedNotification&)
             {
                 onSceneCleared();
+            });
+
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                postProcessConfigWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(

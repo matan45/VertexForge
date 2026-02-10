@@ -20,9 +20,17 @@ layout(push_constant) uniform PushConstants {
     uint quality; // 0=Low, 1=Medium, 2=High
 } pc;
 
+float linearToSRGB(float c)
+{
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
 float luminance(vec3 color)
 {
-    return dot(color, vec3(0.299, 0.587, 0.114));
+    // Convert to perceptual (sRGB) space for edge detection
+    // since hardware sRGB sampling gives us linear values
+    vec3 s = vec3(linearToSRGB(color.r), linearToSRGB(color.g), linearToSRGB(color.b));
+    return dot(s, vec3(0.299, 0.587, 0.114));
 }
 
 void main()

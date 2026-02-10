@@ -325,14 +325,13 @@ namespace render::postprocess
 
     void PostProcessPipeline::addEffect(std::unique_ptr<PostProcessEffect> effect)
     {
+        auto* ptr = effect.get();
         effects.push_back(std::move(effect));
         sortEffects();
 
-        if (initialized)
+        if (initialized && !ptr->isInitialized())
         {
-            auto& added = effects.back();
-            if (!added->isInitialized())
-                added->init(renderPass, swapChain.getSwapchainExtent());
+            ptr->init(renderPass, swapChain.getSwapchainExtent());
         }
     }
 

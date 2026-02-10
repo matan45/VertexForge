@@ -43,6 +43,7 @@ namespace windows
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;
+        events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
         events::SubscriptionToken terrainLoadStartedToken;
         bool isLoadingTerrain = false;

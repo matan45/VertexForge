@@ -14,6 +14,15 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+        if (visible)
+        {
+            loadSettings();
+        }
+    }
+
     void PostProcessConfigWindow::loadSettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -158,12 +167,12 @@ namespace windows
                     ImGui::SetTooltip("Brightness threshold for bloom extraction.\nLower values = more bloom (LDR scenes need ~0.5-0.8).");
                 }
 
-                if (ImGui::DragFloat("Intensity", &settings.bloom.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                if (ImGui::DragFloat("Intensity##bloom", &settings.bloom.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
                 {
                     isDirty = true;
                 }
 
-                if (ImGui::DragFloat("Radius", &settings.bloom.radius, 0.01f, 0.0f, 2.0f, "%.2f"))
+                if (ImGui::DragFloat("Radius##bloom", &settings.bloom.radius, 0.01f, 0.0f, 2.0f, "%.2f"))
                 {
                     isDirty = true;
                 }
@@ -203,12 +212,12 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                if (ImGui::SliderFloat("Intensity", &settings.vignette.intensity, 0.0f, 1.0f, "%.2f"))
+                if (ImGui::SliderFloat("Intensity##vignette", &settings.vignette.intensity, 0.0f, 1.0f, "%.2f"))
                 {
                     isDirty = true;
                 }
 
-                if (ImGui::SliderFloat("Radius", &settings.vignette.radius, 0.0f, 1.5f, "%.2f"))
+                if (ImGui::SliderFloat("Radius##vignette", &settings.vignette.radius, 0.0f, 1.5f, "%.2f"))
                 {
                     isDirty = true;
                 }
@@ -246,7 +255,7 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Intensity", &settings.chromaticAberration.intensity, 0.001f, 0.0f, 0.05f, "%.4f"))
+                if (ImGui::DragFloat("Intensity##ca", &settings.chromaticAberration.intensity, 0.001f, 0.0f, 0.05f, "%.4f"))
                 {
                     isDirty = true;
                 }
@@ -275,7 +284,7 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Intensity", &settings.filmGrain.intensity, 0.01f, 0.0f, 1.0f, "%.2f"))
+                if (ImGui::DragFloat("Intensity##grain", &settings.filmGrain.intensity, 0.01f, 0.0f, 1.0f, "%.2f"))
                 {
                     isDirty = true;
                 }

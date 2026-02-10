@@ -24,5 +24,6 @@ namespace windows
     public:
         void draw();
         void show();
+        void notifySceneLoaded();
     };
 }
