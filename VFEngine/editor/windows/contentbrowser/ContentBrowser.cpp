@@ -9,6 +9,7 @@
 #include "events/ApplicationEvents.hpp"
 #include "events/ProjectEvents.hpp"
 #include "events/TerrainEvents.hpp"
+#include "events/SceneEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
@@ -219,6 +220,12 @@ namespace windows
                     {
                         events::terrain::BeginTerrainLoadCommand cmd;
                         cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                        events::EventDispatcher::instance().execute(cmd);
+                    }
+                    else if (selectedType == AssetType::Scene)
+                    {
+                        events::scene::LoadSceneCommand cmd;
+                        cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                         events::EventDispatcher::instance().execute(cmd);
                     }
                     else
