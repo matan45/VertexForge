@@ -10,6 +10,7 @@
 #include "types/CameraTypes.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
+#include "postprocess/PostProcessTypes.hpp"
 
 namespace services
 {
@@ -105,6 +106,11 @@ namespace controllers {
 		void setTerrainErrorThreshold(float threshold);
 		void setTerrainTextureScale(float scale);
 		void setTerrainShadowLOD(uint32_t lod);
+
+		void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
+		postprocess::PostProcessSettings getPostProcessSettings() const;
+		void setPostProcessEnabled(bool enabled);
+		bool isPostProcessEnabled() const;
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

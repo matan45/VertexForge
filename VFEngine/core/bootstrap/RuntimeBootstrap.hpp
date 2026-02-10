@@ -10,6 +10,7 @@ namespace services
     class IPhysicsProvider;
     class IAnimatorProvider;
     class IVFXRuntimeProvider;
+    class IPostProcessProvider;
 }
 
 namespace window
@@ -36,6 +37,7 @@ namespace core
     class PhysicsAdapter;
     class AnimatorAdapter;
     class VFXRuntimeAdapter;
+    class PostProcessAdapter;
 
     class RuntimeBootstrap
     {
@@ -49,6 +51,7 @@ namespace core
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
+        std::unique_ptr<PostProcessAdapter> postProcessAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -77,6 +80,8 @@ namespace core
         services::IAnimatorProvider* getAnimatorProvider();
 
         services::IVFXRuntimeProvider* getVFXRuntimeProvider();
+
+        services::IPostProcessProvider* getPostProcessProvider();
 
         // === Other Accessors ===
 

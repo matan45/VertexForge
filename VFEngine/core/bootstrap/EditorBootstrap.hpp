@@ -18,6 +18,7 @@ namespace services
     class ITerrainRenderProvider;
     class ITerrainRaycastProvider;
     class ITerrainBrushComputeProvider;
+    class IPostProcessProvider;
 }
 
 namespace window
@@ -52,6 +53,7 @@ namespace core
     class TerrainRenderAdapter;
     class TerrainRaycastAdapter;
     class TerrainBrushComputeAdapter;
+    class PostProcessAdapter;
 
     class EditorBootstrap
     {
@@ -73,6 +75,7 @@ namespace core
         std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
         std::unique_ptr<TerrainRaycastAdapter> terrainRaycastAdapter;
         std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
+        std::unique_ptr<PostProcessAdapter> postProcessAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -116,6 +119,8 @@ namespace core
         services::ITerrainRaycastProvider* getTerrainRaycastProvider();
 
         services::ITerrainBrushComputeProvider* getTerrainBrushComputeProvider();
+
+        services::IPostProcessProvider* getPostProcessProvider();
 
         // === Other Accessors ===
 

@@ -18,7 +18,10 @@ namespace postprocess
         ACES = 0,
         Reinhard,
         Uncharted2,
-        Linear
+        Linear,
+        GranTurismo,
+        AgX,
+        KhronosPBRNeutral
     };
 
     enum class FXAAQuality : uint8_t
@@ -34,6 +37,7 @@ namespace postprocess
         ToneMappingMode mode = ToneMappingMode::ACES;
         float exposure = 1.0f;
         float gamma = 2.2f;
+        float contrast = 1.0f;
     };
 
     struct FXAASettings
@@ -47,7 +51,7 @@ namespace postprocess
     struct BloomSettings
     {
         bool enabled = false;
-        float threshold = 1.0f;
+        float threshold = 0.7f;
         float intensity = 0.5f;
         float radius = 0.5f;
         uint32_t passes = 5;

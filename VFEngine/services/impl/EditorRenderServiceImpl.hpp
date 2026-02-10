@@ -4,6 +4,7 @@
 #include "../events/SceneEvents.hpp"
 #include "../providers/IOffScreenProvider.hpp"
 #include "../providers/IEditorTextureProvider.hpp"
+#include "../providers/IPostProcessProvider.hpp"
 #include <unordered_map>
 
 namespace services
@@ -13,6 +14,7 @@ namespace services
     private:
         IOffScreenProvider* offScreenProvider;
         IEditorTextureProvider* textureProvider;
+        IPostProcessProvider* postProcessProvider;
         std::optional<std::string> currentIBLPath;
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
@@ -24,7 +26,8 @@ namespace services
 
     public:
         explicit EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,
-                                         IEditorTextureProvider* textureProvider);
+                                         IEditorTextureProvider* textureProvider,
+                                         IPostProcessProvider* postProcessProvider);
         ~EditorRenderServiceImpl() override;
 
         void registerEventHandlers() override;

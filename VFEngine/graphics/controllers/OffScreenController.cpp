@@ -7,6 +7,7 @@
 #include "../render/DebugRenderer.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
+#include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/tools/ShadowDebugRenderer.hpp"
 #include "types/RenderSettings.hpp"
 #include "offscreen/IBLController.hpp"
@@ -350,6 +351,46 @@ namespace controllers
         stats.pointResolution = atlasConfig.pointResolution;
 
         return stats;
+    }
+
+    void OffScreenController::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)
+    {
+        currentPostProcessSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* pipeline = renderHandler->getPostProcessPipeline();
+        if (pipeline)
+        {
+            pipeline->applySettings(settings);
+        }
+    }
+
+    postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const
+    {
+        return currentPostProcessSettings;
+    }
+
+    void OffScreenController::setPostProcessEnabled(bool enabled)
+    {
+        currentPostProcessSettings.enabled = enabled;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* pipeline = renderHandler->getPostProcessPipeline();
+        if (pipeline)
+        {
+            pipeline->applySettings(currentPostProcessSettings);
+        }
+    }
+
+    bool OffScreenController::isPostProcessEnabled() const
+    {
+        return currentPostProcessSettings.enabled;
     }
 
     void OffScreenController::setShowGrid(bool show)

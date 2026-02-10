@@ -1,15 +1,18 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/EditorModeEvents.hpp"
+#include "../events/PostProcessEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace services
 {
     EditorRenderServiceImpl::EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,
-                                                     IEditorTextureProvider* textureProvider)
+                                                     IEditorTextureProvider* textureProvider,
+                                                     IPostProcessProvider* postProcessProvider)
         : offScreenProvider(offScreenProvider)
           , textureProvider(textureProvider)
+          , postProcessProvider(postProcessProvider)
     {
     }
 
@@ -545,6 +548,39 @@ namespace services
                 {
                     offScreenProvider->setTerrainShadowLOD(cmd.lod);
                 }
+            });
+
+        // Post-process events
+        dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
+            [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
+            {
+                if (postProcessProvider)
+                {
+                    postProcessProvider->applyPostProcessSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::postprocess::GetPostProcessSettingsQuery>(
+            [this](const events::postprocess::GetPostProcessSettingsQuery&)
+            {
+                return postProcessProvider
+                           ? postProcessProvider->getPostProcessSettings()
+                           : postprocess::PostProcessSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::postprocess::SetPostProcessEnabledCommand>(
+            [this](const events::postprocess::SetPostProcessEnabledCommand& cmd)
+            {
+                if (postProcessProvider)
+                {
+                    postProcessProvider->setPostProcessEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::postprocess::GetPostProcessEnabledQuery>(
+            [this](const events::postprocess::GetPostProcessEnabledQuery&)
+            {
+                return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
             });
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(

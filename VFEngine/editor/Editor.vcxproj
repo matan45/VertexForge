@@ -136,6 +136,7 @@
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\PaintToolPanel.hpp" />
     <ClInclude Include="windows\PhysicsConfigWindow.hpp" />
+    <ClInclude Include="windows\PostProcessConfigWindow.hpp" />
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\RenderConfigWindow.hpp" />
@@ -221,6 +222,7 @@
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\PaintToolPanel.cpp" />
     <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
+    <ClCompile Include="windows\PostProcessConfigWindow.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />

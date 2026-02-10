@@ -1,4 +1,10 @@
 #include "PostProcessPipeline.hpp"
+#include "effects/ToneMappingEffect.hpp"
+#include "effects/FXAAEffect.hpp"
+#include "effects/BloomEffect.hpp"
+#include "effects/VignetteEffect.hpp"
+#include "effects/ChromaticAberrationEffect.hpp"
+#include "effects/FilmGrainEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -319,35 +325,82 @@ namespace render::postprocess
 
     void PostProcessPipeline::addEffect(std::unique_ptr<PostProcessEffect> effect)
     {
+        auto* ptr = effect.get();
         effects.push_back(std::move(effect));
         sortEffects();
 
-        if (initialized)
+        if (initialized && !ptr->isInitialized())
         {
-            auto& added = effects.back();
-            if (!added->isInitialized())
-                added->init(renderPass, swapChain.getSwapchainExtent());
+            ptr->init(renderPass, swapChain.getSwapchainExtent());
         }
     }
 
     void PostProcessPipeline::removeEffect(::postprocess::EffectType type)
     {
-        auto it = std::remove_if(effects.begin(), effects.end(),
-            [type](const auto& e) { return e->getType() == type; });
-
-        for (auto removeIt = it; removeIt != effects.end(); ++removeIt)
+        for (auto it = effects.begin(); it != effects.end();)
         {
-            if ((*removeIt)->isInitialized())
-                (*removeIt)->cleanup();
+            if ((*it)->getType() == type)
+            {
+                if ((*it)->isInitialized())
+                    (*it)->cleanup();
+                it = effects.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
-
-        effects.erase(it, effects.end());
     }
 
     void PostProcessPipeline::updateSettings(const ::postprocess::PostProcessSettings& settings)
     {
         for (auto& effect : effects)
             effect->updateParameters(settings);
+    }
+
+    void PostProcessPipeline::applySettings(const ::postprocess::PostProcessSettings& settings)
+    {
+        auto hasEffect = [this](::postprocess::EffectType type) -> bool
+        {
+            return std::any_of(effects.begin(), effects.end(),
+                [type](const auto& e) { return e->getType() == type; });
+        };
+
+        auto syncEffect = [&](::postprocess::EffectType type, bool enabled,
+                              auto makeEffect)
+        {
+            // Only add if both globally enabled and per-effect enabled
+            bool shouldBeActive = settings.enabled && enabled;
+
+            if (shouldBeActive && !hasEffect(type))
+            {
+                addEffect(makeEffect());
+            }
+            else if (!shouldBeActive && hasEffect(type))
+            {
+                removeEffect(type);
+            }
+        };
+
+        syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
+            [this]() { return std::make_unique<ToneMappingEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
+            [this]() { return std::make_unique<FXAAEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,
+            [this]() { return std::make_unique<BloomEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::Vignette, settings.vignette.enabled,
+            [this]() { return std::make_unique<VignetteEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::ChromaticAberration, settings.chromaticAberration.enabled,
+            [this]() { return std::make_unique<ChromaticAberrationEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::FilmGrain, settings.filmGrain.enabled,
+            [this]() { return std::make_unique<FilmGrainEffect>(device); });
+
+        updateSettings(settings);
     }
 
     void PostProcessPipeline::sortEffects()

@@ -1185,7 +1185,8 @@ namespace serialization
             {"enabled", settings.toneMapping.enabled},
             {"mode", toneMappingModeToString(settings.toneMapping.mode)},
             {"exposure", settings.toneMapping.exposure},
-            {"gamma", settings.toneMapping.gamma}
+            {"gamma", settings.toneMapping.gamma},
+            {"contrast", settings.toneMapping.contrast}
         };
 
         j["fxaa"] = {
@@ -1240,6 +1241,8 @@ namespace serialization
                 settings.toneMapping.exposure = std::clamp(tm["exposure"].get<float>(), 0.01f, 20.0f);
             if (tm.contains("gamma") && tm["gamma"].is_number())
                 settings.toneMapping.gamma = std::clamp(tm["gamma"].get<float>(), 0.1f, 5.0f);
+            if (tm.contains("contrast") && tm["contrast"].is_number())
+                settings.toneMapping.contrast = std::clamp(tm["contrast"].get<float>(), 0.5f, 2.0f);
         }
 
         if (j.contains("fxaa") && j["fxaa"].is_object())

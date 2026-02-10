@@ -285,6 +285,26 @@ namespace controllers {
 		offScreenController->setTerrainShadowLOD(lod);
 	}
 
+	void OffScreen::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)
+	{
+		offScreenController->applyPostProcessSettings(settings);
+	}
+
+	postprocess::PostProcessSettings OffScreen::getPostProcessSettings() const
+	{
+		return offScreenController->getPostProcessSettings();
+	}
+
+	void OffScreen::setPostProcessEnabled(bool enabled)
+	{
+		offScreenController->setPostProcessEnabled(enabled);
+	}
+
+	bool OffScreen::isPostProcessEnabled() const
+	{
+		return offScreenController->isPostProcessEnabled();
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);
