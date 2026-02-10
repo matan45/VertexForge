@@ -21,13 +21,23 @@ layout(set = 0, binding = 1) uniform SunData {
     float threshold;
 } sun;
 
+// Screen-space dither to break up banding
+float interleavedGradientNoise(vec2 pos)
+{
+    return fract(52.9829189 * fract(dot(pos, vec2(0.06711056, 0.00583715))));
+}
+
 void main()
 {
     // Direction from this pixel toward the sun
     vec2 deltaTexCoord = texCoord - sun.sunScreenPos;
     deltaTexCoord *= (1.0 / float(sun.sampleCount)) * sun.density;
 
-    vec2 sampleUV = texCoord;
+    // Jitter starting position to break coherent banding
+    vec2 screenPos = gl_FragCoord.xy;
+    float jitter = interleavedGradientNoise(screenPos);
+    vec2 sampleUV = texCoord - deltaTexCoord * jitter;
+
     float illumination = 0.0;
     float decayFactor = 1.0;
 
