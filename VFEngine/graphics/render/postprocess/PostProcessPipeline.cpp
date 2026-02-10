@@ -5,6 +5,8 @@
 #include "effects/VignetteEffect.hpp"
 #include "effects/ChromaticAberrationEffect.hpp"
 #include "effects/FilmGrainEffect.hpp"
+#include "effects/GodRaysEffect.hpp"
+#include "effects/DepthOfFieldEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -22,6 +24,23 @@ namespace render::postprocess
     PostProcessPipeline::~PostProcessPipeline()
     {
         cleanup();
+    }
+
+    void PostProcessPipeline::setSunData(const glm::vec2& screenPos, bool hasSun)
+    {
+        sunInfo.screenPos = screenPos;
+        sunInfo.hasSun = hasSun;
+    }
+
+    void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
+                                              const glm::vec3& cameraPosition,
+                                              const glm::mat4& viewMatrix, float time)
+    {
+        cameraInfo.nearPlane = nearPlane;
+        cameraInfo.farPlane = farPlane;
+        cameraInfo.cameraPosition = cameraPosition;
+        cameraInfo.viewMatrix = viewMatrix;
+        cameraInfo.time = time;
     }
 
     bool PostProcessPipeline::hasEnabledEffects() const
@@ -399,6 +418,12 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::FilmGrain, settings.filmGrain.enabled,
             [this]() { return std::make_unique<FilmGrainEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::GodRays, settings.godRays.enabled,
+            [this]() { return std::make_unique<GodRaysEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::DepthOfField, settings.depthOfField.enabled,
+            [this]() { return std::make_unique<DepthOfFieldEffect>(device, swapChain, offscreenResources, *this); });
 
         updateSettings(settings);
     }

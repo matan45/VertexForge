@@ -251,4 +251,153 @@ public class PostProcess {
     public static function setFilmGrainSize(float value): void {
         _native_postprocess_filmGrain_setSize(value);
     }
+
+    // ============================================
+    // God Rays
+    // ============================================
+
+    public static function isGodRaysEnabled(): bool {
+        return _native_postprocess_godRays_isEnabled();
+    }
+
+    public static function setGodRaysEnabled(bool enabled): void {
+        _native_postprocess_godRays_setEnabled(enabled);
+    }
+
+    // God rays overall brightness (0.0 - 2.0)
+    public static function getGodRaysIntensity(): float {
+        return _native_postprocess_godRays_getIntensity();
+    }
+
+    public static function setGodRaysIntensity(float value): void {
+        _native_postprocess_godRays_setIntensity(value);
+    }
+
+    // Exponential falloff per sample step (0.9 - 1.0)
+    public static function getGodRaysDecay(): float {
+        return _native_postprocess_godRays_getDecay();
+    }
+
+    public static function setGodRaysDecay(float value): void {
+        _native_postprocess_godRays_setDecay(value);
+    }
+
+    // Sample step spacing (0.1 - 2.0)
+    public static function getGodRaysDensity(): float {
+        return _native_postprocess_godRays_getDensity();
+    }
+
+    public static function setGodRaysDensity(float value): void {
+        _native_postprocess_godRays_setDensity(value);
+    }
+
+    // Per-sample contribution weight (0.0 - 2.0)
+    public static function getGodRaysWeight(): float {
+        return _native_postprocess_godRays_getWeight();
+    }
+
+    public static function setGodRaysWeight(float value): void {
+        _native_postprocess_godRays_setWeight(value);
+    }
+
+    // Number of ray marching steps (16 - 128)
+    public static function getGodRaysSampleCount(): int {
+        return _native_postprocess_godRays_getSampleCount();
+    }
+
+    public static function setGodRaysSampleCount(int value): void {
+        _native_postprocess_godRays_setSampleCount(value);
+    }
+
+    // Depth threshold for sky detection (0.0 - 1.0)
+    public static function getGodRaysThreshold(): float {
+        return _native_postprocess_godRays_getThreshold();
+    }
+
+    public static function setGodRaysThreshold(float value): void {
+        _native_postprocess_godRays_setThreshold(value);
+    }
+
+    // ============================================
+    // Depth of Field
+    // ============================================
+
+    public static function isDoFEnabled(): bool {
+        return _native_postprocess_dof_isEnabled();
+    }
+
+    public static function setDoFEnabled(bool enabled): void {
+        _native_postprocess_dof_setEnabled(enabled);
+    }
+
+    // Focus mode: 0 = Manual, 1 = TargetPoint
+    public static function getDoFFocusMode(): int {
+        return _native_postprocess_dof_getFocusMode();
+    }
+
+    public static function setDoFFocusMode(int mode): void {
+        _native_postprocess_dof_setFocusMode(mode);
+    }
+
+    // Distance at which objects are in perfect focus (0.1 - 1000.0)
+    public static function getDoFFocalDistance(): float {
+        return _native_postprocess_dof_getFocalDistance();
+    }
+
+    public static function setDoFFocalDistance(float value): void {
+        _native_postprocess_dof_setFocalDistance(value);
+    }
+
+    // World-space focus target position (used in TargetPoint mode)
+    public static function getDoFFocusTargetX(): float {
+        return _native_postprocess_dof_getFocusTargetX();
+    }
+
+    public static function getDoFFocusTargetY(): float {
+        return _native_postprocess_dof_getFocusTargetY();
+    }
+
+    public static function getDoFFocusTargetZ(): float {
+        return _native_postprocess_dof_getFocusTargetZ();
+    }
+
+    public static function setDoFFocusTarget(float x, float y, float z): void {
+        _native_postprocess_dof_setFocusTarget(x, y, z);
+    }
+
+    // How quickly focus transitions to target (0.1 - 50.0)
+    public static function getDoFFocusSmoothing(): float {
+        return _native_postprocess_dof_getFocusSmoothing();
+    }
+
+    public static function setDoFFocusSmoothing(float value): void {
+        _native_postprocess_dof_setFocusSmoothing(value);
+    }
+
+    // Range around focal distance that stays sharp (0.1 - 100.0)
+    public static function getDoFFocalRange(): float {
+        return _native_postprocess_dof_getFocalRange();
+    }
+
+    public static function setDoFFocalRange(float value): void {
+        _native_postprocess_dof_setFocalRange(value);
+    }
+
+    // Maximum blur radius in pixels (0.0 - 20.0)
+    public static function getDoFMaxBlurRadius(): float {
+        return _native_postprocess_dof_getMaxBlurRadius();
+    }
+
+    public static function setDoFMaxBlurRadius(float value): void {
+        _native_postprocess_dof_setMaxBlurRadius(value);
+    }
+
+    // Number of Poisson disc samples (4 - 32)
+    public static function getDoFSampleCount(): int {
+        return _native_postprocess_dof_getSampleCount();
+    }
+
+    public static function setDoFSampleCount(int value): void {
+        _native_postprocess_dof_setSampleCount(value);
+    }
 }

@@ -312,6 +312,181 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawGodRaysSection()
+    {
+        if (ImGui::CollapsingHeader("God Rays", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable God Rays", &settings.godRays.enabled))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Requires a directional light in the scene.\nThe sun position is derived from the first directional light.");
+            }
+
+            if (settings.godRays.enabled)
+            {
+                ImGui::Spacing();
+
+                if (ImGui::DragFloat("Intensity##godrays", &settings.godRays.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Overall brightness of the god rays effect.");
+                }
+
+                if (ImGui::DragFloat("Decay", &settings.godRays.decay, 0.001f, 0.9f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Exponential falloff per sample step.\nCloser to 1.0 = longer rays.");
+                }
+
+                if (ImGui::DragFloat("Density##godrays", &settings.godRays.density, 0.01f, 0.1f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Controls spacing between sample steps.\nHigher = denser sampling.");
+                }
+
+                if (ImGui::DragFloat("Weight##godrays", &settings.godRays.weight, 0.01f, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Per-sample contribution weight.");
+                }
+
+                int samples = settings.godRays.sampleCount;
+                if (ImGui::SliderInt("Samples", &samples, 16, 128))
+                {
+                    settings.godRays.sampleCount = samples;
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Number of ray marching steps.\nMore = higher quality but slower.");
+                }
+
+                if (ImGui::DragFloat("Threshold##godrays", &settings.godRays.threshold, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Depth threshold for sky detection.\nPixels with depth >= threshold contribute light.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
+    void PostProcessConfigWindow::drawDepthOfFieldSection()
+    {
+        if (ImGui::CollapsingHeader("Depth of Field", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable Depth of Field", &settings.depthOfField.enabled))
+            {
+                isDirty = true;
+            }
+
+            if (settings.depthOfField.enabled)
+            {
+                ImGui::Spacing();
+
+                const char* focusModes[] = {"Manual", "Target Point"};
+                int focusModeIdx = static_cast<int>(settings.depthOfField.focusMode);
+                if (ImGui::Combo("Focus Mode", &focusModeIdx, focusModes, IM_ARRAYSIZE(focusModes)))
+                {
+                    settings.depthOfField.focusMode = static_cast<::postprocess::DoFFocusMode>(focusModeIdx);
+                    isDirty = true;
+                }
+
+                if (settings.depthOfField.focusMode == ::postprocess::DoFFocusMode::Manual)
+                {
+                    if (ImGui::DragFloat("Focal Distance", &settings.depthOfField.focalDistance, 0.1f, 0.1f, 1000.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Distance at which objects are in perfect focus.");
+                    }
+                }
+                else
+                {
+                    float focusTarget[3] = {settings.depthOfField.focusTargetX,
+                                            settings.depthOfField.focusTargetY,
+                                            settings.depthOfField.focusTargetZ};
+                    if (ImGui::DragFloat3("Focus Target", focusTarget, 0.1f))
+                    {
+                        settings.depthOfField.focusTargetX = focusTarget[0];
+                        settings.depthOfField.focusTargetY = focusTarget[1];
+                        settings.depthOfField.focusTargetZ = focusTarget[2];
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("World-space position to focus on.");
+                    }
+
+                    if (ImGui::DragFloat("Focus Smoothing", &settings.depthOfField.focusSmoothing, 0.1f, 0.1f, 50.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("How quickly focus transitions to the target.\nHigher = faster.");
+                    }
+                }
+
+                if (ImGui::DragFloat("Focal Range", &settings.depthOfField.focalRange, 0.1f, 0.1f, 100.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Range around the focal distance that remains sharp.\nSmaller = shallower depth of field.");
+                }
+
+                if (ImGui::DragFloat("Max Blur Radius", &settings.depthOfField.maxBlurRadius, 0.1f, 0.0f, 20.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum blur amount in pixels for fully out-of-focus areas.");
+                }
+
+                int samples = settings.depthOfField.sampleCount;
+                if (ImGui::SliderInt("Samples##dof", &samples, 4, 32))
+                {
+                    settings.depthOfField.sampleCount = samples;
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Number of Poisson disc samples.\nMore = smoother blur but slower.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::draw()
     {
         if (!visible)
@@ -338,6 +513,8 @@ namespace windows
             drawVignetteSection();
             drawChromaticAberrationSection();
             drawFilmGrainSection();
+            drawGodRaysSection();
+            drawDepthOfFieldSection();
 
             ImGui::Spacing();
             ImGui::Separator();

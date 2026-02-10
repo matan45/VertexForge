@@ -995,6 +995,35 @@ namespace render
             }
         }
 
+        // Pass camera data for depth-based effects (DoF)
+        postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane,
+                                           currentCameraPosition, currentView, currentTime);
+
+        // Compute sun screen position for god rays
+        if (gpuDrivenRendererInitialized)
+        {
+            auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+            auto sunDir = lbm->getFirstDirectionalLightDirection();
+            if (sunDir)
+            {
+                glm::vec3 sunWorldPos = currentCameraPosition - (*sunDir) * currentFarPlane;
+                glm::vec4 clip = currentProjection * currentView * glm::vec4(sunWorldPos, 1.0f);
+                if (clip.w > 0.0f)
+                {
+                    glm::vec2 screenUV = (glm::vec2(clip) / clip.w) * 0.5f + 0.5f;
+                    postProcessPipeline->setSunData(screenUV, true);
+                }
+                else
+                {
+                    postProcessPipeline->setSunData({0.5f, 0.5f}, false);
+                }
+            }
+            else
+            {
+                postProcessPipeline->setSunData({0.5f, 0.5f}, false);
+            }
+        }
+
         // Post-processing chain (ping-pong effects, then blit back to scene color)
         postProcessPipeline->execute(commandBuffer, imageIndex);
     }
