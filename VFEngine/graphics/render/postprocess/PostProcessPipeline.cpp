@@ -337,16 +337,19 @@ namespace render::postprocess
 
     void PostProcessPipeline::removeEffect(::postprocess::EffectType type)
     {
-        auto it = std::remove_if(effects.begin(), effects.end(),
-            [type](const auto& e) { return e->getType() == type; });
-
-        for (auto removeIt = it; removeIt != effects.end(); ++removeIt)
+        for (auto it = effects.begin(); it != effects.end();)
         {
-            if ((*removeIt)->isInitialized())
-                (*removeIt)->cleanup();
+            if ((*it)->getType() == type)
+            {
+                if ((*it)->isInitialized())
+                    (*it)->cleanup();
+                it = effects.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
-
-        effects.erase(it, effects.end());
     }
 
     void PostProcessPipeline::updateSettings(const ::postprocess::PostProcessSettings& settings)
