@@ -28,6 +28,11 @@ namespace render::gpudriven
     class TerrainRaycastPipeline;
 }
 
+namespace render::postprocess
+{
+    class PostProcessPipeline;
+}
+
 namespace render
 {
     class ClearColor;
@@ -70,6 +75,7 @@ namespace render
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
         std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
+        std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
 
         core::OffscreenResources& offscreenResources;
 
@@ -195,6 +201,8 @@ namespace render
 
         void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
         void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
+
+        postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
 
         void cleanUp() const;
 
