@@ -13,6 +13,7 @@
 #include "details/ColliderDrawer.hpp"
 #include "details/RigidBodyDrawer.hpp"
 #include "details/VFXDrawer.hpp"
+#include "details/BillboardDrawer.hpp"
 #include "details/DirectionalLightDrawer.hpp"
 #include "details/PointLightDrawer.hpp"
 #include "details/SpotLightDrawer.hpp"
@@ -38,6 +39,7 @@ namespace windows
         details::ColliderDrawer colliderDrawer;
         details::RigidBodyDrawer rigidBodyDrawer;
         details::VFXDrawer vfxDrawer;
+        details::BillboardDrawer billboardDrawer;
         details::DirectionalLightDrawer directionalLightDrawer;
         details::PointLightDrawer pointLightDrawer;
         details::SpotLightDrawer spotLightDrawer;

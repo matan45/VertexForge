@@ -234,6 +234,8 @@ namespace components
         bool editorOnly = true;
         bool selectable = true;
 
+        std::string texturePath; // Path to .vfImage file (empty = use atlas icon)
+
         uint32_t getEffectiveAtlasIndex() const
         {
             if (iconType == BillboardIconType::Custom)

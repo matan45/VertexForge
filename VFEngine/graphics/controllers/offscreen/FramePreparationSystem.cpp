@@ -294,11 +294,13 @@ namespace controllers::offscreen
 
         renderHandler->initBillboardPipeline();
 
-        if (ctx.playModeActive || !ctx.showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
+        if (!renderHandler->isBillboardPipelineInitialized())
         {
             renderHandler->setBillboardDrawList({});
             return;
         }
+
+        bool showEditorIcons = !ctx.playModeActive && ctx.showBillboardIcons;
 
         std::vector<render::billboard::BillboardRenderData> billboardDrawList;
 
@@ -319,11 +321,13 @@ namespace controllers::offscreen
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (!billboard.editorOnly)
+            // Editor-only billboards (debug icons) only show in editor mode
+            if (billboard.editorOnly && !showEditorIcons)
             {
                 continue;
             }
 
+            // Non-editor billboards (custom textured) always render
             render::billboard::BillboardRenderData renderData;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
@@ -331,6 +335,7 @@ namespace controllers::offscreen
             renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
+            renderData.texturePath = billboard.texturePath;
 
             billboardDrawList.push_back(renderData);
         }

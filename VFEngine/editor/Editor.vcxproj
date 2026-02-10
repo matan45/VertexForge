@@ -164,6 +164,7 @@
     <ClInclude Include="windows\details\AddComponentPopup.hpp" />
     <ClInclude Include="windows\details\AudioSource2DDrawer.hpp" />
     <ClInclude Include="windows\details\AudioSource3DDrawer.hpp" />
+    <ClInclude Include="windows\details\BillboardDrawer.hpp" />
     <ClInclude Include="windows\details\CameraDrawer.hpp" />
     <ClInclude Include="windows\details\ColliderDrawer.hpp" />
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
@@ -249,6 +250,7 @@
     <ClCompile Include="windows\details\AddComponentPopup.cpp" />
     <ClCompile Include="windows\details\AudioSource2DDrawer.cpp" />
     <ClCompile Include="windows\details\AudioSource3DDrawer.cpp" />
+    <ClCompile Include="windows\details\BillboardDrawer.cpp" />
     <ClCompile Include="windows\details\CameraDrawer.cpp" />
     <ClCompile Include="windows\details\ColliderDrawer.cpp" />
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />

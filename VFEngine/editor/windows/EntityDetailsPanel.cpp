@@ -80,6 +80,7 @@ namespace windows
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
+        bool hasBillboard = billboardDrawer.draw(handle);
 
         bool hasDirectionalLight = directionalLightDrawer.draw(handle);
         bool hasPointLight = pointLightDrawer.draw(handle);
@@ -90,7 +91,7 @@ namespace windows
         terrainTileDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody, hasVFX,
+                               hasCollider, hasRigidBody, hasVFX, hasBillboard,
                                hasDirectionalLight, hasPointLight, hasSpotLight);
     }
 

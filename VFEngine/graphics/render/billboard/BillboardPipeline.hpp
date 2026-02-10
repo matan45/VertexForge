@@ -6,17 +6,26 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 namespace core
 {
     class Device;
     class SwapChain;
     class Shader;
+    class Texture;
     struct OffscreenResources;
 }
 
 namespace render::billboard
 {
+    struct CustomTextureBatch
+    {
+        std::string texturePath;
+        uint32_t firstInstance = 0;
+        uint32_t instanceCount = 0;
+    };
+
     class BillboardPipeline
     {
     private:
@@ -33,12 +42,25 @@ namespace render::billboard
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet descriptorSet;
+        vk::DescriptorSet atlasDescriptorSet;
 
         std::vector<vk::Framebuffer> framebuffers;
 
         BillboardBufferManager bufferManager;
         BillboardAtlasManager atlasManager;
+
+        // Custom texture support
+        struct CustomTextureEntry
+        {
+            std::unique_ptr<core::Texture> texture;
+            vk::DescriptorSet descriptorSet;
+        };
+        std::unordered_map<std::string, CustomTextureEntry> customTextureCache;
+        static constexpr uint32_t MAX_CUSTOM_TEXTURES = 32;
+
+        // Per-frame batch info (set by setBillboardList, read by recordCommandBuffer)
+        uint32_t atlasInstanceCount = 0;
+        std::vector<CustomTextureBatch> customBatches;
 
     public:
         explicit BillboardPipeline(core::Device& device, core::SwapChain& swapChain,
@@ -72,6 +94,7 @@ namespace render::billboard
         void createPipeline();
         void createFramebuffers();
 
-        void updateDescriptorSet();
+        void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
+        bool loadCustomTexture(const std::string& texturePath);
     };
 }

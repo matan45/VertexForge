@@ -254,6 +254,25 @@ namespace events::scene {
         std::string_view getName() const override { return "SetVFXData"; }
     };
 
+    struct AddBillboardComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddBillboardComponent"; }
+    };
+
+    struct RemoveBillboardComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveBillboardComponent"; }
+    };
+
+    struct SetBillboardDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::BillboardData billboardData;
+
+        std::string_view getName() const override { return "SetBillboardData"; }
+    };
+
     struct AddDirectionalLightComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -463,6 +482,18 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetVFXData"; }
+    };
+
+    struct HasBillboardComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasBillboardComponent"; }
+    };
+
+    struct GetBillboardDataQuery : IQuery<std::optional<services::BillboardData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetBillboardData"; }
     };
 
     struct HasDirectionalLightComponentQuery : IQuery<bool> {

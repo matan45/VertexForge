@@ -364,6 +364,10 @@ namespace serialization
         });
         j["editorOnly"] = billboard.editorOnly;
         j["selectable"] = billboard.selectable;
+        if (!billboard.texturePath.empty())
+        {
+            j["texturePath"] = billboard.texturePath;
+        }
         return j;
     }
 
@@ -385,6 +389,7 @@ namespace serialization
         }
         billboard.editorOnly = j.value("editorOnly", true);
         billboard.selectable = j.value("selectable", true);
+        billboard.texturePath = j.value("texturePath", std::string(""));
     }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)

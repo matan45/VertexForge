@@ -2,9 +2,12 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Logger.hpp"
+#include <filesystem>
+#include <algorithm>
 
 namespace render::billboard
 {
@@ -71,11 +74,15 @@ namespace render::billboard
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
+        // Clean up custom textures before destroying the pool
+        customTextureCache.clear();
+        customBatches.clear();
+        atlasInstanceCount = 0;
+
         if (descriptorPool)
         {
-            if (descriptorSet)
-                dev.freeDescriptorSets(descriptorPool, descriptorSet);
             dev.destroyDescriptorPool(descriptorPool);
+            descriptorPool = nullptr;
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
 
@@ -166,17 +173,20 @@ namespace render::billboard
 
     void BillboardPipeline::createDescriptorPool()
     {
+        // 1 atlas set + up to MAX_CUSTOM_TEXTURES custom texture sets
+        uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES;
+
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = 1;
+        poolSizes[0].descriptorCount = totalSets;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = 1;
+        poolSizes[1].descriptorCount = totalSets;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 1;
+        poolInfo.maxSets = totalSets;
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
@@ -188,12 +198,13 @@ namespace render::billboard
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        atlasDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-        updateDescriptorSet();
+        updateDescriptorSet(atlasDescriptorSet, atlasManager.getImageView(), atlasManager.getSampler());
     }
 
-    void BillboardPipeline::updateDescriptorSet()
+    void BillboardPipeline::updateDescriptorSet(vk::DescriptorSet dstSet,
+                                                  vk::ImageView imageView, vk::Sampler sampler)
     {
         vk::DescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = bufferManager.getCameraUBO();
@@ -201,27 +212,27 @@ namespace render::billboard
         uboBufferInfo.range = sizeof(BillboardCameraUBO);
 
         vk::WriteDescriptorSet uboWrite{};
-        uboWrite.dstSet = descriptorSet;
+        uboWrite.dstSet = dstSet;
         uboWrite.dstBinding = 0;
         uboWrite.dstArrayElement = 0;
         uboWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
         uboWrite.descriptorCount = 1;
         uboWrite.pBufferInfo = &uboBufferInfo;
 
-        vk::DescriptorImageInfo atlasImageInfo{};
-        atlasImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        atlasImageInfo.imageView = atlasManager.getImageView();
-        atlasImageInfo.sampler = atlasManager.getSampler();
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfo.imageView = imageView;
+        imageInfo.sampler = sampler;
 
-        vk::WriteDescriptorSet atlasWrite{};
-        atlasWrite.dstSet = descriptorSet;
-        atlasWrite.dstBinding = 1;
-        atlasWrite.dstArrayElement = 0;
-        atlasWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        atlasWrite.descriptorCount = 1;
-        atlasWrite.pImageInfo = &atlasImageInfo;
+        vk::WriteDescriptorSet imageWrite{};
+        imageWrite.dstSet = dstSet;
+        imageWrite.dstBinding = 1;
+        imageWrite.dstArrayElement = 0;
+        imageWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        imageWrite.descriptorCount = 1;
+        imageWrite.pImageInfo = &imageInfo;
 
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {uboWrite, atlasWrite};
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {uboWrite, imageWrite};
         device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
     }
 
@@ -284,11 +295,52 @@ namespace render::billboard
     bool BillboardPipeline::loadAtlas(const std::string& atlasPath)
     {
         bool result = atlasManager.loadAtlas(atlasPath);
-        if (result && descriptorSet)
+        if (result && atlasDescriptorSet)
         {
-            updateDescriptorSet();
+            updateDescriptorSet(atlasDescriptorSet, atlasManager.getImageView(), atlasManager.getSampler());
         }
         return result;
+    }
+
+    bool BillboardPipeline::loadCustomTexture(const std::string& texturePath)
+    {
+        if (customTextureCache.contains(texturePath))
+        {
+            return true;
+        }
+
+        if (customTextureCache.size() >= MAX_CUSTOM_TEXTURES)
+        {
+            loggerWarning("Billboard custom texture limit reached ({}), cannot load: {}",
+                          MAX_CUSTOM_TEXTURES, texturePath);
+            return false;
+        }
+
+        if (!std::filesystem::exists(texturePath))
+        {
+            loggerWarning("Billboard texture file not found: {}", texturePath);
+            return false;
+        }
+
+        auto texture = std::make_unique<core::Texture>(device);
+        texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Unorm, false);
+
+        // Allocate a descriptor set for this texture
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        updateDescriptorSet(newDescSet, texture->getImageView(), texture->getSampler());
+
+        CustomTextureEntry entry;
+        entry.texture = std::move(texture);
+        entry.descriptorSet = newDescSet;
+        customTextureCache.emplace(texturePath, std::move(entry));
+
+        loggerInfo("Billboard custom texture loaded: {}", texturePath);
+        return true;
     }
 
     void BillboardPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
@@ -299,13 +351,68 @@ namespace render::billboard
 
     void BillboardPipeline::setBillboardList(const std::vector<BillboardRenderData>& billboards)
     {
-        bufferManager.updateInstanceBuffer(billboards);
+        customBatches.clear();
+        atlasInstanceCount = 0;
+
+        if (billboards.empty())
+        {
+            bufferManager.updateInstanceBuffer({});
+            return;
+        }
+
+        // Separate atlas billboards from custom-textured billboards
+        std::vector<BillboardRenderData> atlasBillboards;
+        std::unordered_map<std::string, std::vector<BillboardRenderData>> texturedBillboards;
+
+        for (const auto& billboard : billboards)
+        {
+            if (billboard.texturePath.empty())
+            {
+                atlasBillboards.push_back(billboard);
+            }
+            else
+            {
+                texturedBillboards[billboard.texturePath].push_back(billboard);
+            }
+        }
+
+        // Build combined instance list: atlas first, then custom texture batches
+        std::vector<BillboardRenderData> orderedBillboards;
+        orderedBillboards.reserve(billboards.size());
+
+        // Atlas billboards first
+        orderedBillboards.insert(orderedBillboards.end(), atlasBillboards.begin(), atlasBillboards.end());
+        atlasInstanceCount = static_cast<uint32_t>(atlasBillboards.size());
+
+        // Custom texture batches
+        for (auto& [path, batchBillboards] : texturedBillboards)
+        {
+            if (loadCustomTexture(path))
+            {
+                CustomTextureBatch batch;
+                batch.texturePath = path;
+                batch.firstInstance = static_cast<uint32_t>(orderedBillboards.size());
+                batch.instanceCount = static_cast<uint32_t>(batchBillboards.size());
+                customBatches.push_back(std::move(batch));
+
+                orderedBillboards.insert(orderedBillboards.end(),
+                                         batchBillboards.begin(), batchBillboards.end());
+            }
+        }
+
+        bufferManager.updateInstanceBuffer(orderedBillboards);
     }
 
     void BillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                  uint32_t imageIndex) const
     {
-        if (!initialized || bufferManager.getCurrentInstanceCount() == 0)
+        uint32_t totalInstances = atlasInstanceCount;
+        for (const auto& batch : customBatches)
+        {
+            totalInstances += batch.instanceCount;
+        }
+
+        if (!initialized || totalInstances == 0)
         {
             return;
         }
@@ -320,26 +427,54 @@ namespace render::billboard
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                          0, descriptorSet, nullptr);
-
-        BillboardPushConstants pushConstants{};
-        pushConstants.viewportSize = glm::vec2(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height)
-        );
-        pushConstants.atlasGridSize = static_cast<float>(AtlasConfig::GRID_SIZE);
-
-        commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                                     0, sizeof(BillboardPushConstants), &pushConstants);
-
+        // Bind shared vertex and index buffers
         vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
         vk::DeviceSize offsets[] = {0, 0};
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
-
         commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
 
-        commandBuffer.drawIndexed(6, bufferManager.getCurrentInstanceCount(), 0, 0, 0);
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        // Draw atlas billboards
+        if (atlasInstanceCount > 0)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, atlasDescriptorSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = static_cast<float>(AtlasConfig::GRID_SIZE);
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
+        }
+
+        // Draw custom-textured billboard batches
+        for (const auto& batch : customBatches)
+        {
+            auto it = customTextureCache.find(batch.texturePath);
+            if (it == customTextureCache.end())
+            {
+                continue;
+            }
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, it->second.descriptorSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = 1.0f; // Full texture UV
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+        }
 
         commandBuffer.endRenderPass();
     }
