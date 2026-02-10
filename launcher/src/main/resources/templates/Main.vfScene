@@ -98,6 +98,18 @@
         "enabled": false,
         "intensity": 0.004999999888241291
       },
+      "depthOfField": {
+        "enabled": false,
+        "focalDistance": 10.0,
+        "focalRange": 5.0,
+        "focusMode": 0,
+        "focusSmoothing": 5.0,
+        "focusTargetX": 0.0,
+        "focusTargetY": 0.0,
+        "focusTargetZ": 0.0,
+        "maxBlurRadius": 5.0,
+        "sampleCount": 32
+      },
       "enabled": true,
       "filmGrain": {
         "enabled": false,
@@ -109,6 +121,15 @@
         "edgeThresholdMin": 0.031199999153614044,
         "enabled": false,
         "quality": "medium"
+      },
+      "godRays": {
+        "decay": 0.9800000190734863,
+        "density": 1.0,
+        "enabled": false,
+        "intensity": 0.800000011920929,
+        "sampleCount": 64,
+        "threshold": 0.5,
+        "weight": 1.0
       },
       "toneMapping": {
         "contrast": 1.0,
@@ -164,7 +185,7 @@
         1.0
       ]
     },
-    "uuid": 9418529535528189918
+    "uuid": 3284051538547156574
   },
   "version": "1.1"
 }

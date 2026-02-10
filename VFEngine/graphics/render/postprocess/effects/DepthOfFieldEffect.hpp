@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "postprocess/PostProcessTypes.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 
 namespace core
@@ -79,10 +81,17 @@ namespace render::postprocess
         vk::ImageAspectFlags depthAspectMask;
 
         // Cached settings
+        ::postprocess::DoFFocusMode currentFocusMode = ::postprocess::DoFFocusMode::Manual;
         float currentFocalDistance = 10.0f;
+        glm::vec3 currentFocusTarget{0.0f};
+        float currentFocusSmoothing = 5.0f;
         float currentFocalRange = 5.0f;
         float currentMaxBlurRadius = 5.0f;
         int currentSampleCount = 32;
+
+        // Smoothing state
+        float smoothedFocalDistance = 10.0f;
+        float lastTime = 0.0f;
 
         vk::Extent2D currentExtent{};
 

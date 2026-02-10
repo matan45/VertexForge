@@ -1234,7 +1234,12 @@ namespace serialization
 
         j["depthOfField"] = {
             {"enabled", settings.depthOfField.enabled},
+            {"focusMode", static_cast<int>(settings.depthOfField.focusMode)},
             {"focalDistance", settings.depthOfField.focalDistance},
+            {"focusTargetX", settings.depthOfField.focusTargetX},
+            {"focusTargetY", settings.depthOfField.focusTargetY},
+            {"focusTargetZ", settings.depthOfField.focusTargetZ},
+            {"focusSmoothing", settings.depthOfField.focusSmoothing},
             {"focalRange", settings.depthOfField.focalRange},
             {"maxBlurRadius", settings.depthOfField.maxBlurRadius},
             {"sampleCount", settings.depthOfField.sampleCount}
@@ -1348,8 +1353,19 @@ namespace serialization
             const auto& df = j["depthOfField"];
             if (df.contains("enabled") && df["enabled"].is_boolean())
                 settings.depthOfField.enabled = df["enabled"].get<bool>();
+            if (df.contains("focusMode") && df["focusMode"].is_number_integer())
+                settings.depthOfField.focusMode = static_cast<postprocess::DoFFocusMode>(
+                    std::clamp(df["focusMode"].get<int>(), 0, 1));
             if (df.contains("focalDistance") && df["focalDistance"].is_number())
                 settings.depthOfField.focalDistance = std::clamp(df["focalDistance"].get<float>(), 0.1f, 1000.0f);
+            if (df.contains("focusTargetX") && df["focusTargetX"].is_number())
+                settings.depthOfField.focusTargetX = df["focusTargetX"].get<float>();
+            if (df.contains("focusTargetY") && df["focusTargetY"].is_number())
+                settings.depthOfField.focusTargetY = df["focusTargetY"].get<float>();
+            if (df.contains("focusTargetZ") && df["focusTargetZ"].is_number())
+                settings.depthOfField.focusTargetZ = df["focusTargetZ"].get<float>();
+            if (df.contains("focusSmoothing") && df["focusSmoothing"].is_number())
+                settings.depthOfField.focusSmoothing = std::clamp(df["focusSmoothing"].get<float>(), 0.1f, 50.0f);
             if (df.contains("focalRange") && df["focalRange"].is_number())
                 settings.depthOfField.focalRange = std::clamp(df["focalRange"].get<float>(), 0.1f, 100.0f);
             if (df.contains("maxBlurRadius") && df["maxBlurRadius"].is_number())

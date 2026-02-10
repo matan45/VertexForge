@@ -91,10 +91,21 @@ namespace postprocess
         float threshold = 0.5f;
     };
 
+    enum class DoFFocusMode : uint8_t
+    {
+        Manual = 0,
+        TargetPoint
+    };
+
     struct DepthOfFieldSettings
     {
         bool enabled = false;
+        DoFFocusMode focusMode = DoFFocusMode::Manual;
         float focalDistance = 10.0f;
+        float focusTargetX = 0.0f;
+        float focusTargetY = 0.0f;
+        float focusTargetZ = 0.0f;
+        float focusSmoothing = 5.0f;
         float focalRange = 5.0f;
         float maxBlurRadius = 5.0f;
         int sampleCount = 32;

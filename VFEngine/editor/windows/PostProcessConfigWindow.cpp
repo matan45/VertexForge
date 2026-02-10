@@ -407,13 +407,50 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Focal Distance", &settings.depthOfField.focalDistance, 0.1f, 0.1f, 1000.0f, "%.1f"))
+                const char* focusModes[] = {"Manual", "Target Point"};
+                int focusModeIdx = static_cast<int>(settings.depthOfField.focusMode);
+                if (ImGui::Combo("Focus Mode", &focusModeIdx, focusModes, IM_ARRAYSIZE(focusModes)))
                 {
+                    settings.depthOfField.focusMode = static_cast<::postprocess::DoFFocusMode>(focusModeIdx);
                     isDirty = true;
                 }
-                if (ImGui::IsItemHovered())
+
+                if (settings.depthOfField.focusMode == ::postprocess::DoFFocusMode::Manual)
                 {
-                    ImGui::SetTooltip("Distance at which objects are in perfect focus.");
+                    if (ImGui::DragFloat("Focal Distance", &settings.depthOfField.focalDistance, 0.1f, 0.1f, 1000.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Distance at which objects are in perfect focus.");
+                    }
+                }
+                else
+                {
+                    float focusTarget[3] = {settings.depthOfField.focusTargetX,
+                                            settings.depthOfField.focusTargetY,
+                                            settings.depthOfField.focusTargetZ};
+                    if (ImGui::DragFloat3("Focus Target", focusTarget, 0.1f))
+                    {
+                        settings.depthOfField.focusTargetX = focusTarget[0];
+                        settings.depthOfField.focusTargetY = focusTarget[1];
+                        settings.depthOfField.focusTargetZ = focusTarget[2];
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("World-space position to focus on.");
+                    }
+
+                    if (ImGui::DragFloat("Focus Smoothing", &settings.depthOfField.focusSmoothing, 0.1f, 0.1f, 50.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("How quickly focus transitions to the target.\nHigher = faster.");
+                    }
                 }
 
                 if (ImGui::DragFloat("Focal Range", &settings.depthOfField.focalRange, 0.1f, 0.1f, 100.0f, "%.1f"))

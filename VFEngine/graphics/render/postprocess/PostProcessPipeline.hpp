@@ -24,6 +24,9 @@ namespace render::postprocess
     {
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
+        glm::vec3 cameraPosition{0.0f};
+        glm::mat4 viewMatrix{1.0f};
+        float time = 0.0f;
     };
 
     struct PingPongTarget
@@ -85,7 +88,8 @@ namespace render::postprocess
         void setSunData(const glm::vec2& screenPos, bool hasSun);
         const SunInfo& getSunData() const { return sunInfo; }
 
-        void setCameraData(float nearPlane, float farPlane);
+        void setCameraData(float nearPlane, float farPlane, const glm::vec3& cameraPosition,
+                          const glm::mat4& viewMatrix, float time);
         const CameraInfo& getCameraData() const { return cameraInfo; }
 
         bool hasEnabledEffects() const;

@@ -32,10 +32,15 @@ namespace render::postprocess
         sunInfo.hasSun = hasSun;
     }
 
-    void PostProcessPipeline::setCameraData(float nearPlane, float farPlane)
+    void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
+                                              const glm::vec3& cameraPosition,
+                                              const glm::mat4& viewMatrix, float time)
     {
         cameraInfo.nearPlane = nearPlane;
         cameraInfo.farPlane = farPlane;
+        cameraInfo.cameraPosition = cameraPosition;
+        cameraInfo.viewMatrix = viewMatrix;
+        cameraInfo.time = time;
     }
 
     bool PostProcessPipeline::hasEnabledEffects() const

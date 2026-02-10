@@ -330,6 +330,15 @@ public class PostProcess {
         _native_postprocess_dof_setEnabled(enabled);
     }
 
+    // Focus mode: 0 = Manual, 1 = TargetPoint
+    public static function getDoFFocusMode(): int {
+        return _native_postprocess_dof_getFocusMode();
+    }
+
+    public static function setDoFFocusMode(int mode): void {
+        _native_postprocess_dof_setFocusMode(mode);
+    }
+
     // Distance at which objects are in perfect focus (0.1 - 1000.0)
     public static function getDoFFocalDistance(): float {
         return _native_postprocess_dof_getFocalDistance();
@@ -337,6 +346,32 @@ public class PostProcess {
 
     public static function setDoFFocalDistance(float value): void {
         _native_postprocess_dof_setFocalDistance(value);
+    }
+
+    // World-space focus target position (used in TargetPoint mode)
+    public static function getDoFFocusTargetX(): float {
+        return _native_postprocess_dof_getFocusTargetX();
+    }
+
+    public static function getDoFFocusTargetY(): float {
+        return _native_postprocess_dof_getFocusTargetY();
+    }
+
+    public static function getDoFFocusTargetZ(): float {
+        return _native_postprocess_dof_getFocusTargetZ();
+    }
+
+    public static function setDoFFocusTarget(float x, float y, float z): void {
+        _native_postprocess_dof_setFocusTarget(x, y, z);
+    }
+
+    // How quickly focus transitions to target (0.1 - 50.0)
+    public static function getDoFFocusSmoothing(): float {
+        return _native_postprocess_dof_getFocusSmoothing();
+    }
+
+    public static function setDoFFocusSmoothing(float value): void {
+        _native_postprocess_dof_setFocusSmoothing(value);
     }
 
     // Range around focal distance that stays sharp (0.1 - 100.0)

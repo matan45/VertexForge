@@ -8,6 +8,7 @@
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include <cstring>
+#include <cmath>
 
 namespace render::postprocess
 {
@@ -210,7 +211,10 @@ namespace render::postprocess
     {
         const auto& d = settings.depthOfField;
         enabled = d.enabled;
+        currentFocusMode = d.focusMode;
         currentFocalDistance = d.focalDistance;
+        currentFocusTarget = glm::vec3(d.focusTargetX, d.focusTargetY, d.focusTargetZ);
+        currentFocusSmoothing = d.focusSmoothing;
         currentFocalRange = d.focalRange;
         currentMaxBlurRadius = d.maxBlurRadius;
         currentSampleCount = d.sampleCount;
@@ -630,8 +634,28 @@ namespace render::postprocess
     {
         const auto& camInfo = pipeline.getCameraData();
 
+        float targetFocal = currentFocalDistance;
+        if (currentFocusMode == ::postprocess::DoFFocusMode::TargetPoint)
+        {
+            // Project target into view space and use Z depth (matches shader's linearizeDepth)
+            glm::vec4 viewPos = camInfo.viewMatrix * glm::vec4(currentFocusTarget, 1.0f);
+            targetFocal = glm::max(-viewPos.z, camInfo.nearPlane);
+        }
+
+        float dt = camInfo.time - lastTime;
+        lastTime = camInfo.time;
+        if (dt > 0.0f && dt < 1.0f)
+        {
+            smoothedFocalDistance = glm::mix(smoothedFocalDistance, targetFocal,
+                                             1.0f - std::exp(-currentFocusSmoothing * dt));
+        }
+        else
+        {
+            smoothedFocalDistance = targetFocal;
+        }
+
         DoFParams data{};
-        data.focalDistance = currentFocalDistance;
+        data.focalDistance = smoothedFocalDistance;
         data.focalRange = currentFocalRange;
         data.maxBlurRadius = currentMaxBlurRadius;
         data.nearPlane = camInfo.nearPlane;

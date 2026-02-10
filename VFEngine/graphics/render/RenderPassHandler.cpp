@@ -996,7 +996,8 @@ namespace render
         }
 
         // Pass camera data for depth-based effects (DoF)
-        postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane);
+        postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane,
+                                           currentCameraPosition, currentView, currentTime);
 
         // Compute sun screen position for god rays
         if (gpuDrivenRendererInitialized)

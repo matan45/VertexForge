@@ -600,6 +600,26 @@ namespace core::api
                 });
             });
 
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocusMode",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.depthOfField.focusMode));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setFocusMode",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t mode = extractInt64(args[0], "PostProcess.dof.setFocusMode");
+                    if (mode >= 0 && mode <= 1)
+                    {
+                        s.depthOfField.focusMode = static_cast<postprocess::DoFFocusMode>(mode);
+                    }
+                });
+            });
+
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocalDistance",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {
@@ -613,6 +633,54 @@ namespace core::api
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.focalDistance = extractFloat(args[0], "PostProcess.dof.setFocalDistance");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetX",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focusTargetX);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetY",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focusTargetY);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetZ",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focusTargetZ);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setFocusTarget",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.focusTargetX = extractFloat(args[0], "PostProcess.dof.setFocusTarget x");
+                    s.depthOfField.focusTargetY = extractFloat(args[1], "PostProcess.dof.setFocusTarget y");
+                    s.depthOfField.focusTargetZ = extractFloat(args[2], "PostProcess.dof.setFocusTarget z");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_getFocusSmoothing",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.depthOfField.focusSmoothing);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_dof_setFocusSmoothing",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.depthOfField.focusSmoothing = extractFloat(args[0], "PostProcess.dof.setFocusSmoothing");
                 });
             });
 
