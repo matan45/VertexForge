@@ -7,6 +7,7 @@
 #include "components/PhysicsComponentService.hpp"
 #include "components/AnimatorComponentService.hpp"
 #include "components/VFXComponentService.hpp"
+#include "components/BillboardComponentService.hpp"
 #include "components/LightComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
@@ -30,6 +31,7 @@ namespace services
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
+        , billboardService(std::make_unique<BillboardComponentService>(sceneGraph))
         , lightService(std::make_unique<LightComponentService>())
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
@@ -55,6 +57,7 @@ namespace services
         physicsService->registerEventHandlers(dispatcher);
         animatorService->registerEventHandlers(dispatcher);
         vfxService->registerEventHandlers(dispatcher);
+        billboardService->registerEventHandlers(dispatcher);
         lightService->registerEventHandlers(dispatcher);
 
         // New extracted services
@@ -417,5 +420,32 @@ namespace services
     bool SceneServiceImpl::setVFXData(EntityHandle entity, const VFXData& vfxData)
     {
         return vfxService->setVFXData(entity, vfxData);
+    }
+
+    // ========== BILLBOARD COMPONENT SERVICE DELEGATES ==========
+
+    bool SceneServiceImpl::addBillboardComponent(EntityHandle entity)
+    {
+        return billboardService->addBillboardComponent(entity);
+    }
+
+    bool SceneServiceImpl::removeBillboardComponent(EntityHandle entity)
+    {
+        return billboardService->removeBillboardComponent(entity);
+    }
+
+    bool SceneServiceImpl::hasBillboardComponent(EntityHandle entity) const
+    {
+        return billboardService->hasBillboardComponent(entity);
+    }
+
+    std::optional<BillboardData> SceneServiceImpl::getBillboardData(EntityHandle entity) const
+    {
+        return billboardService->getBillboardData(entity);
+    }
+
+    bool SceneServiceImpl::setBillboardData(EntityHandle entity, const BillboardData& billboardData)
+    {
+        return billboardService->setBillboardData(entity, billboardData);
     }
 }

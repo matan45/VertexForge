@@ -30,8 +30,8 @@ namespace windows
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Skip non-selectable or non-editor billboards
-            if (!billboard.selectable || !billboard.editorOnly)
+            // Skip non-selectable billboards
+            if (!billboard.selectable)
             {
                 continue;
             }
@@ -64,7 +64,33 @@ namespace windows
             BillboardScreenHit hit;
             hit.entity = services::internal::toHandle(entity);
             hit.screenCenter = screenPos;
-            hit.screenSize = billboard.size; // Size is in screen pixels for ScreenSpace mode
+
+            if (billboard.sizeMode == components::BillboardSizeMode::WorldSpace)
+            {
+                // Project world-space size to screen pixels for hit testing
+                // Use a point offset by the billboard half-size to estimate screen extent
+                glm::vec3 cameraRight = glm::vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+                glm::vec3 cameraUp = glm::vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+
+                glm::vec4 rightClip = projMatrix * viewMatrix * glm::vec4(worldPos + cameraRight * billboard.size.x * 0.5f, 1.0f);
+                glm::vec4 upClip = projMatrix * viewMatrix * glm::vec4(worldPos + cameraUp * billboard.size.y * 0.5f, 1.0f);
+
+                glm::vec2 rightScreen;
+                rightScreen.x = ((rightClip.x / rightClip.w) * 0.5f + 0.5f) * viewportSize.x + viewportPos.x;
+                rightScreen.y = ((rightClip.y / rightClip.w) * 0.5f + 0.5f) * viewportSize.y + viewportPos.y;
+
+                glm::vec2 upScreen;
+                upScreen.x = ((upClip.x / upClip.w) * 0.5f + 0.5f) * viewportSize.x + viewportPos.x;
+                upScreen.y = ((upClip.y / upClip.w) * 0.5f + 0.5f) * viewportSize.y + viewportPos.y;
+
+                float screenWidth = glm::length(rightScreen - screenPos) * 2.0f;
+                float screenHeight = glm::length(upScreen - screenPos) * 2.0f;
+                hit.screenSize = glm::vec2(screenWidth, screenHeight);
+            }
+            else
+            {
+                hit.screenSize = billboard.size; // Size is in screen pixels for ScreenSpace mode
+            }
 
             cachedBillboardHits.push_back(hit);
         }

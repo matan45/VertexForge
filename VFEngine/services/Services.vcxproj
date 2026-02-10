@@ -154,6 +154,7 @@
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
+    <ClInclude Include="impl\components\BillboardComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\LightComponentService.hpp" />
@@ -230,6 +231,7 @@
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
+    <ClCompile Include="impl\components\BillboardComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\LightComponentService.cpp" />

@@ -220,6 +220,20 @@ namespace services {
         virtual bool setVFXData(EntityHandle entity, const VFXData& vfxData) = 0;
 
         // ============================================
+        // Billboard Component Operations
+        // ============================================
+
+        virtual bool addBillboardComponent(EntityHandle entity) = 0;
+
+        virtual bool removeBillboardComponent(EntityHandle entity) = 0;
+
+        virtual bool hasBillboardComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<BillboardData> getBillboardData(EntityHandle entity) const = 0;
+
+        virtual bool setBillboardData(EntityHandle entity, const BillboardData& billboardData) = 0;
+
+        // ============================================
         // Static Entity Operations (BVH Optimization)
         // ============================================
 

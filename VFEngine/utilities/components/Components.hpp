@@ -218,6 +218,7 @@ namespace components
         Audio2D,
         Audio3D,
         Particle,
+        Billboard,
         Custom
     };
 
@@ -233,6 +234,8 @@ namespace components
 
         bool editorOnly = true;
         bool selectable = true;
+
+        std::string texturePath; // Path to .vfImage file (empty = use atlas icon)
 
         uint32_t getEffectiveAtlasIndex() const
         {
@@ -250,6 +253,7 @@ namespace components
             case BillboardIconType::Audio2D: return 4;
             case BillboardIconType::Audio3D: return 5;
             case BillboardIconType::Particle: return 6;
+            case BillboardIconType::Billboard: return 7;
             default: return atlasIndex;
             }
         }
