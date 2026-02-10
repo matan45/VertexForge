@@ -7,6 +7,7 @@
 #include "PhysicsConfigWindow.hpp"
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
+#include "PostProcessConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
 #include "SculptToolPanel.hpp"
@@ -34,6 +35,7 @@ namespace windows
         PhysicsConfigWindow physicsConfigWindow;
         AudioConfigWindow audioConfigWindow;
         RenderConfigWindow renderConfigWindow;
+        PostProcessConfigWindow postProcessConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
         SculptToolPanel sculptToolPanel;

@@ -7,6 +7,7 @@
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/VFXRuntimeAdapter.hpp"
+#include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -30,6 +31,7 @@ namespace core
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
+        postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
 
         offScreen->init();
         audioAdapter->init();
@@ -74,6 +76,7 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        postProcessAdapter.reset();
         vfxRuntimeAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
@@ -115,6 +118,11 @@ namespace core
     services::IVFXRuntimeProvider* RuntimeBootstrap::getVFXRuntimeProvider()
     {
         return vfxRuntimeAdapter.get();
+    }
+
+    services::IPostProcessProvider* RuntimeBootstrap::getPostProcessProvider()
+    {
+        return postProcessAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()

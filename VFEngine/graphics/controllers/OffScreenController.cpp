@@ -352,6 +352,46 @@ namespace controllers
         return stats;
     }
 
+    void OffScreenController::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)
+    {
+        currentPostProcessSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* pipeline = renderHandler->getPostProcessPipeline();
+        if (pipeline)
+        {
+            pipeline->updateSettings(settings);
+        }
+    }
+
+    postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const
+    {
+        return currentPostProcessSettings;
+    }
+
+    void OffScreenController::setPostProcessEnabled(bool enabled)
+    {
+        currentPostProcessSettings.enabled = enabled;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* pipeline = renderHandler->getPostProcessPipeline();
+        if (pipeline)
+        {
+            pipeline->updateSettings(currentPostProcessSettings);
+        }
+    }
+
+    bool OffScreenController::isPostProcessEnabled() const
+    {
+        return currentPostProcessSettings.enabled;
+    }
+
     void OffScreenController::setShowGrid(bool show)
     {
         showGrid = show;

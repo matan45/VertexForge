@@ -3,12 +3,14 @@
 #include "../events/RenderEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../providers/IOffScreenProvider.hpp"
+#include "../providers/IPostProcessProvider.hpp"
 
 namespace services {
-    
+
     class RuntimeRenderServiceImpl : public IRenderService {
     private:
         IOffScreenProvider* offScreenProvider;
+        IPostProcessProvider* postProcessProvider;
         std::optional<std::string> currentIBLPath;
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
@@ -16,7 +18,8 @@ namespace services {
 
         events::SubscriptionToken meshDataChangedToken;
     public:
-        explicit RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider);
+        explicit RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                         IPostProcessProvider* postProcessProvider);
         ~RuntimeRenderServiceImpl() override = default;
 
         void registerEventHandlers() override;

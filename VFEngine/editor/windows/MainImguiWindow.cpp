@@ -18,6 +18,7 @@ namespace windows
         menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow, &audioConfigWindow, &renderConfigWindow);
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
+        menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
 
         subscribeToEvents();
     }
@@ -78,6 +79,7 @@ namespace windows
             physicsConfigWindow.draw();
             audioConfigWindow.draw();
             renderConfigWindow.draw();
+            postProcessConfigWindow.draw();
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
             sculptToolPanel.draw();

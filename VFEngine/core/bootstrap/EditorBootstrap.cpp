@@ -15,6 +15,7 @@
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/TerrainBrushComputeAdapter.hpp"
+#include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -47,6 +48,7 @@ namespace core
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
+        postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
 
         offScreen->init();
         audioAdapter->init();
@@ -109,6 +111,7 @@ namespace core
         scriptingAdapter.reset();
         physicsAdapter.reset();
         animatorAdapter.reset();
+        postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
 
@@ -186,6 +189,11 @@ namespace core
     services::ITerrainBrushComputeProvider* EditorBootstrap::getTerrainBrushComputeProvider()
     {
         return terrainBrushComputeAdapter.get();
+    }
+
+    services::IPostProcessProvider* EditorBootstrap::getPostProcessProvider()
+    {
+        return postProcessAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()
