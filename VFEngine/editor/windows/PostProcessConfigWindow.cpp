@@ -322,6 +322,10 @@ namespace windows
             {
                 isDirty = true;
             }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Requires a directional light in the scene.\nThe sun position is derived from the first directional light.");
+            }
 
             if (settings.godRays.enabled)
             {
