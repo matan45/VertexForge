@@ -20,6 +20,10 @@ namespace render::postprocess
         virtual void cleanup() = 0;
         virtual void recreate(vk::RenderPass renderPass, vk::Extent2D extent) = 0;
 
+        // Called before beginRenderPass — multi-pass effects do internal work here
+        virtual void preRecord(const vk::CommandBuffer& commandBuffer,
+                               vk::DescriptorSet inputDescriptorSet) {}
+
         // Record fullscreen draw (called between beginRenderPass/endRenderPass by pipeline)
         virtual void record(const vk::CommandBuffer& commandBuffer,
                             vk::DescriptorSet inputDescriptorSet) = 0;

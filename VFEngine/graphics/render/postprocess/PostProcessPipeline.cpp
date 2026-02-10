@@ -57,6 +57,8 @@ namespace render::postprocess
             rpBegin.renderArea.offset = vk::Offset2D{0, 0};
             rpBegin.renderArea.extent = extent;
 
+            activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
+
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
             commandBuffer.endRenderPass();
