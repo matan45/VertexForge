@@ -16,6 +16,7 @@
 #include "tools/ClusterDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "postprocess/PostProcessPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
@@ -39,6 +40,7 @@ namespace render
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
         , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
+        , postProcessPipeline{std::make_unique<postprocess::PostProcessPipeline>(device, swapChain, offscreenResources)}
     {
     }
 
@@ -766,6 +768,11 @@ namespace render
         {
             terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
         }
+
+        if (postProcessPipeline && postProcessPipeline->isInitialized())
+        {
+            postProcessPipeline->recreate();
+        }
     }
 
     void RenderPassHandler::cleanUp() const
@@ -799,6 +806,11 @@ namespace render
         if (meshPipelineInitialized)
         {
             meshPipeline->cleanUpShader();
+        }
+
+        if (postProcessPipeline)
+        {
+            postProcessPipeline->cleanup();
         }
 
         meshPipeline->cleanUp();
@@ -982,6 +994,9 @@ namespace render
                     {}, {}, {}, toAttachment);
             }
         }
+
+        // Post-processing chain (ping-pong effects, then blit back to scene color)
+        postProcessPipeline->execute(commandBuffer, imageIndex);
     }
 
     bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath) const
