@@ -57,9 +57,9 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                const char* modeItems[] = {"ACES", "Reinhard", "Uncharted2", "Linear"};
+                const char* modeItems[] = {"ACES", "Reinhard", "Uncharted2", "Linear", "Gran Turismo", "AgX", "Khronos PBR Neutral"};
                 int currentMode = static_cast<int>(settings.toneMapping.mode);
-                if (ImGui::Combo("Mode", &currentMode, modeItems, 4))
+                if (ImGui::Combo("Mode", &currentMode, modeItems, 7))
                 {
                     settings.toneMapping.mode = static_cast<postprocess::ToneMappingMode>(currentMode);
                     isDirty = true;

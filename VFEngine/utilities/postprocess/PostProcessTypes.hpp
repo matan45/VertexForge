@@ -18,7 +18,10 @@ namespace postprocess
         ACES = 0,
         Reinhard,
         Uncharted2,
-        Linear
+        Linear,
+        GranTurismo,
+        AgX,
+        KhronosPBRNeutral
     };
 
     enum class FXAAQuality : uint8_t
