@@ -15,6 +15,7 @@ layout(set = 0, binding = 0) uniform sampler2D inputTexture;
 layout(push_constant) uniform PushConstants {
     float exposure;
     float gamma;
+    float contrast;
     uint mode;
 } pc;
 
@@ -148,6 +149,9 @@ void main()
 
     // Apply exposure
     color *= pc.exposure;
+
+    // Apply contrast (midpoint-based)
+    color = max(pow(color / 0.18, vec3(pc.contrast)) * 0.18, 0.0);
 
     // Tone mapping
     if (pc.mode == 0u)

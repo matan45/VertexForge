@@ -83,6 +83,15 @@ namespace windows
                     ImGui::SetTooltip("Controls scene brightness before tone mapping.");
                 }
 
+                if (ImGui::DragFloat("Contrast", &settings.toneMapping.contrast, 0.01f, 0.5f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Adjusts contrast around mid-gray.\n1.0 = neutral, >1.0 = more contrast, <1.0 = less contrast.");
+                }
+
                 if (ImGui::DragFloat("Gamma", &settings.toneMapping.gamma, 0.01f, 1.0f, 3.0f, "%.2f"))
                 {
                     isDirty = true;

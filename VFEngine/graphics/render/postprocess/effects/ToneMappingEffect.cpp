@@ -9,6 +9,7 @@ namespace render::postprocess
     {
         float exposure;
         float gamma;
+        float contrast;
         uint32_t mode;
     };
 
@@ -86,6 +87,7 @@ namespace render::postprocess
         ToneMappingPushConstants pc{};
         pc.exposure = currentExposure;
         pc.gamma = currentGamma;
+        pc.contrast = currentContrast;
         pc.mode = static_cast<uint32_t>(currentMode);
 
         commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment,
@@ -100,6 +102,7 @@ namespace render::postprocess
         enabled = tm.enabled;
         currentExposure = tm.exposure;
         currentGamma = tm.gamma;
+        currentContrast = tm.contrast;
         currentMode = tm.mode;
     }
 
