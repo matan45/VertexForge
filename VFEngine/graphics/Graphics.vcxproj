@@ -362,6 +362,7 @@
     <None Include="..\..\resources\shaders\material\terrain_material_generated.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
