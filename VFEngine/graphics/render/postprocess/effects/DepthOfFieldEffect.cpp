@@ -157,14 +157,12 @@ namespace render::postprocess
     {
         updateDoFBuffer();
 
-        // Transition depth to read-only for sampling
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        // Render blur pass — samples scene color (set 0) + depth/UBO (set 1)
         vk::RenderPassBeginInfo rpBegin{};
         rpBegin.renderPass = blurRenderPass;
         rpBegin.framebuffer = blurFramebuffer;
@@ -175,7 +173,6 @@ namespace render::postprocess
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, blurPipeline);
 
-        // Bind both sets: set 0 = scene color input, set 1 = depth + UBO
         std::array<vk::DescriptorSet, 2> blurSets = {inputDescriptorSet, blurDescriptorSet};
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                           blurPipelineLayout, 0,
@@ -185,7 +182,6 @@ namespace render::postprocess
         commandBuffer.draw(3, 1, 0, 0);
         commandBuffer.endRenderPass();
 
-        // Transition depth back to attachment
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
@@ -219,8 +215,6 @@ namespace render::postprocess
         currentMaxBlurRadius = d.maxBlurRadius;
         currentSampleCount = d.sampleCount;
     }
-
-    // === Resource Creation ===
 
     void DepthOfFieldEffect::createSampler()
     {
@@ -340,7 +334,6 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        // Blur pass layout (set 1): binding 0 = depth sampler, binding 1 = UBO
         {
             std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
 
@@ -361,7 +354,6 @@ namespace render::postprocess
             blurDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
         }
 
-        // Composite layout (set 1): binding 0 = blur result image
         {
             vk::DescriptorSetLayoutBinding binding{};
             binding.binding = 0;
@@ -382,7 +374,7 @@ namespace render::postprocess
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2; // depth image + blur result
+        poolSizes[0].descriptorCount = 2;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
@@ -413,7 +405,6 @@ namespace render::postprocess
         blurDescriptorSet = sets[0];
         compositeDescriptorSet = sets[1];
 
-        // Write blur descriptor set: depth image + UBO
         {
             vk::DescriptorImageInfo depthImageInfo{};
             depthImageInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
@@ -444,7 +435,6 @@ namespace render::postprocess
             dev.updateDescriptorSets(writes, nullptr);
         }
 
-        // Write composite descriptor set: blur result image
         {
             vk::DescriptorImageInfo blurImageInfo{};
             blurImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -476,7 +466,6 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        // Blur pipeline layout: set 0 = scene color (pipeline's input layout), set 1 = depth+UBO
         std::array<vk::DescriptorSetLayout, 2> blurSetLayouts = {
             pipeline.getInputDescriptorSetLayout(), blurDescriptorSetLayout
         };

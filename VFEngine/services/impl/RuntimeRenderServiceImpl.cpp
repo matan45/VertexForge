@@ -155,7 +155,6 @@ namespace services
                 return getMeshBoundingBox(q.meshPath);
             });
 
-        // Post-process events
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
             [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
             {
@@ -207,14 +206,6 @@ namespace services
         return offScreenProvider->meshLoad(meshPath);
     }
 
-    void RuntimeRenderServiceImpl::unloadMesh(const std::string& meshId)
-    {
-        if (offScreenProvider)
-        {
-            offScreenProvider->meshUnload(meshId);
-        }
-    }
-
     void RuntimeRenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                                                     const glm::vec3& cameraPos, float time)
     {
@@ -227,15 +218,6 @@ namespace services
     bool RuntimeRenderServiceImpl::isMeshLoaded(const std::string& meshPath) const
     {
         return offScreenProvider && offScreenProvider->isMeshLoaded(meshPath);
-    }
-
-    std::vector<std::string> RuntimeRenderServiceImpl::getLoadedMeshes() const
-    {
-        if (!offScreenProvider)
-        {
-            return {};
-        }
-        return offScreenProvider->getLoadedMeshes();
     }
 
     std::optional<MeshBoundingBox> RuntimeRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const

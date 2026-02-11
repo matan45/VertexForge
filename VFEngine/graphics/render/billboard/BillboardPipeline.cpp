@@ -74,7 +74,6 @@ namespace render::billboard
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
-        // Clean up custom textures before destroying the pool
         customTextureCache.clear();
         customBatches.clear();
         atlasInstanceCount = 0;
@@ -173,7 +172,6 @@ namespace render::billboard
 
     void BillboardPipeline::createDescriptorPool()
     {
-        // 1 atlas set + up to MAX_CUSTOM_TEXTURES custom texture sets
         uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES;
 
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
@@ -331,7 +329,6 @@ namespace render::billboard
             return false;
         }
 
-        // Allocate a descriptor set for this texture
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -366,7 +363,6 @@ namespace render::billboard
             return;
         }
 
-        // Separate atlas billboards from custom-textured billboards
         std::vector<BillboardRenderData> atlasBillboards;
         std::unordered_map<std::string, std::vector<BillboardRenderData>> texturedBillboards;
 
@@ -382,15 +378,12 @@ namespace render::billboard
             }
         }
 
-        // Build combined instance list: atlas first, then custom texture batches
         std::vector<BillboardRenderData> orderedBillboards;
         orderedBillboards.reserve(billboards.size());
 
-        // Atlas billboards first
         orderedBillboards.insert(orderedBillboards.end(), atlasBillboards.begin(), atlasBillboards.end());
         atlasInstanceCount = static_cast<uint32_t>(atlasBillboards.size());
 
-        // Custom texture batches
         for (auto& [path, batchBillboards] : texturedBillboards)
         {
             if (loadCustomTexture(path))
@@ -433,7 +426,6 @@ namespace render::billboard
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind shared vertex and index buffers
         vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
         vk::DeviceSize offsets[] = {0, 0};
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
@@ -444,7 +436,6 @@ namespace render::billboard
             static_cast<float>(swapChain.getSwapchainExtent().height)
         );
 
-        // Draw atlas billboards
         if (atlasInstanceCount > 0)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
@@ -460,7 +451,6 @@ namespace render::billboard
             commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
         }
 
-        // Draw custom-textured billboard batches
         for (const auto& batch : customBatches)
         {
             auto it = customTextureCache.find(batch.texturePath);
@@ -474,7 +464,7 @@ namespace render::billboard
 
             BillboardPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
-            pushConstants.atlasGridSize = 1.0f; // Full texture UV
+            pushConstants.atlasGridSize = 1.0f;
 
             commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
                                          0, sizeof(BillboardPushConstants), &pushConstants);

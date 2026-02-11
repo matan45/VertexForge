@@ -57,7 +57,6 @@ namespace render::postprocess
         if (!initialized)
             lazyInit();
 
-        // Gather enabled and initialized effects
         std::vector<PostProcessEffect*> activeEffects;
         for (auto& e : effects)
         {
@@ -69,7 +68,6 @@ namespace render::postprocess
 
         auto extent = swapChain.getSwapchainExtent();
 
-        // Ping-pong state
         vk::DescriptorSet currentInputDescSet = sceneDescriptorSets[imageIndex];
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
@@ -88,7 +86,6 @@ namespace render::postprocess
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
             commandBuffer.endRenderPass();
 
-            // Swap for next iteration
             if (outputIsA)
             {
                 currentInputDescSet = descriptorSetA;
@@ -103,21 +100,17 @@ namespace render::postprocess
             }
         }
 
-        // The last written target is the opposite of currentOutput
         PingPongTarget* lastWritten = outputIsA ? &targetB : &targetA;
 
-        // Transition lastWritten: eShaderReadOnlyOptimal -> eTransferSrcOptimal
         core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        // Transition scene color: eShaderReadOnlyOptimal -> eTransferDstOptimal
         vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        // Copy result back to scene color image
         vk::ImageCopy region{};
         region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
         region.srcSubresource.layerCount = 1;
@@ -132,7 +125,6 @@ namespace render::postprocess
             sceneImage, vk::ImageLayout::eTransferDstOptimal,
             region);
 
-        // Transition scene color back: eTransferDstOptimal -> eShaderReadOnlyOptimal
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
@@ -280,7 +272,7 @@ namespace render::postprocess
     void PostProcessPipeline::createDescriptorPool()
     {
         uint32_t sceneImageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        uint32_t totalSets = 2 + sceneImageCount; // targetA + targetB + scene images
+        uint32_t totalSets = 2 + sceneImageCount;
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
@@ -316,7 +308,6 @@ namespace render::postprocess
         for (uint32_t i = 0; i < sceneImageCount; ++i)
             sceneDescriptorSets[i] = sets[2 + i];
 
-        // Write descriptors
         updateDescriptorSet(descriptorSetA, targetA.imageView);
         updateDescriptorSet(descriptorSetB, targetB.imageView);
 
@@ -388,7 +379,6 @@ namespace render::postprocess
         auto syncEffect = [&](::postprocess::EffectType type, bool enabled,
                               auto makeEffect)
         {
-            // Only add if both globally enabled and per-effect enabled
             bool shouldBeActive = settings.enabled && enabled;
 
             if (shouldBeActive && !hasEffect(type))
@@ -441,21 +431,17 @@ namespace render::postprocess
 
         auto& dev = device.getLogicalDevice();
 
-        // Cleanup framebuffers and ping-pong targets
         dev.destroyFramebuffer(targetA.framebuffer);
         dev.destroyFramebuffer(targetB.framebuffer);
         cleanupPingPongTargets();
 
-        // Cleanup descriptor pool (frees all descriptor sets)
         dev.destroyDescriptorPool(descriptorPool);
         descriptorSetA = nullptr;
         descriptorSetB = nullptr;
         sceneDescriptorSets.clear();
 
-        // Cleanup render pass and pipeline
         dev.destroyRenderPass(renderPass);
 
-        // Recreate
         createRenderPass();
         createPingPongTargets();
         createFramebuffers();

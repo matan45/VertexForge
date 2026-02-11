@@ -167,7 +167,6 @@ namespace render::postprocess
 
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, downsamplePipeline);
 
-            // Set dynamic viewport and scissor for this mip level
             vk::Viewport viewport{};
             viewport.x = 0.0f;
             viewport.y = 0.0f;
@@ -182,14 +181,13 @@ namespace render::postprocess
             scissor.extent = vk::Extent2D{mip.width, mip.height};
             commandBuffer.setScissor(0, scissor);
 
-            // Bind input: first pass reads scene, subsequent read previous mip
+            // First pass reads scene, subsequent read previous mip
             vk::DescriptorSet input = (i == 0)
                 ? inputDescriptorSet
                 : mipLevels[i - 1].descriptorSet;
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                               bloomPipelineLayout, 0, input, nullptr);
 
-            // Source dimensions for texel size
             uint32_t srcWidth = (i == 0) ? currentExtent.width : mipLevels[i - 1].width;
             uint32_t srcHeight = (i == 0) ? currentExtent.height : mipLevels[i - 1].height;
 
@@ -288,8 +286,6 @@ namespace render::postprocess
         currentRadius = b.radius;
         currentPasses = b.passes;
     }
-
-    // === Resource creation ===
 
     void BloomEffect::createSampler()
     {
@@ -413,13 +409,11 @@ namespace render::postprocess
         uint32_t w = currentExtent.width / 2;
         uint32_t h = currentExtent.height / 2;
 
-        // Cap mip count
         uint32_t maxMips = static_cast<uint32_t>(std::floor(std::log2(
             static_cast<float>(std::max(w, h))))) + 1;
         mipCount = std::min(currentPasses, maxMips);
         mipCount = std::max(mipCount, 1u);
 
-        // Create image with N mip levels
         core::ImageInfoRequest req(dev, device.getPhysicalDevice());
         req.width = w;
         req.height = h;
@@ -432,7 +426,6 @@ namespace render::postprocess
 
         core::ImageUtilities::createImage(req, bloomImage, bloomMemory);
 
-        // Create per-mip image views and framebuffers
         mipLevels.resize(mipCount);
         uint32_t mipW = w;
         uint32_t mipH = h;
@@ -442,7 +435,6 @@ namespace render::postprocess
             mipLevels[i].width = mipW;
             mipLevels[i].height = mipH;
 
-            // Create image view for this specific mip level
             vk::ImageViewCreateInfo viewInfo{};
             viewInfo.image = bloomImage;
             viewInfo.viewType = vk::ImageViewType::e2D;
@@ -455,7 +447,6 @@ namespace render::postprocess
 
             mipLevels[i].imageView = dev.createImageView(viewInfo);
 
-            // Create framebuffer for this mip (compatible with both render passes)
             vk::FramebufferCreateInfo fbInfo{};
             fbInfo.renderPass = downsampleRenderPass;
             fbInfo.attachmentCount = 1;
@@ -538,12 +529,11 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        // Shared pipeline layout for downsample/upsample: 1 descriptor set + push constants
         {
             vk::PushConstantRange pushConstantRange{};
             pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eFragment;
             pushConstantRange.offset = 0;
-            pushConstantRange.size = sizeof(BloomDownsamplePC); // Largest push constant
+            pushConstantRange.size = sizeof(BloomDownsamplePC);
 
             vk::PipelineLayoutCreateInfo layoutInfo{};
             layoutInfo.setLayoutCount = 1;
@@ -554,13 +544,11 @@ namespace render::postprocess
             bloomPipelineLayout = dev.createPipelineLayout(layoutInfo);
         }
 
-        // Common state for both pipelines
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
 
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
 
-        // Dynamic viewport and scissor
         std::array<vk::DynamicState, 2> dynamicStates = {
             vk::DynamicState::eViewport,
             vk::DynamicState::eScissor
@@ -661,7 +649,6 @@ namespace render::postprocess
 
     void BloomEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
     {
-        // Composite uses 2 descriptor sets: scene (set 0) + bloom (set 1)
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             descriptorSetLayout, descriptorSetLayout
         };

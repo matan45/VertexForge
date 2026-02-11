@@ -85,7 +85,6 @@ namespace render::postprocess
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, inputDescriptorSet, nullptr);
 
-        // Compute animated time seed from steady clock
         auto now = std::chrono::steady_clock::now().time_since_epoch();
         float timeMs = std::chrono::duration<float, std::milli>(now).count();
         float time = std::fmod(timeMs, 100000.0f);

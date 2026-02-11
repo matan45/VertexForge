@@ -20,7 +20,6 @@ namespace render::postprocess
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout inputDescriptorSetLayout;
 
-        // Cached settings
         float currentExposure = 1.0f;
         float currentGamma = 2.2f;
         float currentContrast = 1.0f;

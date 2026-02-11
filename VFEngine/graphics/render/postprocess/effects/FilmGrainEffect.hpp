@@ -20,7 +20,6 @@ namespace render::postprocess
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout inputDescriptorSetLayout;
 
-        // Cached settings
         float currentIntensity = 0.1f;
         float currentSize = 1.6f;
 

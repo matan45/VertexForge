@@ -19,7 +19,6 @@ namespace render::postprocess
     {
         enabled = false;
 
-        // Determine depth aspect mask based on format
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
         depthAspectMask = vk::ImageAspectFlagBits::eDepth;
         if (depthFormat == vk::Format::eD16UnormS8Uint ||
@@ -157,14 +156,12 @@ namespace render::postprocess
     {
         updateSunBuffer();
 
-        // Transition depth to read-only for sampling
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        // Render radial blur pass
         vk::RenderPassBeginInfo rpBegin{};
         rpBegin.renderPass = rayRenderPass;
         rpBegin.framebuffer = rayFramebuffer;
@@ -180,7 +177,6 @@ namespace render::postprocess
         commandBuffer.draw(3, 1, 0, 0);
         commandBuffer.endRenderPass();
 
-        // Transition depth back to attachment
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
@@ -213,8 +209,6 @@ namespace render::postprocess
         currentSampleCount = g.sampleCount;
         currentThreshold = g.threshold;
     }
-
-    // === Resource Creation ===
 
     void GodRaysEffect::createSampler()
     {
@@ -334,7 +328,6 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        // Ray pass layout: binding 0 = depth sampler, binding 1 = UBO
         {
             std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
 
@@ -355,7 +348,6 @@ namespace render::postprocess
             rayDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
         }
 
-        // Composite layout: binding 0 = god rays image
         {
             vk::DescriptorSetLayoutBinding binding{};
             binding.binding = 0;
@@ -407,7 +399,6 @@ namespace render::postprocess
         rayDescriptorSet = sets[0];
         compositeDescriptorSet = sets[1];
 
-        // Write ray descriptor set: depth image + UBO
         {
             vk::DescriptorImageInfo depthImageInfo{};
             depthImageInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
@@ -438,7 +429,6 @@ namespace render::postprocess
             dev.updateDescriptorSets(writes, nullptr);
         }
 
-        // Write composite descriptor set: god rays image
         {
             vk::DescriptorImageInfo rayImageInfo{};
             rayImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;

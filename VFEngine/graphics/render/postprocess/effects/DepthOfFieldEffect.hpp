@@ -36,51 +36,37 @@ namespace render::postprocess
         core::OffscreenResources& offscreenResources;
         PostProcessPipeline& pipeline;
 
-        // Blur result image (RGBA - rgb = blurred color, a = CoC)
         vk::Image blurImage;
         vk::DeviceMemory blurMemory;
         vk::ImageView blurImageView;
         vk::Framebuffer blurFramebuffer;
 
-        // Depth-only image view for sampling
         vk::ImageView depthOnlyImageView;
-
-        // Internal render pass
         vk::RenderPass blurRenderPass;
 
-        // Shaders
         std::shared_ptr<core::Shader> blurShader;
         std::shared_ptr<core::Shader> compositeShader;
 
-        // Blur pass pipeline
         vk::Pipeline blurPipeline;
         vk::PipelineLayout blurPipelineLayout;
 
-        // Composite pipeline
         vk::Pipeline compositePipeline;
         vk::PipelineLayout compositePipelineLayout;
 
-        // Descriptor layouts
         vk::DescriptorSetLayout blurDescriptorSetLayout;
         vk::DescriptorSetLayout compositeDescriptorSetLayout;
 
-        // Descriptor pool and sets
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet blurDescriptorSet;
         vk::DescriptorSet compositeDescriptorSet;
 
-        // DoF UBO
         vk::Buffer dofBuffer;
         vk::DeviceMemory dofBufferMemory;
         void* dofBufferMapped = nullptr;
 
-        // Sampler
         vk::Sampler sampler;
-
-        // Depth aspect mask (depends on depth format)
         vk::ImageAspectFlags depthAspectMask;
 
-        // Cached settings
         ::postprocess::DoFFocusMode currentFocusMode = ::postprocess::DoFFocusMode::Manual;
         float currentFocalDistance = 10.0f;
         glm::vec3 currentFocusTarget{0.0f};
@@ -89,7 +75,6 @@ namespace render::postprocess
         float currentMaxBlurRadius = 5.0f;
         int currentSampleCount = 32;
 
-        // Smoothing state
         float smoothedFocalDistance = 10.0f;
         float lastTime = 0.0f;
 

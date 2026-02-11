@@ -49,7 +49,6 @@ namespace render::billboard
         BillboardBufferManager bufferManager;
         BillboardAtlasManager atlasManager;
 
-        // Custom texture support
         struct CustomTextureEntry
         {
             std::unique_ptr<core::Texture> texture;
@@ -58,7 +57,6 @@ namespace render::billboard
         std::unordered_map<std::string, CustomTextureEntry> customTextureCache;
         static constexpr uint32_t MAX_CUSTOM_TEXTURES = 32;
 
-        // Per-frame batch info (set by setBillboardList, read by recordCommandBuffer)
         uint32_t atlasInstanceCount = 0;
         std::vector<CustomTextureBatch> customBatches;
 
@@ -81,9 +79,6 @@ namespace render::billboard
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
-
-        vk::RenderPass getRenderPass() const { return renderPass; }
-        vk::Pipeline getGraphicsPipeline() const { return graphicsPipeline; }
 
     private:
         void loadShader();

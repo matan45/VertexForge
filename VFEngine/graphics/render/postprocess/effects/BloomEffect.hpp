@@ -26,42 +26,34 @@ namespace render::postprocess
     private:
         core::Device& device;
 
-        // Mip chain
         vk::Image bloomImage;
         vk::DeviceMemory bloomMemory;
         std::vector<BloomMipLevel> mipLevels;
         uint32_t mipCount = 0;
 
-        // Render passes
         vk::RenderPass downsampleRenderPass;
         vk::RenderPass upsampleRenderPass;
 
-        // Shaders
         std::shared_ptr<core::Shader> downsampleShader;
         std::shared_ptr<core::Shader> upsampleShader;
         std::shared_ptr<core::Shader> compositeShader;
 
-        // Pipelines (downsample/upsample use dynamic viewport/scissor)
         vk::Pipeline downsamplePipeline;
         vk::Pipeline upsamplePipeline;
         vk::PipelineLayout bloomPipelineLayout;
 
-        // Composite pipeline (2 descriptor sets: scene + bloom)
         vk::Pipeline compositePipeline;
         vk::PipelineLayout compositePipelineLayout;
 
-        // Descriptors
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::Sampler bloomSampler;
 
-        // Cached settings
         float currentThreshold = 1.0f;
         float currentIntensity = 0.5f;
         float currentRadius = 0.5f;
         uint32_t currentPasses = 5;
 
-        // Stored extent for recreate
         vk::Extent2D currentExtent{};
 
     public:

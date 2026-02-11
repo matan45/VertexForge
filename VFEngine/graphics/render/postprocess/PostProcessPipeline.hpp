@@ -46,28 +46,21 @@ namespace render::postprocess
 
         bool initialized = false;
 
-        // Shared resources
         vk::RenderPass renderPass;
         vk::Sampler linearSampler;
         vk::DescriptorSetLayout inputDescriptorSetLayout;
         vk::DescriptorPool descriptorPool;
 
-        // Ping-pong targets
         PingPongTarget targetA{};
         PingPongTarget targetB{};
 
-        // Descriptor sets for sampling each source
-        vk::DescriptorSet descriptorSetA; // samples targetA
-        vk::DescriptorSet descriptorSetB; // samples targetB
-        std::vector<vk::DescriptorSet> sceneDescriptorSets; // samples scene color per swapchain image
+        vk::DescriptorSet descriptorSetA;
+        vk::DescriptorSet descriptorSetB;
+        std::vector<vk::DescriptorSet> sceneDescriptorSets;
 
-        // Sun data for effects that need it (God Rays)
         SunInfo sunInfo{};
-
-        // Camera data for effects that need it (Depth of Field)
         CameraInfo cameraInfo{};
 
-        // Effect chain (sorted by priority)
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
 
     public:

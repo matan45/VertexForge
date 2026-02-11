@@ -550,7 +550,6 @@ namespace services
                 }
             });
 
-        // Post-process events
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
             [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
             {

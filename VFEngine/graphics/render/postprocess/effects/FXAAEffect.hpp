@@ -21,7 +21,6 @@ namespace render::postprocess
         vk::DescriptorSetLayout inputDescriptorSetLayout;
         vk::Extent2D currentExtent{};
 
-        // Cached settings
         float currentEdgeThresholdMin = 0.0312f;
         float currentEdgeThreshold = 0.125f;
         ::postprocess::FXAAQuality currentQuality = ::postprocess::FXAAQuality::Medium;

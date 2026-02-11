@@ -34,17 +34,14 @@ namespace services {
         bool hasIBL() const override;
         std::optional<std::string> getIBLPath() const override;
 
-        // Render State
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
 
     private:
         std::string loadMesh(const std::string& meshPath);
-        void unloadMesh(const std::string& meshId);
         void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
-        std::vector<std::string> getLoadedMeshes() const;
         void prepareCameras();
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
         void prepareFrameMeshes();
