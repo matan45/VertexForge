@@ -18,6 +18,7 @@ namespace windows
         menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow, &audioConfigWindow, &renderConfigWindow);
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
+        menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
 
         subscribeToEvents();
     }
@@ -26,6 +27,7 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unsubscribe(sceneClearedToken);
+        dispatcher.unsubscribe(sceneLoadedToken);
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(terrainLoadStartedToken);
     }
@@ -38,6 +40,12 @@ namespace windows
             [this](const events::scene::SceneClearedNotification&)
             {
                 onSceneCleared();
+            });
+
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                postProcessConfigWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
@@ -78,6 +86,7 @@ namespace windows
             physicsConfigWindow.draw();
             audioConfigWindow.draw();
             renderConfigWindow.draw();
+            postProcessConfigWindow.draw();
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
             sculptToolPanel.draw();

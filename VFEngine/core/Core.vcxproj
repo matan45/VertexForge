@@ -108,6 +108,7 @@
     <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
+    <ClInclude Include="adapters\PostProcessAdapter.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\TerrainBrushComputeAdapter.hpp" />
     <ClInclude Include="adapters\TerrainRaycastAdapter.hpp" />
@@ -122,6 +123,7 @@
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
     <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
+    <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
@@ -159,6 +161,7 @@
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
+    <ClCompile Include="adapters\PostProcessAdapter.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\TerrainBrushComputeAdapter.cpp" />
     <ClCompile Include="adapters\TerrainRaycastAdapter.cpp" />
@@ -172,6 +175,7 @@
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
+    <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />

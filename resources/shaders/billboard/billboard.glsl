@@ -29,7 +29,6 @@ void main() {
     vec3 worldPos = inWorldPosAndAtlas.xyz;
     float atlasIndex = inWorldPosAndAtlas.w;
 
-    // Extract camera right and up vectors from view matrix
     vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
     vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
 
@@ -38,10 +37,8 @@ void main() {
     if (inSizeMode == 0u) {
         // Screen-space mode: constant size in pixels regardless of distance
 
-        // First, project the billboard center to clip space
         vec4 centerClip = camera.projection * camera.view * vec4(worldPos, 1.0);
 
-        // Calculate the offset in normalized device coordinates
         // inPosition is -0.5 to 0.5, so we scale by size/viewportSize
         vec2 ndcOffset = inPosition * inSize / pc.viewportSize * 2.0;
 
@@ -52,7 +49,6 @@ void main() {
     else {
         // World-space mode: size scales with distance (like a physical object)
 
-        // Calculate billboard vertex position in world space
         vertexPos = worldPos
             + cameraRight * inPosition.x * inSize.x
             + cameraUp * inPosition.y * inSize.y;
@@ -66,9 +62,15 @@ void main() {
 
     // Map input UV (0-1) to tile UV within atlas
     vec2 tileSize = vec2(1.0 / gridSize);
-    fragTexCoord = (vec2(tileU, tileV) + inTexCoord) * tileSize;
+    vec2 uv = inTexCoord;
 
-    // Pass through color tint
+    // Custom textures (gridSize == 1) need V flip since .vfImage stores top-to-bottom
+    if (gridSize == 1.0) {
+        uv.y = 1.0 - uv.y;
+    }
+
+    fragTexCoord = (vec2(tileU, tileV) + uv) * tileSize;
+
     fragColorTint = inColorTint;
 }
 
@@ -85,7 +87,6 @@ layout(binding = 1) uniform sampler2D atlasTexture;
 void main() {
     vec4 texColor = texture(atlasTexture, fragTexCoord);
 
-    // Apply color tint
     vec4 finalColor = texColor * fragColorTint;
 
     if (finalColor.a < 0.01) {

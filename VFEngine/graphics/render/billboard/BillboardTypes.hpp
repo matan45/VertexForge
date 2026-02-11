@@ -117,6 +117,7 @@ namespace render::billboard
         uint32_t sizeMode;      // 0 = ScreenSpace, 1 = WorldSpace
         uint32_t entityId;
         glm::vec4 colorTint;
+        std::string texturePath; // Non-empty = use custom texture instead of atlas
     };
 
     // Atlas configuration

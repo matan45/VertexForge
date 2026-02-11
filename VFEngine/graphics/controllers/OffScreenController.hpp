@@ -4,6 +4,7 @@
 #include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
+#include "postprocess/PostProcessTypes.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -75,6 +76,7 @@ namespace controllers
         bool showClusterDebug = false;
         bool showShadowDebug = false;
         bool playModeActive = false;
+        postprocess::PostProcessSettings currentPostProcessSettings;
 
     public:
         explicit OffScreenController();
@@ -154,6 +156,11 @@ namespace controllers
         void setShowShadowDebug(bool show) { showShadowDebug = show; }
         bool getShowShadowDebug() const { return showShadowDebug; }
         void prepareFrameShadowDebug();
+
+        void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
+        postprocess::PostProcessSettings getPostProcessSettings() const;
+        void setPostProcessEnabled(bool enabled);
+        bool isPostProcessEnabled() const;
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

@@ -44,12 +44,12 @@ namespace math
             viewProjection[3][3] - viewProjection[3][1]
         );
 
-        // Near plane
+        // Near plane (Vulkan depth range [0,1]: z >= 0, so just row2)
         planes[4] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][2],
-            viewProjection[1][3] + viewProjection[1][2],
-            viewProjection[2][3] + viewProjection[2][2],
-            viewProjection[3][3] + viewProjection[3][2]
+            viewProjection[0][2],
+            viewProjection[1][2],
+            viewProjection[2][2],
+            viewProjection[3][2]
         );
 
         // Far plane

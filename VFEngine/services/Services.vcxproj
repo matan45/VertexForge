@@ -118,6 +118,7 @@
     <ClInclude Include="events\PaintModeEvents.hpp" />
     <ClInclude Include="events\PhysicsEvents.hpp" />
     <ClInclude Include="events\PhysicsSettingsEvents.hpp" />
+    <ClInclude Include="events\PostProcessEvents.hpp" />
     <ClInclude Include="events\PreviewEvents.hpp" />
     <ClInclude Include="events\ProjectEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
@@ -153,6 +154,7 @@
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
+    <ClInclude Include="impl\components\BillboardComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\LightComponentService.hpp" />
@@ -194,6 +196,7 @@
     <ClInclude Include="providers\IMeshPreviewProvider.hpp" />
     <ClInclude Include="providers\IOffScreenProvider.hpp" />
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
+    <ClInclude Include="providers\IPostProcessProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
     <ClInclude Include="providers\ITerrainBrushComputeProvider.hpp" />
@@ -228,6 +231,7 @@
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
+    <ClCompile Include="impl\components\BillboardComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\LightComponentService.cpp" />

@@ -3,12 +3,14 @@
 #include "../events/RenderEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../providers/IOffScreenProvider.hpp"
+#include "../providers/IPostProcessProvider.hpp"
 
 namespace services {
-    
+
     class RuntimeRenderServiceImpl : public IRenderService {
     private:
         IOffScreenProvider* offScreenProvider;
+        IPostProcessProvider* postProcessProvider;
         std::optional<std::string> currentIBLPath;
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
@@ -16,7 +18,8 @@ namespace services {
 
         events::SubscriptionToken meshDataChangedToken;
     public:
-        explicit RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider);
+        explicit RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                         IPostProcessProvider* postProcessProvider);
         ~RuntimeRenderServiceImpl() override = default;
 
         void registerEventHandlers() override;
@@ -31,17 +34,14 @@ namespace services {
         bool hasIBL() const override;
         std::optional<std::string> getIBLPath() const override;
 
-        // Render State
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
 
     private:
         std::string loadMesh(const std::string& meshPath);
-        void unloadMesh(const std::string& meshId);
         void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
-        std::vector<std::string> getLoadedMeshes() const;
         void prepareCameras();
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
         void prepareFrameMeshes();

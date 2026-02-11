@@ -8,7 +8,7 @@ namespace windows::details
 {
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
-                                 bool hasCollider, bool hasRigidBody, bool hasVFX,
+                                 bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -121,6 +121,20 @@ namespace windows::details
                 }
             }
 
+            if (!hasBillboard)
+            {
+                if (ImGui::Selectable("  Billboard"))
+                {
+                    events::scene::AddBillboardComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Camera-facing textured quad");
+                }
+            }
+
             // Physics components section
             ImGui::Spacing();
             ImGui::TextDisabled("Physics");
@@ -202,7 +216,7 @@ namespace windows::details
             }
 
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
-                           hasCollider && hasRigidBody && hasVFX &&
+                           hasCollider && hasRigidBody && hasVFX && hasBillboard &&
                            hasDirectionalLight && hasPointLight && hasSpotLight;
             if (allAdded)
             {

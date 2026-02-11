@@ -77,13 +77,90 @@
     }
   },
   "renderSettings": {
+    "culling": {
+      "frustumCullingEnabled": true,
+      "lodSelectionEnabled": true,
+      "meshletBackfaceCullingEnabled": true,
+      "meshletFrustumCullingEnabled": true,
+      "occlusionCullingEnabled": true,
+      "terrainFrustumCullingEnabled": true,
+      "terrainMeshletCullingEnabled": true
+    },
+    "postProcess": {
+      "bloom": {
+        "enabled": false,
+        "intensity": 0.5,
+        "passes": 5,
+        "radius": 0.5,
+        "threshold": 0.699999988079071
+      },
+      "chromaticAberration": {
+        "enabled": false,
+        "intensity": 0.004999999888241291
+      },
+      "depthOfField": {
+        "enabled": false,
+        "focalDistance": 10.0,
+        "focalRange": 5.0,
+        "focusMode": 0,
+        "focusSmoothing": 5.0,
+        "focusTargetX": 0.0,
+        "focusTargetY": 0.0,
+        "focusTargetZ": 0.0,
+        "maxBlurRadius": 5.0,
+        "sampleCount": 32
+      },
+      "enabled": true,
+      "filmGrain": {
+        "enabled": false,
+        "intensity": 0.10000000149011612,
+        "size": 1.600000023841858
+      },
+      "fxaa": {
+        "edgeThreshold": 0.125,
+        "edgeThresholdMin": 0.031199999153614044,
+        "enabled": false,
+        "quality": "medium"
+      },
+      "godRays": {
+        "decay": 0.9800000190734863,
+        "density": 1.0,
+        "enabled": false,
+        "intensity": 0.800000011920929,
+        "sampleCount": 64,
+        "threshold": 0.5,
+        "weight": 1.0
+      },
+      "toneMapping": {
+        "contrast": 1.0,
+        "enabled": true,
+        "exposure": 1.0,
+        "gamma": 2.200000047683716,
+        "mode": "aces"
+      },
+      "vignette": {
+        "enabled": false,
+        "intensity": 0.30000001192092896,
+        "radius": 0.800000011920929,
+        "softness": 0.5
+      }
+    },
     "shadows": {
       "cascadeCount": 4,
       "cascadeSplitMode": "practical",
       "enabled": true,
       "normalBias": 0.019999999552965164,
       "quality": "high",
-      "shadowBias": 0.004999999888241291
+      "shadowBias": 0.004999999888241291,
+      "shadowIntensity": 0.5,
+      "slopeBias": 1.5
+    },
+    "terrain": {
+      "enabled": true,
+      "errorThreshold": 2.0,
+      "lodBias": 1.0,
+      "shadowLOD": 2,
+      "textureScale": 0.10000000149011612
     }
   },
   "root": {
@@ -108,7 +185,7 @@
         1.0
       ]
     },
-    "uuid": 17516301760157937024
+    "uuid": 3284051538547156574
   },
   "version": "1.1"
 }

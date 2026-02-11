@@ -13,6 +13,7 @@
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
+#include "../../events/PostProcessEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <functional>
 
@@ -172,13 +173,15 @@ namespace services
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
-        events::terrain::TerrainDeletedNotification terrainNotif;
-        dispatcher.publish(terrainNotif);
+        sceneGraph->clearScene();
 
         if (entityStateService)
         {
             entityStateService->clearSelection();
         }
+
+        events::scene::SceneClearedNotification clearedNotif;
+        dispatcher.publish(clearedNotif);
 
         events::scene::SceneLoadingStartedNotification startNotif;
         startNotif.scenePath = filePath;
@@ -273,6 +276,10 @@ namespace services
             events::render::ApplyShadowSettingsCommand renderCmd;
             renderCmd.settings = sceneGraph->getRenderSettings();
             dispatcher.execute(renderCmd);
+
+            events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
+            postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;
+            dispatcher.execute(postProcessCmd);
 
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;

@@ -114,7 +114,8 @@ namespace handlers {
             bootstrap->getAnimatorProvider()
         );
         renderService = std::make_shared<services::RuntimeRenderServiceImpl>(
-            bootstrap->getOffScreenProvider()
+            bootstrap->getOffScreenProvider(),
+            bootstrap->getPostProcessProvider()
         );
         inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());

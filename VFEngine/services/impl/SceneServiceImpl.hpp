@@ -24,6 +24,7 @@ namespace services
     class PhysicsComponentService;
     class AnimatorComponentService;
     class VFXComponentService;
+    class BillboardComponentService;
     class LightComponentService;
 
     // New extracted services
@@ -47,6 +48,7 @@ namespace services
         std::unique_ptr<PhysicsComponentService> physicsService;
         std::unique_ptr<AnimatorComponentService> animatorService;
         std::unique_ptr<VFXComponentService> vfxService;
+        std::unique_ptr<BillboardComponentService> billboardService;
         std::unique_ptr<LightComponentService> lightService;
 
         // New extracted services
@@ -144,6 +146,13 @@ namespace services
         bool hasVFXComponent(EntityHandle entity) const override;
         std::optional<VFXData> getVFXData(EntityHandle entity) const override;
         bool setVFXData(EntityHandle entity, const VFXData& vfxData) override;
+
+        // Billboard Component Operations
+        bool addBillboardComponent(EntityHandle entity) override;
+        bool removeBillboardComponent(EntityHandle entity) override;
+        bool hasBillboardComponent(EntityHandle entity) const override;
+        std::optional<BillboardData> getBillboardData(EntityHandle entity) const override;
+        bool setBillboardData(EntityHandle entity, const BillboardData& billboardData) override;
 
         // Static Entity Operations
         bool setEntityStatic(EntityHandle entity, bool isStatic) override;

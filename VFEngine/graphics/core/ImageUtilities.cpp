@@ -126,6 +126,24 @@ namespace core
 			sourceStage = vk::PipelineStageFlagBits::eTransfer;
 			destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
 		}
+		else if (oldLayout == eShaderReadOnlyOptimal && newLayout == eTransferDstOptimal) {
+			barrier.srcAccessMask = eShaderRead;
+			barrier.dstAccessMask = eTransferWrite;
+			sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
+			destinationStage = vk::PipelineStageFlagBits::eTransfer;
+		}
+		else if (oldLayout == eDepthStencilAttachmentOptimal && newLayout == eDepthStencilReadOnlyOptimal) {
+			barrier.srcAccessMask = eDepthStencilAttachmentWrite;
+			barrier.dstAccessMask = eShaderRead;
+			sourceStage = vk::PipelineStageFlagBits::eLateFragmentTests;
+			destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+		}
+		else if (oldLayout == eDepthStencilReadOnlyOptimal && newLayout == eDepthStencilAttachmentOptimal) {
+			barrier.srcAccessMask = eShaderRead;
+			barrier.dstAccessMask = eDepthStencilAttachmentWrite;
+			sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
+			destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+		}
 
 		commandBuffer.pipelineBarrier(
 			sourceStage, destinationStage,

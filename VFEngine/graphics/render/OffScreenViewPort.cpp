@@ -177,7 +177,7 @@ namespace render
         imageColorInfo.height = swapChain.getSwapchainExtent().height;
         imageColorInfo.format = colorFormat;
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
-        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());

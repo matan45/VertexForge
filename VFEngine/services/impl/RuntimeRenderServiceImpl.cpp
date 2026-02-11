@@ -1,12 +1,15 @@
 #include "RuntimeRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/PostProcessEvents.hpp"
 #include "print/Logger.hpp"
 #include <filesystem>
 
 namespace services
 {
-    RuntimeRenderServiceImpl::RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider)
+    RuntimeRenderServiceImpl::RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                                       IPostProcessProvider* postProcessProvider)
         : offScreenProvider(offScreenProvider)
+          , postProcessProvider(postProcessProvider)
     {
     }
 
@@ -152,6 +155,38 @@ namespace services
                 return getMeshBoundingBox(q.meshPath);
             });
 
+        dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
+            [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
+            {
+                if (postProcessProvider)
+                {
+                    postProcessProvider->applyPostProcessSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::postprocess::GetPostProcessSettingsQuery>(
+            [this](const events::postprocess::GetPostProcessSettingsQuery&)
+            {
+                return postProcessProvider
+                           ? postProcessProvider->getPostProcessSettings()
+                           : postprocess::PostProcessSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::postprocess::SetPostProcessEnabledCommand>(
+            [this](const events::postprocess::SetPostProcessEnabledCommand& cmd)
+            {
+                if (postProcessProvider)
+                {
+                    postProcessProvider->setPostProcessEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::postprocess::GetPostProcessEnabledQuery>(
+            [this](const events::postprocess::GetPostProcessEnabledQuery&)
+            {
+                return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
@@ -171,14 +206,6 @@ namespace services
         return offScreenProvider->meshLoad(meshPath);
     }
 
-    void RuntimeRenderServiceImpl::unloadMesh(const std::string& meshId)
-    {
-        if (offScreenProvider)
-        {
-            offScreenProvider->meshUnload(meshId);
-        }
-    }
-
     void RuntimeRenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                                                     const glm::vec3& cameraPos, float time)
     {
@@ -191,15 +218,6 @@ namespace services
     bool RuntimeRenderServiceImpl::isMeshLoaded(const std::string& meshPath) const
     {
         return offScreenProvider && offScreenProvider->isMeshLoaded(meshPath);
-    }
-
-    std::vector<std::string> RuntimeRenderServiceImpl::getLoadedMeshes() const
-    {
-        if (!offScreenProvider)
-        {
-            return {};
-        }
-        return offScreenProvider->getLoadedMeshes();
     }
 
     std::optional<MeshBoundingBox> RuntimeRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const

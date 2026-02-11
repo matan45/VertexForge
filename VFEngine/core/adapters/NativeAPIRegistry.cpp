@@ -7,6 +7,7 @@
 #include "api/AnimatorAPI.hpp"
 #include "api/VFXAPI.hpp"
 #include "api/LightAPI.hpp"
+#include "api/PostProcessAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -36,6 +37,7 @@ namespace core
         api::AnimatorAPI::registerAPI(interpreter);
         api::VFXAPI::registerAPI(interpreter);
         api::LightAPI::registerAPI(interpreter);
+        api::PostProcessAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }
