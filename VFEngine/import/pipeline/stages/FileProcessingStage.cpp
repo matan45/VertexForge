@@ -1,4 +1,5 @@
 #include "FileProcessingStage.hpp"
+#include <stdexcept>
 
 namespace pipeline::stages
 {
@@ -141,6 +142,9 @@ namespace pipeline::stages
         }
 
         types::FontImportConfig config;
-        fontProcessor.loadFromFile(context.file, context.fileName, context.location, config, fontProgress);
+        if (!fontProcessor.loadFromFile(context.file, context.fileName, context.location, config, fontProgress))
+        {
+            throw std::runtime_error("Failed to import font: " + std::string(context.fileName));
+        }
     }
 }

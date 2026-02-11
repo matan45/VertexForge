@@ -217,13 +217,18 @@ namespace render::text
 
         CachedFont cached;
         cached.fontData = fontData;
+        cached.isColorFont = (atlas.format == resource::FontAtlasFormat::RGBA_32);
 
-        // Font atlas is single-channel (grayscale/SDF) - use R8_UNORM
+        // Select format based on atlas type
+        vk::Format atlasFormat = cached.isColorFont
+            ? vk::Format::eR8G8B8A8Unorm
+            : vk::Format::eR8Unorm;
+
         core::ImageInfoRequest imageInfo(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             atlas.width, atlas.height, 1, 1,
-            vk::Format::eR8Unorm,
+            atlasFormat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -233,7 +238,7 @@ namespace render::text
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
             cached.atlasImage,
-            vk::Format::eR8Unorm,
+            atlasFormat,
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D
         );

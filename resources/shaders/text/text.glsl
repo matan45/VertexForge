@@ -25,7 +25,7 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
-    float padding1;
+    uint glyphMode;   // 0 = SDF, 1 = color bitmap
     float padding2;
 } pc;
 
@@ -87,17 +87,33 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler2D fontAtlas;
 
+layout(push_constant) uniform PushConstants {
+    vec2 viewportSize;
+    uint glyphMode;   // 0 = SDF, 1 = color bitmap
+    float padding2;
+} pc;
+
 void main() {
-    float sdfValue = texture(fontAtlas, fragTexCoord).r;
+    if (pc.glyphMode == 1u) {
+        // Color bitmap mode: sample RGBA directly from atlas
+        vec4 texColor = texture(fontAtlas, fragTexCoord);
+        if (texColor.a < 0.01) {
+            discard;
+        }
+        outColor = vec4(texColor.rgb, texColor.a * fragColor.a);
+    } else {
+        // SDF mode: existing smoothstep logic
+        float sdfValue = texture(fontAtlas, fragTexCoord).r;
 
-    float edge = fragSdfParams.x;
-    float smoothWidth = fragSdfParams.y;
+        float edge = fragSdfParams.x;
+        float smoothWidth = fragSdfParams.y;
 
-    float alpha = smoothstep(edge - smoothWidth, edge + smoothWidth, sdfValue);
+        float alpha = smoothstep(edge - smoothWidth, edge + smoothWidth, sdfValue);
 
-    if (alpha < 0.01) {
-        discard;
+        if (alpha < 0.01) {
+            discard;
+        }
+
+        outColor = vec4(fragColor.rgb, fragColor.a * alpha);
     }
-
-    outColor = vec4(fragColor.rgb, fragColor.a * alpha);
 }

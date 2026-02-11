@@ -339,6 +339,7 @@ namespace serialization
         case components::BillboardIconType::Audio3D: return "audio3D";
         case components::BillboardIconType::Particle: return "particle";
         case components::BillboardIconType::Billboard: return "billboard";
+        case components::BillboardIconType::Text: return "text";
         default: return "custom";
         }
     }
@@ -353,6 +354,7 @@ namespace serialization
         if (str == "audio3D") return components::BillboardIconType::Audio3D;
         if (str == "particle") return components::BillboardIconType::Particle;
         if (str == "billboard") return components::BillboardIconType::Billboard;
+        if (str == "text") return components::BillboardIconType::Text;
         // Legacy support
         if (str == "light") return components::BillboardIconType::PointLight;
         if (str == "audioSource") return components::BillboardIconType::Audio3D;
@@ -408,6 +410,7 @@ namespace serialization
         j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
         j["renderMode"] = textRenderModeToString(text.renderMode);
         j["lineSpacing"] = text.lineSpacing;
+        j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
         return j;
     }
@@ -426,6 +429,7 @@ namespace serialization
         }
         text.renderMode = stringToTextRenderMode(j.value("renderMode", "worldSpace"));
         text.lineSpacing = j.value("lineSpacing", 1.0f);
+        text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
     }
 

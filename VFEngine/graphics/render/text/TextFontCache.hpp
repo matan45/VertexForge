@@ -26,6 +26,8 @@ namespace render::text
         vk::DeviceMemory atlasImageMemory;
         vk::ImageView atlasImageView;
         vk::Sampler atlasSampler;
+
+        bool isColorFont = false;
     };
 
     class TextFontCache

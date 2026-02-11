@@ -117,7 +117,7 @@ namespace render::text
     struct TextPushConstants
     {
         glm::vec2 viewportSize;
-        float padding1;
+        uint32_t glyphMode;  // 0 = SDF, 1 = color bitmap
         float padding2;
     };
 
@@ -131,6 +131,7 @@ namespace render::text
         uint32_t renderMode;   // 0 = ScreenSpace, 1 = WorldSpace
         uint32_t entityId;
         float lineSpacing;
+        float letterSpacing;
         float maxWidth;
     };
 }

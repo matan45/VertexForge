@@ -93,7 +93,8 @@ namespace text
         const std::string& text,
         float fontSize,
         float maxWidth,
-        float lineSpacing)
+        float lineSpacing,
+        float letterSpacing)
     {
         LayoutResult result;
 
@@ -157,7 +158,7 @@ namespace text
                 cursorX += fontData.getKerning(prevCodepoint, codepoint) * scale;
             }
 
-            float glyphAdvance = glyph->advanceX * scale;
+            float glyphAdvance = glyph->advanceX * scale + letterSpacing;
 
             // Word wrap check
             if (maxWidth > 0.0f && cursorX + glyphAdvance > maxWidth && cursorX > 0.0f)

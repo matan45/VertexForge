@@ -17,6 +17,7 @@ namespace windows::details
         bool drawColor(services::TextData& data);
         bool drawRenderMode(services::TextData& data);
         bool drawLineSpacing(services::TextData& data);
+        bool drawLetterSpacing(services::TextData& data);
         bool drawMaxWidth(services::TextData& data);
 
         char textBuffer[1024] = {};

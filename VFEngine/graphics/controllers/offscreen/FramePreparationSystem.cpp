@@ -390,6 +390,7 @@ namespace controllers::offscreen
             renderData.renderMode = static_cast<uint32_t>(textComp.renderMode);
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.lineSpacing = textComp.lineSpacing;
+            renderData.letterSpacing = textComp.letterSpacing;
             renderData.maxWidth = textComp.maxWidth;
 
             textDrawList.push_back(std::move(renderData));

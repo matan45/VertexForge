@@ -1,4 +1,5 @@
 #include "Font.hpp"
+#include "SDFGenerator.hpp"
 #include "print/EditorLogger.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "resource/EndianUtils.hpp"
@@ -8,18 +9,20 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
-// IMPORTANT: stb_rect_pack must be included BEFORE stb_truetype
-// so that stb_truetype uses the external rect pack instead of its internal one
+// stb_rect_pack is still used for atlas bin-packing
 #define STB_RECT_PACK_IMPLEMENTATION
 #include <stb_rect_pack.h>
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#include <stb_truetype.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_GLYPH_H
+#include FT_COLOR_H
 
 namespace types
 {
-    void Font::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
+    bool Font::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
                             std::string_view location,
                             const FontImportConfig& config,
                             FontProgressCallback progressCallback) const
@@ -30,43 +33,73 @@ namespace types
         if (!loadFontFile(file.path, fontBuffer))
         {
             vfLogError("Failed to load font file: {}", file.path);
-            return;
+            return false;
         }
 
         if (progressCallback) progressCallback(0.1f);
 
-        stbtt_fontinfo fontInfo;
-        int fontOffset = stbtt_GetFontOffsetForIndex(fontBuffer.data(), 0);
-        if (fontOffset < 0)
+        FT_Library library = nullptr;
+        FT_Face face = nullptr;
+
+        if (!initFreeType(library, face, fontBuffer, file.path))
         {
-            vfLogError("Invalid font file or font index: {}", file.path);
-            return;
+            return false;
         }
 
-        if (!stbtt_InitFont(&fontInfo, fontBuffer.data(), fontOffset))
+        // RAII cleanup for FreeType resources
+        auto cleanupFT = [&]()
         {
-            vfLogError("Failed to initialize font: {}", file.path);
-            return;
-        }
+            if (face) FT_Done_Face(face);
+            if (library) FT_Done_FreeType(library);
+        };
 
         if (progressCallback) progressCallback(0.15f);
 
-        float scale = stbtt_ScaleForPixelHeight(&fontInfo, static_cast<float>(config.baseFontSize));
+        bool colorFont = isColorFont(face);
+
+        // For bitmap-only fonts, select a strike; for outline fonts, set pixel size
+        if (colorFont && face->num_fixed_sizes > 0)
+        {
+            int bestStrike = 0;
+            int bestDiff = std::abs(static_cast<int>(face->available_sizes[0].height)
+                                  - static_cast<int>(config.baseFontSize));
+            for (int i = 1; i < face->num_fixed_sizes; ++i)
+            {
+                int diff = std::abs(static_cast<int>(face->available_sizes[i].height)
+                                  - static_cast<int>(config.baseFontSize));
+                if (diff < bestDiff)
+                {
+                    bestDiff = diff;
+                    bestStrike = i;
+                }
+            }
+            FT_Select_Size(face, bestStrike);
+        }
+        else
+        {
+            FT_Set_Pixel_Sizes(face, 0, config.baseFontSize);
+        }
 
         resource::FontData fontData;
         fontData.headerFileType = resource::FileType::FONT;
         fontData.metadata.baseFontSize = config.baseFontSize;
 
-        extractFontMetrics(&fontInfo, scale, fontData.metadata, fileName);
+        extractFontMetrics(face, config.baseFontSize, fontData.metadata, fileName);
 
         fontData.formatFlags = resource::FontFormatFlags::NONE;
-        if (config.generateSDF)
+
+        if (colorFont)
+        {
+            fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::COLOR_EMOJI;
+        }
+        else if (config.generateSDF)
         {
             fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::SDF_ENABLED;
             fontData.sdfParams.spread = config.sdfSpread;
             fontData.sdfParams.padding = config.sdfPadding;
             fontData.sdfParams.edgeValue = static_cast<float>(config.sdfOnEdgeValue) / 255.0f;
         }
+
         if (config.includeKerning)
         {
             fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::KERNING_ENABLED;
@@ -74,23 +107,44 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        fontData.characterRanges = buildCharacterRanges(config);
+        // For color emoji fonts, automatically include emoji ranges
+        FontImportConfig effectiveConfig = config;
+        if (colorFont)
+        {
+            effectiveConfig.includeEmoji = true;
+            effectiveConfig.includeMiscSymbols = true;
+            effectiveConfig.includeDingbats = true;
+        }
+
+        fontData.characterRanges = buildCharacterRanges(effectiveConfig);
 
         if (progressCallback) progressCallback(0.25f);
 
-        bool atlasSuccess = generateSDFAtlas(&fontInfo, scale, fontData.characterRanges, config, fontData);
+        bool atlasSuccess = false;
+        if (colorFont)
+        {
+            atlasSuccess = generateColorAtlas(face, config.baseFontSize,
+                                              fontData.characterRanges, config, fontData);
+        }
+        else
+        {
+            atlasSuccess = generateSDFAtlas(face, config.baseFontSize,
+                                            fontData.characterRanges, config, fontData);
+        }
 
         if (!atlasSuccess)
         {
             vfLogError("Failed to generate font atlas for: {}", file.path);
-            return;
+            cleanupFT();
+            return false;
         }
 
         if (progressCallback) progressCallback(0.8f);
 
         if (config.includeKerning)
         {
-            extractKerningPairs(&fontInfo, scale, fontData.glyphs, fontData.kerningPairs);
+            float scale = 1.0f; // FreeType metrics are already in pixel units at the set size
+            extractKerningPairs(face, scale, fontData.glyphs, fontData.kerningPairs);
         }
 
         if (progressCallback) progressCallback(0.9f);
@@ -102,11 +156,16 @@ namespace types
 
         saveToFile(location, fileName, fontData);
 
+        cleanupFT();
+
         if (progressCallback) progressCallback(1.0f);
 
-        vfLogInfo("Successfully imported font: {} ({} glyphs, {}x{} atlas)",
+        vfLogInfo("Successfully imported font: {} ({} glyphs, {}x{} atlas, {})",
                   fileName, fontData.glyphs.size(),
-                  fontData.atlas.width, fontData.atlas.height);
+                  fontData.atlas.width, fontData.atlas.height,
+                  colorFont ? "color" : "SDF");
+
+        return true;
     }
 
     bool Font::loadFontFile(std::string_view path, std::vector<unsigned char>& fontBuffer) const
@@ -134,7 +193,6 @@ namespace types
                 return false;
             }
 
-            // Sanity check for file size (fonts shouldn't be gigabytes)
             constexpr std::streamsize maxFontSize = 100 * 1024 * 1024;  // 100 MB
             if (size > maxFontSize)
             {
@@ -157,21 +215,6 @@ namespace types
                 return false;
             }
 
-            // Check for CFF-based OpenType fonts (not supported by stb_truetype)
-            // The 'OTTO' signature at the start indicates CFF outlines
-            if (fontBuffer.size() >= 4)
-            {
-                bool isCFF = (fontBuffer[0] == 'O' && fontBuffer[1] == 'T' &&
-                             fontBuffer[2] == 'T' && fontBuffer[3] == 'O');
-                if (isCFF)
-                {
-                    vfLogError("Font file uses CFF (PostScript) outlines which are not supported: {}", path);
-                    vfLogError("Please convert this OTF font to TTF format using a font converter tool, "
-                              "or use a TTF version of this font.");
-                    return false;
-                }
-            }
-
             return true;
         }
         catch (const std::bad_alloc& e)
@@ -186,22 +229,57 @@ namespace types
         }
     }
 
-    void Font::extractFontMetrics(const void* fontInfoPtr, float scale,
+    bool Font::initFreeType(FT_Library& library, FT_Face& face,
+                            const std::vector<unsigned char>& buffer,
+                            std::string_view path) const
+    {
+        FT_Error error = FT_Init_FreeType(&library);
+        if (error)
+        {
+            vfLogError("Failed to initialize FreeType library (error {})", error);
+            return false;
+        }
+
+        error = FT_New_Memory_Face(library, buffer.data(),
+                                   static_cast<FT_Long>(buffer.size()), 0, &face);
+        if (error)
+        {
+            vfLogError("FreeType failed to load font face from: {} (error {})", path, error);
+            FT_Done_FreeType(library);
+            library = nullptr;
+            return false;
+        }
+
+        // Explicitly select Unicode charmap for full supplementary plane support
+        error = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
+        if (error)
+        {
+            vfLogWarning("FreeType: no Unicode charmap found in font: {} (error {})", path, error);
+        }
+
+        return true;
+    }
+
+    void Font::extractFontMetrics(FT_Face face, uint32_t fontSize,
                                   resource::FontMetadata& metadata,
                                   std::string_view fileName) const
     {
-        const stbtt_fontinfo* fontInfo = static_cast<const stbtt_fontinfo*>(fontInfoPtr);
+        // FreeType metrics are in 26.6 fixed-point format (divide by 64)
+        FT_Size_Metrics metrics = face->size->metrics;
 
-        int ascent, descent, lineGap;
-        stbtt_GetFontVMetrics(fontInfo, &ascent, &descent, &lineGap);
-
-        metadata.ascender = static_cast<float>(ascent) * scale;
-        metadata.descender = static_cast<float>(descent) * scale;
-        metadata.lineHeight = (static_cast<float>(ascent - descent + lineGap)) * scale;
+        metadata.ascender = static_cast<float>(metrics.ascender) / 64.0f;
+        metadata.descender = static_cast<float>(metrics.descender) / 64.0f;
+        metadata.lineHeight = static_cast<float>(metrics.height) / 64.0f;
         metadata.underlinePosition = metadata.descender * 0.5f;
-        metadata.underlineThickness = scale * 1.0f;
-        metadata.fontName = std::string(fileName);
-        metadata.fontStyle = "Regular";
+        metadata.underlineThickness = static_cast<float>(fontSize) / 32.0f;
+
+        metadata.fontName = face->family_name ? face->family_name : std::string(fileName);
+        metadata.fontStyle = face->style_name ? face->style_name : "Regular";
+    }
+
+    bool Font::isColorFont(FT_Face face) const
+    {
+        return FT_HAS_COLOR(face) != 0;
     }
 
     std::vector<resource::CharacterRange> Font::buildCharacterRanges(
@@ -210,34 +288,37 @@ namespace types
         std::vector<resource::CharacterRange> ranges;
 
         if (config.includeBasicLatin)
-        {
             ranges.push_back({0x0020, 0x007E});
-        }
 
         if (config.includeLatin1Supplement)
-        {
             ranges.push_back({0x00A0, 0x00FF});
-        }
 
         if (config.includeLatinExtendedA)
-        {
             ranges.push_back({0x0100, 0x017F});
-        }
 
         if (config.includeLatinExtendedB)
-        {
             ranges.push_back({0x0180, 0x024F});
-        }
 
         if (config.includeGreek)
-        {
             ranges.push_back({0x0370, 0x03FF});
-        }
 
         if (config.includeCyrillic)
-        {
             ranges.push_back({0x0400, 0x04FF});
+
+        // Emoji ranges
+        if (config.includeEmoji)
+        {
+            ranges.push_back({0x1F600, 0x1F64F}); // Emoticons
+            ranges.push_back({0x1F300, 0x1F5FF}); // Misc Symbols and Pictographs
+            ranges.push_back({0x1F900, 0x1F9FF}); // Supplemental Symbols and Pictographs
+            ranges.push_back({0x1FA70, 0x1FAFF}); // Symbols and Pictographs Extended-A
         }
+
+        if (config.includeMiscSymbols)
+            ranges.push_back({0x2600, 0x26FF});
+
+        if (config.includeDingbats)
+            ranges.push_back({0x2700, 0x27BF});
 
         return ranges;
     }
@@ -264,87 +345,112 @@ namespace types
         return v;
     }
 
-    bool Font::generateSDFAtlas(const void* fontInfoPtr, float scale,
+    bool Font::generateSDFAtlas(FT_Face face, uint32_t fontSize,
                                 const std::vector<resource::CharacterRange>& ranges,
                                 const FontImportConfig& config,
                                 resource::FontData& fontData) const
     {
-        const stbtt_fontinfo* fontInfo = static_cast<const stbtt_fontinfo*>(fontInfoPtr);
-
         uint32_t totalGlyphs = countTotalGlyphs(ranges);
 
-        std::vector<stbrp_rect> rects;
-        rects.reserve(totalGlyphs);
+        // Render at 4x resolution for better SDF quality
+        uint32_t hiresSize = fontSize * 4;
+        int padding = static_cast<int>(config.sdfPadding);
 
         struct GlyphTemp
         {
             uint32_t codepoint;
-            int glyphIndex;
-            int width, height;
-            int xoff, yoff;
-            int advanceWidth, leftSideBearing;
-            unsigned char* sdfBitmap = nullptr;
+            FT_UInt glyphIndex;
+            int targetWidth, targetHeight;
+            float bearingX, bearingY;
+            float advanceX;
+            SDFResult sdfResult;
         };
         std::vector<GlyphTemp> glyphTemps;
         glyphTemps.reserve(totalGlyphs);
 
-        // RAII cleanup for SDF bitmaps on any exit path
-        auto cleanupBitmaps = [&glyphTemps]() {
-            for (auto& temp : glyphTemps)
-            {
-                if (temp.sdfBitmap)
-                {
-                    stbtt_FreeSDF(temp.sdfBitmap, nullptr);
-                    temp.sdfBitmap = nullptr;
-                }
-            }
-        };
-
-        int padding = static_cast<int>(config.sdfPadding);
-        uint8_t onEdge = config.sdfOnEdgeValue;
-        float pixelDistScale = static_cast<float>(onEdge) / config.sdfSpread;
+        std::vector<stbrp_rect> rects;
+        rects.reserve(totalGlyphs);
 
         int rectId = 0;
         for (const auto& range : ranges)
         {
             for (uint32_t cp = range.rangeStart; cp <= range.rangeEnd; ++cp)
             {
-                int glyphIndex = stbtt_FindGlyphIndex(fontInfo, static_cast<int>(cp));
-
+                FT_UInt glyphIndex = FT_Get_Char_Index(face, cp);
                 if (glyphIndex == 0 && cp != ' ')
+                    continue;
+
+                // Get metrics at base size
+                FT_Set_Pixel_Sizes(face, 0, fontSize);
+                if (FT_Load_Glyph(face, glyphIndex, FT_LOAD_DEFAULT))
+                    continue;
+
+                float advanceX = static_cast<float>(face->glyph->advance.x) / 64.0f;
+
+                // Render bitmap at high resolution for SDF generation
+                FT_Set_Pixel_Sizes(face, 0, hiresSize);
+                if (FT_Load_Glyph(face, glyphIndex, FT_LOAD_RENDER))
                 {
+                    FT_Set_Pixel_Sizes(face, 0, fontSize);
                     continue;
                 }
 
-                int advanceWidth, leftSideBearing;
-                stbtt_GetGlyphHMetrics(fontInfo, glyphIndex, &advanceWidth, &leftSideBearing);
+                FT_Bitmap* bitmap = &face->glyph->bitmap;
 
-                int width = 0, height = 0, xoff = 0, yoff = 0;
-                unsigned char* sdfBitmap = nullptr;
+                // Calculate target (base-size) dimensions including SDF padding
+                int targetWidth = 0;
+                int targetHeight = 0;
+                float bearingX = 0.0f;
+                float bearingY = 0.0f;
 
-                if (glyphIndex != 0)
+                if (bitmap->width > 0 && bitmap->rows > 0)
                 {
-                    sdfBitmap = stbtt_GetGlyphSDF(
-                        fontInfo, scale, glyphIndex, padding, onEdge, pixelDistScale,
-                        &width, &height, &xoff, &yoff);
-                }
+                    // Scale hires bitmap metrics back to base size
+                    float scaleDown = static_cast<float>(fontSize) / static_cast<float>(hiresSize);
+                    targetWidth = static_cast<int>(std::ceil(bitmap->width * scaleDown)) + padding * 2;
+                    targetHeight = static_cast<int>(std::ceil(bitmap->rows * scaleDown)) + padding * 2;
 
-                GlyphTemp temp;
-                temp.codepoint = cp;
-                temp.glyphIndex = glyphIndex;
-                temp.width = width;
-                temp.height = height;
-                temp.xoff = xoff;
-                temp.yoff = yoff;
-                temp.advanceWidth = advanceWidth;
-                temp.leftSideBearing = leftSideBearing;
-                temp.sdfBitmap = sdfBitmap;
-                glyphTemps.push_back(temp);
+                    bearingX = static_cast<float>(face->glyph->bitmap_left) * scaleDown
+                               - static_cast<float>(padding);
+                    bearingY = static_cast<float>(face->glyph->bitmap_top) * scaleDown
+                               + static_cast<float>(padding);
+
+                    // Generate SDF from hires bitmap
+                    SDFResult sdf = SDFGenerator::generateFromBitmap(
+                        bitmap->buffer,
+                        static_cast<int>(bitmap->width), static_cast<int>(bitmap->rows),
+                        targetWidth, targetHeight,
+                        config.sdfSpread, config.sdfOnEdgeValue);
+
+                    GlyphTemp temp;
+                    temp.codepoint = cp;
+                    temp.glyphIndex = glyphIndex;
+                    temp.targetWidth = sdf.width;
+                    temp.targetHeight = sdf.height;
+                    temp.bearingX = bearingX;
+                    temp.bearingY = bearingY;
+                    temp.advanceX = advanceX;
+                    temp.sdfResult = std::move(sdf);
+                    glyphTemps.push_back(std::move(temp));
+                }
+                else
+                {
+                    // Whitespace character (e.g., space)
+                    GlyphTemp temp;
+                    temp.codepoint = cp;
+                    temp.glyphIndex = glyphIndex;
+                    temp.targetWidth = 0;
+                    temp.targetHeight = 0;
+                    temp.bearingX = 0.0f;
+                    temp.bearingY = 0.0f;
+                    temp.advanceX = advanceX;
+                    glyphTemps.push_back(std::move(temp));
+                }
 
                 stbrp_rect rect;
                 rect.id = rectId++;
-                rect.w = static_cast<stbrp_coord>(width + config.atlasPadding);
-                rect.h = static_cast<stbrp_coord>(height + config.atlasPadding);
+                rect.w = static_cast<stbrp_coord>(glyphTemps.back().targetWidth + config.atlasPadding);
+                rect.h = static_cast<stbrp_coord>(glyphTemps.back().targetHeight + config.atlasPadding);
                 rect.x = 0;
                 rect.y = 0;
                 rect.was_packed = 0;
@@ -352,13 +458,16 @@ namespace types
             }
         }
 
+        // Reset face size back to base
+        FT_Set_Pixel_Sizes(face, 0, fontSize);
+
         if (rects.empty())
         {
             vfLogWarning("No valid glyphs found in font");
-            cleanupBitmaps();
             return false;
         }
 
+        // Pack glyphs into atlas
         int atlasWidth = static_cast<int>(config.atlasWidth);
         int atlasHeight = static_cast<int>(config.atlasHeight);
 
@@ -374,10 +483,8 @@ namespace types
         {
             if (rect.was_packed)
             {
-                actualWidth = std::max(actualWidth,
-                    static_cast<uint32_t>(rect.x + rect.w));
-                actualHeight = std::max(actualHeight,
-                    static_cast<uint32_t>(rect.y + rect.h));
+                actualWidth = std::max(actualWidth, static_cast<uint32_t>(rect.x + rect.w));
+                actualHeight = std::max(actualHeight, static_cast<uint32_t>(rect.y + rect.h));
             }
         }
 
@@ -407,50 +514,45 @@ namespace types
 
             resource::GlyphData glyph;
             glyph.codepoint = temp.codepoint;
-            glyph.advanceX = static_cast<float>(temp.advanceWidth) * scale;
-            glyph.advanceY = 0.0f;  // Horizontal text
-            glyph.bearingX = static_cast<float>(temp.xoff);
-            glyph.bearingY = static_cast<float>(-temp.yoff);  // Convert from top-left to baseline
-            glyph.glyphWidth = static_cast<float>(temp.width);
-            glyph.glyphHeight = static_cast<float>(temp.height);
+            glyph.advanceX = temp.advanceX;
+            glyph.advanceY = 0.0f;
+            glyph.bearingX = temp.bearingX;
+            glyph.bearingY = temp.bearingY;
+            glyph.glyphWidth = static_cast<float>(temp.targetWidth);
+            glyph.glyphHeight = static_cast<float>(temp.targetHeight);
 
-            if (rect.was_packed && temp.width > 0 && temp.height > 0)
+            if (rect.was_packed && temp.targetWidth > 0 && temp.targetHeight > 0)
             {
                 glyph.atlasX = static_cast<uint32_t>(rect.x);
                 glyph.atlasY = static_cast<uint32_t>(rect.y);
-                glyph.atlasWidth = static_cast<uint32_t>(temp.width);
-                glyph.atlasHeight = static_cast<uint32_t>(temp.height);
+                glyph.atlasWidth = static_cast<uint32_t>(temp.targetWidth);
+                glyph.atlasHeight = static_cast<uint32_t>(temp.targetHeight);
 
-                if (temp.sdfBitmap)
+                if (!temp.sdfResult.pixels.empty())
                 {
-                    // Bounds validation before copying to atlas
-                    uint32_t destEndX = static_cast<uint32_t>(rect.x) + static_cast<uint32_t>(temp.width);
-                    uint32_t destEndY = static_cast<uint32_t>(rect.y) + static_cast<uint32_t>(temp.height);
+                    uint32_t destEndX = glyph.atlasX + glyph.atlasWidth;
+                    uint32_t destEndY = glyph.atlasY + glyph.atlasHeight;
 
                     if (destEndX > actualWidth || destEndY > actualHeight)
                     {
-                        vfLogError("Glyph U+{:04X} would overflow atlas bounds: dest ({},{}) to ({},{}) exceeds atlas {}x{}",
-                                  temp.codepoint, rect.x, rect.y, destEndX, destEndY, actualWidth, actualHeight);
+                        vfLogError("Glyph U+{:04X} would overflow atlas bounds", temp.codepoint);
+                        glyph.atlasX = glyph.atlasY = glyph.atlasWidth = glyph.atlasHeight = 0;
                         unpackedGlyphs.push_back(temp.codepoint);
-                        glyph.atlasX = 0;
-                        glyph.atlasY = 0;
-                        glyph.atlasWidth = 0;
-                        glyph.atlasHeight = 0;
                     }
                     else
                     {
                         size_t atlasSize = fontData.atlas.pixels.size();
-                        for (int y = 0; y < temp.height; ++y)
+                        for (int y = 0; y < temp.targetHeight; ++y)
                         {
-                            for (int x = 0; x < temp.width; ++x)
+                            for (int x = 0; x < temp.targetWidth; ++x)
                             {
                                 size_t atlasIdx = (static_cast<size_t>(rect.y) + y) * actualWidth
                                                 + (static_cast<size_t>(rect.x) + x);
-                                size_t srcIdx = static_cast<size_t>(y) * temp.width + x;
+                                size_t srcIdx = static_cast<size_t>(y) * temp.targetWidth + x;
 
-                                if (atlasIdx < atlasSize)
+                                if (atlasIdx < atlasSize && srcIdx < temp.sdfResult.pixels.size())
                                 {
-                                    fontData.atlas.pixels[atlasIdx] = temp.sdfBitmap[srcIdx];
+                                    fontData.atlas.pixels[atlasIdx] = temp.sdfResult.pixels[srcIdx];
                                 }
                             }
                         }
@@ -460,19 +562,12 @@ namespace types
             }
             else
             {
-                glyph.atlasX = 0;
-                glyph.atlasY = 0;
-                glyph.atlasWidth = 0;
-                glyph.atlasHeight = 0;
+                glyph.atlasX = glyph.atlasY = glyph.atlasWidth = glyph.atlasHeight = 0;
 
-                if (temp.width > 0 && temp.height > 0)
-                {
+                if (temp.targetWidth > 0 && temp.targetHeight > 0)
                     unpackedGlyphs.push_back(temp.codepoint);
-                }
                 else
-                {
                     ++emptyGlyphCount;
-                }
             }
 
             fontData.glyphs.push_back(glyph);
@@ -485,22 +580,14 @@ namespace types
             {
                 uint32_t cp = unpackedGlyphs[i];
                 if (cp >= 32 && cp < 127)
-                {
                     failedChars += static_cast<char>(cp);
-                }
                 else
-                {
                     failedChars += "U+" + std::to_string(cp);
-                }
                 if (i < unpackedGlyphs.size() - 1 && i < 19)
-                {
                     failedChars += ", ";
-                }
             }
             if (unpackedGlyphs.size() > 20)
-            {
                 failedChars += "... and " + std::to_string(unpackedGlyphs.size() - 20) + " more";
-            }
 
             vfLogWarning("Font atlas too small: {} glyphs could not be packed. "
                         "Consider increasing atlas size (current: {}x{}). Failed characters: {}",
@@ -511,52 +598,279 @@ namespace types
                  "Atlas size: {}x{}",
                  packedCount, emptyGlyphCount, unpackedGlyphs.size(), actualWidth, actualHeight);
 
-        cleanupBitmaps();
+        return true;
+    }
+
+    bool Font::generateColorAtlas(FT_Face face, uint32_t fontSize,
+                                  const std::vector<resource::CharacterRange>& ranges,
+                                  const FontImportConfig& config,
+                                  resource::FontData& fontData) const
+    {
+        uint32_t totalGlyphs = countTotalGlyphs(ranges);
+
+        // For bitmap-only fonts (CBDT/CBLC like Noto Color Emoji),
+        // we must select a bitmap strike instead of using FT_Set_Pixel_Sizes
+        if (face->num_fixed_sizes > 0)
+        {
+            // Find the strike closest to the requested fontSize
+            int bestStrike = 0;
+            int bestDiff = std::abs(static_cast<int>(face->available_sizes[0].height) - static_cast<int>(fontSize));
+            for (int i = 1; i < face->num_fixed_sizes; ++i)
+            {
+                int diff = std::abs(static_cast<int>(face->available_sizes[i].height) - static_cast<int>(fontSize));
+                if (diff < bestDiff)
+                {
+                    bestDiff = diff;
+                    bestStrike = i;
+                }
+            }
+            FT_Select_Size(face, bestStrike);
+        }
+        else
+        {
+            FT_Set_Pixel_Sizes(face, 0, fontSize);
+        }
+
+        // Select the first color palette for COLR rendering
+        // Without this, COLRv1 glyphs may produce empty bitmaps
+        FT_Palette_Data paletteData;
+        if (FT_Palette_Data_Get(face, &paletteData) == 0 && paletteData.num_palettes > 0)
+        {
+            FT_Color* palette = nullptr;
+            FT_Palette_Select(face, 0, &palette);
+        }
+
+        struct GlyphTemp
+        {
+            uint32_t codepoint;
+            int width, height;
+            float bearingX, bearingY;
+            float advanceX;
+            std::vector<unsigned char> rgbaPixels; // RGBA
+        };
+        std::vector<GlyphTemp> glyphTemps;
+        glyphTemps.reserve(totalGlyphs);
+
+        std::vector<stbrp_rect> rects;
+        rects.reserve(totalGlyphs);
+
+        int rectId = 0;
+        for (const auto& range : ranges)
+        {
+            for (uint32_t cp = range.rangeStart; cp <= range.rangeEnd; ++cp)
+            {
+                FT_UInt glyphIndex = FT_Get_Char_Index(face, cp);
+                if (glyphIndex == 0 && cp != ' ')
+                    continue;
+
+                // Skip SVG table (requires external renderer) and use COLR/CPAL fallback
+                FT_Int32 loadFlags = FT_LOAD_COLOR | FT_LOAD_RENDER | FT_LOAD_NO_SVG;
+                if (FT_Load_Glyph(face, glyphIndex, loadFlags))
+                    continue;
+
+                FT_Bitmap* bitmap = &face->glyph->bitmap;
+
+                // COLRv1 glyphs may load successfully but produce empty bitmaps
+                // if FreeType can't fully render the paint operations.
+                // Fallback: render as grayscale outline.
+                if (bitmap->width == 0 || bitmap->rows == 0)
+                {
+                    if (FT_Load_Glyph(face, glyphIndex, FT_LOAD_RENDER | FT_LOAD_NO_SVG))
+                        continue;
+                    bitmap = &face->glyph->bitmap;
+                    if (bitmap->width == 0 || bitmap->rows == 0)
+                        continue;
+                }
+
+                float advanceX = static_cast<float>(face->glyph->advance.x) / 64.0f;
+
+                GlyphTemp temp;
+                temp.codepoint = cp;
+                temp.width = static_cast<int>(bitmap->width);
+                temp.height = static_cast<int>(bitmap->rows);
+                temp.bearingX = static_cast<float>(face->glyph->bitmap_left);
+                temp.bearingY = static_cast<float>(face->glyph->bitmap_top);
+                temp.advanceX = advanceX;
+
+                if (bitmap->buffer)
+                {
+                    size_t pixelCount = static_cast<size_t>(bitmap->width) * bitmap->rows;
+                    temp.rgbaPixels.resize(pixelCount * 4);
+
+                    if (bitmap->pixel_mode == FT_PIXEL_MODE_BGRA)
+                    {
+                        // Convert BGRA -> RGBA
+                        for (size_t p = 0; p < pixelCount; ++p)
+                        {
+                            size_t off = p * 4;
+                            temp.rgbaPixels[off + 0] = bitmap->buffer[off + 2]; // R
+                            temp.rgbaPixels[off + 1] = bitmap->buffer[off + 1]; // G
+                            temp.rgbaPixels[off + 2] = bitmap->buffer[off + 0]; // B
+                            temp.rgbaPixels[off + 3] = bitmap->buffer[off + 3]; // A
+                        }
+                    }
+                    else if (bitmap->pixel_mode == FT_PIXEL_MODE_GRAY)
+                    {
+                        // Grayscale fallback: white glyph with alpha from gray value
+                        for (size_t p = 0; p < pixelCount; ++p)
+                        {
+                            temp.rgbaPixels[p * 4 + 0] = 255;
+                            temp.rgbaPixels[p * 4 + 1] = 255;
+                            temp.rgbaPixels[p * 4 + 2] = 255;
+                            temp.rgbaPixels[p * 4 + 3] = bitmap->buffer[p];
+                        }
+                    }
+                }
+
+                if (temp.rgbaPixels.empty())
+                    continue;
+
+                glyphTemps.push_back(std::move(temp));
+
+                stbrp_rect rect;
+                rect.id = rectId++;
+                rect.w = static_cast<stbrp_coord>(glyphTemps.back().width + config.atlasPadding);
+                rect.h = static_cast<stbrp_coord>(glyphTemps.back().height + config.atlasPadding);
+                rect.x = 0;
+                rect.y = 0;
+                rect.was_packed = 0;
+                rects.push_back(rect);
+            }
+        }
+
+        if (rects.empty())
+        {
+            vfLogWarning("No valid glyphs found in color font");
+            return false;
+        }
+
+        // Use larger atlas for color emoji (bitmaps are bigger)
+        uint32_t atlasW = std::max(config.atlasWidth, 2048u);
+        uint32_t atlasH = std::max(config.atlasHeight, 2048u);
+
+        int iAtlasW = static_cast<int>(atlasW);
+        int iAtlasH = static_cast<int>(atlasH);
+
+        std::vector<stbrp_node> nodes(iAtlasW);
+        stbrp_context packContext;
+        stbrp_init_target(&packContext, iAtlasW, iAtlasH, nodes.data(),
+                          static_cast<int>(nodes.size()));
+
+        stbrp_pack_rects(&packContext, rects.data(), static_cast<int>(rects.size()));
+
+        uint32_t actualWidth = 0, actualHeight = 0;
+        for (const auto& rect : rects)
+        {
+            if (rect.was_packed)
+            {
+                actualWidth = std::max(actualWidth, static_cast<uint32_t>(rect.x + rect.w));
+                actualHeight = std::max(actualHeight, static_cast<uint32_t>(rect.y + rect.h));
+            }
+        }
+
+        actualWidth = nextPowerOf2(actualWidth);
+        actualHeight = nextPowerOf2(actualHeight);
+        actualWidth = std::max(actualWidth, 64u);
+        actualHeight = std::max(actualHeight, 64u);
+
+        fontData.atlas.width = actualWidth;
+        fontData.atlas.height = actualHeight;
+        fontData.atlas.format = resource::FontAtlasFormat::RGBA_32;
+        fontData.atlas.pixels.resize(static_cast<size_t>(actualWidth) * actualHeight * 4, 0);
+
+        fontData.glyphs.reserve(glyphTemps.size());
+
+        uint32_t packedCount = 0;
+
+        for (size_t i = 0; i < glyphTemps.size(); ++i)
+        {
+            const auto& temp = glyphTemps[i];
+            const auto& rect = rects[i];
+
+            resource::GlyphData glyph;
+            glyph.codepoint = temp.codepoint;
+            glyph.advanceX = temp.advanceX;
+            glyph.advanceY = 0.0f;
+            glyph.bearingX = temp.bearingX;
+            glyph.bearingY = temp.bearingY;
+            glyph.glyphWidth = static_cast<float>(temp.width);
+            glyph.glyphHeight = static_cast<float>(temp.height);
+
+            if (rect.was_packed && temp.width > 0 && temp.height > 0 && !temp.rgbaPixels.empty())
+            {
+                glyph.atlasX = static_cast<uint32_t>(rect.x);
+                glyph.atlasY = static_cast<uint32_t>(rect.y);
+                glyph.atlasWidth = static_cast<uint32_t>(temp.width);
+                glyph.atlasHeight = static_cast<uint32_t>(temp.height);
+
+                // Copy RGBA pixel data into atlas (4 bytes per pixel)
+                for (int y = 0; y < temp.height; ++y)
+                {
+                    for (int x = 0; x < temp.width; ++x)
+                    {
+                        size_t atlasIdx = ((static_cast<size_t>(rect.y) + y) * actualWidth
+                                        + (static_cast<size_t>(rect.x) + x)) * 4;
+                        size_t srcIdx = (static_cast<size_t>(y) * temp.width + x) * 4;
+
+                        if (atlasIdx + 3 < fontData.atlas.pixels.size() &&
+                            srcIdx + 3 < temp.rgbaPixels.size())
+                        {
+                            fontData.atlas.pixels[atlasIdx + 0] = temp.rgbaPixels[srcIdx + 0];
+                            fontData.atlas.pixels[atlasIdx + 1] = temp.rgbaPixels[srcIdx + 1];
+                            fontData.atlas.pixels[atlasIdx + 2] = temp.rgbaPixels[srcIdx + 2];
+                            fontData.atlas.pixels[atlasIdx + 3] = temp.rgbaPixels[srcIdx + 3];
+                        }
+                    }
+                }
+                ++packedCount;
+            }
+            else
+            {
+                glyph.atlasX = glyph.atlasY = glyph.atlasWidth = glyph.atlasHeight = 0;
+            }
+
+            fontData.glyphs.push_back(glyph);
+        }
+
+        vfLogInfo("Color font atlas generated: {} glyphs packed. Atlas size: {}x{}",
+                 packedCount, actualWidth, actualHeight);
 
         return true;
     }
 
-    void Font::extractKerningPairs(const void* fontInfoPtr, float scale,
+    void Font::extractKerningPairs(FT_Face face, float scale,
                                    const std::vector<resource::GlyphData>& glyphs,
                                    std::vector<resource::KerningPair>& kerningPairs) const
     {
-        const stbtt_fontinfo* fontInfo = static_cast<const stbtt_fontinfo*>(fontInfoPtr);
-
-        int tableLength = stbtt_GetKerningTableLength(fontInfo);
-        if (tableLength <= 0)
-        {
+        if (!FT_HAS_KERNING(face))
             return;
-        }
 
-        std::vector<stbtt_kerningentry> entries(tableLength);
-        int actualLength = stbtt_GetKerningTable(fontInfo, entries.data(), tableLength);
-
-        std::unordered_map<int, uint32_t> glyphIndexToCodepoint;
+        // Build a set of glyph indices we care about
+        std::vector<std::pair<uint32_t, FT_UInt>> codepointGlyphs;
         for (const auto& glyph : glyphs)
         {
-            int glyphIndex = stbtt_FindGlyphIndex(fontInfo, static_cast<int>(glyph.codepoint));
-            if (glyphIndex != 0)
+            FT_UInt idx = FT_Get_Char_Index(face, glyph.codepoint);
+            if (idx != 0)
             {
-                glyphIndexToCodepoint[glyphIndex] = glyph.codepoint;
+                codepointGlyphs.emplace_back(glyph.codepoint, idx);
             }
         }
 
-        for (int i = 0; i < actualLength; ++i)
+        // Check kerning for all pairs
+        for (const auto& [leftCp, leftIdx] : codepointGlyphs)
         {
-            const auto& entry = entries[i];
-
-            auto it1 = glyphIndexToCodepoint.find(entry.glyph1);
-            auto it2 = glyphIndexToCodepoint.find(entry.glyph2);
-
-            if (it1 != glyphIndexToCodepoint.end() && it2 != glyphIndexToCodepoint.end())
+            for (const auto& [rightCp, rightIdx] : codepointGlyphs)
             {
-                resource::KerningPair pair;
-                pair.leftCodepoint = it1->second;
-                pair.rightCodepoint = it2->second;
-                pair.kerningAmount = static_cast<float>(entry.advance) * scale;
+                FT_Vector kerning;
+                FT_Get_Kerning(face, leftIdx, rightIdx, FT_KERNING_DEFAULT, &kerning);
+                float amount = static_cast<float>(kerning.x) / 64.0f;
 
-                if (std::abs(pair.kerningAmount) > 0.001f)
+                if (std::abs(amount) > 0.001f)
                 {
+                    resource::KerningPair pair;
+                    pair.leftCodepoint = leftCp;
+                    pair.rightCodepoint = rightCp;
+                    pair.kerningAmount = amount;
                     kerningPairs.push_back(pair);
                 }
             }
@@ -632,7 +946,7 @@ namespace types
                 writeLE<uint32_t>(outFile, glyph.atlasY);
                 writeLE<uint32_t>(outFile, glyph.atlasWidth);
                 writeLE<uint32_t>(outFile, glyph.atlasHeight);
-                writeLE<uint32_t>(outFile, glyph.reserved);
+                writeLE<uint32_t>(outFile, glyph.glyphFlags);
             }
 
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.kerningPairs.size()));

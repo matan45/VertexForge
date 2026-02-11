@@ -290,7 +290,7 @@ namespace render::text
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(TextPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
@@ -378,7 +378,8 @@ namespace render::text
                 textEntity.text,
                 textEntity.fontSize,
                 textEntity.maxWidth,
-                textEntity.lineSpacing
+                textEntity.lineSpacing,
+                textEntity.letterSpacing
             );
 
             auto& instances = fontInstances[textEntity.fontPath];
@@ -455,17 +456,23 @@ namespace render::text
             static_cast<float>(swapChain.getSwapchainExtent().height)
         );
 
-        TextPushConstants pushConstants{};
-        pushConstants.viewportSize = viewportSize;
-
-        commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                                     0, sizeof(TextPushConstants), &pushConstants);
-
         for (const auto& batch : fontBatches)
         {
             auto it = fontDescriptorSets.find(batch.fontPath);
             vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                 ? it->second : defaultDescriptorSet;
+
+            // Determine glyphMode from cached font data
+            const CachedFont* cached = fontCache.getFont(batch.fontPath);
+            uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+
+            TextPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.glyphMode = glyphMode;
+
+            commandBuffer.pushConstants(pipelineLayout,
+                                         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                         0, sizeof(TextPushConstants), &pushConstants);
 
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                               0, descSet, nullptr);

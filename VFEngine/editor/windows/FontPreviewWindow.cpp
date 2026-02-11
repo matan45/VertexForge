@@ -302,6 +302,10 @@ namespace windows
 
             ImGui::Text("Style: %s", fontData.metadata.fontStyle.c_str());
             ImGui::Text("Base Size: %u px", fontData.metadata.baseFontSize);
+            if (resource::hasFlag(fontData.formatFlags, resource::FontFormatFlags::COLOR_EMOJI))
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Color Emoji Font");
+            }
         }
 
         ImGui::Spacing();

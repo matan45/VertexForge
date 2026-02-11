@@ -220,6 +220,7 @@ namespace components
         Audio3D,
         Particle,
         Billboard,
+        Text,
         Custom
     };
 
@@ -255,6 +256,7 @@ namespace components
             case BillboardIconType::Audio3D: return 5;
             case BillboardIconType::Particle: return 6;
             case BillboardIconType::Billboard: return 7;
+            case BillboardIconType::Text: return 8;
             default: return atlasIndex;
             }
         }
@@ -492,6 +494,7 @@ namespace components
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
         TextRenderMode renderMode = TextRenderMode::WorldSpace;
         float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
     };
 }

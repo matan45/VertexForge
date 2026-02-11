@@ -32,6 +32,7 @@ namespace text
         const std::string& text,
         float fontSize,
         float maxWidth = 0.0f,
-        float lineSpacing = 1.0f
+        float lineSpacing = 1.0f,
+        float letterSpacing = 0.0f
     );
 }

@@ -220,6 +220,7 @@ namespace services
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
         uint8_t renderMode = 1; // 0=ScreenSpace, 1=WorldSpace
         float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
     };
 

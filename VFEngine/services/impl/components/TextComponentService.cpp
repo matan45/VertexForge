@@ -25,6 +25,7 @@ namespace services {
         }
 
         sceneEntity.addComponent<components::TextComponent>();
+        autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Text));
         return true;
     }
 
@@ -36,6 +37,7 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::TextComponent>()) {
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Text));
             sceneEntity.removeComponent<components::TextComponent>();
             return true;
         }
@@ -72,6 +74,7 @@ namespace services {
         data.color = comp.color;
         data.renderMode = static_cast<uint8_t>(comp.renderMode);
         data.lineSpacing = comp.lineSpacing;
+        data.letterSpacing = comp.letterSpacing;
         data.maxWidth = comp.maxWidth;
         return data;
     }
@@ -94,6 +97,7 @@ namespace services {
         comp.color = textData.color;
         comp.renderMode = static_cast<components::TextRenderMode>(textData.renderMode);
         comp.lineSpacing = textData.lineSpacing;
+        comp.letterSpacing = textData.letterSpacing;
         comp.maxWidth = textData.maxWidth;
         return true;
     }
@@ -123,6 +127,36 @@ namespace services {
             [this](const events::scene::GetTextDataQuery& query) {
                 return getTextData(query.entity);
             });
+    }
+
+    void TextComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
+            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
+            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
+            billboard.editorOnly = true;
+            billboard.selectable = true;
+        }
+    }
+
+    void TextComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
+            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
+            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
+                sceneEntity.removeComponent<components::BillboardComponent>();
+            }
+        }
     }
 
 }

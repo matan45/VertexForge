@@ -59,6 +59,8 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawLineSpacing(data);
             ImGui::Spacing();
+            changed |= drawLetterSpacing(data);
+            ImGui::Spacing();
             changed |= drawMaxWidth(data);
 
             if (changed)
@@ -219,6 +221,18 @@ namespace windows::details
         bool changed = false;
 
         if (ImGui::DragFloat("Line Spacing##Text", &data.lineSpacing, 0.01f, 0.5f, 3.0f, "%.2f"))
+        {
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    bool TextDrawer::drawLetterSpacing(services::TextData& data)
+    {
+        bool changed = false;
+
+        if (ImGui::DragFloat("Letter Spacing##Text", &data.letterSpacing, 0.1f, -10.0f, 50.0f, "%.1f"))
         {
             changed = true;
         }

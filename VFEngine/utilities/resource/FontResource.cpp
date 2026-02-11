@@ -130,7 +130,7 @@ namespace resource
             glyph.atlasY = readLE<uint32_t>(inFile);
             glyph.atlasWidth = readLE<uint32_t>(inFile);
             glyph.atlasHeight = readLE<uint32_t>(inFile);
-            glyph.reserved = readLE<uint32_t>(inFile);
+            glyph.glyphFlags = readLE<uint32_t>(inFile);
             fontData.glyphs.push_back(glyph);
         }
 
