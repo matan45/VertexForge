@@ -46,15 +46,12 @@ void main() {
 
     if (renderMode == 0u) {
         // Screen-space mode: position in pixels from top-left
+        // worldPos.xy is used as the pixel-space anchor point on screen
 
-        // Glyph pixel position
-        vec2 pixelPos = charOffset + localPos * charSize;
+        vec2 pixelPos = worldPos.xy + charOffset + localPos * charSize;
 
-        // Convert to NDC (-1..1)
+        // Convert to NDC: Vulkan Y goes top(-1) to bottom(+1), matching pixel coords
         vec2 ndc = (pixelPos / pc.viewportSize) * 2.0 - 1.0;
-
-        // Flip Y for Vulkan coordinate system
-        ndc.y = -ndc.y;
 
         gl_Position = vec4(ndc, 0.0, 1.0);
     }
