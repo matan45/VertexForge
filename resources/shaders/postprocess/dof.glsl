@@ -51,7 +51,6 @@ void main()
     float depth = texture(depthTexture, texCoord).r;
     float linearDepth = linearizeDepth(depth);
 
-    // Circle of Confusion
     float coc = clamp(abs(linearDepth - dof.focalDistance) / dof.focalRange, 0.0, 1.0);
 
     vec2 texelSize = 1.0 / vec2(textureSize(sceneColorTexture, 0));

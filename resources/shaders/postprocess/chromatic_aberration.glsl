@@ -18,11 +18,9 @@ layout(push_constant) uniform PushConstants {
 
 void main()
 {
-    // Radial direction from center
     vec2 dir = texCoord - vec2(0.5);
     float dist = length(dir);
 
-    // Per-channel UV offset scaled by distance from center
     vec2 offset = dir * dist * pc.intensity;
 
     float r = texture(inputTexture, texCoord + offset).r;

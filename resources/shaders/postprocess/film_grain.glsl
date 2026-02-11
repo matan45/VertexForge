@@ -34,14 +34,12 @@ void main()
 {
     vec3 color = texture(inputTexture, texCoord).rgb;
 
-    // Compute luminance for weighting
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
-    // Generate animated grain noise in pixel space
     vec2 pixelCoord = gl_FragCoord.xy;
     float noise = grain(pixelCoord, pc.time);
 
-    // Luminance-weighted: stronger grain in darker areas
+    // Stronger grain in darker areas
     float weight = (1.0 - luma) * pc.intensity;
     color += noise * weight;
 

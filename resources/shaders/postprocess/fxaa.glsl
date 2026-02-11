@@ -37,7 +37,6 @@ void main()
 {
     vec2 texelSize = vec2(pc.texelSizeX, pc.texelSizeY);
 
-    // Sample center and cardinal neighbors
     vec3 rgbM  = texture(inputTexture, texCoord).rgb;
     vec3 rgbN  = texture(inputTexture, texCoord + vec2( 0.0, -texelSize.y)).rgb;
     vec3 rgbS  = texture(inputTexture, texCoord + vec2( 0.0,  texelSize.y)).rgb;
@@ -54,14 +53,12 @@ void main()
     float lumaMax = max(lumaM, max(max(lumaN, lumaS), max(lumaE, lumaW)));
     float lumaRange = lumaMax - lumaMin;
 
-    // Early exit if contrast is below threshold
     if (lumaRange < max(pc.edgeThresholdMin, lumaMax * pc.edgeThreshold))
     {
         outColor = vec4(rgbM, 1.0);
         return;
     }
 
-    // Sample diagonal neighbors
     vec3 rgbNW = texture(inputTexture, texCoord + vec2(-texelSize.x, -texelSize.y)).rgb;
     vec3 rgbNE = texture(inputTexture, texCoord + vec2( texelSize.x, -texelSize.y)).rgb;
     vec3 rgbSW = texture(inputTexture, texCoord + vec2(-texelSize.x,  texelSize.y)).rgb;
@@ -78,7 +75,6 @@ void main()
     subpixelOffset = smoothstep(0.0, 1.0, subpixelOffset);
     subpixelOffset = subpixelOffset * subpixelOffset * 0.75;
 
-    // Determine edge direction
     float edgeH = abs(lumaNW + lumaNE - 2.0 * lumaN)
                 + abs(lumaW  + lumaE  - 2.0 * lumaM) * 2.0
                 + abs(lumaSW + lumaSE - 2.0 * lumaS);
@@ -89,7 +85,6 @@ void main()
 
     bool isHorizontal = (edgeH >= edgeV);
 
-    // Select edge normal direction
     float stepLength = isHorizontal ? texelSize.y : texelSize.x;
     float lumaP = isHorizontal ? lumaN : lumaE;
     float lumaN2 = isHorizontal ? lumaS : lumaW;
@@ -115,7 +110,6 @@ void main()
         lumaLocalAvg = 0.5 * (lumaN2 + lumaM);
     }
 
-    // Shift UV to edge
     vec2 currentUV = texCoord;
     if (isHorizontal)
     {
@@ -126,7 +120,6 @@ void main()
         currentUV.x += stepLength * 0.5;
     }
 
-    // Determine search step count based on quality
     int searchSteps;
     if (pc.quality == 0u)
     {
@@ -141,7 +134,6 @@ void main()
         searchSteps = 12; // High
     }
 
-    // Search along edge in both directions
     vec2 edgeStep = isHorizontal ? vec2(texelSize.x, 0.0) : vec2(0.0, texelSize.y);
 
     vec2 uvP = currentUV + edgeStep;
@@ -169,7 +161,6 @@ void main()
         }
     }
 
-    // Compute distances to edge endpoints
     float distP, distN;
     if (isHorizontal)
     {
@@ -194,7 +185,6 @@ void main()
     float finalOffset = correctVariation ? pixelOffset : 0.0;
     finalOffset = max(finalOffset, subpixelOffset);
 
-    // Apply offset and sample
     vec2 finalUV = texCoord;
     if (isHorizontal)
     {

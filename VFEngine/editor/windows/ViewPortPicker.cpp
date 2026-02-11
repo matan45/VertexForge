@@ -30,7 +30,6 @@ namespace windows
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Skip non-selectable billboards
             if (!billboard.selectable)
             {
                 continue;
@@ -40,13 +39,11 @@ namespace windows
 
             glm::vec4 clipPos = projMatrix * viewMatrix * glm::vec4(worldPos, 1.0f);
 
-            // Behind camera check
             if (clipPos.w <= 0.0f)
             {
                 continue;
             }
 
-            // Convert to NDC
             glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
 
             if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f)
@@ -54,8 +51,7 @@ namespace windows
                 continue;
             }
 
-            // Convert to screen space
-            // Note: No Y flip needed because EditorCamera's projection matrix already
+            // No Y flip needed because EditorCamera's projection matrix already
             // flips Y for Vulkan (projectionMatrix[1][1] *= -1), so ndc.y = -1 is top, +1 is bottom
             glm::vec2 screenPos;
             screenPos.x = (ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x;
@@ -120,7 +116,6 @@ namespace windows
                 {
                     return hit.entity;
                 }
-                // Entity was deleted or no longer has billboard, skip and continue searching
             }
         }
         return std::nullopt;
@@ -144,7 +139,6 @@ namespace windows
                 continue;
             }
 
-            // Get mesh bounding box from renderer
             events::render::GetMeshBoundingBoxQuery query;
             query.meshPath = meshComp.meshPath;
             auto bounds = dispatcher.query(query);
@@ -154,7 +148,6 @@ namespace windows
                 continue;
             }
 
-            // Transform local AABB to world space
             math::AABB localAABB(bounds->min, bounds->max);
             math::AABB worldAABB = localAABB.getTransformed(worldTransform.worldMatrix);
 
@@ -175,20 +168,16 @@ namespace windows
         screenPos.x = glm::clamp(screenPos.x, viewportPos.x, viewportPos.x + viewportSize.x);
         screenPos.y = glm::clamp(screenPos.y, viewportPos.y, viewportPos.y + viewportSize.y);
 
-        // Convert screen position to normalized viewport coordinates [0, 1]
         float normalizedX = (screenPos.x - viewportPos.x) / viewportSize.x;
         float normalizedY = (screenPos.y - viewportPos.y) / viewportSize.y;
 
-        // Convert to NDC [-1, 1]
-        // Note: Y is already in correct orientation due to Vulkan's flipped projection
+        // Y is already in correct orientation due to Vulkan's flipped projection
         float ndcX = normalizedX * 2.0f - 1.0f;
         float ndcY = normalizedY * 2.0f - 1.0f;
 
-        // Get inverse matrices
         glm::mat4 invProj = glm::inverse(camera.getProjectionMatrix());
         glm::mat4 invView = glm::inverse(camera.getViewMatrix());
 
-        // Unproject near and far points
         glm::vec4 nearPoint = invProj * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
         glm::vec4 farPoint = invProj * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
 
@@ -196,7 +185,6 @@ namespace windows
         nearPoint /= nearPoint.w;
         farPoint /= farPoint.w;
 
-        // Transform to world space
         glm::vec3 worldNear = glm::vec3(invView * nearPoint);
         glm::vec3 worldFar = glm::vec3(invView * farPoint);
 
@@ -228,12 +216,10 @@ namespace windows
             auto hitDistance = meshData.worldAABB.intersectRay(ray);
             if (hitDistance.has_value())
             {
-                // Validate entity still exists
                 auto enttEntity = services::internal::fromHandle(meshData.entity);
                 if (registry.valid(enttEntity) &&
                     registry.all_of<components::MeshComponent>(enttEntity))
                 {
-                    // Prefer smaller bounding boxes - allows picking nested objects
                     float volume = meshData.worldAABB.getVolume();
                     if (volume < smallestVolume)
                     {

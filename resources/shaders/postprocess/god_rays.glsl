@@ -29,7 +29,6 @@ float interleavedGradientNoise(vec2 pos)
 
 void main()
 {
-    // Direction from this pixel toward the sun
     vec2 deltaTexCoord = texCoord - sun.sunScreenPos;
     deltaTexCoord *= (1.0 / float(sun.sampleCount)) * sun.density;
 
@@ -45,7 +44,6 @@ void main()
     {
         sampleUV -= deltaTexCoord;
 
-        // Clamp to valid UV range
         if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
             break;
 

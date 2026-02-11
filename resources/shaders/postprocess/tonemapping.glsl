@@ -147,47 +147,37 @@ void main()
 {
     vec3 color = texture(inputTexture, texCoord).rgb;
 
-    // Apply exposure
     color *= pc.exposure;
 
-    // Apply contrast (midpoint-based)
+    // Contrast around 0.18 midpoint
     color = max(pow(color / 0.18, vec3(pc.contrast)) * 0.18, 0.0);
 
-    // Tone mapping
     if (pc.mode == 0u)
     {
-        // ACES
         color = ACESFilm(color);
     }
     else if (pc.mode == 1u)
     {
-        // Reinhard
         color = Reinhard(color);
     }
     else if (pc.mode == 2u)
     {
-        // Uncharted 2
         float W = 11.2;
         color = Uncharted2Tonemap(color) / Uncharted2Tonemap(vec3(W));
     }
     else if (pc.mode == 4u)
     {
-        // Gran Turismo
         color = GranTurismo(color);
     }
     else if (pc.mode == 5u)
     {
-        // AgX
         color = AgX(color);
     }
     else if (pc.mode == 6u)
     {
-        // Khronos PBR Neutral
         color = KhronosPBRNeutral(color);
     }
     // mode == 3: Linear (exposure only, no curve)
-
-    // Gamma correction
     color = pow(color, vec3(1.0 / pc.gamma));
 
     outColor = vec4(color, 1.0);

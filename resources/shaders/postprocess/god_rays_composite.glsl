@@ -18,6 +18,5 @@ void main()
     vec3 sceneColor = texture(sceneColorTexture, texCoord).rgb;
     vec3 godRays = texture(godRaysTexture, texCoord).rgb;
 
-    // Additive blend
     outColor = vec4(sceneColor + godRays, 1.0);
 }
