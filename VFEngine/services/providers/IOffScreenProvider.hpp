@@ -161,6 +161,7 @@ namespace services {
         virtual void prepareFrameLightGizmos() = 0;
 
         virtual void prepareFrameBillboards() = 0;
+        virtual void prepareFrameText() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;

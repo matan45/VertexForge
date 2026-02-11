@@ -110,6 +110,11 @@ namespace controllers {
 		offScreenController->prepareFrameBillboards();
 	}
 
+	void OffScreen::prepareFrameText()
+	{
+		offScreenController->prepareFrameText();
+	}
+
 	void OffScreen::setShowBillboardIcons(bool show)
 	{
 		offScreenController->setShowBillboardIcons(show);

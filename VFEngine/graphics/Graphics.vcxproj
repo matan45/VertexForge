@@ -216,6 +216,10 @@
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
     <ClInclude Include="render\shadow\SpotShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\TerrainShadowPipeline.hpp" />
+    <ClInclude Include="render\text\TextBufferManager.hpp" />
+    <ClInclude Include="render\text\TextFontCache.hpp" />
+    <ClInclude Include="render\text\TextPipeline.hpp" />
+    <ClInclude Include="render\text\TextTypes.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
     <ClInclude Include="render\tools\AudioSphereDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ClusterDebugRenderer.hpp" />
@@ -339,6 +343,9 @@
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
     <ClCompile Include="render\shadow\SpotShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\TerrainShadowPipeline.cpp" />
+    <ClCompile Include="render\text\TextBufferManager.cpp" />
+    <ClCompile Include="render\text\TextFontCache.cpp" />
+    <ClCompile Include="render\text\TextPipeline.cpp" />
     <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\tools\AudioSphereDebugRenderer.cpp" />
     <ClCompile Include="render\tools\ClusterDebugRenderer.cpp" />
@@ -388,7 +395,6 @@
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays_composite.glsl" />
@@ -399,6 +405,7 @@
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
     <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />
+    <None Include="..\..\resources\shaders\text\text.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />

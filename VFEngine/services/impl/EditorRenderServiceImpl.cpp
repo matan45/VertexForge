@@ -43,6 +43,7 @@ namespace services
         prepareCameras();
         prepareFrameMeshes();
         prepareFrameBillboards();
+        prepareFrameText();
         prepareFrameCameraFrustums();
         prepareFrameAudioSpheres();
         prepareFrameLightGizmos();
@@ -666,6 +667,16 @@ namespace services
         }
 
         offScreenProvider->prepareFrameBillboards();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameText()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameText();
     }
 
     void EditorRenderServiceImpl::prepareFrameCameraFrustums()

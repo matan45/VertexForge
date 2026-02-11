@@ -153,6 +153,7 @@
     <ClInclude Include="terrain\TerrainWeightMap.hpp" />
     <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
     <ClInclude Include="terrain\WeightBrushApplicator.hpp" />
+    <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
@@ -209,6 +210,7 @@
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />
     <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
     <ClCompile Include="terrain\WeightBrushApplicator.cpp" />
+    <ClCompile Include="text\TextLayout.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />

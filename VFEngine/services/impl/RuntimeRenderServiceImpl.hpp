@@ -45,6 +45,7 @@ namespace services {
         void prepareCameras();
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
         void prepareFrameMeshes();
+        void prepareFrameText();
     };
 
 }

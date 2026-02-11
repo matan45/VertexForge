@@ -109,6 +109,11 @@ namespace serialization
             componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
         }
 
+        if (entity.hasComponent<components::TextComponent>())
+        {
+            componentsJson["text"] = serializeText(entity.getComponent<components::TextComponent>());
+        }
+
         if (entity.hasComponent<components::AudioSource2DComponent>())
         {
             componentsJson["audioSource2D"] = serializeAudioSource2D(
@@ -392,6 +397,52 @@ namespace serialization
         billboard.editorOnly = j.value("editorOnly", true);
         billboard.selectable = j.value("selectable", true);
         billboard.texturePath = j.value("texturePath", std::string(""));
+    }
+
+    json SceneSerialization::serializeText(const components::TextComponent& text)
+    {
+        json j;
+        j["fontPath"] = text.fontPath;
+        j["text"] = text.text;
+        j["fontSize"] = text.fontSize;
+        j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
+        j["renderMode"] = textRenderModeToString(text.renderMode);
+        j["lineSpacing"] = text.lineSpacing;
+        j["maxWidth"] = text.maxWidth;
+        return j;
+    }
+
+    void SceneSerialization::deserializeText(const json& j, components::TextComponent& text)
+    {
+        text.fontPath = j.value("fontPath", std::string(""));
+        text.text = j.value("text", std::string("Hello World"));
+        text.fontSize = j.value("fontSize", 32.0f);
+        if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 4)
+        {
+            text.color = glm::vec4(
+                j["color"][0].get<float>(), j["color"][1].get<float>(),
+                j["color"][2].get<float>(), j["color"][3].get<float>()
+            );
+        }
+        text.renderMode = stringToTextRenderMode(j.value("renderMode", "worldSpace"));
+        text.lineSpacing = j.value("lineSpacing", 1.0f);
+        text.maxWidth = j.value("maxWidth", 0.0f);
+    }
+
+    std::string SceneSerialization::textRenderModeToString(components::TextRenderMode mode)
+    {
+        switch (mode)
+        {
+        case components::TextRenderMode::ScreenSpace: return "screenSpace";
+        case components::TextRenderMode::WorldSpace: return "worldSpace";
+        default: return "worldSpace";
+        }
+    }
+
+    components::TextRenderMode SceneSerialization::stringToTextRenderMode(const std::string& str)
+    {
+        if (str == "screenSpace") return components::TextRenderMode::ScreenSpace;
+        return components::TextRenderMode::WorldSpace;
     }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
@@ -1613,6 +1664,12 @@ namespace serialization
             {
                 auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
                 deserializeBillboard(componentsJson["billboard"], billboardComp);
+            }
+
+            if (componentsJson.contains("text"))
+            {
+                auto& textComp = entity.addOrReplaceComponent<components::TextComponent>();
+                deserializeText(componentsJson["text"], textComp);
             }
 
             if (componentsJson.contains("audioSource2D"))

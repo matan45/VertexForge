@@ -49,6 +49,7 @@ namespace controllers::offscreen
 
         void prepareMeshes(const FrameContext& ctx);
         void prepareBillboards(const FrameContext& ctx);
+        void prepareText(const FrameContext& ctx);
         void prepareCameraFrustums(const FrameContext& ctx);
         void prepareAudioSpheres(const FrameContext& ctx);
         void prepareGrid(const FrameContext& ctx);

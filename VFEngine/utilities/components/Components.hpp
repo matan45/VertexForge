@@ -28,12 +28,13 @@ namespace components
     struct SpotLightComponent;
     struct TerrainComponent;
     struct TerrainTileComponent;
+    struct TextComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
-                                               SpotLightComponent, TerrainComponent, TerrainTileComponent>;
+                                               SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent>;
 
     struct WorldTransformComponent
     {
@@ -475,5 +476,22 @@ namespace components
         int32_t tileX = 0;
         int32_t tileZ = 0;
         TerrainColliderDebugData debugData;
+    };
+
+    enum class TextRenderMode : uint8_t
+    {
+        ScreenSpace,
+        WorldSpace
+    };
+
+    struct TextComponent
+    {
+        std::string fontPath;
+        std::string text = "Hello World";
+        float fontSize = 32.0f;
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        TextRenderMode renderMode = TextRenderMode::WorldSpace;
+        float lineSpacing = 1.0f;
+        float maxWidth = 0.0f;
     };
 }

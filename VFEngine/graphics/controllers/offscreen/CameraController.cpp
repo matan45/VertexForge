@@ -2,6 +2,7 @@
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
 #include "../../render/billboard/BillboardPipeline.hpp"
+#include "../../render/text/TextPipeline.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -94,6 +95,11 @@ namespace controllers::offscreen
         if (renderHandler.isBillboardPipelineInitialized())
         {
             renderHandler.getBillboardPipeline()->updateCameraUBO(view, projection, cameraPos);
+        }
+
+        if (renderHandler.isTextPipelineInitialized())
+        {
+            renderHandler.getTextPipeline()->updateCameraUBO(view, projection, cameraPos);
         }
 
         // Get or create camera data

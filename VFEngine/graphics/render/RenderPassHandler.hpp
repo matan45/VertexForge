@@ -61,6 +61,12 @@ namespace render
         struct BillboardRenderData;
     }
 
+    namespace text
+    {
+        class TextPipeline;
+        struct TextRenderData;
+    }
+
     class RenderPassHandler
     {
     private:
@@ -71,6 +77,7 @@ namespace render
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
+        std::unique_ptr<text::TextPipeline> textPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
@@ -87,6 +94,9 @@ namespace render
 
         bool billboardPipelineInitialized = false;
         std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
+
+        bool textPipelineInitialized = false;
+        std::vector<text::TextRenderData> currentTextDrawList;
 
         bool debugRendererInitialized = false;
         glm::mat4 currentView{1.0f};
@@ -134,6 +144,11 @@ namespace render
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
         void setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards);
+
+        void initTextPipeline();
+        text::TextPipeline* getTextPipeline() const { return textPipeline.get(); }
+        bool isTextPipelineInitialized() const { return textPipelineInitialized; }
+        void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
 
         void initDebugRenderer();
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);

@@ -178,6 +178,18 @@ namespace controllers
         framePreparation->prepareBillboards(ctx);
     }
 
+    void OffScreenController::prepareFrameText()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+
+        framePreparation->prepareText(ctx);
+    }
+
     void OffScreenController::prepareFrameCameraFrustums()
     {
         offscreen::FrameContext ctx;

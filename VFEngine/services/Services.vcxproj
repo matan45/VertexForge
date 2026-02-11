@@ -161,6 +161,7 @@
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
     <ClInclude Include="impl\components\PhysicsComponentService.hpp" />
+    <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
     <ClInclude Include="impl\scene\EntityQueryService.hpp" />
     <ClInclude Include="impl\scene\EntityStateService.hpp" />
@@ -238,6 +239,7 @@
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
     <ClCompile Include="impl\components\PhysicsComponentService.cpp" />
+    <ClCompile Include="impl\components\TextComponentService.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
     <ClCompile Include="impl\scene\EntityQueryService.cpp" />
     <ClCompile Include="impl\scene\EntityStateService.cpp" />

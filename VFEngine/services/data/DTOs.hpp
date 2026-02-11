@@ -212,6 +212,17 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
     };
 
+    struct TextData
+    {
+        std::string fontPath;
+        std::string text = "Hello World";
+        float fontSize = 32.0f;
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        uint8_t renderMode = 1; // 0=ScreenSpace, 1=WorldSpace
+        float lineSpacing = 1.0f;
+        float maxWidth = 0.0f;
+    };
+
     struct DirectionalLightData
     {
         glm::vec3 color{1.0f, 1.0f, 1.0f};

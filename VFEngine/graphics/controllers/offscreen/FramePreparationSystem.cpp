@@ -7,6 +7,8 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/billboard/BillboardPipeline.hpp"
+#include "../../render/text/TextTypes.hpp"
+#include "../../render/text/TextPipeline.hpp"
 #include "../../render/DebugRenderer.hpp"
 #include "../../render/tools/FrustumDebugRenderer.hpp"
 #include "../../render/tools/AudioSphereDebugRenderer.hpp"
@@ -341,6 +343,59 @@ namespace controllers::offscreen
         }
 
         renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+    }
+
+    void FramePreparationSystem::prepareText(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initTextPipeline();
+
+        if (!renderHandler->isTextPipelineInitialized())
+        {
+            renderHandler->setTextDrawList({});
+            return;
+        }
+
+        std::vector<render::text::TextRenderData> textDrawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TextComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& textComp = view.get<components::TextComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            if (textComp.fontPath.empty() || textComp.text.empty())
+            {
+                continue;
+            }
+
+            render::text::TextRenderData renderData;
+            renderData.fontPath = textComp.fontPath;
+            renderData.text = textComp.text;
+            renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
+            renderData.fontSize = textComp.fontSize;
+            renderData.color = textComp.color;
+            renderData.renderMode = static_cast<uint32_t>(textComp.renderMode);
+            renderData.entityId = static_cast<uint32_t>(entity);
+            renderData.lineSpacing = textComp.lineSpacing;
+            renderData.maxWidth = textComp.maxWidth;
+
+            textDrawList.push_back(std::move(renderData));
+        }
+
+        renderHandler->setTextDrawList(std::move(textDrawList));
     }
 
     void FramePreparationSystem::prepareCameraFrustums(const FrameContext& ctx)

@@ -9,6 +9,8 @@
 #include "mesh/MeshGPUCache.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
+#include "text/TextPipeline.hpp"
+#include "text/TextTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
@@ -36,6 +38,7 @@ namespace render
         , iblRenderer{std::make_unique<IBL>(device, swapChain, offscreenResources)}
         , meshPipeline{std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources)}
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
+        , textPipeline{std::make_unique<text::TextPipeline>(device, swapChain, offscreenResources)}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
@@ -310,6 +313,26 @@ namespace render
         if (billboardPipelineInitialized && billboardPipeline)
         {
             billboardPipeline->setBillboardList(currentBillboardDrawList);
+        }
+    }
+
+    void RenderPassHandler::initTextPipeline()
+    {
+        if (textPipelineInitialized)
+        {
+            return;
+        }
+
+        textPipeline->init();
+        textPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setTextDrawList(std::vector<text::TextRenderData>&& textEntities)
+    {
+        currentTextDrawList = std::move(textEntities);
+        if (textPipelineInitialized && textPipeline)
+        {
+            textPipeline->setTextDrawList(currentTextDrawList);
         }
     }
 
@@ -752,6 +775,11 @@ namespace render
             billboardPipeline->recreate();
         }
 
+        if (textPipelineInitialized)
+        {
+            textPipeline->recreate();
+        }
+
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -795,6 +823,11 @@ namespace render
         if (billboardPipelineInitialized)
         {
             billboardPipeline->cleanUp();
+        }
+
+        if (textPipelineInitialized)
+        {
+            textPipeline->cleanUp();
         }
 
         if (debugRendererInitialized)
@@ -930,6 +963,11 @@ namespace render
         if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
         {
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
+        if (textPipelineInitialized && !currentTextDrawList.empty())
+        {
+            textPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();

@@ -51,6 +51,7 @@ namespace services {
         RigidBody,
         Animator,
         VFX,
+        Text,
     };
 
 }

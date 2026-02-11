@@ -63,6 +63,12 @@ namespace serialization
         static json serializeBillboard(const components::BillboardComponent& billboard);
         static void deserializeBillboard(const json& j, components::BillboardComponent& billboard);
 
+        static json serializeText(const components::TextComponent& text);
+        static void deserializeText(const json& j, components::TextComponent& text);
+
+        static std::string textRenderModeToString(components::TextRenderMode mode);
+        static components::TextRenderMode stringToTextRenderMode(const std::string& str);
+
         static json serializeAudioSource2D(const components::AudioSource2DComponent& audioSource);
         static void deserializeAudioSource2D(const json& j, components::AudioSource2DComponent& audioSource);
 

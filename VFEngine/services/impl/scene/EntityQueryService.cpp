@@ -192,6 +192,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::Text:
+            {
+                auto view = registry.view<components::TextComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -251,6 +260,8 @@ namespace services
             return registry.all_of<components::AnimatorComponent>(enttEntity);
         case ComponentTypeId::VFX:
             return registry.all_of<components::VFXComponent>(enttEntity);
+        case ComponentTypeId::Text:
+            return registry.all_of<components::TextComponent>(enttEntity);
         default:
             return false;
         }
@@ -297,6 +308,8 @@ namespace services
             types.push_back(ComponentTypeId::Animator);
         if (registry.all_of<components::VFXComponent>(enttEntity))
             types.push_back(ComponentTypeId::VFX);
+        if (registry.all_of<components::TextComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Text);
 
         return types;
     }

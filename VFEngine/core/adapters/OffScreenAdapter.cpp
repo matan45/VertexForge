@@ -93,6 +93,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameText() {
+        if (offScreen) {
+            offScreen->prepareFrameText();
+        }
+    }
+
     void OffScreenAdapter::setShowBillboardIcons(bool show) {
         if (offScreen) {
             offScreen->setShowBillboardIcons(show);

@@ -23,6 +23,7 @@ namespace services
         frameCounter++;
         prepareCameras();
         prepareFrameMeshes();
+        prepareFrameText();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -250,6 +251,14 @@ namespace services
         if (offScreenProvider)
         {
             offScreenProvider->prepareFrameMeshes();
+        }
+    }
+
+    void RuntimeRenderServiceImpl::prepareFrameText()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareFrameText();
         }
     }
 }

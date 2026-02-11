@@ -273,6 +273,25 @@ namespace events::scene {
         std::string_view getName() const override { return "SetBillboardData"; }
     };
 
+    struct AddTextComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddTextComponent"; }
+    };
+
+    struct RemoveTextComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveTextComponent"; }
+    };
+
+    struct SetTextDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::TextData textData;
+
+        std::string_view getName() const override { return "SetTextData"; }
+    };
+
     struct AddDirectionalLightComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -494,6 +513,18 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetBillboardData"; }
+    };
+
+    struct HasTextComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasTextComponent"; }
+    };
+
+    struct GetTextDataQuery : IQuery<std::optional<services::TextData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetTextData"; }
     };
 
     struct HasDirectionalLightComponentQuery : IQuery<bool> {
