@@ -390,7 +390,7 @@ namespace controllers::offscreen
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.fontSize = textComp.fontSize;
             renderData.color = textComp.color;
-            renderData.renderMode = static_cast<uint32_t>(textComp.renderMode);
+            renderData.renderMode = 1; // WorldSpace only
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.lineSpacing = textComp.lineSpacing;
             renderData.letterSpacing = textComp.letterSpacing;

@@ -426,7 +426,6 @@ namespace serialization
         j["text"] = text.text;
         j["fontSize"] = text.fontSize;
         j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
-        j["renderMode"] = textRenderModeToString(text.renderMode);
         j["lineSpacing"] = text.lineSpacing;
         j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
@@ -445,26 +444,9 @@ namespace serialization
                 j["color"][2].get<float>(), j["color"][3].get<float>()
             );
         }
-        text.renderMode = stringToTextRenderMode(j.value("renderMode", "worldSpace"));
         text.lineSpacing = j.value("lineSpacing", 1.0f);
         text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
-    }
-
-    std::string SceneSerialization::textRenderModeToString(components::TextRenderMode mode)
-    {
-        switch (mode)
-        {
-        case components::TextRenderMode::ScreenSpace: return "screenSpace";
-        case components::TextRenderMode::WorldSpace: return "worldSpace";
-        default: return "worldSpace";
-        }
-    }
-
-    components::TextRenderMode SceneSerialization::stringToTextRenderMode(const std::string& str)
-    {
-        if (str == "screenSpace") return components::TextRenderMode::ScreenSpace;
-        return components::TextRenderMode::WorldSpace;
     }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)

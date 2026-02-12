@@ -484,19 +484,12 @@ namespace components
         TerrainColliderDebugData debugData;
     };
 
-    enum class TextRenderMode : uint8_t
-    {
-        ScreenSpace,
-        WorldSpace
-    };
-
     struct TextComponent
     {
         std::string fontPath;
         std::string text = "Hello World";
         float fontSize = 32.0f;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
-        TextRenderMode renderMode = TextRenderMode::WorldSpace;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;

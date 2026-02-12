@@ -55,8 +55,6 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawColor(data);
             ImGui::Spacing();
-            changed |= drawRenderMode(data);
-            ImGui::Spacing();
             changed |= drawLineSpacing(data);
             ImGui::Spacing();
             changed |= drawLetterSpacing(data);
@@ -194,22 +192,6 @@ namespace windows::details
 
         if (ImGui::ColorEdit4("Color##Text", &data.color.x))
         {
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    bool TextDrawer::drawRenderMode(services::TextData& data)
-    {
-        bool changed = false;
-
-        const char* modes[] = {"Screen Space", "World Space"};
-        int currentMode = static_cast<int>(data.renderMode);
-
-        if (ImGui::Combo("Render Mode##Text", &currentMode, modes, 2))
-        {
-            data.renderMode = static_cast<uint8_t>(currentMode);
             changed = true;
         }
 
