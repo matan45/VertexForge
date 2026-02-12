@@ -8,6 +8,7 @@
 #include "print/Logger.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <string_view>
 
 namespace render::ui
 {
@@ -325,7 +326,7 @@ namespace render::ui
 
         struct ImageEntry
         {
-            std::string texturePath;
+            std::string_view texturePath;
             UIImageInstance instance;
         };
 
@@ -362,7 +363,7 @@ namespace render::ui
             group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
 
             // Sub-group by texture within this scissor group
-            std::unordered_map<std::string, std::vector<UIImageInstance>> texturedInstances;
+            std::unordered_map<std::string_view, std::vector<UIImageInstance>> texturedInstances;
             for (auto& entry : entries)
             {
                 texturedInstances[entry.texturePath].push_back(entry.instance);
@@ -370,13 +371,13 @@ namespace render::ui
 
             for (auto& [path, instances] : texturedInstances)
             {
-                if (!loadTexture(path))
+                if (!loadTexture(std::string(path)))
                 {
                     continue;
                 }
 
                 UITextureBatch batch;
-                batch.texturePath = path;
+                batch.texturePath = std::string(path);
                 batch.firstInstance = static_cast<uint32_t>(allInstances.size());
                 batch.instanceCount = static_cast<uint32_t>(instances.size());
                 group.batches.push_back(std::move(batch));

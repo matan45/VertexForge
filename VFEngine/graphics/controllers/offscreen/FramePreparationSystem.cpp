@@ -963,6 +963,24 @@ namespace controllers::offscreen
 
             return {posX, posY, w, h};
         }
+
+        const components::UICanvasComponent* findCanvasForEntity(
+            entt::registry& registry, entt::entity entity)
+        {
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parent = registry.get<components::ParentComponent>(current).parent;
+                if (parent == entt::null || !registry.valid(parent))
+                    break;
+                if (registry.all_of<components::UICanvasComponent>(parent))
+                    return &registry.get<components::UICanvasComponent>(parent);
+                current = parent;
+            }
+            if (registry.all_of<components::UICanvasComponent>(entity))
+                return &registry.get<components::UICanvasComponent>(entity);
+            return nullptr;
+        }
     } // anonymous namespace
 
     void FramePreparationSystem::prepareUIImages(const FrameContext& ctx)
@@ -1023,23 +1041,7 @@ namespace controllers::offscreen
                         continue;
                 }
 
-                // Find canvas for scale computation
-                const components::UICanvasComponent* scrollCanvas = nullptr;
-                entt::entity cur = scrollEntity;
-                while (registry.all_of<components::ParentComponent>(cur))
-                {
-                    entt::entity p = registry.get<components::ParentComponent>(cur).parent;
-                    if (p == entt::null || !registry.valid(p))
-                        break;
-                    if (registry.all_of<components::UICanvasComponent>(p))
-                    {
-                        scrollCanvas = &registry.get<components::UICanvasComponent>(p);
-                        break;
-                    }
-                    cur = p;
-                }
-                if (!scrollCanvas && registry.all_of<components::UICanvasComponent>(scrollEntity))
-                    scrollCanvas = &registry.get<components::UICanvasComponent>(scrollEntity);
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
                 if (!scrollCanvas)
                     continue;
 
@@ -1095,23 +1097,7 @@ namespace controllers::offscreen
                         continue;
                 }
 
-                // Find canvas (same parent-walk pattern)
-                const components::UICanvasComponent* scrollCanvas = nullptr;
-                entt::entity cur = scrollEntity;
-                while (registry.all_of<components::ParentComponent>(cur))
-                {
-                    entt::entity p = registry.get<components::ParentComponent>(cur).parent;
-                    if (p == entt::null || !registry.valid(p))
-                        break;
-                    if (registry.all_of<components::UICanvasComponent>(p))
-                    {
-                        scrollCanvas = &registry.get<components::UICanvasComponent>(p);
-                        break;
-                    }
-                    cur = p;
-                }
-                if (!scrollCanvas && registry.all_of<components::UICanvasComponent>(scrollEntity))
-                    scrollCanvas = &registry.get<components::UICanvasComponent>(scrollEntity);
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
                 if (!scrollCanvas)
                     continue;
 
