@@ -147,7 +147,22 @@ namespace serialization
         static json serializeUIImage(const components::UIImageComponent& image);
         static void deserializeUIImage(const json& j, components::UIImageComponent& image);
 
+        static json serializeUIScroll(const components::UIScrollComponent& scroll);
+        static void deserializeUIScroll(const json& j, components::UIScrollComponent& scroll);
+
+        static json serializeUILayoutGroup(const components::UILayoutGroupComponent& layoutGroup);
+        static void deserializeUILayoutGroup(const json& j, components::UILayoutGroupComponent& layoutGroup);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
+
+        static std::string scrollbarVisibilityToString(components::ScrollbarVisibility visibility);
+        static components::ScrollbarVisibility stringToScrollbarVisibility(const std::string& str);
+
+        static std::string layoutDirectionToString(components::LayoutDirection direction);
+        static components::LayoutDirection stringToLayoutDirection(const std::string& str);
+
+        static std::string childAlignmentToString(components::ChildAlignment alignment);
+        static components::ChildAlignment stringToChildAlignment(const std::string& str);
     };
 }

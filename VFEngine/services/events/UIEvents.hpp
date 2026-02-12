@@ -175,4 +175,43 @@ namespace events::ui {
         std::string_view getName() const override { return "GetScrollOffset"; }
     };
 
+    // ============================================
+    // UI Layout Group Commands
+    // ============================================
+
+    struct AddUILayoutGroupComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUILayoutGroupComponent"; }
+    };
+
+    struct RemoveUILayoutGroupComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUILayoutGroupComponent"; }
+    };
+
+    struct SetUILayoutGroupDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UILayoutGroupData layoutGroupData;
+
+        std::string_view getName() const override { return "SetUILayoutGroupData"; }
+    };
+
+    // ============================================
+    // UI Layout Group Queries
+    // ============================================
+
+    struct HasUILayoutGroupComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUILayoutGroupComponent"; }
+    };
+
+    struct GetUILayoutGroupDataQuery : IQuery<std::optional<services::UILayoutGroupData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUILayoutGroupData"; }
+    };
+
 }

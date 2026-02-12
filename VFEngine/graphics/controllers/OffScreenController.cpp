@@ -586,8 +586,22 @@ namespace controllers
         if (ctx.playModeActive)
         {
             auto& dispatcher = events::EventDispatcher::instance();
-            ctx.mousePosition = dispatcher.query(events::input::GetMousePositionQuery{});
+            glm::vec2 rawMouse = dispatcher.query(events::input::GetMousePositionQuery{}) - uiViewportOffset;
+
+            // Scale mouse from viewport panel coordinates to framebuffer coordinates
+            if (uiViewportPanelSize.x > 0.0f && uiViewportPanelSize.y > 0.0f)
+            {
+                float fbW = static_cast<float>(ctx.viewportWidth);
+                float fbH = static_cast<float>(ctx.viewportHeight);
+                rawMouse.x *= fbW / uiViewportPanelSize.x;
+                rawMouse.y *= fbH / uiViewportPanelSize.y;
+            }
+
+            ctx.mousePosition = rawMouse;
             ctx.scrollDelta = dispatcher.query(events::input::GetScrollDeltaQuery{});
+            events::input::IsMouseButtonDownQuery mouseQuery;
+            mouseQuery.button = 0;
+            ctx.leftMouseDown = dispatcher.query(mouseQuery);
         }
 
         framePreparation->prepareUIImages(ctx);

@@ -34,6 +34,7 @@ namespace controllers::offscreen
         uint32_t viewportHeight = 0;
         glm::vec2 mousePosition{0.0f, 0.0f};
         glm::vec2 scrollDelta{0.0f, 0.0f};
+        bool leftMouseDown = false;
     };
 
     class FramePreparationSystem

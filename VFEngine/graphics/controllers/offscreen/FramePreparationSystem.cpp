@@ -921,6 +921,80 @@ namespace controllers::offscreen
             drawList.push_back(renderData);
         }
 
+        // --- UIRect wireframe outlines for all rect elements ---
+        auto rectView = registry.view<components::UIRectComponent>();
+        for (auto entity : rectView)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+            }
+
+            // Skip canvas entities themselves (already drawn above)
+            if (registry.all_of<components::UICanvasComponent>(entity))
+                continue;
+
+            const auto& rectComp = rectView.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find canvas
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity canvasEntity = entt::null;
+            entt::entity current = entity;
+
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    canvasEntity = parentEntity;
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas || canvasEntity == entt::null)
+                continue;
+
+            if (!registry.all_of<components::WorldTransformComponent>(canvasEntity))
+                continue;
+
+            const auto& canvasWorldTransform = registry.get<components::WorldTransformComponent>(canvasEntity);
+
+            float canvasW = canvas->referenceWidth / canvas->pixelsPerUnit;
+            float canvasH = canvas->referenceHeight / canvas->pixelsPerUnit;
+
+            float anchorLeft = rectComp.anchorMin.x * canvas->referenceWidth;
+            float anchorRight = rectComp.anchorMax.x * canvas->referenceWidth;
+            float anchorBottom = rectComp.anchorMin.y * canvas->referenceHeight;
+            float anchorTop = rectComp.anchorMax.y * canvas->referenceHeight;
+
+            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+
+            float localCX = cx / canvas->referenceWidth - 0.5f;
+            float localCY = cy / canvas->referenceHeight - 0.5f;
+            float normW = w / canvas->referenceWidth;
+            float normH = h / canvas->referenceHeight;
+
+            glm::mat4 canvasScaled = canvasWorldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+
+            glm::mat4 rectModel = canvasScaled
+                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.002f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
+
+            render::mesh::UICanvasOutlineRenderData renderData;
+            renderData.modelMatrix = rectModel;
+            drawList.push_back(renderData);
+        }
+
         if (!drawList.empty())
         {
             if (!renderHandler->isMeshPipelineInitialized())
@@ -1024,8 +1098,143 @@ namespace controllers::offscreen
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
 
+        // --- Scrollbar drag interaction ---
+        bool anyScrollDragging = false;
+        {
+            auto scrollDragView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+
+            // Phase 1: Process active drags
+            for (auto scrollEntity : scrollDragView)
+            {
+                auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+                if (!scrollComp.isDragging)
+                    continue;
+
+                anyScrollDragging = true;
+
+                if (ctx.leftMouseDown)
+                {
+                    const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                    if (!scrollCanvas) { scrollComp.isDragging = false; break; }
+
+                    float vw = static_cast<float>(ctx.viewportWidth);
+                    float vh = static_cast<float>(ctx.viewportHeight);
+                    float sc = 1.0f;
+                    if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                        sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                    const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                    PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                    if (scrollComp.dragAxis == 1) // vertical
+                    {
+                        float maxScrollY = std::max(0.0f, scrollComp.contentSize.y - scrollComp.viewportSize.y);
+                        float ratio = scrollComp.viewportSize.y / scrollComp.contentSize.y;
+                        float thumbH = std::max(20.0f, vpRect.h * ratio);
+                        float scrollRange = vpRect.h - thumbH;
+                        if (scrollRange > 0.0f)
+                        {
+                            float deltaMouseY = ctx.mousePosition.y - scrollComp.dragStartMousePos.y;
+                            scrollComp.scrollOffset.y = glm::clamp(
+                                scrollComp.dragStartScrollOffset.y + (deltaMouseY / scrollRange) * maxScrollY,
+                                0.0f, maxScrollY);
+                        }
+                    }
+                    else // horizontal (dragAxis == 0)
+                    {
+                        float maxScrollX = std::max(0.0f, scrollComp.contentSize.x - scrollComp.viewportSize.x);
+                        float ratio = scrollComp.viewportSize.x / scrollComp.contentSize.x;
+                        float thumbW = std::max(20.0f, vpRect.w * ratio);
+                        float scrollRange = vpRect.w - thumbW;
+                        if (scrollRange > 0.0f)
+                        {
+                            float deltaMouseX = ctx.mousePosition.x - scrollComp.dragStartMousePos.x;
+                            scrollComp.scrollOffset.x = glm::clamp(
+                                scrollComp.dragStartScrollOffset.x + (deltaMouseX / scrollRange) * maxScrollX,
+                                0.0f, maxScrollX);
+                        }
+                    }
+                }
+                else
+                {
+                    scrollComp.isDragging = false;
+                }
+                break; // only one drag at a time
+            }
+
+            // Phase 2: Initiate new drag on mouse down over thumb
+            if (!anyScrollDragging && ctx.leftMouseDown)
+            {
+                for (auto scrollEntity : scrollDragView)
+                {
+                    if (registry.all_of<components::NameComponent>(scrollEntity))
+                        if (!registry.get<components::NameComponent>(scrollEntity).isActive)
+                            continue;
+
+                    const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                    if (!scrollCanvas) continue;
+
+                    float vw = static_cast<float>(ctx.viewportWidth);
+                    float vh = static_cast<float>(ctx.viewportHeight);
+                    float sc = 1.0f;
+                    if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                        sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                    auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+                    const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                    PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                    // Check vertical thumb hit
+                    if (scrollComp.verticalScrollEnabled && scrollComp.contentSize.y > scrollComp.viewportSize.y
+                        && scrollComp.verticalScrollbarVisibility != components::ScrollbarVisibility::Hidden)
+                    {
+                        float maxScrollY = std::max(0.0f, scrollComp.contentSize.y - scrollComp.viewportSize.y);
+                        float ratio = scrollComp.viewportSize.y / scrollComp.contentSize.y;
+                        float thumbH = std::max(20.0f, vpRect.h * ratio);
+                        float scrollRange = vpRect.h - thumbH;
+                        float thumbY = (maxScrollY > 0.0f)
+                            ? vpRect.y + scrollRange * (scrollComp.scrollOffset.y / maxScrollY) : vpRect.y;
+                        float thumbX = vpRect.x + vpRect.w - 8.0f;
+
+                        if (ctx.mousePosition.x >= thumbX && ctx.mousePosition.x <= thumbX + 8.0f
+                            && ctx.mousePosition.y >= thumbY && ctx.mousePosition.y <= thumbY + thumbH)
+                        {
+                            scrollComp.isDragging = true;
+                            scrollComp.dragAxis = 1;
+                            scrollComp.dragStartScrollOffset = scrollComp.scrollOffset;
+                            scrollComp.dragStartMousePos = ctx.mousePosition;
+                            break;
+                        }
+                    }
+
+                    // Check horizontal thumb hit
+                    if (scrollComp.horizontalScrollEnabled && scrollComp.contentSize.x > scrollComp.viewportSize.x
+                        && scrollComp.horizontalScrollbarVisibility != components::ScrollbarVisibility::Hidden)
+                    {
+                        float maxScrollX = std::max(0.0f, scrollComp.contentSize.x - scrollComp.viewportSize.x);
+                        float ratio = scrollComp.viewportSize.x / scrollComp.contentSize.x;
+                        float thumbW = std::max(20.0f, vpRect.w * ratio);
+                        float scrollRange = vpRect.w - thumbW;
+                        float thumbX = (maxScrollX > 0.0f)
+                            ? vpRect.x + scrollRange * (scrollComp.scrollOffset.x / maxScrollX) : vpRect.x;
+                        float thumbY = vpRect.y + vpRect.h - 8.0f;
+
+                        if (ctx.mousePosition.x >= thumbX && ctx.mousePosition.x <= thumbX + thumbW
+                            && ctx.mousePosition.y >= thumbY && ctx.mousePosition.y <= thumbY + 8.0f)
+                        {
+                            scrollComp.isDragging = true;
+                            scrollComp.dragAxis = 0;
+                            scrollComp.dragStartScrollOffset = scrollComp.scrollOffset;
+                            scrollComp.dragStartMousePos = ctx.mousePosition;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // --- Apply mouse wheel scroll input ---
-        if (ctx.scrollDelta.y != 0.0f || ctx.scrollDelta.x != 0.0f)
+        if (!anyScrollDragging && (ctx.scrollDelta.y != 0.0f || ctx.scrollDelta.x != 0.0f))
         {
             auto scrollInputView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
 
@@ -1073,10 +1282,145 @@ namespace controllers::offscreen
                 auto& scrollComp = registry.get<components::UIScrollComponent>(targetScroll);
                 float sensitivity = scrollComp.scrollSensitivity * 20.0f;
 
-                if (scrollComp.verticalScrollEnabled)
+                bool canScrollV = scrollComp.verticalScrollEnabled
+                    && scrollComp.contentSize.y > scrollComp.viewportSize.y;
+                bool canScrollH = scrollComp.horizontalScrollEnabled
+                    && scrollComp.contentSize.x > scrollComp.viewportSize.x;
+
+                if (canScrollV)
                     scrollComp.scrollOffset.y -= ctx.scrollDelta.y * sensitivity;
-                if (scrollComp.horizontalScrollEnabled)
-                    scrollComp.scrollOffset.x -= ctx.scrollDelta.x * sensitivity;
+
+                if (canScrollH)
+                {
+                    // Use horizontal scroll delta, or route vertical wheel to horizontal
+                    // when this container only scrolls horizontally
+                    float hDelta = ctx.scrollDelta.x;
+                    if (!canScrollV && ctx.scrollDelta.y != 0.0f)
+                        hDelta = ctx.scrollDelta.y;
+                    scrollComp.scrollOffset.x -= hDelta * sensitivity;
+                }
+            }
+        }
+
+        // --- Layout group pass: auto-position children ---
+        {
+            auto layoutView = registry.view<components::UILayoutGroupComponent,
+                                            components::ChildrenComponent,
+                                            components::UIRectComponent>();
+            for (auto layoutEntity : layoutView)
+            {
+                if (registry.all_of<components::NameComponent>(layoutEntity))
+                    if (!registry.get<components::NameComponent>(layoutEntity).isActive)
+                        continue;
+
+                const auto* layoutCanvas = findCanvasForEntity(registry, layoutEntity);
+                if (!layoutCanvas)
+                    continue;
+
+                float vw = static_cast<float>(ctx.viewportWidth);
+                float vh = static_cast<float>(ctx.viewportHeight);
+                float sc = 1.0f;
+                if (layoutCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / layoutCanvas->referenceWidth, vh / layoutCanvas->referenceHeight);
+
+                const auto& parentRect = registry.get<components::UIRectComponent>(layoutEntity);
+                PixelRect pRect = resolvePixelRect(parentRect, vw, vh, sc);
+
+                const auto& layoutComp = registry.get<components::UILayoutGroupComponent>(layoutEntity);
+                const auto& children = registry.get<components::ChildrenComponent>(layoutEntity).children;
+
+                bool isVertical = (layoutComp.direction == components::LayoutDirection::Vertical);
+                bool isGrid = (layoutComp.direction == components::LayoutDirection::Grid);
+
+                float cursorX = layoutComp.padding.x; // left
+                float cursorY = layoutComp.padding.z;  // top
+                int gridCol = 0;
+                int cols = std::max(1, layoutComp.constraintCount);
+                float rowHeight = 0.0f;
+
+                // For non-grid: single cursor along main axis
+                float cursor = isVertical ? layoutComp.padding.z : layoutComp.padding.x;
+
+                for (auto child : children)
+                {
+                    if (!registry.valid(child) || !registry.all_of<components::UIRectComponent>(child))
+                        continue;
+                    if (registry.all_of<components::NameComponent>(child)
+                        && !registry.get<components::NameComponent>(child).isActive)
+                        continue;
+
+                    auto& childRect = registry.get<components::UIRectComponent>(child);
+
+                    // Compute child pixel size from its rect
+                    float childW = (childRect.anchorMax.x - childRect.anchorMin.x) * vw + childRect.sizeDelta.x * sc;
+                    float childH = ((1.0f - childRect.anchorMin.y) - (1.0f - childRect.anchorMax.y)) * vh + childRect.sizeDelta.y * sc;
+
+                    // Compute target pixel position
+                    float targetX, targetY;
+
+                    if (isGrid)
+                    {
+                        float availW = pRect.w - layoutComp.padding.x - layoutComp.padding.y;
+                        float cellW = (availW - layoutComp.spacing * (cols - 1)) / cols;
+
+                        targetX = pRect.x + layoutComp.padding.x + gridCol * (cellW + layoutComp.spacing);
+                        // Center child within cell
+                        targetX += (cellW - childW) * 0.5f;
+                        targetY = pRect.y + cursorY;
+
+                        rowHeight = std::max(rowHeight, childH);
+                        gridCol++;
+                        if (gridCol >= cols)
+                        {
+                            gridCol = 0;
+                            cursorY += rowHeight + layoutComp.spacing;
+                            rowHeight = 0.0f;
+                        }
+                    }
+                    else if (isVertical)
+                    {
+                        targetY = pRect.y + cursor;
+                        float availW = pRect.w - layoutComp.padding.x - layoutComp.padding.y;
+                        switch (layoutComp.childAlignment)
+                        {
+                        case components::ChildAlignment::Center:
+                            targetX = pRect.x + layoutComp.padding.x + (availW - childW) * 0.5f;
+                            break;
+                        case components::ChildAlignment::End:
+                            targetX = pRect.x + layoutComp.padding.x + availW - childW;
+                            break;
+                        default: // Start
+                            targetX = pRect.x + layoutComp.padding.x;
+                            break;
+                        }
+                        cursor += childH + layoutComp.spacing;
+                    }
+                    else // Horizontal
+                    {
+                        targetX = pRect.x + cursor;
+                        float availH = pRect.h - layoutComp.padding.z - layoutComp.padding.w;
+                        switch (layoutComp.childAlignment)
+                        {
+                        case components::ChildAlignment::Center:
+                            targetY = pRect.y + layoutComp.padding.z + (availH - childH) * 0.5f;
+                            break;
+                        case components::ChildAlignment::End:
+                            targetY = pRect.y + layoutComp.padding.z + availH - childH;
+                            break;
+                        default: // Start
+                            targetY = pRect.y + layoutComp.padding.z;
+                            break;
+                        }
+                        cursor += childW + layoutComp.spacing;
+                    }
+
+                    // Back-calculate anchoredPosition from target pixel position
+                    float anchorCenterX = (childRect.anchorMin.x + childRect.anchorMax.x) * 0.5f * vw;
+                    float anchorCenterY = ((1.0f - childRect.anchorMax.y) + (1.0f - childRect.anchorMin.y)) * 0.5f * vh;
+
+                    childRect.anchoredPosition.x = (targetX + childRect.pivot.x * childW - anchorCenterX) / sc;
+                    childRect.anchoredPosition.y = -((targetY + childRect.pivot.y * childH) - anchorCenterY) / sc;
+                }
             }
         }
 
@@ -1172,75 +1516,24 @@ namespace controllers::offscreen
             }
         }
 
-        for (auto entity : view)
+        // Helper lambda to emit one UIImage entity into drawList
+        auto emitUIImage = [&](entt::entity entity, entt::entity scrollAncestor,
+                               const components::UICanvasComponent* canvas)
         {
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
-            }
-
             const auto& imageComp = view.get<components::UIImageComponent>(entity);
-            if (imageComp.texturePath.empty())
-            {
-                continue;
-            }
+            if (imageComp.texturePath.empty() && imageComp.colorTint.a < 0.01f)
+                return;
 
             const auto& rectComp = view.get<components::UIRectComponent>(entity);
 
-            // Walk parent hierarchy to find UICanvasComponent and nearest UIScrollComponent
-            const components::UICanvasComponent* canvas = nullptr;
-            entt::entity scrollAncestor = entt::null;
-            entt::entity current = entity;
-            while (registry.all_of<components::ParentComponent>(current))
-            {
-                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
-                if (parentEntity == entt::null || !registry.valid(parentEntity))
-                {
-                    break;
-                }
-
-                if (scrollAncestor == entt::null
-                    && registry.all_of<components::UIScrollComponent>(parentEntity))
-                {
-                    scrollAncestor = parentEntity;
-                }
-
-                if (registry.all_of<components::UICanvasComponent>(parentEntity))
-                {
-                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
-                    break;
-                }
-                current = parentEntity;
-            }
-
-            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
-            {
-                canvas = &registry.get<components::UICanvasComponent>(entity);
-            }
-
-            if (!canvas)
-            {
-                continue;
-            }
-
-            // Resolve anchors to pixel coordinates
             float viewportW = static_cast<float>(ctx.viewportWidth);
             float viewportH = static_cast<float>(ctx.viewportHeight);
-
             float scale = 1.0f;
             if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
-            {
-                scale = std::min(viewportW / canvas->referenceWidth,
-                                 viewportH / canvas->referenceHeight);
-            }
+                scale = std::min(viewportW / canvas->referenceWidth, viewportH / canvas->referenceHeight);
 
             PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
 
-            // Apply scroll container offset and scissor
             glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
             if (scrollAncestor != entt::null)
             {
@@ -1252,15 +1545,195 @@ namespace controllers::offscreen
                     scissor = it->second.scissorRect;
                 }
             }
+            else if (registry.all_of<components::UIScrollComponent>(entity))
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(entity));
+                if (it != scrollContainers.end())
+                    scissor = it->second.scissorRect;
+            }
 
             render::ui::UIImageRenderData renderData;
-            renderData.texturePath = imageComp.texturePath;
+            renderData.texturePath = imageComp.texturePath.empty() ? "__white_1x1__" : imageComp.texturePath;
             renderData.position = glm::vec2(rect.x, rect.y);
             renderData.size = glm::vec2(rect.w, rect.h);
             renderData.colorTint = imageComp.colorTint;
             renderData.scissorRect = scissor;
-
             drawList.push_back(std::move(renderData));
+        };
+
+        // Pass 1: Scroll container backgrounds (must render before their children)
+        for (auto entity : view)
+        {
+            if (!registry.all_of<components::UIScrollComponent>(entity))
+                continue;
+
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, entity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            if (!canvas) continue;
+
+            emitUIImage(entity, entt::null, canvas);
+        }
+
+        // Pass 2: All other UIImage entities (children of scroll containers, non-scroll elements)
+        for (auto entity : view)
+        {
+            // Skip scroll containers (already emitted in pass 1)
+            if (registry.all_of<components::UIScrollComponent>(entity))
+                continue;
+
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find UICanvasComponent and nearest UIScrollComponent
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+
+            if (!canvas) continue;
+
+            emitUIImage(entity, scrollAncestor, canvas);
+        }
+
+        // --- Generate scrollbar draw data (rendered on top of content) ---
+        {
+            constexpr float SCROLLBAR_WIDTH = 8.0f;
+            constexpr float SCROLLBAR_MIN_THUMB = 20.0f;
+            const glm::vec4 TRACK_COLOR{0.2f, 0.2f, 0.2f, 0.3f};
+            const glm::vec4 THUMB_COLOR{0.6f, 0.6f, 0.6f, 0.6f};
+            const std::string whiteTex = "__white_1x1__";
+
+            auto scrollBarView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollBarView)
+            {
+                if (registry.all_of<components::NameComponent>(scrollEntity))
+                {
+                    if (!registry.get<components::NameComponent>(scrollEntity).isActive)
+                        continue;
+                }
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float vw = static_cast<float>(ctx.viewportWidth);
+                float vh = static_cast<float>(ctx.viewportHeight);
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                glm::vec4 scrollScissor = scrollComp.computedScissorRect;
+
+                // --- Vertical scrollbar ---
+                bool showVertical = false;
+                if (scrollComp.verticalScrollEnabled && scrollComp.contentSize.y > scrollComp.viewportSize.y)
+                {
+                    if (scrollComp.verticalScrollbarVisibility != components::ScrollbarVisibility::Hidden)
+                        showVertical = true;
+                }
+                else if (scrollComp.verticalScrollbarVisibility == components::ScrollbarVisibility::AlwaysVisible)
+                {
+                    showVertical = true;
+                }
+
+                if (showVertical)
+                {
+                    render::ui::UIImageRenderData track;
+                    track.texturePath = whiteTex;
+                    track.position = glm::vec2(vpRect.x + vpRect.w - SCROLLBAR_WIDTH, vpRect.y);
+                    track.size = glm::vec2(SCROLLBAR_WIDTH, vpRect.h);
+                    track.colorTint = TRACK_COLOR;
+                    track.scissorRect = scrollScissor;
+                    drawList.push_back(std::move(track));
+
+                    float maxScrollY = std::max(0.0f, scrollComp.contentSize.y - scrollComp.viewportSize.y);
+                    float ratio = scrollComp.viewportSize.y / scrollComp.contentSize.y;
+                    float thumbH = std::max(SCROLLBAR_MIN_THUMB, vpRect.h * ratio);
+                    float scrollRange = vpRect.h - thumbH;
+                    float thumbY = (maxScrollY > 0.0f)
+                        ? vpRect.y + scrollRange * (scrollComp.scrollOffset.y / maxScrollY)
+                        : vpRect.y;
+
+                    render::ui::UIImageRenderData thumb;
+                    thumb.texturePath = whiteTex;
+                    thumb.position = glm::vec2(vpRect.x + vpRect.w - SCROLLBAR_WIDTH, thumbY);
+                    thumb.size = glm::vec2(SCROLLBAR_WIDTH, thumbH);
+                    thumb.colorTint = THUMB_COLOR;
+                    thumb.scissorRect = scrollScissor;
+                    drawList.push_back(std::move(thumb));
+                }
+
+                // --- Horizontal scrollbar ---
+                bool showHorizontal = false;
+                if (scrollComp.horizontalScrollEnabled && scrollComp.contentSize.x > scrollComp.viewportSize.x)
+                {
+                    if (scrollComp.horizontalScrollbarVisibility != components::ScrollbarVisibility::Hidden)
+                        showHorizontal = true;
+                }
+                else if (scrollComp.horizontalScrollbarVisibility == components::ScrollbarVisibility::AlwaysVisible)
+                {
+                    showHorizontal = true;
+                }
+
+                if (showHorizontal)
+                {
+                    render::ui::UIImageRenderData track;
+                    track.texturePath = whiteTex;
+                    track.position = glm::vec2(vpRect.x, vpRect.y + vpRect.h - SCROLLBAR_WIDTH);
+                    track.size = glm::vec2(vpRect.w, SCROLLBAR_WIDTH);
+                    track.colorTint = TRACK_COLOR;
+                    track.scissorRect = scrollScissor;
+                    drawList.push_back(std::move(track));
+
+                    float maxScrollX = std::max(0.0f, scrollComp.contentSize.x - scrollComp.viewportSize.x);
+                    float ratio = scrollComp.viewportSize.x / scrollComp.contentSize.x;
+                    float thumbW = std::max(SCROLLBAR_MIN_THUMB, vpRect.w * ratio);
+                    float scrollRange = vpRect.w - thumbW;
+                    float thumbX = (maxScrollX > 0.0f)
+                        ? vpRect.x + scrollRange * (scrollComp.scrollOffset.x / maxScrollX)
+                        : vpRect.x;
+
+                    render::ui::UIImageRenderData thumb;
+                    thumb.texturePath = whiteTex;
+                    thumb.position = glm::vec2(thumbX, vpRect.y + vpRect.h - SCROLLBAR_WIDTH);
+                    thumb.size = glm::vec2(thumbW, SCROLLBAR_WIDTH);
+                    thumb.colorTint = THUMB_COLOR;
+                    thumb.scissorRect = scrollScissor;
+                    drawList.push_back(std::move(thumb));
+                }
+            }
         }
 
         renderHandler->setUIImageDrawList(std::move(drawList));

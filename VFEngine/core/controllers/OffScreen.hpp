@@ -111,6 +111,8 @@ namespace controllers {
 		void setTerrainTextureScale(float scale);
 		void setTerrainShadowLOD(uint32_t lod);
 
+		void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
+
 		void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
 		postprocess::PostProcessSettings getPostProcessSettings() const;
 		void setPostProcessEnabled(bool enabled);

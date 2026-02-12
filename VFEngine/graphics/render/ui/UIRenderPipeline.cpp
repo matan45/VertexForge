@@ -5,6 +5,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -33,6 +34,32 @@ namespace render::ui
         bufferManager.init();
 
         createDefaultDescriptorSet();
+
+        // Create 1x1 white fallback texture for color-only quads (scrollbars, etc.)
+        {
+            resource::TextureData whiteTexData;
+            whiteTexData.width = 1;
+            whiteTexData.height = 1;
+            whiteTexData.numbersOfChannels = 4;
+            whiteTexData.mipLevels = 1;
+            whiteTexData.mipData.push_back({1, 1, {255, 255, 255, 255}});
+
+            auto texture = std::make_unique<core::Texture>(device);
+            texture->loadTextureFromData(whiteTexData, vk::Format::eR8G8B8A8Unorm, false);
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &descriptorSetLayout;
+            vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+            updateDescriptorSet(descSet, texture->getImageView(), texture->getSampler());
+
+            TextureEntry entry;
+            entry.texture = std::move(texture);
+            entry.descriptorSet = descSet;
+            textureCache.emplace("__white_1x1__", std::move(entry));
+        }
+
         createPipeline();
         createFramebuffers();
 
