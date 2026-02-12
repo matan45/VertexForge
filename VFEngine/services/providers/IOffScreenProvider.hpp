@@ -195,6 +195,8 @@ namespace services {
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
 
+        virtual void prepareFrameUICanvasOutlines() = 0;
+
         virtual void setFrustumCullingEnabled(bool enabled) = 0;
         virtual void setOcclusionCullingEnabled(bool enabled) = 0;
         virtual void setLODSelectionEnabled(bool enabled) = 0;

@@ -20,6 +20,8 @@
 #include "details/SpotLightDrawer.hpp"
 #include "details/TerrainDrawer.hpp"
 #include "details/TerrainTileDrawer.hpp"
+#include "details/UICanvasDrawer.hpp"
+#include "details/UIRectDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -47,6 +49,8 @@ namespace windows
         details::SpotLightDrawer spotLightDrawer;
         details::TerrainDrawer terrainDrawer;
         details::TerrainTileDrawer terrainTileDrawer;
+        details::UICanvasDrawer uiCanvasDrawer;
+        details::UIRectDrawer uiRectDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

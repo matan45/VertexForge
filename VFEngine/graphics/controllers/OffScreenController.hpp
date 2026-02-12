@@ -158,6 +158,8 @@ namespace controllers
         bool getShowShadowDebug() const { return showShadowDebug; }
         void prepareFrameShadowDebug();
 
+        void prepareFrameUICanvasOutlines();
+
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
         postprocess::PostProcessSettings getPostProcessSettings() const;
         void setPostProcessEnabled(bool enabled);

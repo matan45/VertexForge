@@ -91,9 +91,14 @@ namespace windows
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
 
+        // UI components
+        bool hasUICanvas = uiCanvasDrawer.draw(handle);
+        bool hasUIRect = uiRectDrawer.draw(handle);
+
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX, hasBillboard,
-                               hasText, hasDirectionalLight, hasPointLight, hasSpotLight);
+                               hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
+                               hasUICanvas);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

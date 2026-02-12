@@ -15,6 +15,7 @@
 #include "../../render/tools/PhysicsDebugRenderer.hpp"
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include "../../render/tools/ClusterDebugRenderer.hpp"
+#include "../../render/tools/UICanvasDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
@@ -875,5 +876,59 @@ namespace controllers::offscreen
         debugData.showAllClusters = debugData.highlightedClusterIndices.empty();
 
         renderHandler->setClusterDebugData(std::move(debugData));
+    }
+
+    void FramePreparationSystem::prepareUICanvasOutlines(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        if (ctx.playModeActive || !ctx.showDebugRendering)
+        {
+            renderHandler->setUICanvasOutlineDrawList({});
+            return;
+        }
+
+        std::vector<render::mesh::UICanvasOutlineRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UICanvasComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& canvasComp = view.get<components::UICanvasComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            float width = canvasComp.referenceWidth / canvasComp.pixelsPerUnit;
+            float height = canvasComp.referenceHeight / canvasComp.pixelsPerUnit;
+
+            render::mesh::UICanvasOutlineRenderData renderData;
+            renderData.modelMatrix = worldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(width, height, 1.0f));
+
+            drawList.push_back(renderData);
+        }
+
+        if (!drawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setUICanvasOutlineDrawList(std::move(drawList));
     }
 }

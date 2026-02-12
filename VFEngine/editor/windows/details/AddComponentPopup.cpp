@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/ScriptingEvents.hpp"
+#include "events/UIEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -9,7 +10,8 @@ namespace windows::details
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
-                                 bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight)
+                                 bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
+                                 bool hasUICanvas)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -229,9 +231,32 @@ namespace windows::details
                 }
             }
 
+            // UI components section
+            ImGui::Spacing();
+            ImGui::TextDisabled("UI");
+            ImGui::Separator();
+
+            if (!hasUICanvas)
+            {
+                if (ImGui::Selectable("  UI Canvas"))
+                {
+                    events::ui::AddUICanvasComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+
+                    events::ui::AddUIRectComponentCommand rectCmd;
+                    rectCmd.entity = handle;
+                    dispatcher.execute(rectCmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("UI Canvas with reference resolution and auto-scaling");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
-                           hasDirectionalLight && hasPointLight && hasSpotLight;
+                           hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas;
             if (allAdded)
             {
                 ImGui::Spacing();

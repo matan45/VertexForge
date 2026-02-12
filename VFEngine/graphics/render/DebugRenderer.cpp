@@ -7,6 +7,7 @@
 #include "tools/LightGizmoDebugRenderer.hpp"
 #include "tools/ClusterDebugRenderer.hpp"
 #include "tools/ShadowDebugRenderer.hpp"
+#include "tools/UICanvasDebugRenderer.hpp"
 
 namespace render
 {
@@ -21,6 +22,7 @@ namespace render
         lightGizmoRenderer = std::make_unique<mesh::LightGizmoDebugRenderer>(device, swapChain);
         clusterDebugRenderer = std::make_unique<mesh::ClusterDebugRenderer>(device, swapChain);
         shadowDebugRenderer = std::make_unique<mesh::ShadowDebugRenderer>(device, swapChain);
+        uiCanvasRenderer = std::make_unique<mesh::UICanvasDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -35,6 +37,7 @@ namespace render
         lightGizmoRenderer->init(renderPass);
         clusterDebugRenderer->init(renderPass);
         shadowDebugRenderer->init(renderPass);
+        uiCanvasRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -48,6 +51,7 @@ namespace render
         lightGizmoRenderer->recreate(renderPass);
         clusterDebugRenderer->recreate(renderPass);
         shadowDebugRenderer->recreate(renderPass);
+        uiCanvasRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -83,6 +87,10 @@ namespace render
         if (shadowDebugRenderer)
         {
             shadowDebugRenderer->cleanUp();
+        }
+        if (uiCanvasRenderer)
+        {
+            uiCanvasRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -120,6 +128,10 @@ namespace render
         if (shadowDebugRenderer)
         {
             shadowDebugRenderer->cleanUpShader();
+        }
+        if (uiCanvasRenderer)
+        {
+            uiCanvasRenderer->cleanUpShader();
         }
     }
 
@@ -160,6 +172,11 @@ namespace render
     void DebugRenderer::setShadowFrustumDrawList(std::vector<mesh::ShadowFrustumRenderData>&& frustums)
     {
         shadowFrustumDrawList = std::move(frustums);
+    }
+
+    void DebugRenderer::setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines)
+    {
+        uiCanvasDrawList = std::move(outlines);
     }
 
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
@@ -207,6 +224,11 @@ namespace render
         {
             shadowDebugRenderer->render(commandBuffer, shadowFrustumDrawList, view, projection);
         }
+
+        if (uiCanvasRenderer && !uiCanvasDrawList.empty())
+        {
+            uiCanvasRenderer->render(commandBuffer, uiCanvasDrawList, view, projection);
+        }
     }
 
     bool DebugRenderer::hasItemsToRender() const
@@ -214,7 +236,8 @@ namespace render
         return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() ||
             hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty()) ||
             !lightGizmoDrawList.empty() || (showClusterDebug && clusterDebugData) ||
-            (showShadowDebug && !shadowFrustumDrawList.empty());
+            (showShadowDebug && !shadowFrustumDrawList.empty()) ||
+            !uiCanvasDrawList.empty();
     }
 
     void DebugRenderer::setShowGrid(bool show)

@@ -613,6 +613,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setUICanvasOutlineDrawList(std::move(outlines));
+        }
+    }
+
     void RenderPassHandler::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
     {
         if (debugRenderer)
