@@ -9,6 +9,11 @@ namespace window
         auto* controller = getControllerForWindow(window);
         if (controller)
         {
+            // Chain to previous callback (e.g. ImGui) first
+            if (controller->previousScrollCallback)
+            {
+                controller->previousScrollCallback(window, xoffset, yoffset);
+            }
             controller->onScroll(xoffset, yoffset);
         }
     }
@@ -27,7 +32,8 @@ namespace window
         {
             // Register in static map (doesn't conflict with Window's user pointer)
             controllerRegistry[glfwWindow] = this;
-            glfwSetScrollCallback(glfwWindow, scrollCallback);
+            // Save previous callback (e.g. ImGui's) for chaining
+            previousScrollCallback = glfwSetScrollCallback(glfwWindow, scrollCallback);
         }
     }
 
@@ -97,7 +103,7 @@ namespace window
 
     glm::vec2 InputController::getScrollDelta() const
     {
-        return scrollDelta;
+        return frameScrollDelta;
     }
 
     void InputController::update()
@@ -117,7 +123,8 @@ namespace window
             lastMousePos = currentPos;
         }
 
-        // Reset scroll delta after it's been consumed
+        // Save scroll delta for this frame, then reset accumulator
+        frameScrollDelta = scrollDelta;
         scrollDelta = glm::vec2(0.0f);
 
         // Double-click detection
