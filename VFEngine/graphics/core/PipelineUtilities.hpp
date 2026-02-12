@@ -51,6 +51,8 @@ namespace core
 		vk::BlendFactor dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 		vk::BlendFactor srcAlphaBlendFactor = vk::BlendFactor::eOne;
 		vk::BlendFactor dstAlphaBlendFactor = vk::BlendFactor::eZero;
+
+		std::vector<vk::DynamicState> dynamicStates;
 	};
 
 	struct GraphicsPipelineResult

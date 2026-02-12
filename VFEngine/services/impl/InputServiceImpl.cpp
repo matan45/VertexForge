@@ -152,6 +152,11 @@ namespace services {
                 return getMouseDelta();
             });
 
+        dispatcher.registerQueryHandler<events::input::GetScrollDeltaQuery>(
+            [this](const events::input::GetScrollDeltaQuery&) {
+                return getScrollDelta();
+            });
+
         dispatcher.registerQueryHandler<events::input::IsKeyReleasedQuery>(
             [this](const events::input::IsKeyReleasedQuery& query) {
                 return isKeyReleased(query.keyCode);

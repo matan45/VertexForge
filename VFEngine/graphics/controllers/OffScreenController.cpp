@@ -20,6 +20,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/InputEvents.hpp"
 #include "time/Timer.hpp"
 
 namespace controllers
@@ -581,6 +582,13 @@ namespace controllers
         ctx.playModeActive = playModeActive;
         ctx.viewportWidth = swapChain.getSwapchainExtent().width;
         ctx.viewportHeight = swapChain.getSwapchainExtent().height;
+
+        if (ctx.playModeActive)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            ctx.mousePosition = dispatcher.query(events::input::GetMousePositionQuery{});
+            ctx.scrollDelta = dispatcher.query(events::input::GetScrollDeltaQuery{});
+        }
 
         framePreparation->prepareUIImages(ctx);
     }

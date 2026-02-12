@@ -93,5 +93,6 @@ namespace render::ui
         glm::vec2 position;    // pixel position
         glm::vec2 size;        // pixel size
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f}; // x, y, width, height; 0,0,0,0 = full viewport
     };
 }

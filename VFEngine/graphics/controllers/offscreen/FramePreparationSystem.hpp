@@ -32,6 +32,8 @@ namespace controllers::offscreen
         float deltaTime = 0.0f;
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
+        glm::vec2 mousePosition{0.0f, 0.0f};
+        glm::vec2 scrollDelta{0.0f, 0.0f};
     };
 
     class FramePreparationSystem

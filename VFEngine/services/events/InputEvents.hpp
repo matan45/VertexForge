@@ -29,6 +29,10 @@ namespace events::input {
         std::string_view getName() const override { return "GetMouseDelta"; }
     };
 
+    struct GetScrollDeltaQuery : IQuery<glm::vec2> {
+        std::string_view getName() const override { return "GetScrollDelta"; }
+    };
+
     struct IsKeyReleasedQuery : IQuery<bool> {
         int keyCode;
 
