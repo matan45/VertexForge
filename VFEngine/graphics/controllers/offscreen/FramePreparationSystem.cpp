@@ -1039,14 +1039,16 @@ namespace controllers::offscreen
 
             float anchorLeftPx = rectComp.anchorMin.x * parentW;
             float anchorRightPx = rectComp.anchorMax.x * parentW;
-            float anchorTopPx = rectComp.anchorMin.y * parentH;
-            float anchorBotPx = rectComp.anchorMax.y * parentH;
+            // Flip Y: UI anchor Y=0 is bottom, but Vulkan pixel Y=0 is top
+            float anchorTopPx = (1.0f - rectComp.anchorMax.y) * parentH;
+            float anchorBotPx = (1.0f - rectComp.anchorMin.y) * parentH;
 
             float w = (anchorRightPx - anchorLeftPx) + rectComp.sizeDelta.x * scale;
             float h = (anchorBotPx - anchorTopPx) + rectComp.sizeDelta.y * scale;
 
             float cx = (anchorLeftPx + anchorRightPx) * 0.5f + rectComp.anchoredPosition.x * scale;
-            float cy = (anchorTopPx + anchorBotPx) * 0.5f + rectComp.anchoredPosition.y * scale;
+            // Negate Y offset: positive anchoredPosition.y means up in UI, but down in screen pixel space
+            float cy = (anchorTopPx + anchorBotPx) * 0.5f - rectComp.anchoredPosition.y * scale;
 
             float posX = cx - rectComp.pivot.x * w;
             float posY = cy - rectComp.pivot.y * h;
