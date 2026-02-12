@@ -61,6 +61,7 @@ namespace windows
             {
                 events::render::SetUIViewportOffsetCommand offsetCmd;
                 offsetCmd.offset = vp;
+                offsetCmd.panelSize = vs;
                 dispatcher.execute(offsetCmd);
             }
 

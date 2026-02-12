@@ -558,7 +558,7 @@ namespace services
             {
                 if (offScreenProvider)
                 {
-                    offScreenProvider->setUIViewportOffset(cmd.offset);
+                    offScreenProvider->setUIViewportOffset(cmd.offset, cmd.panelSize);
                 }
             });
 
