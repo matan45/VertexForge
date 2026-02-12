@@ -644,6 +644,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setUICanvasImageDrawList(std::move(images));
+        }
+    }
+
     void RenderPassHandler::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
     {
         if (debugRenderer)
