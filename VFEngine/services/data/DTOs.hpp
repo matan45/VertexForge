@@ -265,4 +265,10 @@ namespace services
         glm::vec2 sizeDelta{0.0f, 0.0f};
         glm::vec2 anchoredPosition{0.0f, 0.0f};
     };
+
+    struct UIImageData
+    {
+        std::string texturePath;
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+    };
 }

@@ -229,6 +229,9 @@
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasDebugRenderer.hpp" />
+    <ClInclude Include="render\ui\UIRenderBufferManager.hpp" />
+    <ClInclude Include="render\ui\UIRenderPipeline.hpp" />
+    <ClInclude Include="render\ui\UIRenderTypes.hpp" />
     <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
@@ -356,6 +359,8 @@
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
     <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />
     <ClCompile Include="render\tools\UICanvasDebugRenderer.cpp" />
+    <ClCompile Include="render\ui\UIRenderBufferManager.cpp" />
+    <ClCompile Include="render\ui\UIRenderPipeline.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
@@ -413,6 +418,7 @@
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
+    <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />

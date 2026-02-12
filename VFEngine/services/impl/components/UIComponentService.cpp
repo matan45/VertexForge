@@ -192,6 +192,85 @@ namespace services {
         return true;
     }
 
+    // ========== UI Image Operations ==========
+
+    bool UIComponentService::addUIImageComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UIImageComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UIImageComponent>();
+        return true;
+    }
+
+    bool UIComponentService::removeUIImageComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UIImageComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUIImageComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UIImageComponent>();
+    }
+
+    std::optional<UIImageData> UIComponentService::getUIImageData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
+
+        UIImageData data;
+        data.texturePath = comp.texturePath;
+        data.colorTint = comp.colorTint;
+        return data;
+    }
+
+    bool UIComponentService::setUIImageData(EntityHandle entity, const UIImageData& imageData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
+        comp.texturePath = imageData.texturePath;
+        comp.colorTint = imageData.colorTint;
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -247,6 +326,33 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIRectDataQuery>(
             [this](const events::ui::GetUIRectDataQuery& query) {
                 return getUIRectData(query.entity);
+            });
+
+        // Image commands
+        dispatcher.registerCommandHandler<events::ui::AddUIImageComponentCommand>(
+            [this](const events::ui::AddUIImageComponentCommand& cmd) {
+                return addUIImageComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUIImageComponentCommand>(
+            [this](const events::ui::RemoveUIImageComponentCommand& cmd) {
+                return removeUIImageComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIImageDataCommand>(
+            [this](const events::ui::SetUIImageDataCommand& cmd) {
+                return setUIImageData(cmd.entity, cmd.imageData);
+            });
+
+        // Image queries
+        dispatcher.registerQueryHandler<events::ui::HasUIImageComponentQuery>(
+            [this](const events::ui::HasUIImageComponentQuery& query) {
+                return hasUIImageComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIImageDataQuery>(
+            [this](const events::ui::GetUIImageDataQuery& query) {
+                return getUIImageData(query.entity);
             });
     }
 

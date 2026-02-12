@@ -54,6 +54,7 @@ namespace services {
         Text,
         UICanvas,
         UIRect,
+        UIImage,
     };
 
 }
