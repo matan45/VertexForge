@@ -52,6 +52,13 @@ namespace services {
         bool setUIScrollData(EntityHandle entity, const UIScrollData& scrollData);
         bool setScrollOffset(EntityHandle entity, const glm::vec2& offset);
         std::optional<glm::vec2> getScrollOffset(EntityHandle entity) const;
+
+        // UI Layout Group Operations
+        bool addUILayoutGroupComponent(EntityHandle entity);
+        bool removeUILayoutGroupComponent(EntityHandle entity);
+        bool hasUILayoutGroupComponent(EntityHandle entity) const;
+        std::optional<UILayoutGroupData> getUILayoutGroupData(EntityHandle entity) const;
+        bool setUILayoutGroupData(EntityHandle entity, const UILayoutGroupData& layoutGroupData);
     };
 
 }

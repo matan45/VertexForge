@@ -33,13 +33,15 @@ namespace components
     struct UIRectComponent;
     struct UIImageComponent;
     struct UIScrollComponent;
+    struct UILayoutGroupComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
-                                               UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent>;
+                                               UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
+                                               UILayoutGroupComponent>;
 
     struct WorldTransformComponent
     {
@@ -552,5 +554,26 @@ namespace components
         uint8_t dragAxis = 0; // 0=horizontal, 1=vertical
         glm::vec2 dragStartScrollOffset{0.0f, 0.0f};
         glm::vec2 dragStartMousePos{0.0f, 0.0f};
+    };
+
+    enum class LayoutDirection : uint8_t
+    {
+        Vertical,
+        Horizontal
+    };
+
+    enum class ChildAlignment : uint8_t
+    {
+        Start,
+        Center,
+        End
+    };
+
+    struct UILayoutGroupComponent
+    {
+        LayoutDirection direction = LayoutDirection::Vertical;
+        float spacing = 0.0f;
+        glm::vec4 padding{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom
+        ChildAlignment childAlignment = ChildAlignment::Start;
     };
 }

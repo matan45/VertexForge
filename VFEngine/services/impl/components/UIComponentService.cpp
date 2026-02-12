@@ -393,6 +393,98 @@ namespace services {
         return comp.scrollOffset;
     }
 
+    // ========== UI Layout Group CRUD ==========
+
+    bool UIComponentService::addUILayoutGroupComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UILayoutGroupComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UILayoutGroupComponent>();
+
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        if (!sceneEntity.hasComponent<components::ChildrenComponent>()) {
+            sceneEntity.addComponent<components::ChildrenComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUILayoutGroupComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILayoutGroupComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UILayoutGroupComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUILayoutGroupComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UILayoutGroupComponent>();
+    }
+
+    std::optional<UILayoutGroupData> UIComponentService::getUILayoutGroupData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILayoutGroupComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UILayoutGroupComponent>();
+
+        UILayoutGroupData data;
+        data.direction = static_cast<uint8_t>(comp.direction);
+        data.spacing = comp.spacing;
+        data.padding = comp.padding;
+        data.childAlignment = static_cast<uint8_t>(comp.childAlignment);
+        return data;
+    }
+
+    bool UIComponentService::setUILayoutGroupData(EntityHandle entity, const UILayoutGroupData& layoutGroupData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILayoutGroupComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UILayoutGroupComponent>();
+        comp.direction = static_cast<components::LayoutDirection>(layoutGroupData.direction);
+        comp.spacing = layoutGroupData.spacing;
+        comp.padding = layoutGroupData.padding;
+        comp.childAlignment = static_cast<components::ChildAlignment>(layoutGroupData.childAlignment);
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -512,6 +604,33 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetScrollOffsetQuery>(
             [this](const events::ui::GetScrollOffsetQuery& query) {
                 return getScrollOffset(query.entity);
+            });
+
+        // Layout Group commands
+        dispatcher.registerCommandHandler<events::ui::AddUILayoutGroupComponentCommand>(
+            [this](const events::ui::AddUILayoutGroupComponentCommand& cmd) {
+                return addUILayoutGroupComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUILayoutGroupComponentCommand>(
+            [this](const events::ui::RemoveUILayoutGroupComponentCommand& cmd) {
+                return removeUILayoutGroupComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUILayoutGroupDataCommand>(
+            [this](const events::ui::SetUILayoutGroupDataCommand& cmd) {
+                return setUILayoutGroupData(cmd.entity, cmd.layoutGroupData);
+            });
+
+        // Layout Group queries
+        dispatcher.registerQueryHandler<events::ui::HasUILayoutGroupComponentQuery>(
+            [this](const events::ui::HasUILayoutGroupComponentQuery& query) {
+                return hasUILayoutGroupComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUILayoutGroupDataQuery>(
+            [this](const events::ui::GetUILayoutGroupDataQuery& query) {
+                return getUILayoutGroupData(query.entity);
             });
     }
 

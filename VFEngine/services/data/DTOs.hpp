@@ -279,4 +279,12 @@ namespace services
         uint8_t verticalScrollbarVisibility = 0;   // 0=Auto, 1=AlwaysVisible, 2=Hidden
         float scrollSensitivity = 1.0f;
     };
+
+    struct UILayoutGroupData
+    {
+        uint8_t direction = 0;      // 0=Vertical, 1=Horizontal
+        float spacing = 0.0f;
+        glm::vec4 padding{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom
+        uint8_t childAlignment = 0; // 0=Start, 1=Center, 2=End
+    };
 }

@@ -56,6 +56,7 @@ namespace services {
         UIRect,
         UIImage,
         UIScroll,
+        UILayoutGroup,
     };
 
 }

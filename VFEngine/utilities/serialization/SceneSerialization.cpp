@@ -194,6 +194,18 @@ namespace serialization
                 entity.getComponent<components::UIImageComponent>());
         }
 
+        if (entity.hasComponent<components::UIScrollComponent>())
+        {
+            componentsJson["uiScroll"] = serializeUIScroll(
+                entity.getComponent<components::UIScrollComponent>());
+        }
+
+        if (entity.hasComponent<components::UILayoutGroupComponent>())
+        {
+            componentsJson["uiLayoutGroup"] = serializeUILayoutGroup(
+                entity.getComponent<components::UILayoutGroupComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1649,6 +1661,102 @@ namespace serialization
         return components::UIScaleMode::ScaleWithScreenSize;
     }
 
+    json SceneSerialization::serializeUIScroll(const components::UIScrollComponent& scroll)
+    {
+        json j;
+        j["horizontalScrollEnabled"] = scroll.horizontalScrollEnabled;
+        j["verticalScrollEnabled"] = scroll.verticalScrollEnabled;
+        j["horizontalScrollbarVisibility"] = scrollbarVisibilityToString(scroll.horizontalScrollbarVisibility);
+        j["verticalScrollbarVisibility"] = scrollbarVisibilityToString(scroll.verticalScrollbarVisibility);
+        j["scrollSensitivity"] = scroll.scrollSensitivity;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIScroll(const json& j, components::UIScrollComponent& scroll)
+    {
+        scroll.horizontalScrollEnabled = j.value("horizontalScrollEnabled", false);
+        scroll.verticalScrollEnabled = j.value("verticalScrollEnabled", true);
+        scroll.horizontalScrollbarVisibility = stringToScrollbarVisibility(j.value("horizontalScrollbarVisibility", "auto"));
+        scroll.verticalScrollbarVisibility = stringToScrollbarVisibility(j.value("verticalScrollbarVisibility", "auto"));
+        scroll.scrollSensitivity = j.value("scrollSensitivity", 1.0f);
+    }
+
+    std::string SceneSerialization::scrollbarVisibilityToString(components::ScrollbarVisibility visibility)
+    {
+        switch (visibility)
+        {
+        case components::ScrollbarVisibility::Auto: return "auto";
+        case components::ScrollbarVisibility::AlwaysVisible: return "alwaysVisible";
+        case components::ScrollbarVisibility::Hidden: return "hidden";
+        default: return "auto";
+        }
+    }
+
+    components::ScrollbarVisibility SceneSerialization::stringToScrollbarVisibility(const std::string& str)
+    {
+        if (str == "alwaysVisible") return components::ScrollbarVisibility::AlwaysVisible;
+        if (str == "hidden") return components::ScrollbarVisibility::Hidden;
+        return components::ScrollbarVisibility::Auto;
+    }
+
+    json SceneSerialization::serializeUILayoutGroup(const components::UILayoutGroupComponent& layoutGroup)
+    {
+        json j;
+        j["direction"] = layoutDirectionToString(layoutGroup.direction);
+        j["spacing"] = layoutGroup.spacing;
+        j["padding"] = {layoutGroup.padding.x, layoutGroup.padding.y, layoutGroup.padding.z, layoutGroup.padding.w};
+        j["childAlignment"] = childAlignmentToString(layoutGroup.childAlignment);
+        return j;
+    }
+
+    void SceneSerialization::deserializeUILayoutGroup(const json& j, components::UILayoutGroupComponent& layoutGroup)
+    {
+        layoutGroup.direction = stringToLayoutDirection(j.value("direction", "vertical"));
+        layoutGroup.spacing = j.value("spacing", 0.0f);
+        if (j.contains("padding") && j["padding"].is_array() && j["padding"].size() == 4)
+        {
+            layoutGroup.padding.x = j["padding"][0].get<float>();
+            layoutGroup.padding.y = j["padding"][1].get<float>();
+            layoutGroup.padding.z = j["padding"][2].get<float>();
+            layoutGroup.padding.w = j["padding"][3].get<float>();
+        }
+        layoutGroup.childAlignment = stringToChildAlignment(j.value("childAlignment", "start"));
+    }
+
+    std::string SceneSerialization::layoutDirectionToString(components::LayoutDirection direction)
+    {
+        switch (direction)
+        {
+        case components::LayoutDirection::Vertical: return "vertical";
+        case components::LayoutDirection::Horizontal: return "horizontal";
+        default: return "vertical";
+        }
+    }
+
+    components::LayoutDirection SceneSerialization::stringToLayoutDirection(const std::string& str)
+    {
+        if (str == "horizontal") return components::LayoutDirection::Horizontal;
+        return components::LayoutDirection::Vertical;
+    }
+
+    std::string SceneSerialization::childAlignmentToString(components::ChildAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::ChildAlignment::Start: return "start";
+        case components::ChildAlignment::Center: return "center";
+        case components::ChildAlignment::End: return "end";
+        default: return "start";
+        }
+    }
+
+    components::ChildAlignment SceneSerialization::stringToChildAlignment(const std::string& str)
+    {
+        if (str == "center") return components::ChildAlignment::Center;
+        if (str == "end") return components::ChildAlignment::End;
+        return components::ChildAlignment::Start;
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1883,6 +1991,18 @@ namespace serialization
             {
                 auto& imageComp = entity.addOrReplaceComponent<components::UIImageComponent>();
                 deserializeUIImage(componentsJson["uiImage"], imageComp);
+            }
+
+            if (componentsJson.contains("uiScroll"))
+            {
+                auto& scrollComp = entity.addOrReplaceComponent<components::UIScrollComponent>();
+                deserializeUIScroll(componentsJson["uiScroll"], scrollComp);
+            }
+
+            if (componentsJson.contains("uiLayoutGroup"))
+            {
+                auto& layoutGroupComp = entity.addOrReplaceComponent<components::UILayoutGroupComponent>();
+                deserializeUILayoutGroup(componentsJson["uiLayoutGroup"], layoutGroupComp);
             }
         }
 
