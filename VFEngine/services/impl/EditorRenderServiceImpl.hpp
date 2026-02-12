@@ -68,6 +68,7 @@ namespace services
         void prepareFrameClusterDebug();
         void prepareFrameShadowDebug();
         void prepareFrameUICanvasOutlines();
+        void prepareFrameUIImages();
         void prepareGrid();
     };
 }
