@@ -463,6 +463,7 @@ namespace services {
         data.spacing = comp.spacing;
         data.padding = comp.padding;
         data.childAlignment = static_cast<uint8_t>(comp.childAlignment);
+        data.constraintCount = comp.constraintCount;
         return data;
     }
 
@@ -482,6 +483,7 @@ namespace services {
         comp.spacing = layoutGroupData.spacing;
         comp.padding = layoutGroupData.padding;
         comp.childAlignment = static_cast<components::ChildAlignment>(layoutGroupData.childAlignment);
+        comp.constraintCount = std::max(1, layoutGroupData.constraintCount);
         return true;
     }
 

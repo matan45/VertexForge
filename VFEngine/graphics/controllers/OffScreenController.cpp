@@ -586,7 +586,7 @@ namespace controllers
         if (ctx.playModeActive)
         {
             auto& dispatcher = events::EventDispatcher::instance();
-            ctx.mousePosition = dispatcher.query(events::input::GetMousePositionQuery{});
+            ctx.mousePosition = dispatcher.query(events::input::GetMousePositionQuery{}) - uiViewportOffset;
             ctx.scrollDelta = dispatcher.query(events::input::GetScrollDeltaQuery{});
             events::input::IsMouseButtonDownQuery mouseQuery;
             mouseQuery.button = 0;

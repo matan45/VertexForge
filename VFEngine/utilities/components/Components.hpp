@@ -559,7 +559,8 @@ namespace components
     enum class LayoutDirection : uint8_t
     {
         Vertical,
-        Horizontal
+        Horizontal,
+        Grid
     };
 
     enum class ChildAlignment : uint8_t
@@ -575,5 +576,6 @@ namespace components
         float spacing = 0.0f;
         glm::vec4 padding{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom
         ChildAlignment childAlignment = ChildAlignment::Start;
+        int constraintCount = 2; // columns (Grid mode only)
     };
 }

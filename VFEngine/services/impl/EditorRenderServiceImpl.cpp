@@ -553,6 +553,15 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::render::SetUIViewportOffsetCommand>(
+            [this](const events::render::SetUIViewportOffsetCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setUIViewportOffset(cmd.offset);
+                }
+            });
+
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
             [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
             {

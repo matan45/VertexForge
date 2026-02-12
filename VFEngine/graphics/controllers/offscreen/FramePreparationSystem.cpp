@@ -1243,7 +1243,16 @@ namespace controllers::offscreen
                 const auto& children = registry.get<components::ChildrenComponent>(layoutEntity).children;
 
                 bool isVertical = (layoutComp.direction == components::LayoutDirection::Vertical);
-                float cursor = isVertical ? layoutComp.padding.z : layoutComp.padding.x; // top or left
+                bool isGrid = (layoutComp.direction == components::LayoutDirection::Grid);
+
+                float cursorX = layoutComp.padding.x; // left
+                float cursorY = layoutComp.padding.z;  // top
+                int gridCol = 0;
+                int cols = std::max(1, layoutComp.constraintCount);
+                float rowHeight = 0.0f;
+
+                // For non-grid: single cursor along main axis
+                float cursor = isVertical ? layoutComp.padding.z : layoutComp.padding.x;
 
                 for (auto child : children)
                 {
@@ -1261,7 +1270,27 @@ namespace controllers::offscreen
 
                     // Compute target pixel position
                     float targetX, targetY;
-                    if (isVertical)
+
+                    if (isGrid)
+                    {
+                        float availW = pRect.w - layoutComp.padding.x - layoutComp.padding.y;
+                        float cellW = (availW - layoutComp.spacing * (cols - 1)) / cols;
+
+                        targetX = pRect.x + layoutComp.padding.x + gridCol * (cellW + layoutComp.spacing);
+                        // Center child within cell
+                        targetX += (cellW - childW) * 0.5f;
+                        targetY = pRect.y + cursorY;
+
+                        rowHeight = std::max(rowHeight, childH);
+                        gridCol++;
+                        if (gridCol >= cols)
+                        {
+                            gridCol = 0;
+                            cursorY += rowHeight + layoutComp.spacing;
+                            rowHeight = 0.0f;
+                        }
+                    }
+                    else if (isVertical)
                     {
                         targetY = pRect.y + cursor;
                         float availW = pRect.w - layoutComp.padding.x - layoutComp.padding.y;
@@ -1279,7 +1308,7 @@ namespace controllers::offscreen
                         }
                         cursor += childH + layoutComp.spacing;
                     }
-                    else
+                    else // Horizontal
                     {
                         targetX = pRect.x + cursor;
                         float availH = pRect.h - layoutComp.padding.z - layoutComp.padding.w;

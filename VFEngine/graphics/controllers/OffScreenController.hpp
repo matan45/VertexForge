@@ -76,6 +76,7 @@ namespace controllers
         bool showClusterDebug = false;
         bool showShadowDebug = false;
         bool playModeActive = false;
+        glm::vec2 uiViewportOffset{0.0f, 0.0f};
         postprocess::PostProcessSettings currentPostProcessSettings;
 
     public:
@@ -160,6 +161,8 @@ namespace controllers
 
         void prepareFrameUICanvasOutlines();
         void prepareFrameUIImages();
+
+        void setUIViewportOffset(const glm::vec2& offset) { uiViewportOffset = offset; }
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
         postprocess::PostProcessSettings getPostProcessSettings() const;

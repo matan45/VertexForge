@@ -212,6 +212,8 @@ namespace services {
         virtual void setTerrainErrorThreshold(float threshold) = 0;
         virtual void setTerrainTextureScale(float scale) = 0;
         virtual void setTerrainShadowLOD(uint32_t lod) = 0;
+
+        virtual void setUIViewportOffset(const glm::vec2& offset) = 0;
     };
 
 }

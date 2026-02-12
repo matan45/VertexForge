@@ -282,9 +282,10 @@ namespace services
 
     struct UILayoutGroupData
     {
-        uint8_t direction = 0;      // 0=Vertical, 1=Horizontal
+        uint8_t direction = 0;      // 0=Vertical, 1=Horizontal, 2=Grid
         float spacing = 0.0f;
         glm::vec4 padding{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom
         uint8_t childAlignment = 0; // 0=Start, 1=Center, 2=End
+        int constraintCount = 2;    // columns (Grid mode only)
     };
 }

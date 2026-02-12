@@ -249,4 +249,10 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainShadowLOD"; }
     };
 
+    struct SetUIViewportOffsetCommand : ICommand<> {
+        glm::vec2 offset{0.0f, 0.0f};
+
+        std::string_view getName() const override { return "SetUIViewportOffset"; }
+    };
+
 }

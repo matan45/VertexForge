@@ -15,5 +15,6 @@ namespace windows::details
         bool drawSpacing(services::UILayoutGroupData& data);
         bool drawPadding(services::UILayoutGroupData& data);
         bool drawChildAlignment(services::UILayoutGroupData& data);
+        bool drawConstraintCount(services::UILayoutGroupData& data);
     };
 }

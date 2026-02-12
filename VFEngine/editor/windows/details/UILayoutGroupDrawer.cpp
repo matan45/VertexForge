@@ -40,10 +40,15 @@ namespace windows::details
             services::UILayoutGroupData data = *dataOpt;
             bool changed = false;
 
-            ImGui::TextDisabled("Auto-stack children vertically or horizontally");
+            ImGui::TextDisabled("Auto-layout children in stack or grid");
             ImGui::Spacing();
 
             changed |= drawDirection(data);
+            if (data.direction == 2) // Grid
+            {
+                ImGui::Spacing();
+                changed |= drawConstraintCount(data);
+            }
             ImGui::Spacing();
             changed |= drawSpacing(data);
             ImGui::Spacing();
@@ -98,9 +103,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        const char* directions[] = {"Vertical", "Horizontal"};
+        const char* directions[] = {"Vertical", "Horizontal", "Grid"};
         int dir = static_cast<int>(data.direction);
-        if (ImGui::Combo("Direction##UILayoutGroup", &dir, directions, 2))
+        if (ImGui::Combo("Direction##UILayoutGroup", &dir, directions, 3))
         {
             data.direction = static_cast<uint8_t>(dir);
             changed = true;
@@ -155,6 +160,19 @@ namespace windows::details
         if (ImGui::Combo("Child Alignment##UILayoutGroup", &align, alignments, 3))
         {
             data.childAlignment = static_cast<uint8_t>(align);
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    bool UILayoutGroupDrawer::drawConstraintCount(services::UILayoutGroupData& data)
+    {
+        bool changed = false;
+
+        if (ImGui::DragInt("Columns##UILayoutGroup", &data.constraintCount, 0.1f, 1, 20))
+        {
+            if (data.constraintCount < 1) data.constraintCount = 1;
             changed = true;
         }
 

@@ -1706,6 +1706,7 @@ namespace serialization
         j["spacing"] = layoutGroup.spacing;
         j["padding"] = {layoutGroup.padding.x, layoutGroup.padding.y, layoutGroup.padding.z, layoutGroup.padding.w};
         j["childAlignment"] = childAlignmentToString(layoutGroup.childAlignment);
+        j["constraintCount"] = layoutGroup.constraintCount;
         return j;
     }
 
@@ -1721,6 +1722,7 @@ namespace serialization
             layoutGroup.padding.w = j["padding"][3].get<float>();
         }
         layoutGroup.childAlignment = stringToChildAlignment(j.value("childAlignment", "start"));
+        layoutGroup.constraintCount = j.value("constraintCount", 2);
     }
 
     std::string SceneSerialization::layoutDirectionToString(components::LayoutDirection direction)
@@ -1729,6 +1731,7 @@ namespace serialization
         {
         case components::LayoutDirection::Vertical: return "vertical";
         case components::LayoutDirection::Horizontal: return "horizontal";
+        case components::LayoutDirection::Grid: return "grid";
         default: return "vertical";
         }
     }
@@ -1736,6 +1739,7 @@ namespace serialization
     components::LayoutDirection SceneSerialization::stringToLayoutDirection(const std::string& str)
     {
         if (str == "horizontal") return components::LayoutDirection::Horizontal;
+        if (str == "grid") return components::LayoutDirection::Grid;
         return components::LayoutDirection::Vertical;
     }
 
