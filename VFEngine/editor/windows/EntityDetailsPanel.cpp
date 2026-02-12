@@ -94,11 +94,12 @@ namespace windows
         // UI components
         bool hasUICanvas = uiCanvasDrawer.draw(handle);
         bool hasUIRect = uiRectDrawer.draw(handle);
+        bool hasUIImage = uiImageDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX, hasBillboard,
                                hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
-                               hasUICanvas);
+                               hasUICanvas, hasUIRect, hasUIImage);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

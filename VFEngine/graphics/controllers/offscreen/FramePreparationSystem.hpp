@@ -62,6 +62,10 @@ namespace controllers::offscreen
         void prepareUIImages(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
+
+    private:
+        void prepareUIImagesScreenSpace(const FrameContext& ctx);
+        void prepareUIImagesWorldSpace(const FrameContext& ctx);
         
     };
 }

@@ -72,7 +72,6 @@ namespace services {
         data.text = comp.text;
         data.fontSize = comp.fontSize;
         data.color = comp.color;
-        data.renderMode = static_cast<uint8_t>(comp.renderMode);
         data.lineSpacing = comp.lineSpacing;
         data.letterSpacing = comp.letterSpacing;
         data.maxWidth = comp.maxWidth;
@@ -95,7 +94,6 @@ namespace services {
         comp.text = textData.text;
         comp.fontSize = textData.fontSize;
         comp.color = textData.color;
-        comp.renderMode = static_cast<components::TextRenderMode>(textData.renderMode);
         comp.lineSpacing = textData.lineSpacing;
         comp.letterSpacing = textData.letterSpacing;
         comp.maxWidth = textData.maxWidth;

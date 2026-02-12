@@ -16,6 +16,7 @@
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include "../../render/tools/ClusterDebugRenderer.hpp"
 #include "../../render/tools/UICanvasDebugRenderer.hpp"
+#include "../../render/tools/UICanvasImageRenderer.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/lighting/ClusterGridManager.hpp"
@@ -389,7 +390,7 @@ namespace controllers::offscreen
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.fontSize = textComp.fontSize;
             renderData.color = textComp.color;
-            renderData.renderMode = static_cast<uint32_t>(textComp.renderMode);
+            renderData.renderMode = 1; // WorldSpace only
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.lineSpacing = textComp.lineSpacing;
             renderData.letterSpacing = textComp.letterSpacing;
@@ -937,6 +938,24 @@ namespace controllers::offscreen
     {
         auto* renderHandler = ctx.renderHandler;
 
+        if (ctx.playModeActive)
+        {
+            // Play mode: screen-space overlay via UIRenderPipeline
+            renderHandler->setUICanvasImageDrawList({});
+            prepareUIImagesScreenSpace(ctx);
+        }
+        else
+        {
+            // Editor mode: world-space quads on canvas via UICanvasImageRenderer
+            renderHandler->setUIImageDrawList({});
+            prepareUIImagesWorldSpace(ctx);
+        }
+    }
+
+    void FramePreparationSystem::prepareUIImagesScreenSpace(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
         renderHandler->initUIRenderPipeline();
 
         if (!renderHandler->isUIRenderPipelineInitialized())
@@ -994,7 +1013,6 @@ namespace controllers::offscreen
                 current = parentEntity;
             }
 
-            // Also check if the entity itself has a canvas
             if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
             {
                 canvas = &registry.get<components::UICanvasComponent>(entity);
@@ -1019,21 +1037,19 @@ namespace controllers::offscreen
             float parentW = viewportW;
             float parentH = viewportH;
 
-            // Anchor edges in pixels
             float anchorLeftPx = rectComp.anchorMin.x * parentW;
             float anchorRightPx = rectComp.anchorMax.x * parentW;
-            float anchorTopPx = rectComp.anchorMin.y * parentH;
-            float anchorBotPx = rectComp.anchorMax.y * parentH;
+            // Flip Y: UI anchor Y=0 is bottom, but Vulkan pixel Y=0 is top
+            float anchorTopPx = (1.0f - rectComp.anchorMax.y) * parentH;
+            float anchorBotPx = (1.0f - rectComp.anchorMin.y) * parentH;
 
-            // Size = stretch between anchors + sizeDelta scaled
             float w = (anchorRightPx - anchorLeftPx) + rectComp.sizeDelta.x * scale;
             float h = (anchorBotPx - anchorTopPx) + rectComp.sizeDelta.y * scale;
 
-            // Center = anchor midpoint + anchoredPosition offset
             float cx = (anchorLeftPx + anchorRightPx) * 0.5f + rectComp.anchoredPosition.x * scale;
-            float cy = (anchorTopPx + anchorBotPx) * 0.5f + rectComp.anchoredPosition.y * scale;
+            // Negate Y offset: positive anchoredPosition.y means up in UI, but down in screen pixel space
+            float cy = (anchorTopPx + anchorBotPx) * 0.5f - rectComp.anchoredPosition.y * scale;
 
-            // Apply pivot to get top-left corner
             float posX = cx - rectComp.pivot.x * w;
             float posY = cy - rectComp.pivot.y * h;
 
@@ -1047,5 +1063,126 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUIImageDrawList(std::move(drawList));
+    }
+
+    void FramePreparationSystem::prepareUIImagesWorldSpace(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        std::vector<render::mesh::UICanvasImageRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& imageComp = view.get<components::UIImageComponent>(entity);
+            if (imageComp.texturePath.empty())
+            {
+                continue;
+            }
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find canvas entity with WorldTransformComponent
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity canvasEntity = entt::null;
+            entt::entity current = entity;
+
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                {
+                    break;
+                }
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    canvasEntity = parentEntity;
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+            {
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+                canvasEntity = entity;
+            }
+
+            if (!canvas || canvasEntity == entt::null)
+            {
+                continue;
+            }
+
+            // Need canvas world transform for positioning in 3D space
+            if (!registry.all_of<components::WorldTransformComponent>(canvasEntity))
+            {
+                continue;
+            }
+
+            const auto& canvasWorldTransform = registry.get<components::WorldTransformComponent>(canvasEntity);
+
+            // Canvas world dimensions
+            float canvasW = canvas->referenceWidth / canvas->pixelsPerUnit;
+            float canvasH = canvas->referenceHeight / canvas->pixelsPerUnit;
+
+            // Image rect in canvas pixels (referenceWidth x referenceHeight is the parent)
+            float anchorLeft = rectComp.anchorMin.x * canvas->referenceWidth;
+            float anchorRight = rectComp.anchorMax.x * canvas->referenceWidth;
+            float anchorBottom = rectComp.anchorMin.y * canvas->referenceHeight;
+            float anchorTop = rectComp.anchorMax.y * canvas->referenceHeight;
+
+            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+
+            // Normalize to canvas space (0..1), then shift to unit quad space (-0.5..0.5)
+            float localCX = cx / canvas->referenceWidth - 0.5f;
+            float localCY = cy / canvas->referenceHeight - 0.5f;
+            float normW = w / canvas->referenceWidth;
+            float normH = h / canvas->referenceHeight;
+
+            // Model matrix: canvas world transform * canvas size * image offset * image size
+            glm::mat4 canvasScaled = canvasWorldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+
+            glm::mat4 imageModel = canvasScaled
+                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
+
+            render::mesh::UICanvasImageRenderData renderData;
+            renderData.modelMatrix = imageModel;
+            renderData.texturePath = imageComp.texturePath;
+            renderData.colorTint = imageComp.colorTint;
+
+            drawList.push_back(std::move(renderData));
+        }
+
+        if (!drawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setUICanvasImageDrawList(std::move(drawList));
     }
 }

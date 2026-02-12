@@ -219,6 +219,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UIImage:
+            {
+                auto view = registry.view<components::UIImageComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -284,6 +293,8 @@ namespace services
             return registry.all_of<components::UICanvasComponent>(enttEntity);
         case ComponentTypeId::UIRect:
             return registry.all_of<components::UIRectComponent>(enttEntity);
+        case ComponentTypeId::UIImage:
+            return registry.all_of<components::UIImageComponent>(enttEntity);
         default:
             return false;
         }
@@ -336,6 +347,8 @@ namespace services
             types.push_back(ComponentTypeId::UICanvas);
         if (registry.all_of<components::UIRectComponent>(enttEntity))
             types.push_back(ComponentTypeId::UIRect);
+        if (registry.all_of<components::UIImageComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIImage);
 
         return types;
     }
