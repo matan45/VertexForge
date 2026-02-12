@@ -271,6 +271,128 @@ namespace services {
         return true;
     }
 
+    // ========== UI Scroll Operations ==========
+
+    bool UIComponentService::addUIScrollComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UIScrollComponent>();
+
+        // Auto-add UIRectComponent if missing (scroll needs rect for viewport bounds)
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUIScrollComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UIScrollComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUIScrollComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UIScrollComponent>();
+    }
+
+    std::optional<UIScrollData> UIComponentService::getUIScrollData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UIScrollComponent>();
+
+        UIScrollData data;
+        data.horizontalScrollEnabled = comp.horizontalScrollEnabled;
+        data.verticalScrollEnabled = comp.verticalScrollEnabled;
+        data.horizontalScrollbarVisibility = static_cast<uint8_t>(comp.horizontalScrollbarVisibility);
+        data.verticalScrollbarVisibility = static_cast<uint8_t>(comp.verticalScrollbarVisibility);
+        data.scrollSensitivity = comp.scrollSensitivity;
+        return data;
+    }
+
+    bool UIComponentService::setUIScrollData(EntityHandle entity, const UIScrollData& scrollData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIScrollComponent>();
+        comp.horizontalScrollEnabled = scrollData.horizontalScrollEnabled;
+        comp.verticalScrollEnabled = scrollData.verticalScrollEnabled;
+        comp.horizontalScrollbarVisibility = static_cast<components::ScrollbarVisibility>(scrollData.horizontalScrollbarVisibility);
+        comp.verticalScrollbarVisibility = static_cast<components::ScrollbarVisibility>(scrollData.verticalScrollbarVisibility);
+        comp.scrollSensitivity = scrollData.scrollSensitivity;
+        return true;
+    }
+
+    bool UIComponentService::setScrollOffset(EntityHandle entity, const glm::vec2& offset) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIScrollComponent>();
+        comp.scrollOffset = offset;
+        return true;
+    }
+
+    std::optional<glm::vec2> UIComponentService::getScrollOffset(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIScrollComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UIScrollComponent>();
+        return comp.scrollOffset;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -353,6 +475,43 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIImageDataQuery>(
             [this](const events::ui::GetUIImageDataQuery& query) {
                 return getUIImageData(query.entity);
+            });
+
+        // Scroll commands
+        dispatcher.registerCommandHandler<events::ui::AddUIScrollComponentCommand>(
+            [this](const events::ui::AddUIScrollComponentCommand& cmd) {
+                return addUIScrollComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUIScrollComponentCommand>(
+            [this](const events::ui::RemoveUIScrollComponentCommand& cmd) {
+                return removeUIScrollComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIScrollDataCommand>(
+            [this](const events::ui::SetUIScrollDataCommand& cmd) {
+                return setUIScrollData(cmd.entity, cmd.scrollData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetScrollOffsetCommand>(
+            [this](const events::ui::SetScrollOffsetCommand& cmd) {
+                return setScrollOffset(cmd.entity, cmd.offset);
+            });
+
+        // Scroll queries
+        dispatcher.registerQueryHandler<events::ui::HasUIScrollComponentQuery>(
+            [this](const events::ui::HasUIScrollComponentQuery& query) {
+                return hasUIScrollComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIScrollDataQuery>(
+            [this](const events::ui::GetUIScrollDataQuery& query) {
+                return getUIScrollData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetScrollOffsetQuery>(
+            [this](const events::ui::GetScrollOffsetQuery& query) {
+                return getScrollOffset(query.entity);
             });
     }
 

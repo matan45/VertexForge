@@ -270,4 +270,13 @@ namespace services
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
     };
+
+    struct UIScrollData
+    {
+        bool horizontalScrollEnabled = false;
+        bool verticalScrollEnabled = true;
+        uint8_t horizontalScrollbarVisibility = 0; // 0=Auto, 1=AlwaysVisible, 2=Hidden
+        uint8_t verticalScrollbarVisibility = 0;   // 0=Auto, 1=AlwaysVisible, 2=Hidden
+        float scrollSensitivity = 1.0f;
+    };
 }

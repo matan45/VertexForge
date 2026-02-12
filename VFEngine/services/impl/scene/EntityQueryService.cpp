@@ -228,6 +228,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UIScroll:
+            {
+                auto view = registry.view<components::UIScrollComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -295,6 +304,8 @@ namespace services
             return registry.all_of<components::UIRectComponent>(enttEntity);
         case ComponentTypeId::UIImage:
             return registry.all_of<components::UIImageComponent>(enttEntity);
+        case ComponentTypeId::UIScroll:
+            return registry.all_of<components::UIScrollComponent>(enttEntity);
         default:
             return false;
         }
@@ -349,6 +360,8 @@ namespace services
             types.push_back(ComponentTypeId::UIRect);
         if (registry.all_of<components::UIImageComponent>(enttEntity))
             types.push_back(ComponentTypeId::UIImage);
+        if (registry.all_of<components::UIScrollComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIScroll);
 
         return types;
     }

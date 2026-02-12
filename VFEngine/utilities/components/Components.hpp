@@ -32,13 +32,14 @@ namespace components
     struct UICanvasComponent;
     struct UIRectComponent;
     struct UIImageComponent;
+    struct UIScrollComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
-                                               UICanvasComponent, UIRectComponent, UIImageComponent>;
+                                               UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent>;
 
     struct WorldTransformComponent
     {
@@ -522,5 +523,34 @@ namespace components
     {
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+    };
+
+    enum class ScrollbarVisibility : uint8_t
+    {
+        Auto,          // Show only when content overflows
+        AlwaysVisible, // Always show
+        Hidden         // Never show (still scrollable)
+    };
+
+    struct UIScrollComponent
+    {
+        // Config (serialized)
+        bool horizontalScrollEnabled = false;
+        bool verticalScrollEnabled = true;
+        ScrollbarVisibility horizontalScrollbarVisibility = ScrollbarVisibility::Auto;
+        ScrollbarVisibility verticalScrollbarVisibility = ScrollbarVisibility::Auto;
+        float scrollSensitivity = 1.0f;
+
+        // Runtime state (NOT serialized)
+        glm::vec2 scrollOffset{0.0f, 0.0f};
+        glm::vec2 contentSize{0.0f, 0.0f};
+        glm::vec2 viewportSize{0.0f, 0.0f};
+        glm::vec4 computedScissorRect{0.0f, 0.0f, 0.0f, 0.0f}; // x, y, width, height
+
+        // Drag state
+        bool isDragging = false;
+        uint8_t dragAxis = 0; // 0=horizontal, 1=vertical
+        glm::vec2 dragStartScrollOffset{0.0f, 0.0f};
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
     };
 }

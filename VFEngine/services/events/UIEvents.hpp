@@ -123,4 +123,56 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUIImageData"; }
     };
 
+    // ============================================
+    // UI Scroll Commands
+    // ============================================
+
+    struct AddUIScrollComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUIScrollComponent"; }
+    };
+
+    struct RemoveUIScrollComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUIScrollComponent"; }
+    };
+
+    struct SetUIScrollDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UIScrollData scrollData;
+
+        std::string_view getName() const override { return "SetUIScrollData"; }
+    };
+
+    struct SetScrollOffsetCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        glm::vec2 offset;
+
+        std::string_view getName() const override { return "SetScrollOffset"; }
+    };
+
+    // ============================================
+    // UI Scroll Queries
+    // ============================================
+
+    struct HasUIScrollComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUIScrollComponent"; }
+    };
+
+    struct GetUIScrollDataQuery : IQuery<std::optional<services::UIScrollData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIScrollData"; }
+    };
+
+    struct GetScrollOffsetQuery : IQuery<std::optional<glm::vec2>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetScrollOffset"; }
+    };
+
 }

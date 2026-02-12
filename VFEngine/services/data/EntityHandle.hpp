@@ -55,6 +55,7 @@ namespace services {
         UICanvas,
         UIRect,
         UIImage,
+        UIScroll,
     };
 
 }
