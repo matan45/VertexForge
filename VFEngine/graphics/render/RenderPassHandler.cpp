@@ -11,6 +11,8 @@
 #include "billboard/BillboardTypes.hpp"
 #include "text/TextPipeline.hpp"
 #include "text/TextTypes.hpp"
+#include "ui/UIRenderPipeline.hpp"
+#include "ui/UIRenderTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
@@ -39,6 +41,7 @@ namespace render
         , meshPipeline{std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources)}
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
         , textPipeline{std::make_unique<text::TextPipeline>(device, swapChain, offscreenResources)}
+        , uiPipeline{std::make_unique<ui::UIRenderPipeline>(device, swapChain, offscreenResources)}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
@@ -336,6 +339,26 @@ namespace render
         }
     }
 
+    void RenderPassHandler::initUIRenderPipeline()
+    {
+        if (uiPipelineInitialized)
+        {
+            return;
+        }
+
+        uiPipeline->init();
+        uiPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setUIImageDrawList(std::vector<ui::UIImageRenderData>&& images)
+    {
+        currentUIImageDrawList = std::move(images);
+        if (uiPipelineInitialized && uiPipeline)
+        {
+            uiPipeline->setUIImageDrawList(currentUIImageDrawList);
+        }
+    }
+
     void RenderPassHandler::initDebugRenderer()
     {
         if (debugRendererInitialized)
@@ -621,6 +644,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setUICanvasImageDrawList(std::move(images));
+        }
+    }
+
     void RenderPassHandler::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
     {
         if (debugRenderer)
@@ -788,6 +819,11 @@ namespace render
             textPipeline->recreate();
         }
 
+        if (uiPipelineInitialized)
+        {
+            uiPipeline->recreate();
+        }
+
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -836,6 +872,11 @@ namespace render
         if (textPipelineInitialized)
         {
             textPipeline->cleanUp();
+        }
+
+        if (uiPipelineInitialized)
+        {
+            uiPipeline->cleanUp();
         }
 
         if (debugRendererInitialized)
@@ -1072,6 +1113,12 @@ namespace render
 
         // Post-processing chain (ping-pong effects, then blit back to scene color)
         postProcessPipeline->execute(commandBuffer, imageIndex);
+
+        // UI overlay pass (after post-processing, renders on top of everything)
+        if (uiPipelineInitialized && !currentUIImageDrawList.empty())
+        {
+            uiPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
     }
 
     bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath) const

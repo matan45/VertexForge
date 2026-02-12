@@ -188,6 +188,12 @@ namespace serialization
                 entity.getComponent<components::UIRectComponent>());
         }
 
+        if (entity.hasComponent<components::UIImageComponent>())
+        {
+            componentsJson["uiImage"] = serializeUIImage(
+                entity.getComponent<components::UIImageComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -420,7 +426,6 @@ namespace serialization
         j["text"] = text.text;
         j["fontSize"] = text.fontSize;
         j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
-        j["renderMode"] = textRenderModeToString(text.renderMode);
         j["lineSpacing"] = text.lineSpacing;
         j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
@@ -439,26 +444,9 @@ namespace serialization
                 j["color"][2].get<float>(), j["color"][3].get<float>()
             );
         }
-        text.renderMode = stringToTextRenderMode(j.value("renderMode", "worldSpace"));
         text.lineSpacing = j.value("lineSpacing", 1.0f);
         text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
-    }
-
-    std::string SceneSerialization::textRenderModeToString(components::TextRenderMode mode)
-    {
-        switch (mode)
-        {
-        case components::TextRenderMode::ScreenSpace: return "screenSpace";
-        case components::TextRenderMode::WorldSpace: return "worldSpace";
-        default: return "worldSpace";
-        }
-    }
-
-    components::TextRenderMode SceneSerialization::stringToTextRenderMode(const std::string& str)
-    {
-        if (str == "screenSpace") return components::TextRenderMode::ScreenSpace;
-        return components::TextRenderMode::WorldSpace;
     }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
@@ -1619,6 +1607,31 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeUIImage(const components::UIImageComponent& image)
+    {
+        json j;
+        if (!image.texturePath.empty())
+        {
+            j["texturePath"] = image.texturePath;
+        }
+        j["colorTint"] = json::array({
+            image.colorTint.r, image.colorTint.g, image.colorTint.b, image.colorTint.a
+        });
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIImage(const json& j, components::UIImageComponent& image)
+    {
+        image.texturePath = j.value("texturePath", std::string(""));
+        if (j.contains("colorTint") && j["colorTint"].is_array() && j["colorTint"].size() >= 4)
+        {
+            image.colorTint = glm::vec4(
+                j["colorTint"][0].get<float>(), j["colorTint"][1].get<float>(),
+                j["colorTint"][2].get<float>(), j["colorTint"][3].get<float>()
+            );
+        }
+    }
+
     std::string SceneSerialization::uiScaleModeToString(components::UIScaleMode mode)
     {
         switch (mode)
@@ -1864,6 +1877,12 @@ namespace serialization
             {
                 auto& rectComp = entity.addOrReplaceComponent<components::UIRectComponent>();
                 deserializeUIRect(componentsJson["uiRect"], rectComp);
+            }
+
+            if (componentsJson.contains("uiImage"))
+            {
+                auto& imageComp = entity.addOrReplaceComponent<components::UIImageComponent>();
+                deserializeUIImage(componentsJson["uiImage"], imageComp);
             }
         }
 

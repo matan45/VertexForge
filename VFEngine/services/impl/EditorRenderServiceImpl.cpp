@@ -51,6 +51,7 @@ namespace services
         prepareFrameClusterDebug();
         prepareFrameShadowDebug();
         prepareFrameUICanvasOutlines();
+        prepareFrameUIImages();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -758,5 +759,15 @@ namespace services
         }
 
         offScreenProvider->prepareFrameUICanvasOutlines();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameUIImages()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameUIImages();
     }
 }

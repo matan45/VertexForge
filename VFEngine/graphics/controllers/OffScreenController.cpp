@@ -571,6 +571,20 @@ namespace controllers
         framePreparation->prepareUICanvasOutlines(ctx);
     }
 
+    void OffScreenController::prepareFrameUIImages()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.viewportWidth = swapChain.getSwapchainExtent().width;
+        ctx.viewportHeight = swapChain.getSwapchainExtent().height;
+
+        framePreparation->prepareUIImages(ctx);
+    }
+
     void OffScreenController::setPlayMode(bool playMode)
     {
         playModeActive = playMode;

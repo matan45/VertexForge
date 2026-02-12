@@ -84,4 +84,43 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUIRectData"; }
     };
 
+    // ============================================
+    // UI Image Commands
+    // ============================================
+
+    struct AddUIImageComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUIImageComponent"; }
+    };
+
+    struct RemoveUIImageComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUIImageComponent"; }
+    };
+
+    struct SetUIImageDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UIImageData imageData;
+
+        std::string_view getName() const override { return "SetUIImageData"; }
+    };
+
+    // ============================================
+    // UI Image Queries
+    // ============================================
+
+    struct HasUIImageComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUIImageComponent"; }
+    };
+
+    struct GetUIImageDataQuery : IQuery<std::optional<services::UIImageData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIImageData"; }
+    };
+
 }

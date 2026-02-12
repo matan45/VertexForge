@@ -31,13 +31,14 @@ namespace components
     struct TextComponent;
     struct UICanvasComponent;
     struct UIRectComponent;
+    struct UIImageComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
-                                               UICanvasComponent, UIRectComponent>;
+                                               UICanvasComponent, UIRectComponent, UIImageComponent>;
 
     struct WorldTransformComponent
     {
@@ -483,19 +484,12 @@ namespace components
         TerrainColliderDebugData debugData;
     };
 
-    enum class TextRenderMode : uint8_t
-    {
-        ScreenSpace,
-        WorldSpace
-    };
-
     struct TextComponent
     {
         std::string fontPath;
         std::string text = "Hello World";
         float fontSize = 32.0f;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
-        TextRenderMode renderMode = TextRenderMode::WorldSpace;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
@@ -522,5 +516,11 @@ namespace components
         glm::vec2 pivot{0.5f, 0.5f};
         glm::vec2 sizeDelta{0.0f, 0.0f};
         glm::vec2 anchoredPosition{0.0f, 0.0f};
+    };
+
+    struct UIImageComponent
+    {
+        std::string texturePath;
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
     };
 }

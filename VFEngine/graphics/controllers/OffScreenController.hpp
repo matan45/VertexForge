@@ -159,6 +159,7 @@ namespace controllers
         void prepareFrameShadowDebug();
 
         void prepareFrameUICanvasOutlines();
+        void prepareFrameUIImages();
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
         postprocess::PostProcessSettings getPostProcessSettings() const;

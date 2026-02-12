@@ -229,6 +229,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameUIImages() {
+        if (offScreen) {
+            offScreen->prepareFrameUIImages();
+        }
+    }
+
     void OffScreenAdapter::setFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setFrustumCullingEnabled(enabled);
