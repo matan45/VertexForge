@@ -201,6 +201,24 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UICanvas:
+            {
+                auto view = registry.view<components::UICanvasComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIRect:
+            {
+                auto view = registry.view<components::UIRectComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -262,6 +280,10 @@ namespace services
             return registry.all_of<components::VFXComponent>(enttEntity);
         case ComponentTypeId::Text:
             return registry.all_of<components::TextComponent>(enttEntity);
+        case ComponentTypeId::UICanvas:
+            return registry.all_of<components::UICanvasComponent>(enttEntity);
+        case ComponentTypeId::UIRect:
+            return registry.all_of<components::UIRectComponent>(enttEntity);
         default:
             return false;
         }
@@ -310,6 +332,10 @@ namespace services
             types.push_back(ComponentTypeId::VFX);
         if (registry.all_of<components::TextComponent>(enttEntity))
             types.push_back(ComponentTypeId::Text);
+        if (registry.all_of<components::UICanvasComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UICanvas);
+        if (registry.all_of<components::UIRectComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIRect);
 
         return types;
     }

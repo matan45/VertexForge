@@ -176,6 +176,18 @@ namespace serialization
                 entity.getComponent<components::TerrainTileComponent>());
         }
 
+        if (entity.hasComponent<components::UICanvasComponent>())
+        {
+            componentsJson["uiCanvas"] = serializeUICanvas(
+                entity.getComponent<components::UICanvasComponent>());
+        }
+
+        if (entity.hasComponent<components::UIRectComponent>())
+        {
+            componentsJson["uiRect"] = serializeUIRect(
+                entity.getComponent<components::UIRectComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1554,6 +1566,76 @@ namespace serialization
             tile.boundingMaxY = it->get<float>();
     }
 
+    json SceneSerialization::serializeUICanvas(const components::UICanvasComponent& canvas)
+    {
+        json j;
+        j["referenceWidth"] = canvas.referenceWidth;
+        j["referenceHeight"] = canvas.referenceHeight;
+        j["scaleMode"] = uiScaleModeToString(canvas.scaleMode);
+        j["pixelsPerUnit"] = canvas.pixelsPerUnit;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUICanvas(const json& j, components::UICanvasComponent& canvas)
+    {
+        canvas.referenceWidth = j.value("referenceWidth", 1920.0f);
+        canvas.referenceHeight = j.value("referenceHeight", 1080.0f);
+        canvas.scaleMode = stringToUIScaleMode(j.value("scaleMode", "scaleWithScreenSize"));
+        canvas.pixelsPerUnit = j.value("pixelsPerUnit", 100.0f);
+    }
+
+    json SceneSerialization::serializeUIRect(const components::UIRectComponent& rect)
+    {
+        json j;
+        j["anchorMin"] = json::array({rect.anchorMin.x, rect.anchorMin.y});
+        j["anchorMax"] = json::array({rect.anchorMax.x, rect.anchorMax.y});
+        j["pivot"] = json::array({rect.pivot.x, rect.pivot.y});
+        j["sizeDelta"] = json::array({rect.sizeDelta.x, rect.sizeDelta.y});
+        j["anchoredPosition"] = json::array({rect.anchoredPosition.x, rect.anchoredPosition.y});
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIRect(const json& j, components::UIRectComponent& rect)
+    {
+        if (j.contains("anchorMin") && j["anchorMin"].is_array() && j["anchorMin"].size() >= 2)
+        {
+            rect.anchorMin = glm::vec2(j["anchorMin"][0].get<float>(), j["anchorMin"][1].get<float>());
+        }
+        if (j.contains("anchorMax") && j["anchorMax"].is_array() && j["anchorMax"].size() >= 2)
+        {
+            rect.anchorMax = glm::vec2(j["anchorMax"][0].get<float>(), j["anchorMax"][1].get<float>());
+        }
+        if (j.contains("pivot") && j["pivot"].is_array() && j["pivot"].size() >= 2)
+        {
+            rect.pivot = glm::vec2(j["pivot"][0].get<float>(), j["pivot"][1].get<float>());
+        }
+        if (j.contains("sizeDelta") && j["sizeDelta"].is_array() && j["sizeDelta"].size() >= 2)
+        {
+            rect.sizeDelta = glm::vec2(j["sizeDelta"][0].get<float>(), j["sizeDelta"][1].get<float>());
+        }
+        if (j.contains("anchoredPosition") && j["anchoredPosition"].is_array() && j["anchoredPosition"].size() >= 2)
+        {
+            rect.anchoredPosition = glm::vec2(j["anchoredPosition"][0].get<float>(), j["anchoredPosition"][1].get<float>());
+        }
+    }
+
+    std::string SceneSerialization::uiScaleModeToString(components::UIScaleMode mode)
+    {
+        switch (mode)
+        {
+        case components::UIScaleMode::ConstantPixelSize: return "constantPixelSize";
+        case components::UIScaleMode::ScaleWithScreenSize: return "scaleWithScreenSize";
+        default: return "scaleWithScreenSize";
+        }
+    }
+
+    components::UIScaleMode SceneSerialization::stringToUIScaleMode(const std::string& str)
+    {
+        if (str == "constantPixelSize") return components::UIScaleMode::ConstantPixelSize;
+        if (str == "scaleWithScreenSize") return components::UIScaleMode::ScaleWithScreenSize;
+        return components::UIScaleMode::ScaleWithScreenSize;
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1770,6 +1852,18 @@ namespace serialization
             {
                 auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
                 deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
+            }
+
+            if (componentsJson.contains("uiCanvas"))
+            {
+                auto& canvasComp = entity.addOrReplaceComponent<components::UICanvasComponent>();
+                deserializeUICanvas(componentsJson["uiCanvas"], canvasComp);
+            }
+
+            if (componentsJson.contains("uiRect"))
+            {
+                auto& rectComp = entity.addOrReplaceComponent<components::UIRectComponent>();
+                deserializeUIRect(componentsJson["uiRect"], rectComp);
             }
         }
 

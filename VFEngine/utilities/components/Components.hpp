@@ -29,12 +29,15 @@ namespace components
     struct TerrainComponent;
     struct TerrainTileComponent;
     struct TextComponent;
+    struct UICanvasComponent;
+    struct UIRectComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
-                                               SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent>;
+                                               SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
+                                               UICanvasComponent, UIRectComponent>;
 
     struct WorldTransformComponent
     {
@@ -496,5 +499,28 @@ namespace components
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
+    };
+
+    enum class UIScaleMode : uint8_t
+    {
+        ConstantPixelSize,
+        ScaleWithScreenSize
+    };
+
+    struct UICanvasComponent
+    {
+        float referenceWidth = 1920.0f;
+        float referenceHeight = 1080.0f;
+        UIScaleMode scaleMode = UIScaleMode::ScaleWithScreenSize;
+        float pixelsPerUnit = 100.0f;
+    };
+
+    struct UIRectComponent
+    {
+        glm::vec2 anchorMin{0.0f, 0.0f};
+        glm::vec2 anchorMax{1.0f, 1.0f};
+        glm::vec2 pivot{0.5f, 0.5f};
+        glm::vec2 sizeDelta{0.0f, 0.0f};
+        glm::vec2 anchoredPosition{0.0f, 0.0f};
     };
 }
