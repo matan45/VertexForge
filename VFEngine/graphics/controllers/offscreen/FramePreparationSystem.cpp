@@ -1549,7 +1549,7 @@ namespace controllers::offscreen
             }
 
             const auto& imageComp = view.get<components::UIImageComponent>(entity);
-            if (imageComp.texturePath.empty())
+            if (imageComp.texturePath.empty() && imageComp.colorTint.a < 0.01f)
             {
                 continue;
             }
@@ -1619,7 +1619,7 @@ namespace controllers::offscreen
             }
 
             render::ui::UIImageRenderData renderData;
-            renderData.texturePath = imageComp.texturePath;
+            renderData.texturePath = imageComp.texturePath.empty() ? "__white_1x1__" : imageComp.texturePath;
             renderData.position = glm::vec2(rect.x, rect.y);
             renderData.size = glm::vec2(rect.w, rect.h);
             renderData.colorTint = imageComp.colorTint;
