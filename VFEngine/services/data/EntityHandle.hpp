@@ -52,6 +52,8 @@ namespace services {
         Animator,
         VFX,
         Text,
+        UICanvas,
+        UIRect,
     };
 
 }

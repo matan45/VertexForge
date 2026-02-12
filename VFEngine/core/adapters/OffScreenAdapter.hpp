@@ -82,6 +82,8 @@ namespace core
         bool getShowShadowDebug() const override;
         void prepareFrameShadowDebug() override;
 
+        void prepareFrameUICanvasOutlines() override;
+
         void setFrustumCullingEnabled(bool enabled) override;
         void setOcclusionCullingEnabled(bool enabled) override;
         void setLODSelectionEnabled(bool enabled) override;

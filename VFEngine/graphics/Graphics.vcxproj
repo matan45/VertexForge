@@ -228,6 +228,7 @@
     <ClInclude Include="render\tools\LightGizmoDebugRenderer.hpp" />
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\UICanvasDebugRenderer.hpp" />
     <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
@@ -354,6 +355,7 @@
     <ClCompile Include="render\tools\LightGizmoDebugRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
     <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\UICanvasDebugRenderer.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />

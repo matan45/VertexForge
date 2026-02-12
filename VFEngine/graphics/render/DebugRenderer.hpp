@@ -23,6 +23,7 @@ namespace render::mesh
     class LightGizmoDebugRenderer;
     class ClusterDebugRenderer;
     class ShadowDebugRenderer;
+    class UICanvasDebugRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
@@ -31,6 +32,7 @@ namespace render::mesh
     struct LightGizmoRenderData;
     struct ClusterDebugRenderData;
     struct ShadowFrustumRenderData;
+    struct UICanvasOutlineRenderData;
 }
 
 namespace render
@@ -49,6 +51,7 @@ namespace render
         std::unique_ptr<mesh::LightGizmoDebugRenderer> lightGizmoRenderer;
         std::unique_ptr<mesh::ClusterDebugRenderer> clusterDebugRenderer;
         std::unique_ptr<mesh::ShadowDebugRenderer> shadowDebugRenderer;
+        std::unique_ptr<mesh::UICanvasDebugRenderer> uiCanvasRenderer;
 
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
@@ -61,6 +64,8 @@ namespace render
         std::unique_ptr<mesh::ClusterDebugRenderData> clusterDebugData;
 
         std::vector<mesh::ShadowFrustumRenderData> shadowFrustumDrawList;
+
+        std::vector<mesh::UICanvasOutlineRenderData> uiCanvasDrawList;
 
         bool initialized = false;
         bool showGrid = true;
@@ -93,6 +98,7 @@ namespace render
         bool getShowClusterDebug() const { return showClusterDebug; }
 
         void setShadowFrustumDrawList(std::vector<mesh::ShadowFrustumRenderData>&& frustums);
+        void setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines);
         void setShowShadowDebug(bool show) { showShadowDebug = show; }
         bool getShowShadowDebug() const { return showShadowDebug; }
 

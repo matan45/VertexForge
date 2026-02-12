@@ -556,6 +556,21 @@ namespace controllers
         debugRenderer->setShowShadowDebug(showShadowDebug);
     }
 
+    void OffScreenController::prepareFrameUICanvasOutlines()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+
+        framePreparation->prepareUICanvasOutlines(ctx);
+    }
+
     void OffScreenController::setPlayMode(bool playMode)
     {
         playModeActive = playMode;

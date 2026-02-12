@@ -128,6 +128,9 @@ namespace core::api
         if (type == "RigidBody") return services::ComponentTypeId::RigidBody;
         if (type == "Animator") return services::ComponentTypeId::Animator;
         if (type == "VFX") return services::ComponentTypeId::VFX;
+        if (type == "Text") return services::ComponentTypeId::Text;
+        if (type == "UICanvas") return services::ComponentTypeId::UICanvas;
+        if (type == "UIRect") return services::ComponentTypeId::UIRect;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -156,6 +159,9 @@ namespace core::api
         case services::ComponentTypeId::RigidBody: return "RigidBody";
         case services::ComponentTypeId::Animator: return "Animator";
         case services::ComponentTypeId::VFX: return "VFX";
+        case services::ComponentTypeId::Text: return "Text";
+        case services::ComponentTypeId::UICanvas: return "UICanvas";
+        case services::ComponentTypeId::UIRect: return "UIRect";
         default: return "Unknown";
         }
     }

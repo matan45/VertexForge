@@ -140,5 +140,14 @@ namespace serialization
 
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
+
+        static json serializeUICanvas(const components::UICanvasComponent& canvas);
+        static void deserializeUICanvas(const json& j, components::UICanvasComponent& canvas);
+
+        static json serializeUIRect(const components::UIRectComponent& rect);
+        static void deserializeUIRect(const json& j, components::UIRectComponent& rect);
+
+        static std::string uiScaleModeToString(components::UIScaleMode mode);
+        static components::UIScaleMode stringToUIScaleMode(const std::string& str);
     };
 }

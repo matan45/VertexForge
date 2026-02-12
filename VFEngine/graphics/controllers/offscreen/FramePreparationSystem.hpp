@@ -56,6 +56,7 @@ namespace controllers::offscreen
         void preparePhysicsColliders(const FrameContext& ctx);
         void prepareLightGizmos(const FrameContext& ctx);
         void prepareClusterDebug(const FrameContext& ctx);
+        void prepareUICanvasOutlines(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

@@ -94,6 +94,8 @@ namespace controllers {
 		bool getShowShadowDebug() const;
 		void prepareFrameShadowDebug();
 
+		void prepareFrameUICanvasOutlines();
+
 		void setFrustumCullingEnabled(bool enabled);
 		void setOcclusionCullingEnabled(bool enabled);
 		void setLODSelectionEnabled(bool enabled);

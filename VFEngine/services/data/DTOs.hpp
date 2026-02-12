@@ -248,4 +248,21 @@ namespace services
         float range = 20.0f;
         bool showGizmo = false;
     };
+
+    struct UICanvasData
+    {
+        float referenceWidth = 1920.0f;
+        float referenceHeight = 1080.0f;
+        uint8_t scaleMode = 1; // 0=ConstantPixelSize, 1=ScaleWithScreenSize
+        float pixelsPerUnit = 100.0f;
+    };
+
+    struct UIRectData
+    {
+        glm::vec2 anchorMin{0.0f, 0.0f};
+        glm::vec2 anchorMax{1.0f, 1.0f};
+        glm::vec2 pivot{0.5f, 0.5f};
+        glm::vec2 sizeDelta{0.0f, 0.0f};
+        glm::vec2 anchoredPosition{0.0f, 0.0f};
+    };
 }
