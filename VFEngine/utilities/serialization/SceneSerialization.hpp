@@ -147,6 +147,9 @@ namespace serialization
         static json serializeUIRect(const components::UIRectComponent& rect);
         static void deserializeUIRect(const json& j, components::UIRectComponent& rect);
 
+        static json serializeUIImage(const components::UIImageComponent& image);
+        static void deserializeUIImage(const json& j, components::UIImageComponent& image);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
     };

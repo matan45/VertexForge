@@ -11,7 +11,7 @@ namespace windows::details
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
-                                 bool hasUICanvas)
+                                 bool hasUICanvas, bool hasUIImage)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -254,9 +254,28 @@ namespace windows::details
                 }
             }
 
+            if (!hasUIImage)
+            {
+                if (ImGui::Selectable("  UI Image"))
+                {
+                    events::ui::AddUIImageComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+
+                    events::ui::AddUIRectComponentCommand rectCmd;
+                    rectCmd.entity = handle;
+                    dispatcher.execute(rectCmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Screen-space image with texture and color tint");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
-                           hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas;
+                           hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
+                           hasUIImage;
             if (allAdded)
             {
                 ImGui::Spacing();
