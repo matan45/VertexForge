@@ -41,7 +41,7 @@ namespace window
     {
         if (glfwWindow)
         {
-            glfwSetScrollCallback(glfwWindow, nullptr);
+            glfwSetScrollCallback(glfwWindow, previousScrollCallback);
             controllerRegistry.erase(glfwWindow);
         }
     }
