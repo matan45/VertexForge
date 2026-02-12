@@ -588,7 +588,9 @@ namespace controllers
             auto& dispatcher = events::EventDispatcher::instance();
             ctx.mousePosition = dispatcher.query(events::input::GetMousePositionQuery{});
             ctx.scrollDelta = dispatcher.query(events::input::GetScrollDeltaQuery{});
-            ctx.leftMouseDown = dispatcher.query(events::input::IsMouseButtonDownQuery{0});
+            events::input::IsMouseButtonDownQuery mouseQuery;
+            mouseQuery.button = 0;
+            ctx.leftMouseDown = dispatcher.query(mouseQuery);
         }
 
         framePreparation->prepareUIImages(ctx);
