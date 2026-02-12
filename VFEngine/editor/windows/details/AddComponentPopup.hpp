@@ -9,7 +9,7 @@ namespace windows::details {
                   bool hasAudio2D, bool hasAudio3D, bool hasScript,
                   bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                   bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
-                  bool hasUICanvas, bool hasUIImage);
+                  bool hasUICanvas, bool hasUIRect, bool hasUIImage);
     };
 
 }

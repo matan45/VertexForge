@@ -11,7 +11,7 @@ namespace windows::details
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
-                                 bool hasUICanvas, bool hasUIImage)
+                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -243,14 +243,24 @@ namespace windows::details
                     events::ui::AddUICanvasComponentCommand cmd;
                     cmd.entity = handle;
                     dispatcher.execute(cmd);
-
-                    events::ui::AddUIRectComponentCommand rectCmd;
-                    rectCmd.entity = handle;
-                    dispatcher.execute(rectCmd);
                 }
                 if (ImGui::IsItemHovered())
                 {
                     ImGui::SetTooltip("UI Canvas with reference resolution and auto-scaling");
+                }
+            }
+
+            if (!hasUIRect)
+            {
+                if (ImGui::Selectable("  UI Rect"))
+                {
+                    events::ui::AddUIRectComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Rect transform for UI anchoring and layout");
                 }
             }
 
@@ -261,10 +271,6 @@ namespace windows::details
                     events::ui::AddUIImageComponentCommand cmd;
                     cmd.entity = handle;
                     dispatcher.execute(cmd);
-
-                    events::ui::AddUIRectComponentCommand rectCmd;
-                    rectCmd.entity = handle;
-                    dispatcher.execute(rectCmd);
                 }
                 if (ImGui::IsItemHovered())
                 {
@@ -275,7 +281,7 @@ namespace windows::details
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
-                           hasUIImage;
+                           hasUIRect && hasUIImage;
             if (allAdded)
             {
                 ImGui::Spacing();
