@@ -196,6 +196,7 @@ namespace services {
         virtual void prepareFrameShadowDebug() = 0;
 
         virtual void prepareFrameUICanvasOutlines() = 0;
+        virtual void prepareFrameUIImages() = 0;
 
         virtual void setFrustumCullingEnabled(bool enabled) = 0;
         virtual void setOcclusionCullingEnabled(bool enabled) = 0;

@@ -68,6 +68,12 @@ namespace render
         struct TextRenderData;
     }
 
+    namespace ui
+    {
+        class UIRenderPipeline;
+        struct UIImageRenderData;
+    }
+
     class RenderPassHandler
     {
     private:
@@ -79,6 +85,7 @@ namespace render
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
         std::unique_ptr<text::TextPipeline> textPipeline;
+        std::unique_ptr<ui::UIRenderPipeline> uiPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
@@ -98,6 +105,9 @@ namespace render
 
         bool textPipelineInitialized = false;
         std::vector<text::TextRenderData> currentTextDrawList;
+
+        bool uiPipelineInitialized = false;
+        std::vector<ui::UIImageRenderData> currentUIImageDrawList;
 
         bool debugRendererInitialized = false;
         glm::mat4 currentView{1.0f};
@@ -150,6 +160,11 @@ namespace render
         text::TextPipeline* getTextPipeline() const { return textPipeline.get(); }
         bool isTextPipelineInitialized() const { return textPipelineInitialized; }
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+
+        void initUIRenderPipeline();
+        ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }
+        bool isUIRenderPipelineInitialized() const { return uiPipelineInitialized; }
+        void setUIImageDrawList(std::vector<ui::UIImageRenderData>&& images);
 
         void initDebugRenderer();
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);

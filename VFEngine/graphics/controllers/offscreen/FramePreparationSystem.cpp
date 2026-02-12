@@ -16,6 +16,7 @@
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include "../../render/tools/ClusterDebugRenderer.hpp"
 #include "../../render/tools/UICanvasDebugRenderer.hpp"
+#include "../../render/ui/UIRenderTypes.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
@@ -930,5 +931,121 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUICanvasOutlineDrawList(std::move(drawList));
+    }
+
+    void FramePreparationSystem::prepareUIImages(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initUIRenderPipeline();
+
+        if (!renderHandler->isUIRenderPipelineInitialized())
+        {
+            renderHandler->setUIImageDrawList({});
+            return;
+        }
+
+        if (ctx.viewportWidth == 0 || ctx.viewportHeight == 0)
+        {
+            renderHandler->setUIImageDrawList({});
+            return;
+        }
+
+        std::vector<render::ui::UIImageRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& imageComp = view.get<components::UIImageComponent>(entity);
+            if (imageComp.texturePath.empty())
+            {
+                continue;
+            }
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find UICanvasComponent
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                {
+                    break;
+                }
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            // Also check if the entity itself has a canvas
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+            {
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            }
+
+            if (!canvas)
+            {
+                continue;
+            }
+
+            // Resolve anchors to pixel coordinates
+            float viewportW = static_cast<float>(ctx.viewportWidth);
+            float viewportH = static_cast<float>(ctx.viewportHeight);
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+            {
+                scale = std::min(viewportW / canvas->referenceWidth,
+                                 viewportH / canvas->referenceHeight);
+            }
+
+            float parentW = viewportW;
+            float parentH = viewportH;
+
+            // Anchor edges in pixels
+            float anchorLeftPx = rectComp.anchorMin.x * parentW;
+            float anchorRightPx = rectComp.anchorMax.x * parentW;
+            float anchorTopPx = rectComp.anchorMin.y * parentH;
+            float anchorBotPx = rectComp.anchorMax.y * parentH;
+
+            // Size = stretch between anchors + sizeDelta scaled
+            float w = (anchorRightPx - anchorLeftPx) + rectComp.sizeDelta.x * scale;
+            float h = (anchorBotPx - anchorTopPx) + rectComp.sizeDelta.y * scale;
+
+            // Center = anchor midpoint + anchoredPosition offset
+            float cx = (anchorLeftPx + anchorRightPx) * 0.5f + rectComp.anchoredPosition.x * scale;
+            float cy = (anchorTopPx + anchorBotPx) * 0.5f + rectComp.anchoredPosition.y * scale;
+
+            // Apply pivot to get top-left corner
+            float posX = cx - rectComp.pivot.x * w;
+            float posY = cy - rectComp.pivot.y * h;
+
+            render::ui::UIImageRenderData renderData;
+            renderData.texturePath = imageComp.texturePath;
+            renderData.position = glm::vec2(posX, posY);
+            renderData.size = glm::vec2(w, h);
+            renderData.colorTint = imageComp.colorTint;
+
+            drawList.push_back(std::move(renderData));
+        }
+
+        renderHandler->setUIImageDrawList(std::move(drawList));
     }
 }

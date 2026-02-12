@@ -95,6 +95,7 @@ namespace controllers {
 		void prepareFrameShadowDebug();
 
 		void prepareFrameUICanvasOutlines();
+		void prepareFrameUIImages();
 
 		void setFrustumCullingEnabled(bool enabled);
 		void setOcclusionCullingEnabled(bool enabled);

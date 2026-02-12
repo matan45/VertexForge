@@ -83,6 +83,7 @@ namespace core
         void prepareFrameShadowDebug() override;
 
         void prepareFrameUICanvasOutlines() override;
+        void prepareFrameUIImages() override;
 
         void setFrustumCullingEnabled(bool enabled) override;
         void setOcclusionCullingEnabled(bool enabled) override;

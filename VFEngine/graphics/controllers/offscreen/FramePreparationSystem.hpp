@@ -30,6 +30,8 @@ namespace controllers::offscreen
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
         float deltaTime = 0.0f;
+        uint32_t viewportWidth = 0;
+        uint32_t viewportHeight = 0;
     };
 
     class FramePreparationSystem
@@ -57,6 +59,7 @@ namespace controllers::offscreen
         void prepareLightGizmos(const FrameContext& ctx);
         void prepareClusterDebug(const FrameContext& ctx);
         void prepareUICanvasOutlines(const FrameContext& ctx);
+        void prepareUIImages(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

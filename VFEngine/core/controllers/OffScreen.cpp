@@ -235,6 +235,11 @@ namespace controllers {
 		offScreenController->prepareFrameUICanvasOutlines();
 	}
 
+	void OffScreen::prepareFrameUIImages()
+	{
+		offScreenController->prepareFrameUIImages();
+	}
+
 	void OffScreen::setFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setFrustumCullingEnabled(enabled);
