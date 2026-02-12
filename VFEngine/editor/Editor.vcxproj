@@ -181,7 +181,9 @@
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
     <ClInclude Include="windows\details\UICanvasDrawer.hpp" />
     <ClInclude Include="windows\details\UIImageDrawer.hpp" />
+    <ClInclude Include="windows\details\UILayoutGroupDrawer.hpp" />
     <ClInclude Include="windows\details\UIRectDrawer.hpp" />
+    <ClInclude Include="windows\details\UIScrollDrawer.hpp" />
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
@@ -271,7 +273,9 @@
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
     <ClCompile Include="windows\details\UICanvasDrawer.cpp" />
     <ClCompile Include="windows\details\UIImageDrawer.cpp" />
+    <ClCompile Include="windows\details\UILayoutGroupDrawer.cpp" />
     <ClCompile Include="windows\details\UIRectDrawer.cpp" />
+    <ClCompile Include="windows\details\UIScrollDrawer.cpp" />
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />

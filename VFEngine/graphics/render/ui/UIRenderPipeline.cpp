@@ -5,9 +5,11 @@
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <string_view>
 
 namespace render::ui
 {
@@ -32,6 +34,32 @@ namespace render::ui
         bufferManager.init();
 
         createDefaultDescriptorSet();
+
+        // Create 1x1 white fallback texture for color-only quads (scrollbars, etc.)
+        {
+            resource::TextureData whiteTexData;
+            whiteTexData.width = 1;
+            whiteTexData.height = 1;
+            whiteTexData.numbersOfChannels = 4;
+            whiteTexData.mipLevels = 1;
+            whiteTexData.mipData.push_back({1, 1, {255, 255, 255, 255}});
+
+            auto texture = std::make_unique<core::Texture>(device);
+            texture->loadTextureFromData(whiteTexData, vk::Format::eR8G8B8A8Unorm, false);
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &descriptorSetLayout;
+            vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+            updateDescriptorSet(descSet, texture->getImageView(), texture->getSampler());
+
+            TextureEntry entry;
+            entry.texture = std::move(texture);
+            entry.descriptorSet = descSet;
+            textureCache.emplace("__white_1x1__", std::move(entry));
+        }
+
         createPipeline();
         createFramebuffers();
 
@@ -73,7 +101,7 @@ namespace render::ui
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         textureCache.clear();
-        textureBatches.clear();
+        scissorGroups.clear();
         totalInstanceCount = 0;
 
         if (descriptorPool)
@@ -219,7 +247,8 @@ namespace render::ui
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = false,
             .depthWriteEnable = false,
-            .blendEnable = true
+            .blendEnable = true,
+            .dynamicStates = { vk::DynamicState::eScissor }
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
@@ -295,7 +324,7 @@ namespace render::ui
 
     void UIRenderPipeline::setUIImageDrawList(const std::vector<UIImageRenderData>& images)
     {
-        textureBatches.clear();
+        scissorGroups.clear();
         totalInstanceCount = 0;
 
         if (images.empty())
@@ -304,8 +333,31 @@ namespace render::ui
             return;
         }
 
-        // Group images by texture path
-        std::unordered_map<std::string, std::vector<UIImageInstance>> texturedInstances;
+        // Group images by scissor rect, then by texture within each group
+        struct ScissorKey
+        {
+            int32_t x, y, w, h;
+            bool operator==(const ScissorKey& o) const { return x == o.x && y == o.y && w == o.w && h == o.h; }
+        };
+        struct ScissorKeyHash
+        {
+            size_t operator()(const ScissorKey& k) const
+            {
+                size_t h = std::hash<int32_t>{}(k.x);
+                h ^= std::hash<int32_t>{}(k.y) << 1;
+                h ^= std::hash<int32_t>{}(k.w) << 2;
+                h ^= std::hash<int32_t>{}(k.h) << 3;
+                return h;
+            }
+        };
+
+        struct ImageEntry
+        {
+            std::string_view texturePath;
+            UIImageInstance instance;
+        };
+
+        std::unordered_map<ScissorKey, std::vector<ImageEntry>, ScissorKeyHash> scissorMap;
 
         for (const auto& image : images)
         {
@@ -314,30 +366,56 @@ namespace render::ui
                 continue;
             }
 
+            ScissorKey key{
+                static_cast<int32_t>(image.scissorRect.x),
+                static_cast<int32_t>(image.scissorRect.y),
+                static_cast<int32_t>(image.scissorRect.z),
+                static_cast<int32_t>(image.scissorRect.w)
+            };
+
             UIImageInstance inst{};
             inst.posAndSize = glm::vec4(image.position, image.size);
             inst.colorTint = image.colorTint;
-            texturedInstances[image.texturePath].push_back(inst);
+
+            scissorMap[key].push_back({image.texturePath, inst});
         }
 
-        // Build ordered instance buffer and batch list
+        // Build ordered instance buffer and scissor groups
         std::vector<UIImageInstance> allInstances;
         allInstances.reserve(images.size());
 
-        for (auto& [path, instances] : texturedInstances)
+        for (auto& [key, entries] : scissorMap)
         {
-            if (!loadTexture(path))
+            UIScissorGroup group;
+            group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
+
+            // Sub-group by texture within this scissor group
+            std::unordered_map<std::string_view, std::vector<UIImageInstance>> texturedInstances;
+            for (auto& entry : entries)
             {
-                continue;
+                texturedInstances[entry.texturePath].push_back(entry.instance);
             }
 
-            UITextureBatch batch;
-            batch.texturePath = path;
-            batch.firstInstance = static_cast<uint32_t>(allInstances.size());
-            batch.instanceCount = static_cast<uint32_t>(instances.size());
-            textureBatches.push_back(std::move(batch));
+            for (auto& [path, instances] : texturedInstances)
+            {
+                if (!loadTexture(std::string(path)))
+                {
+                    continue;
+                }
 
-            allInstances.insert(allInstances.end(), instances.begin(), instances.end());
+                UITextureBatch batch;
+                batch.texturePath = std::string(path);
+                batch.firstInstance = static_cast<uint32_t>(allInstances.size());
+                batch.instanceCount = static_cast<uint32_t>(instances.size());
+                group.batches.push_back(std::move(batch));
+
+                allInstances.insert(allInstances.end(), instances.begin(), instances.end());
+            }
+
+            if (!group.batches.empty())
+            {
+                scissorGroups.push_back(std::move(group));
+            }
         }
 
         totalInstanceCount = static_cast<uint32_t>(allInstances.size());
@@ -378,18 +456,38 @@ namespace render::ui
         commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
                                      0, sizeof(UIPushConstants), &pushConstants);
 
-        for (const auto& batch : textureBatches)
+        for (const auto& group : scissorGroups)
         {
-            auto it = textureCache.find(batch.texturePath);
-            if (it == textureCache.end())
+            // Set scissor for this group
+            vk::Rect2D scissor{};
+            if (group.scissorRect.z > 0.0f && group.scissorRect.w > 0.0f)
             {
-                continue;
+                scissor.offset.x = static_cast<int32_t>(group.scissorRect.x);
+                scissor.offset.y = static_cast<int32_t>(group.scissorRect.y);
+                scissor.extent.width = static_cast<uint32_t>(group.scissorRect.z);
+                scissor.extent.height = static_cast<uint32_t>(group.scissorRect.w);
             }
+            else
+            {
+                // No scissor - full viewport
+                scissor.offset = vk::Offset2D{0, 0};
+                scissor.extent = swapChain.getSwapchainExtent();
+            }
+            commandBuffer.setScissor(0, 1, &scissor);
 
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                              0, it->second.descriptorSet, nullptr);
+            for (const auto& batch : group.batches)
+            {
+                auto it = textureCache.find(batch.texturePath);
+                if (it == textureCache.end())
+                {
+                    continue;
+                }
 
-            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                                  0, it->second.descriptorSet, nullptr);
+
+                commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+            }
         }
 
         commandBuffer.endRenderPass();

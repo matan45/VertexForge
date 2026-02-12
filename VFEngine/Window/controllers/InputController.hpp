@@ -20,6 +20,7 @@ namespace window
         bool firstMouseUpdate{true};
 
         glm::vec2 scrollDelta{0.0f};
+        glm::vec2 frameScrollDelta{0.0f};
 
         // Double-click detection
         static constexpr double DOUBLE_CLICK_TIME = 0.3; // seconds
@@ -33,6 +34,10 @@ namespace window
         // Thread Safety: Only accessed from main thread where GLFW callbacks execute.
         // GLFW requires all window operations on the main thread, so no synchronization needed.
         inline static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
+
+        // Previous scroll callback for chaining (e.g. ImGui's callback)
+        using ScrollCallbackFn = void(*)(GLFWwindow*, double, double);
+        ScrollCallbackFn previousScrollCallback = nullptr;
 
     public:
         explicit InputController(Window* window);

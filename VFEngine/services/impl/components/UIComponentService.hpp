@@ -43,6 +43,22 @@ namespace services {
         bool hasUIImageComponent(EntityHandle entity) const;
         std::optional<UIImageData> getUIImageData(EntityHandle entity) const;
         bool setUIImageData(EntityHandle entity, const UIImageData& imageData);
+
+        // UI Scroll Operations
+        bool addUIScrollComponent(EntityHandle entity);
+        bool removeUIScrollComponent(EntityHandle entity);
+        bool hasUIScrollComponent(EntityHandle entity) const;
+        std::optional<UIScrollData> getUIScrollData(EntityHandle entity) const;
+        bool setUIScrollData(EntityHandle entity, const UIScrollData& scrollData);
+        bool setScrollOffset(EntityHandle entity, const glm::vec2& offset);
+        std::optional<glm::vec2> getScrollOffset(EntityHandle entity) const;
+
+        // UI Layout Group Operations
+        bool addUILayoutGroupComponent(EntityHandle entity);
+        bool removeUILayoutGroupComponent(EntityHandle entity);
+        bool hasUILayoutGroupComponent(EntityHandle entity) const;
+        std::optional<UILayoutGroupData> getUILayoutGroupData(EntityHandle entity) const;
+        bool setUILayoutGroupData(EntityHandle entity, const UILayoutGroupData& layoutGroupData);
     };
 
 }

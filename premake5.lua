@@ -285,6 +285,8 @@ project "Utilities"
 
    links { "spdLog", "meshoptimizer" }
 
+   buildoptions { "/bigobj" }
+
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"

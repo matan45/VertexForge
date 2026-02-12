@@ -11,7 +11,8 @@ namespace windows::details
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
-                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage)
+                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUIScroll,
+                                 bool hasUILayoutGroup)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -278,10 +279,38 @@ namespace windows::details
                 }
             }
 
+            if (!hasUIScroll)
+            {
+                if (ImGui::Selectable("  UI Scroll"))
+                {
+                    events::ui::AddUIScrollComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Scrollable container with clipping and scrollbars");
+                }
+            }
+
+            if (!hasUILayoutGroup)
+            {
+                if (ImGui::Selectable("  UI Layout Group"))
+                {
+                    events::ui::AddUILayoutGroupComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Auto-stack children vertically or horizontally");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
-                           hasUIRect && hasUIImage;
+                           hasUIRect && hasUIImage && hasUIScroll && hasUILayoutGroup;
             if (allAdded)
             {
                 ImGui::Spacing();

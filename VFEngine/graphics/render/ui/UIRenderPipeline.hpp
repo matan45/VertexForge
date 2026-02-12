@@ -25,6 +25,12 @@ namespace render::ui
         uint32_t instanceCount = 0;
     };
 
+    struct UIScissorGroup
+    {
+        glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f}; // 0,0,0,0 = full viewport
+        std::vector<UITextureBatch> batches;
+    };
+
     class UIRenderPipeline
     {
     private:
@@ -55,7 +61,7 @@ namespace render::ui
         std::unordered_map<std::string, TextureEntry> textureCache;
         static constexpr uint32_t MAX_UI_TEXTURES = 64;
 
-        std::vector<UITextureBatch> textureBatches;
+        std::vector<UIScissorGroup> scissorGroups;
         uint32_t totalInstanceCount = 0;
 
     public:

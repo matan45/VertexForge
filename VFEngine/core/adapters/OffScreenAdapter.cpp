@@ -307,6 +307,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) {
+        if (offScreen) {
+            offScreen->setUIViewportOffset(offset, panelSize);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

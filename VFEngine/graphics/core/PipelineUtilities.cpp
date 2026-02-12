@@ -1,6 +1,7 @@
 #include "PipelineUtilities.hpp"
 #include <glm/glm.hpp>
 #include <stdexcept>
+#include <algorithm>
 
 namespace core
 {
@@ -186,12 +187,17 @@ namespace core
 		scissor.offset = vk::Offset2D{0, 0};
 		scissor.extent = config.extent;
 
+		bool hasDynamicViewport = std::find(config.dynamicStates.begin(), config.dynamicStates.end(),
+			vk::DynamicState::eViewport) != config.dynamicStates.end();
+		bool hasDynamicScissor = std::find(config.dynamicStates.begin(), config.dynamicStates.end(),
+			vk::DynamicState::eScissor) != config.dynamicStates.end();
+
 		vk::PipelineViewportStateCreateInfo viewportState{};
 		viewportState.viewportCount = 1;
-		viewportState.pViewports = &viewport;
+		viewportState.pViewports = hasDynamicViewport ? nullptr : &viewport;
 		viewportState.scissorCount = 1;
-		viewportState.pScissors = &scissor;
-		
+		viewportState.pScissors = hasDynamicScissor ? nullptr : &scissor;
+
 		vk::PipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.depthClampEnable = VK_FALSE;
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -200,18 +206,18 @@ namespace core
 		rasterizer.cullMode = config.cullMode;
 		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 		rasterizer.depthBiasEnable = VK_FALSE;
-		
+
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-		
+
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthWriteEnable = config.depthWriteEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthCompareOp = config.depthCompareOp;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
 		depthStencil.stencilTestEnable = VK_FALSE;
-		
+
 		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
 		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
 		                                      vk::ColorComponentFlagBits::eG |
@@ -237,7 +243,14 @@ namespace core
 		colorBlending.logicOpEnable = VK_FALSE;
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
-		
+
+		vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
+		if (!config.dynamicStates.empty())
+		{
+			dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(config.dynamicStates.size());
+			dynamicStateInfo.pDynamicStates = config.dynamicStates.data();
+		}
+
 		vk::GraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.stageCount = static_cast<uint32_t>(config.shaderStages.size());
 		pipelineInfo.pStages = config.shaderStages.data();
@@ -248,6 +261,7 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = config.dynamicStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = result.pipelineLayout;
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;

@@ -300,6 +300,11 @@ namespace controllers {
 		offScreenController->setTerrainShadowLOD(lod);
 	}
 
+	void OffScreen::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize)
+	{
+		offScreenController->setUIViewportOffset(offset, panelSize);
+	}
+
 	void OffScreen::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)
 	{
 		offScreenController->applyPostProcessSettings(settings);
