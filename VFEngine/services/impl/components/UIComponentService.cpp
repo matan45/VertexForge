@@ -487,6 +487,125 @@ namespace services {
         return true;
     }
 
+    // ========== UI Label CRUD ==========
+
+    bool UIComponentService::addUILabelComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UILabelComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UILabelComponent>();
+
+        // Auto-add UIRectComponent if missing (label needs rect for positioning)
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUILabelComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UILabelComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUILabelComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UILabelComponent>();
+    }
+
+    std::optional<UILabelData> UIComponentService::getUILabelData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UILabelComponent>();
+
+        UILabelData data;
+        data.text = comp.text;
+        data.fontPath = comp.fontPath;
+        data.fontSize = comp.fontSize;
+        data.fontStyle = static_cast<uint8_t>(comp.fontStyle);
+        data.color = comp.color;
+        data.horizontalAlignment = static_cast<uint8_t>(comp.horizontalAlignment);
+        data.verticalAlignment = static_cast<uint8_t>(comp.verticalAlignment);
+        data.overflow = static_cast<uint8_t>(comp.overflow);
+        data.wordWrap = comp.wordWrap;
+        data.lineSpacing = comp.lineSpacing;
+        data.letterSpacing = comp.letterSpacing;
+        return data;
+    }
+
+    bool UIComponentService::setUILabelData(EntityHandle entity, const UILabelData& labelData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UILabelComponent>();
+        comp.text = labelData.text;
+        comp.fontPath = labelData.fontPath;
+        comp.fontSize = labelData.fontSize;
+        comp.fontStyle = static_cast<components::FontStyle>(labelData.fontStyle);
+        comp.color = labelData.color;
+        comp.horizontalAlignment = static_cast<components::HorizontalAlignment>(labelData.horizontalAlignment);
+        comp.verticalAlignment = static_cast<components::VerticalAlignment>(labelData.verticalAlignment);
+        comp.overflow = static_cast<components::TextOverflow>(labelData.overflow);
+        comp.wordWrap = labelData.wordWrap;
+        comp.lineSpacing = labelData.lineSpacing;
+        comp.letterSpacing = labelData.letterSpacing;
+        return true;
+    }
+
+    std::optional<glm::vec2> UIComponentService::getUILabelPreferredSize(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            return std::nullopt;
+        }
+
+        // Stub: actual preferred size calculation requires font metrics
+        // Will be implemented in VK-428 (Frame Preparation)
+        return std::nullopt;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -633,6 +752,38 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUILayoutGroupDataQuery>(
             [this](const events::ui::GetUILayoutGroupDataQuery& query) {
                 return getUILayoutGroupData(query.entity);
+            });
+
+        // Label commands
+        dispatcher.registerCommandHandler<events::ui::AddUILabelComponentCommand>(
+            [this](const events::ui::AddUILabelComponentCommand& cmd) {
+                return addUILabelComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUILabelComponentCommand>(
+            [this](const events::ui::RemoveUILabelComponentCommand& cmd) {
+                return removeUILabelComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUILabelDataCommand>(
+            [this](const events::ui::SetUILabelDataCommand& cmd) {
+                return setUILabelData(cmd.entity, cmd.labelData);
+            });
+
+        // Label queries
+        dispatcher.registerQueryHandler<events::ui::HasUILabelComponentQuery>(
+            [this](const events::ui::HasUILabelComponentQuery& query) {
+                return hasUILabelComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUILabelDataQuery>(
+            [this](const events::ui::GetUILabelDataQuery& query) {
+                return getUILabelData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUILabelPreferredSizeQuery>(
+            [this](const events::ui::GetUILabelPreferredSizeQuery& query) {
+                return getUILabelPreferredSize(query.entity);
             });
     }
 

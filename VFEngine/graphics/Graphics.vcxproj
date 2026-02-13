@@ -404,6 +404,7 @@
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays_composite.glsl" />
@@ -422,6 +423,7 @@
     <None Include="..\..\resources\shaders\tools\ui_canvas_image.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
+    <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />

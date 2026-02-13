@@ -237,6 +237,24 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UILayoutGroup:
+            {
+                auto view = registry.view<components::UILayoutGroupComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UILabel:
+            {
+                auto view = registry.view<components::UILabelComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -306,6 +324,10 @@ namespace services
             return registry.all_of<components::UIImageComponent>(enttEntity);
         case ComponentTypeId::UIScroll:
             return registry.all_of<components::UIScrollComponent>(enttEntity);
+        case ComponentTypeId::UILayoutGroup:
+            return registry.all_of<components::UILayoutGroupComponent>(enttEntity);
+        case ComponentTypeId::UILabel:
+            return registry.all_of<components::UILabelComponent>(enttEntity);
         default:
             return false;
         }
@@ -362,6 +384,10 @@ namespace services
             types.push_back(ComponentTypeId::UIImage);
         if (registry.all_of<components::UIScrollComponent>(enttEntity))
             types.push_back(ComponentTypeId::UIScroll);
+        if (registry.all_of<components::UILayoutGroupComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UILayoutGroup);
+        if (registry.all_of<components::UILabelComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UILabel);
 
         return types;
     }

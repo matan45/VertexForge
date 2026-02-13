@@ -34,6 +34,7 @@ namespace components
     struct UIImageComponent;
     struct UIScrollComponent;
     struct UILayoutGroupComponent;
+    struct UILabelComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -41,7 +42,7 @@ namespace components
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
-                                               UILayoutGroupComponent>;
+                                               UILayoutGroupComponent, UILabelComponent>;
 
     struct WorldTransformComponent
     {
@@ -577,5 +578,49 @@ namespace components
         glm::vec4 padding{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom
         ChildAlignment childAlignment = ChildAlignment::Start;
         int constraintCount = 2; // columns (Grid mode only)
+    };
+
+    enum class HorizontalAlignment : uint8_t
+    {
+        Left,
+        Center,
+        Right
+    };
+
+    enum class VerticalAlignment : uint8_t
+    {
+        Top,
+        Middle,
+        Bottom
+    };
+
+    enum class TextOverflow : uint8_t
+    {
+        Overflow,
+        Clip,
+        Ellipsis
+    };
+
+    enum class FontStyle : uint8_t
+    {
+        Normal,
+        Bold,
+        Italic,
+        BoldItalic
+    };
+
+    struct UILabelComponent
+    {
+        std::string text = "Label";
+        std::string fontPath;
+        float fontSize = 16.0f;
+        FontStyle fontStyle = FontStyle::Normal;
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        HorizontalAlignment horizontalAlignment = HorizontalAlignment::Left;
+        VerticalAlignment verticalAlignment = VerticalAlignment::Top;
+        TextOverflow overflow = TextOverflow::Overflow;
+        bool wordWrap = true;
+        float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
     };
 }

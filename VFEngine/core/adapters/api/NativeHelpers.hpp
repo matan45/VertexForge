@@ -131,6 +131,10 @@ namespace core::api
         if (type == "Text") return services::ComponentTypeId::Text;
         if (type == "UICanvas") return services::ComponentTypeId::UICanvas;
         if (type == "UIRect") return services::ComponentTypeId::UIRect;
+        if (type == "UIImage") return services::ComponentTypeId::UIImage;
+        if (type == "UIScroll") return services::ComponentTypeId::UIScroll;
+        if (type == "UILayoutGroup") return services::ComponentTypeId::UILayoutGroup;
+        if (type == "UILabel") return services::ComponentTypeId::UILabel;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -162,6 +166,10 @@ namespace core::api
         case services::ComponentTypeId::Text: return "Text";
         case services::ComponentTypeId::UICanvas: return "UICanvas";
         case services::ComponentTypeId::UIRect: return "UIRect";
+        case services::ComponentTypeId::UIImage: return "UIImage";
+        case services::ComponentTypeId::UIScroll: return "UIScroll";
+        case services::ComponentTypeId::UILayoutGroup: return "UILayoutGroup";
+        case services::ComponentTypeId::UILabel: return "UILabel";
         default: return "Unknown";
         }
     }

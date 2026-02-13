@@ -288,4 +288,19 @@ namespace services
         uint8_t childAlignment = 0; // 0=Start, 1=Center, 2=End
         int constraintCount = 2;    // columns (Grid mode only)
     };
+
+    struct UILabelData
+    {
+        std::string text = "Label";
+        std::string fontPath;
+        float fontSize = 16.0f;
+        uint8_t fontStyle = 0;              // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        uint8_t horizontalAlignment = 0;    // 0=Left, 1=Center, 2=Right
+        uint8_t verticalAlignment = 0;      // 0=Top, 1=Middle, 2=Bottom
+        uint8_t overflow = 0;               // 0=Overflow, 1=Clip, 2=Ellipsis
+        bool wordWrap = true;
+        float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
+    };
 }
