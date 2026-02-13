@@ -146,7 +146,7 @@ namespace windows::details
         {
             nfd::FileDialog fileDialog;
             std::string path = fileDialog.openFileDialog(
-                {{L"Font Files (*.ttf, *.otf)", L"*.ttf;*.otf"}});
+                {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
             if (!path.empty())
             {
                 std::ifstream file(path);
