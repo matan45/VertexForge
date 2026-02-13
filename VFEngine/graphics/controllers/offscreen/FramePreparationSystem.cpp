@@ -18,6 +18,7 @@
 #include "../../render/tools/UICanvasDebugRenderer.hpp"
 #include "../../render/tools/UICanvasImageRenderer.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
+#include "../../render/ui/UITextRenderTypes.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
@@ -27,6 +28,7 @@
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace controllers::offscreen
@@ -1073,6 +1075,8 @@ namespace controllers::offscreen
             renderHandler->setUIImageDrawList({});
             prepareUIImagesWorldSpace(ctx);
         }
+
+        prepareUILabels(ctx);
     }
 
     void FramePreparationSystem::prepareUIImagesScreenSpace(const FrameContext& ctx)
@@ -1858,5 +1862,318 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUICanvasImageDrawList(std::move(drawList));
+    }
+
+    void FramePreparationSystem::prepareUILabels(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+        if (ctx.playModeActive)
+        {
+            prepareUILabelsScreenSpace(ctx);
+        }
+        else
+        {
+            // Editor mode: world-space text on canvas via TextPipeline
+            renderHandler->setUITextDrawList({});
+            prepareUILabelsWorldSpace(ctx);
+        }
+    }
+
+    void FramePreparationSystem::prepareUILabelsWorldSpace(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initTextPipeline();
+
+        if (!renderHandler->isTextPipelineInitialized())
+        {
+            return;
+        }
+
+        std::vector<render::text::TextRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UILabelComponent, components::UIRectComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& labelComp = view.get<components::UILabelComponent>(entity);
+            if (labelComp.text.empty() || labelComp.fontPath.empty())
+            {
+                continue;
+            }
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find canvas entity with WorldTransformComponent
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity canvasEntity = entt::null;
+            entt::entity current = entity;
+
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                {
+                    break;
+                }
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    canvasEntity = parentEntity;
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+            {
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+                canvasEntity = entity;
+            }
+
+            if (!canvas || canvasEntity == entt::null)
+            {
+                continue;
+            }
+
+            if (!registry.all_of<components::WorldTransformComponent>(canvasEntity))
+            {
+                continue;
+            }
+
+            const auto& canvasWorldTransform = registry.get<components::WorldTransformComponent>(canvasEntity);
+
+            // Canvas world dimensions
+            float canvasW = canvas->referenceWidth / canvas->pixelsPerUnit;
+            float canvasH = canvas->referenceHeight / canvas->pixelsPerUnit;
+
+            // Label rect in canvas pixels
+            float anchorLeft = rectComp.anchorMin.x * canvas->referenceWidth;
+            float anchorRight = rectComp.anchorMax.x * canvas->referenceWidth;
+            float anchorBottom = rectComp.anchorMin.y * canvas->referenceHeight;
+            float anchorTop = rectComp.anchorMax.y * canvas->referenceHeight;
+
+            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+
+            // Top-left of rect in canvas pixels (Y-up: top = cy + h/2)
+            float tlX = cx - w * 0.5f;
+            float tlY = cy + h * 0.5f;
+
+            // Normalize to unit quad space (-0.5..0.5)
+            float localTLX = tlX / canvas->referenceWidth - 0.5f;
+            float localTLY = tlY / canvas->referenceHeight - 0.5f;
+
+            // Compute world position of label top-left corner
+            // Text shader extends RIGHT (cameraRight) and DOWN (-cameraUp) from anchor
+            glm::mat4 canvasScaled = canvasWorldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+
+            glm::vec4 worldPos = canvasScaled * glm::vec4(localTLX, localTLY, 0.002f, 1.0f);
+
+            // The world-space text shader applies quadratic scaling:
+            //   worldScale = fontSize / 32, applied on top of layout scale (fontSize/32)
+            //   effective size ∝ (fontSize/32)²
+            // To match screen-space proportions: worldFontSize = sqrt(32 * labelFontSize / ppu)
+            float worldFontSize = std::sqrt(32.0f * labelComp.fontSize / canvas->pixelsPerUnit);
+
+            // Convert rect width from canvas pixels to layout-pixel units
+            // Layout uses scale = worldFontSize/32, shader converts by worldFontSize/32
+            // Always pass rect width: used for word-wrapping AND horizontal alignment
+            float worldMaxWidth = (w > 0.0f)
+                ? (w / canvas->pixelsPerUnit) * 32.0f / worldFontSize
+                : 0.0f;
+
+            // Convert letterSpacing from screen-pixel scale to world layout scale
+            float worldLetterSpacing = (labelComp.fontSize > 0.0f)
+                ? labelComp.letterSpacing * worldFontSize / labelComp.fontSize
+                : 0.0f;
+
+            // Convert rect height to layout-pixel units (same conversion as maxWidth)
+            float worldRectHeight = (h / canvas->pixelsPerUnit) * 32.0f / worldFontSize;
+
+            render::text::TextRenderData renderData;
+            renderData.fontPath = labelComp.fontPath;
+            renderData.text = labelComp.text;
+            renderData.worldPosition = glm::vec3(worldPos);
+            renderData.fontSize = worldFontSize;
+            renderData.color = labelComp.color;
+            renderData.renderMode = 1; // WorldSpace
+            renderData.entityId = static_cast<uint32_t>(entity);
+            renderData.lineSpacing = labelComp.lineSpacing;
+            renderData.letterSpacing = worldLetterSpacing;
+            renderData.maxWidth = worldMaxWidth;
+            renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
+            renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
+            renderData.rectHeight = worldRectHeight;
+
+            drawList.push_back(std::move(renderData));
+        }
+
+        if (!drawList.empty())
+        {
+            renderHandler->appendTextDrawList(std::move(drawList));
+        }
+    }
+
+    void FramePreparationSystem::prepareUILabelsScreenSpace(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initUITextPipeline();
+
+        if (!renderHandler->isUITextPipelineInitialized())
+        {
+            renderHandler->setUITextDrawList({});
+            return;
+        }
+
+        if (ctx.viewportWidth == 0 || ctx.viewportHeight == 0)
+        {
+            renderHandler->setUITextDrawList({});
+            return;
+        }
+
+        std::vector<render::ui::UITextRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UILabelComponent, components::UIRectComponent>();
+
+        float viewportW = static_cast<float>(ctx.viewportWidth);
+        float viewportH = static_cast<float>(ctx.viewportHeight);
+
+        // --- Pre-compute scroll container info (reads already-updated scrollOffset) ---
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                if (registry.all_of<components::NameComponent>(scrollEntity))
+                {
+                    if (!registry.get<components::NameComponent>(scrollEntity).isActive)
+                        continue;
+                }
+
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float vw = viewportW;
+                float vh = viewportH;
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = scrollView.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+                glm::vec4 scissor(sx, sy, sw, sh);
+
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = {scrollComp.scrollOffset, scissor};
+            }
+        }
+
+        // --- Emit labels ---
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+            const auto& labelComp = view.get<components::UILabelComponent>(entity);
+            if (labelComp.text.empty() || labelComp.fontPath.empty())
+                continue;
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy for canvas + scroll ancestor
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            if (!canvas) continue;
+
+            // Resolve pixel rect
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(viewportW / canvas->referenceWidth, viewportH / canvas->referenceHeight);
+
+            PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
+
+            // Apply scroll offset + scissor
+            glm::vec4 scissor{0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                    scissor = it->second.scissorRect;
+                }
+            }
+
+            // Build UITextRenderData
+            render::ui::UITextRenderData renderData;
+            renderData.fontPath = labelComp.fontPath;
+            renderData.text = labelComp.text;
+            renderData.fontSize = labelComp.fontSize * scale;
+            renderData.color = labelComp.color;
+            renderData.lineSpacing = labelComp.lineSpacing;
+            renderData.letterSpacing = labelComp.letterSpacing;
+            renderData.wordWrap = labelComp.wordWrap;
+            renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
+            renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
+            renderData.overflow = static_cast<uint8_t>(labelComp.overflow);
+            renderData.position = glm::vec2(rect.x, rect.y);
+            renderData.size = glm::vec2(rect.w, rect.h);
+            renderData.scissorRect = scissor;
+            drawList.push_back(std::move(renderData));
+        }
+
+        renderHandler->setUITextDrawList(std::move(drawList));
     }
 }

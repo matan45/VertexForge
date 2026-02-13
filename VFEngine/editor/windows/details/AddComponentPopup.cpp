@@ -11,8 +11,8 @@ namespace windows::details
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
-                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUIScroll,
-                                 bool hasUILayoutGroup)
+                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
+                                 bool hasUIScroll, bool hasUILayoutGroup)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -279,6 +279,20 @@ namespace windows::details
                 }
             }
 
+            if (!hasUILabel)
+            {
+                if (ImGui::Selectable("  UI Label"))
+                {
+                    events::ui::AddUILabelComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Text label with font, alignment, and overflow settings");
+                }
+            }
+
             if (!hasUIScroll)
             {
                 if (ImGui::Selectable("  UI Scroll"))
@@ -310,7 +324,7 @@ namespace windows::details
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
-                           hasUIRect && hasUIImage && hasUIScroll && hasUILayoutGroup;
+                           hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup;
             if (allAdded)
             {
                 ImGui::Spacing();

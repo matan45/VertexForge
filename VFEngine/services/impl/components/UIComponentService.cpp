@@ -28,11 +28,6 @@ namespace services {
 
         sceneEntity.addComponent<components::UICanvasComponent>();
 
-        // Auto-add UIRectComponent alongside canvas
-        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
-            sceneEntity.addComponent<components::UIRectComponent>();
-        }
-
         return true;
     }
 
