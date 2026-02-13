@@ -167,6 +167,7 @@ namespace render
         text::TextPipeline* getTextPipeline() const { return textPipeline.get(); }
         bool isTextPipelineInitialized() const { return textPipelineInitialized; }
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+        void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
 
         void initUIRenderPipeline();
         ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }

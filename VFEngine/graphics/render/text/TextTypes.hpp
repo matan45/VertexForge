@@ -133,5 +133,8 @@ namespace render::text
         float lineSpacing;
         float letterSpacing;
         float maxWidth;
+        uint8_t horizontalAlignment = 0; // 0=Left, 1=Center, 2=Right
+        uint8_t verticalAlignment = 0;   // 0=Top, 1=Middle, 2=Bottom
+        float rectHeight = 0.0f;         // Bounding rect height for vertical alignment
     };
 }

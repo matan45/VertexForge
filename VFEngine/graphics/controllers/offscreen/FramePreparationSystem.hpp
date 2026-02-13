@@ -71,6 +71,7 @@ namespace controllers::offscreen
         void prepareUIImagesScreenSpace(const FrameContext& ctx);
         void prepareUIImagesWorldSpace(const FrameContext& ctx);
         void prepareUILabelsScreenSpace(const FrameContext& ctx);
+        void prepareUILabelsWorldSpace(const FrameContext& ctx);
         
     };
 }

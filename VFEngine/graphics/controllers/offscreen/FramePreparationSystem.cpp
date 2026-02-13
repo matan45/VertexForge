@@ -28,6 +28,7 @@
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace controllers::offscreen
@@ -1872,8 +1873,159 @@ namespace controllers::offscreen
         }
         else
         {
-            // Editor mode: no screen-space label rendering yet
+            // Editor mode: world-space text on canvas via TextPipeline
             renderHandler->setUITextDrawList({});
+            prepareUILabelsWorldSpace(ctx);
+        }
+    }
+
+    void FramePreparationSystem::prepareUILabelsWorldSpace(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initTextPipeline();
+
+        if (!renderHandler->isTextPipelineInitialized())
+        {
+            return;
+        }
+
+        std::vector<render::text::TextRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UILabelComponent, components::UIRectComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& labelComp = view.get<components::UILabelComponent>(entity);
+            if (labelComp.text.empty() || labelComp.fontPath.empty())
+            {
+                continue;
+            }
+
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+
+            // Walk parent hierarchy to find canvas entity with WorldTransformComponent
+            const components::UICanvasComponent* canvas = nullptr;
+            entt::entity canvasEntity = entt::null;
+            entt::entity current = entity;
+
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                {
+                    break;
+                }
+
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                {
+                    canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                    canvasEntity = parentEntity;
+                    break;
+                }
+                current = parentEntity;
+            }
+
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+            {
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+                canvasEntity = entity;
+            }
+
+            if (!canvas || canvasEntity == entt::null)
+            {
+                continue;
+            }
+
+            if (!registry.all_of<components::WorldTransformComponent>(canvasEntity))
+            {
+                continue;
+            }
+
+            const auto& canvasWorldTransform = registry.get<components::WorldTransformComponent>(canvasEntity);
+
+            // Canvas world dimensions
+            float canvasW = canvas->referenceWidth / canvas->pixelsPerUnit;
+            float canvasH = canvas->referenceHeight / canvas->pixelsPerUnit;
+
+            // Label rect in canvas pixels
+            float anchorLeft = rectComp.anchorMin.x * canvas->referenceWidth;
+            float anchorRight = rectComp.anchorMax.x * canvas->referenceWidth;
+            float anchorBottom = rectComp.anchorMin.y * canvas->referenceHeight;
+            float anchorTop = rectComp.anchorMax.y * canvas->referenceHeight;
+
+            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+
+            // Top-left of rect in canvas pixels (Y-up: top = cy + h/2)
+            float tlX = cx - w * 0.5f;
+            float tlY = cy + h * 0.5f;
+
+            // Normalize to unit quad space (-0.5..0.5)
+            float localTLX = tlX / canvas->referenceWidth - 0.5f;
+            float localTLY = tlY / canvas->referenceHeight - 0.5f;
+
+            // Compute world position of label top-left corner
+            // Text shader extends RIGHT (cameraRight) and DOWN (-cameraUp) from anchor
+            glm::mat4 canvasScaled = canvasWorldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+
+            glm::vec4 worldPos = canvasScaled * glm::vec4(localTLX, localTLY, 0.002f, 1.0f);
+
+            // The world-space text shader applies quadratic scaling:
+            //   worldScale = fontSize / 32, applied on top of layout scale (fontSize/32)
+            //   effective size ∝ (fontSize/32)²
+            // To match screen-space proportions: worldFontSize = sqrt(32 * labelFontSize / ppu)
+            float worldFontSize = std::sqrt(32.0f * labelComp.fontSize / canvas->pixelsPerUnit);
+
+            // Convert rect width from canvas pixels to layout-pixel units
+            // Layout uses scale = worldFontSize/32, shader converts by worldFontSize/32
+            // Always pass rect width: used for word-wrapping AND horizontal alignment
+            float worldMaxWidth = (w > 0.0f)
+                ? (w / canvas->pixelsPerUnit) * 32.0f / worldFontSize
+                : 0.0f;
+
+            // Convert letterSpacing from screen-pixel scale to world layout scale
+            float worldLetterSpacing = (labelComp.fontSize > 0.0f)
+                ? labelComp.letterSpacing * worldFontSize / labelComp.fontSize
+                : 0.0f;
+
+            // Convert rect height to layout-pixel units (same conversion as maxWidth)
+            float worldRectHeight = (h / canvas->pixelsPerUnit) * 32.0f / worldFontSize;
+
+            render::text::TextRenderData renderData;
+            renderData.fontPath = labelComp.fontPath;
+            renderData.text = labelComp.text;
+            renderData.worldPosition = glm::vec3(worldPos);
+            renderData.fontSize = worldFontSize;
+            renderData.color = labelComp.color;
+            renderData.renderMode = 1; // WorldSpace
+            renderData.entityId = static_cast<uint32_t>(entity);
+            renderData.lineSpacing = labelComp.lineSpacing;
+            renderData.letterSpacing = worldLetterSpacing;
+            renderData.maxWidth = worldMaxWidth;
+            renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
+            renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
+            renderData.rectHeight = worldRectHeight;
+
+            drawList.push_back(std::move(renderData));
+        }
+
+        if (!drawList.empty())
+        {
+            renderHandler->appendTextDrawList(std::move(drawList));
         }
     }
 
@@ -2008,7 +2160,7 @@ namespace controllers::offscreen
             render::ui::UITextRenderData renderData;
             renderData.fontPath = labelComp.fontPath;
             renderData.text = labelComp.text;
-            renderData.fontSize = labelComp.fontSize;
+            renderData.fontSize = labelComp.fontSize * scale;
             renderData.color = labelComp.color;
             renderData.lineSpacing = labelComp.lineSpacing;
             renderData.letterSpacing = labelComp.letterSpacing;

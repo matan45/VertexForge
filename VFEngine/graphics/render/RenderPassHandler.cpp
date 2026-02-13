@@ -342,6 +342,17 @@ namespace render
         }
     }
 
+    void RenderPassHandler::appendTextDrawList(std::vector<text::TextRenderData>&& textEntities)
+    {
+        currentTextDrawList.insert(currentTextDrawList.end(),
+                                   std::make_move_iterator(textEntities.begin()),
+                                   std::make_move_iterator(textEntities.end()));
+        if (textPipelineInitialized && textPipeline)
+        {
+            textPipeline->setTextDrawList(currentTextDrawList);
+        }
+    }
+
     void RenderPassHandler::initUIRenderPipeline()
     {
         if (uiPipelineInitialized)
