@@ -1,8 +1,7 @@
 #pragma once
 
-#include "TextTypes.hpp"
-#include "TextBufferManager.hpp"
-#include "TextFontCache.hpp"
+#include "UITextRenderTypes.hpp"
+#include "UITextBufferManager.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -18,62 +17,69 @@ namespace core
 
 namespace render::text
 {
-    struct FontBatch
+    class TextFontCache;
+}
+
+namespace render::ui
+{
+    struct UITextFontBatch
     {
         std::string fontPath;
         uint32_t firstInstance = 0;
         uint32_t instanceCount = 0;
     };
 
-    class TextPipeline
+    struct UITextScissorGroup
+    {
+        glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        std::vector<UITextFontBatch> batches;
+    };
+
+    class UITextPipeline
     {
     private:
         core::Device& device;
         core::SwapChain& swapChain;
         core::OffscreenResources& offscreenResources;
+        render::text::TextFontCache& fontCache;
 
         bool initialized = false;
 
-        std::shared_ptr<core::Shader> textShader;
+        std::shared_ptr<core::Shader> uiTextShader;
 
         vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
+        vk::DescriptorSet defaultDescriptorSet;
 
         std::vector<vk::Framebuffer> framebuffers;
 
-        TextBufferManager bufferManager;
-        TextFontCache fontCache;
+        UITextBufferManager bufferManager;
 
         // Per-font descriptor sets
         std::unordered_map<std::string, vk::DescriptorSet> fontDescriptorSets;
-        vk::DescriptorSet defaultDescriptorSet;
         static constexpr uint32_t MAX_FONT_DESCRIPTORS = 32;
 
-        std::vector<FontBatch> fontBatches;
+        std::vector<UITextScissorGroup> scissorGroups;
         uint32_t totalInstanceCount = 0;
 
     public:
-        explicit TextPipeline(core::Device& device, core::SwapChain& swapChain,
-                              core::OffscreenResources& offscreenResources);
-        ~TextPipeline();
+        explicit UITextPipeline(core::Device& device, core::SwapChain& swapChain,
+                                core::OffscreenResources& offscreenResources,
+                                render::text::TextFontCache& fontCache);
+        ~UITextPipeline();
 
         void init();
         void recreate();
         void cleanUp();
 
-        void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos) const;
-
-        void setTextDrawList(const std::vector<TextRenderData>& textEntities);
+        void setUITextDrawList(const std::vector<UITextRenderData>& labels);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
-
-        TextFontCache& getFontCache() { return fontCache; }
 
     private:
         void loadShader();
