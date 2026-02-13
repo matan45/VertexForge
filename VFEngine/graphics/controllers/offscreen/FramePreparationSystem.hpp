@@ -63,12 +63,14 @@ namespace controllers::offscreen
         void prepareClusterDebug(const FrameContext& ctx);
         void prepareUICanvasOutlines(const FrameContext& ctx);
         void prepareUIImages(const FrameContext& ctx);
+        void prepareUILabels(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
 
     private:
         void prepareUIImagesScreenSpace(const FrameContext& ctx);
         void prepareUIImagesWorldSpace(const FrameContext& ctx);
+        void prepareUILabelsScreenSpace(const FrameContext& ctx);
         
     };
 }

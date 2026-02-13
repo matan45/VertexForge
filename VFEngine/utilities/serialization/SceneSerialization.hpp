@@ -153,6 +153,9 @@ namespace serialization
         static json serializeUILayoutGroup(const components::UILayoutGroupComponent& layoutGroup);
         static void deserializeUILayoutGroup(const json& j, components::UILayoutGroupComponent& layoutGroup);
 
+        static json serializeUILabel(const components::UILabelComponent& label);
+        static void deserializeUILabel(const json& j, components::UILabelComponent& label);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 
@@ -164,5 +167,17 @@ namespace serialization
 
         static std::string childAlignmentToString(components::ChildAlignment alignment);
         static components::ChildAlignment stringToChildAlignment(const std::string& str);
+
+        static std::string horizontalAlignmentToString(components::HorizontalAlignment alignment);
+        static components::HorizontalAlignment stringToHorizontalAlignment(const std::string& str);
+
+        static std::string verticalAlignmentToString(components::VerticalAlignment alignment);
+        static components::VerticalAlignment stringToVerticalAlignment(const std::string& str);
+
+        static std::string textOverflowToString(components::TextOverflow overflow);
+        static components::TextOverflow stringToTextOverflow(const std::string& str);
+
+        static std::string fontStyleToString(components::FontStyle style);
+        static components::FontStyle stringToFontStyle(const std::string& str);
     };
 }

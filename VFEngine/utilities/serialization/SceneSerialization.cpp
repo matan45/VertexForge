@@ -206,6 +206,12 @@ namespace serialization
                 entity.getComponent<components::UILayoutGroupComponent>());
         }
 
+        if (entity.hasComponent<components::UILabelComponent>())
+        {
+            componentsJson["uiLabel"] = serializeUILabel(
+                entity.getComponent<components::UILabelComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1761,6 +1767,124 @@ namespace serialization
         return components::ChildAlignment::Start;
     }
 
+    json SceneSerialization::serializeUILabel(const components::UILabelComponent& label)
+    {
+        json j;
+        if (!label.text.empty())
+        {
+            j["text"] = label.text;
+        }
+        if (!label.fontPath.empty())
+        {
+            j["fontPath"] = label.fontPath;
+        }
+        j["fontSize"] = label.fontSize;
+        j["fontStyle"] = fontStyleToString(label.fontStyle);
+        j["color"] = json::array({label.color.r, label.color.g, label.color.b, label.color.a});
+        j["horizontalAlignment"] = horizontalAlignmentToString(label.horizontalAlignment);
+        j["verticalAlignment"] = verticalAlignmentToString(label.verticalAlignment);
+        j["overflow"] = textOverflowToString(label.overflow);
+        j["wordWrap"] = label.wordWrap;
+        j["lineSpacing"] = label.lineSpacing;
+        j["letterSpacing"] = label.letterSpacing;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUILabel(const json& j, components::UILabelComponent& label)
+    {
+        label.text = j.value("text", std::string("Label"));
+        label.fontPath = j.value("fontPath", std::string(""));
+        label.fontSize = j.value("fontSize", 16.0f);
+        label.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
+        if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 4)
+        {
+            label.color = glm::vec4(
+                j["color"][0].get<float>(), j["color"][1].get<float>(),
+                j["color"][2].get<float>(), j["color"][3].get<float>()
+            );
+        }
+        label.horizontalAlignment = stringToHorizontalAlignment(j.value("horizontalAlignment", "left"));
+        label.verticalAlignment = stringToVerticalAlignment(j.value("verticalAlignment", "top"));
+        label.overflow = stringToTextOverflow(j.value("overflow", "overflow"));
+        label.wordWrap = j.value("wordWrap", true);
+        label.lineSpacing = j.value("lineSpacing", 1.0f);
+        label.letterSpacing = j.value("letterSpacing", 0.0f);
+    }
+
+    std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::HorizontalAlignment::Left: return "left";
+        case components::HorizontalAlignment::Center: return "center";
+        case components::HorizontalAlignment::Right: return "right";
+        default: return "left";
+        }
+    }
+
+    components::HorizontalAlignment SceneSerialization::stringToHorizontalAlignment(const std::string& str)
+    {
+        if (str == "center") return components::HorizontalAlignment::Center;
+        if (str == "right") return components::HorizontalAlignment::Right;
+        return components::HorizontalAlignment::Left;
+    }
+
+    std::string SceneSerialization::verticalAlignmentToString(components::VerticalAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::VerticalAlignment::Top: return "top";
+        case components::VerticalAlignment::Middle: return "middle";
+        case components::VerticalAlignment::Bottom: return "bottom";
+        default: return "top";
+        }
+    }
+
+    components::VerticalAlignment SceneSerialization::stringToVerticalAlignment(const std::string& str)
+    {
+        if (str == "middle") return components::VerticalAlignment::Middle;
+        if (str == "bottom") return components::VerticalAlignment::Bottom;
+        return components::VerticalAlignment::Top;
+    }
+
+    std::string SceneSerialization::textOverflowToString(components::TextOverflow overflow)
+    {
+        switch (overflow)
+        {
+        case components::TextOverflow::Overflow: return "overflow";
+        case components::TextOverflow::Clip: return "clip";
+        case components::TextOverflow::Ellipsis: return "ellipsis";
+        default: return "overflow";
+        }
+    }
+
+    components::TextOverflow SceneSerialization::stringToTextOverflow(const std::string& str)
+    {
+        if (str == "clip") return components::TextOverflow::Clip;
+        if (str == "ellipsis") return components::TextOverflow::Ellipsis;
+        return components::TextOverflow::Overflow;
+    }
+
+    std::string SceneSerialization::fontStyleToString(components::FontStyle style)
+    {
+        switch (style)
+        {
+        case components::FontStyle::Normal: return "normal";
+        case components::FontStyle::Bold: return "bold";
+        case components::FontStyle::Italic: return "italic";
+        case components::FontStyle::BoldItalic: return "boldItalic";
+        default: return "normal";
+        }
+    }
+
+    components::FontStyle SceneSerialization::stringToFontStyle(const std::string& str)
+    {
+        if (str == "bold") return components::FontStyle::Bold;
+        if (str == "italic") return components::FontStyle::Italic;
+        if (str == "boldItalic") return components::FontStyle::BoldItalic;
+        return components::FontStyle::Normal;
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -2007,6 +2131,12 @@ namespace serialization
             {
                 auto& layoutGroupComp = entity.addOrReplaceComponent<components::UILayoutGroupComponent>();
                 deserializeUILayoutGroup(componentsJson["uiLayoutGroup"], layoutGroupComp);
+            }
+
+            if (componentsJson.contains("uiLabel"))
+            {
+                auto& labelComp = entity.addOrReplaceComponent<components::UILabelComponent>();
+                deserializeUILabel(componentsJson["uiLabel"], labelComp);
             }
         }
 
