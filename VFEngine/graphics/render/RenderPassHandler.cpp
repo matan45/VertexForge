@@ -13,6 +13,8 @@
 #include "text/TextTypes.hpp"
 #include "ui/UIRenderPipeline.hpp"
 #include "ui/UIRenderTypes.hpp"
+#include "ui/UITextPipeline.hpp"
+#include "ui/UITextRenderTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
@@ -42,6 +44,7 @@ namespace render
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
         , textPipeline{std::make_unique<text::TextPipeline>(device, swapChain, offscreenResources)}
         , uiPipeline{std::make_unique<ui::UIRenderPipeline>(device, swapChain, offscreenResources)}
+        , uiTextPipeline{std::make_unique<ui::UITextPipeline>(device, swapChain, offscreenResources, textPipeline->getFontCache())}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
@@ -339,6 +342,17 @@ namespace render
         }
     }
 
+    void RenderPassHandler::appendTextDrawList(std::vector<text::TextRenderData>&& textEntities)
+    {
+        currentTextDrawList.insert(currentTextDrawList.end(),
+                                   std::make_move_iterator(textEntities.begin()),
+                                   std::make_move_iterator(textEntities.end()));
+        if (textPipelineInitialized && textPipeline)
+        {
+            textPipeline->setTextDrawList(currentTextDrawList);
+        }
+    }
+
     void RenderPassHandler::initUIRenderPipeline()
     {
         if (uiPipelineInitialized)
@@ -356,6 +370,29 @@ namespace render
         if (uiPipelineInitialized && uiPipeline)
         {
             uiPipeline->setUIImageDrawList(currentUIImageDrawList);
+        }
+    }
+
+    void RenderPassHandler::initUITextPipeline()
+    {
+        if (uiTextPipelineInitialized)
+        {
+            return;
+        }
+
+        // Ensure TextPipeline is initialized (font cache must be ready)
+        initTextPipeline();
+
+        uiTextPipeline->init();
+        uiTextPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setUITextDrawList(std::vector<ui::UITextRenderData>&& labels)
+    {
+        currentUITextDrawList = std::move(labels);
+        if (uiTextPipelineInitialized && uiTextPipeline)
+        {
+            uiTextPipeline->setUITextDrawList(currentUITextDrawList);
         }
     }
 
@@ -824,6 +861,11 @@ namespace render
             uiPipeline->recreate();
         }
 
+        if (uiTextPipelineInitialized)
+        {
+            uiTextPipeline->recreate();
+        }
+
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -877,6 +919,11 @@ namespace render
         if (uiPipelineInitialized)
         {
             uiPipeline->cleanUp();
+        }
+
+        if (uiTextPipelineInitialized)
+        {
+            uiTextPipeline->cleanUp();
         }
 
         if (debugRendererInitialized)
@@ -1118,6 +1165,12 @@ namespace render
         if (uiPipelineInitialized && !currentUIImageDrawList.empty())
         {
             uiPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
+        // UI text overlay (after UI images, text renders on top)
+        if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
+        {
+            uiTextPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
     }
 

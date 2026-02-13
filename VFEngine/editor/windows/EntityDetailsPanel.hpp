@@ -23,6 +23,7 @@
 #include "details/UICanvasDrawer.hpp"
 #include "details/UIRectDrawer.hpp"
 #include "details/UIImageDrawer.hpp"
+#include "details/UILabelDrawer.hpp"
 #include "details/UIScrollDrawer.hpp"
 #include "details/UILayoutGroupDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
@@ -55,6 +56,7 @@ namespace windows
         details::UICanvasDrawer uiCanvasDrawer;
         details::UIRectDrawer uiRectDrawer;
         details::UIImageDrawer uiImageDrawer;
+        details::UILabelDrawer uiLabelDrawer;
         details::UIScrollDrawer uiScrollDrawer;
         details::UILayoutGroupDrawer uiLayoutGroupDrawer;
         details::AddComponentPopup addComponentPopup;

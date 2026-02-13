@@ -57,6 +57,7 @@ namespace services {
         UIImage,
         UIScroll,
         UILayoutGroup,
+        UILabel,
     };
 
 }

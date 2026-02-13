@@ -214,4 +214,49 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUILayoutGroupData"; }
     };
 
+    // ============================================
+    // UI Label Commands
+    // ============================================
+
+    struct AddUILabelComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUILabelComponent"; }
+    };
+
+    struct RemoveUILabelComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUILabelComponent"; }
+    };
+
+    struct SetUILabelDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UILabelData labelData;
+
+        std::string_view getName() const override { return "SetUILabelData"; }
+    };
+
+    // ============================================
+    // UI Label Queries
+    // ============================================
+
+    struct HasUILabelComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUILabelComponent"; }
+    };
+
+    struct GetUILabelDataQuery : IQuery<std::optional<services::UILabelData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUILabelData"; }
+    };
+
+    struct GetUILabelPreferredSizeQuery : IQuery<std::optional<glm::vec2>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUILabelPreferredSize"; }
+    };
+
 }

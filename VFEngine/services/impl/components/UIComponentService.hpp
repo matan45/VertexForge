@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <optional>
 
@@ -59,6 +60,14 @@ namespace services {
         bool hasUILayoutGroupComponent(EntityHandle entity) const;
         std::optional<UILayoutGroupData> getUILayoutGroupData(EntityHandle entity) const;
         bool setUILayoutGroupData(EntityHandle entity, const UILayoutGroupData& layoutGroupData);
+
+        // UI Label Operations
+        bool addUILabelComponent(EntityHandle entity);
+        bool removeUILabelComponent(EntityHandle entity);
+        bool hasUILabelComponent(EntityHandle entity) const;
+        std::optional<UILabelData> getUILabelData(EntityHandle entity) const;
+        bool setUILabelData(EntityHandle entity, const UILabelData& labelData);
+        std::optional<glm::vec2> getUILabelPreferredSize(EntityHandle entity) const;
     };
 
 }

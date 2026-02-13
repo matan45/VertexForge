@@ -233,6 +233,9 @@
     <ClInclude Include="render\ui\UIRenderBufferManager.hpp" />
     <ClInclude Include="render\ui\UIRenderPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderTypes.hpp" />
+    <ClInclude Include="render\ui\UITextBufferManager.hpp" />
+    <ClInclude Include="render\ui\UITextPipeline.hpp" />
+    <ClInclude Include="render\ui\UITextRenderTypes.hpp" />
     <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
@@ -363,6 +366,8 @@
     <ClCompile Include="render\tools\UICanvasImageRenderer.cpp" />
     <ClCompile Include="render\ui\UIRenderBufferManager.cpp" />
     <ClCompile Include="render\ui\UIRenderPipeline.cpp" />
+    <ClCompile Include="render\ui\UITextBufferManager.cpp" />
+    <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
@@ -404,6 +409,7 @@
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays.glsl" />
     <None Include="..\..\resources\shaders\postprocess\god_rays_composite.glsl" />
@@ -422,6 +428,7 @@
     <None Include="..\..\resources\shaders\tools\ui_canvas_image.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
+    <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
