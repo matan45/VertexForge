@@ -102,4 +102,9 @@ public class UI {
     public static function setCheckboxInteractable(int entityId, bool interactable): void {
         _native_ui_setCheckboxInteractable(entityId, interactable);
     }
+
+    // Get the label text of a checkbox's child UILabel (useful in onCheckboxToggled callbacks)
+    public static function getCheckboxLabelText(int entityId): String {
+        return _native_ui_getCheckboxLabelText(entityId);
+    }
 }

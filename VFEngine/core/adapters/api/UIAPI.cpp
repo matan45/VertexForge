@@ -5,6 +5,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/UIEvents.hpp"
+#include "../../../services/events/SceneEvents.hpp"
 
 namespace core::api
 {
@@ -436,6 +437,47 @@ namespace core::api
                 dispatcher.execute(setCmd);
 
                 return value::Value();
+            });
+
+        // _native_ui_getCheckboxLabelText(entityId) -> String
+        // Walks children of the checkbox entity to find a UILabel and returns its text
+        interpreter->registerNativeFunction("_native_ui_getCheckboxLabelText",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(std::string(""));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getCheckboxLabelText");
+                auto handle = intToEntity(entityId);
+
+                // Get entity data to access children
+                events::scene::GetEntityQuery entityQuery;
+                entityQuery.entity = handle;
+                auto entityData = dispatcher.query(entityQuery);
+                if (!entityData.has_value())
+                {
+                    return value::Value(std::string(""));
+                }
+
+                // Walk children looking for one with UILabel
+                for (const auto& childHandle : entityData->children)
+                {
+                    events::ui::HasUILabelComponentQuery hasLabelQuery;
+                    hasLabelQuery.entity = childHandle;
+                    if (dispatcher.query(hasLabelQuery))
+                    {
+                        events::ui::GetUILabelDataQuery getLabelQuery;
+                        getLabelQuery.entity = childHandle;
+                        auto labelData = dispatcher.query(getLabelQuery);
+                        if (labelData.has_value())
+                        {
+                            return value::Value(labelData->text);
+                        }
+                    }
+                }
+
+                return value::Value(std::string(""));
             });
     }
 }
