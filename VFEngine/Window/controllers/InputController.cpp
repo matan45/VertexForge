@@ -18,6 +18,20 @@ namespace window
         }
     }
 
+    void InputController::charCallback(GLFWwindow* window, unsigned int codepoint)
+    {
+        auto* controller = getControllerForWindow(window);
+        if (controller)
+        {
+            // Chain to previous callback (e.g. ImGui) first
+            if (controller->previousCharCallback)
+            {
+                controller->previousCharCallback(window, codepoint);
+            }
+            controller->charBuffer.push_back(static_cast<uint32_t>(codepoint));
+        }
+    }
+
     InputController* InputController::getControllerForWindow(GLFWwindow* window)
     {
         auto it = controllerRegistry.find(window);
@@ -34,6 +48,7 @@ namespace window
             controllerRegistry[glfwWindow] = this;
             // Save previous callback (e.g. ImGui's) for chaining
             previousScrollCallback = glfwSetScrollCallback(glfwWindow, scrollCallback);
+            previousCharCallback = glfwSetCharCallback(glfwWindow, charCallback);
         }
     }
 
@@ -42,6 +57,7 @@ namespace window
         if (glfwWindow)
         {
             glfwSetScrollCallback(glfwWindow, previousScrollCallback);
+            glfwSetCharCallback(glfwWindow, previousCharCallback);
             controllerRegistry.erase(glfwWindow);
         }
     }
@@ -56,6 +72,17 @@ namespace window
     {
         if (!glfwWindow) return false;
         return glfwGetKey(glfwWindow, keyCode) == GLFW_RELEASE;
+    }
+
+    bool InputController::isKeyPressed(int keyCode) const
+    {
+        if (keyCode < 0 || keyCode >= 512) return false;
+        return keyPressed[keyCode];
+    }
+
+    const std::vector<uint32_t>& InputController::getCharInput() const
+    {
+        return frameCharBuffer;
     }
 
     bool InputController::isMouseButtonDown(int button) const
@@ -127,6 +154,18 @@ namespace window
         frameScrollDelta = scrollDelta;
         scrollDelta = glm::vec2(0.0f);
 
+        // Swap character input buffer (same pattern as scroll delta)
+        frameCharBuffer.swap(charBuffer);
+        charBuffer.clear();
+
+        // Key pressed edge detection
+        for (int key = 0; key < 512; ++key)
+        {
+            bool down = (glfwWindow && glfwGetKey(glfwWindow, key) == GLFW_PRESS);
+            keyPressed[key] = down && !wasKeyDown[key];
+            wasKeyDown[key] = down;
+        }
+
         // Double-click detection
         double currentTime = glfwGetTime();
         for (int button = 0; button < 8; ++button)
@@ -155,6 +194,19 @@ namespace window
 
             wasButtonDown[button] = isDown;
         }
+    }
+
+    std::string InputController::getClipboardText() const
+    {
+        if (!glfwWindow) return "";
+        const char* text = glfwGetClipboardString(glfwWindow);
+        return text ? std::string(text) : std::string();
+    }
+
+    void InputController::setClipboardText(const std::string& text)
+    {
+        if (!glfwWindow) return;
+        glfwSetClipboardString(glfwWindow, text.c_str());
     }
 
     void InputController::onScroll(double xoffset, double yoffset)

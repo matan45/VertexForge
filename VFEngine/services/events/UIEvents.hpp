@@ -337,4 +337,77 @@ namespace events::ui {
         std::string_view getName() const override { return "UIButtonHoverExit"; }
     };
 
+    // ============================================
+    // UI TextInput Commands
+    // ============================================
+
+    struct AddUITextInputComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUITextInputComponent"; }
+    };
+
+    struct RemoveUITextInputComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUITextInputComponent"; }
+    };
+
+    struct SetUITextInputDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UITextInputData textInputData;
+
+        std::string_view getName() const override { return "SetUITextInputData"; }
+    };
+
+    // ============================================
+    // UI TextInput Queries
+    // ============================================
+
+    struct HasUITextInputComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUITextInputComponent"; }
+    };
+
+    struct GetUITextInputDataQuery : IQuery<std::optional<services::UITextInputData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUITextInputData"; }
+    };
+
+    // ============================================
+    // UI TextInput Notifications
+    // ============================================
+
+    struct UITextInputSubmitNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        std::string text;
+
+        std::string_view getName() const override { return "UITextInputSubmit"; }
+    };
+
+    struct UITextInputChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        std::string text;
+
+        std::string_view getName() const override { return "UITextInputChanged"; }
+    };
+
+    struct UITextInputFocusedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UITextInputFocused"; }
+    };
+
+    struct UITextInputUnfocusedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UITextInputUnfocused"; }
+    };
+
 }

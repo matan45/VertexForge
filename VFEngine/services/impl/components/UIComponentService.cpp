@@ -717,6 +717,128 @@ namespace services {
         return true;
     }
 
+    // ========== UI TextInput CRUD ==========
+
+    bool UIComponentService::addUITextInputComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UITextInputComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UITextInputComponent>();
+
+        // Auto-add UIRectComponent if missing (text input needs rect for layout/hit-testing)
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        // Auto-add UIImageComponent if missing (text input background)
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            sceneEntity.addComponent<components::UIImageComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUITextInputComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITextInputComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UITextInputComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUITextInputComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UITextInputComponent>();
+    }
+
+    std::optional<UITextInputData> UIComponentService::getUITextInputData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITextInputComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UITextInputComponent>();
+
+        UITextInputData data;
+        data.text = comp.text;
+        data.placeholderText = comp.placeholderText;
+        data.fontPath = comp.fontPath;
+        data.fontSize = comp.fontSize;
+        data.textColor = comp.textColor;
+        data.placeholderColor = comp.placeholderColor;
+        data.normalColor = comp.normalColor;
+        data.hoveredColor = comp.hoveredColor;
+        data.focusedColor = comp.focusedColor;
+        data.disabledColor = comp.disabledColor;
+        data.colorTransitionDuration = comp.colorTransitionDuration;
+        data.interactable = comp.interactable;
+        data.maxLength = comp.maxLength;
+        data.selectionColor = comp.selectionColor;
+        data.caretColor = comp.caretColor;
+        data.caretWidth = comp.caretWidth;
+        data.caretBlinkRate = comp.caretBlinkRate;
+        data.currentState = static_cast<uint8_t>(comp.currentState);
+        return data;
+    }
+
+    bool UIComponentService::setUITextInputData(EntityHandle entity, const UITextInputData& textInputData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITextInputComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UITextInputComponent>();
+        comp.text = textInputData.text;
+        comp.placeholderText = textInputData.placeholderText;
+        comp.fontPath = textInputData.fontPath;
+        comp.fontSize = textInputData.fontSize;
+        comp.textColor = textInputData.textColor;
+        comp.placeholderColor = textInputData.placeholderColor;
+        comp.normalColor = textInputData.normalColor;
+        comp.hoveredColor = textInputData.hoveredColor;
+        comp.focusedColor = textInputData.focusedColor;
+        comp.disabledColor = textInputData.disabledColor;
+        comp.colorTransitionDuration = textInputData.colorTransitionDuration;
+        comp.interactable = textInputData.interactable;
+        comp.maxLength = textInputData.maxLength;
+        comp.selectionColor = textInputData.selectionColor;
+        comp.caretColor = textInputData.caretColor;
+        comp.caretWidth = textInputData.caretWidth;
+        comp.caretBlinkRate = textInputData.caretBlinkRate;
+        comp.currentState = static_cast<components::UITextInputState>(textInputData.currentState);
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -922,6 +1044,33 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIButtonDataQuery>(
             [this](const events::ui::GetUIButtonDataQuery& query) {
                 return getUIButtonData(query.entity);
+            });
+
+        // TextInput commands
+        dispatcher.registerCommandHandler<events::ui::AddUITextInputComponentCommand>(
+            [this](const events::ui::AddUITextInputComponentCommand& cmd) {
+                return addUITextInputComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUITextInputComponentCommand>(
+            [this](const events::ui::RemoveUITextInputComponentCommand& cmd) {
+                return removeUITextInputComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUITextInputDataCommand>(
+            [this](const events::ui::SetUITextInputDataCommand& cmd) {
+                return setUITextInputData(cmd.entity, cmd.textInputData);
+            });
+
+        // TextInput queries
+        dispatcher.registerQueryHandler<events::ui::HasUITextInputComponentQuery>(
+            [this](const events::ui::HasUITextInputComponentQuery& query) {
+                return hasUITextInputComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUITextInputDataQuery>(
+            [this](const events::ui::GetUITextInputDataQuery& query) {
+                return getUITextInputData(query.entity);
             });
     }
 

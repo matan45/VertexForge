@@ -3,6 +3,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include <string>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -37,6 +38,16 @@ namespace controllers::offscreen
         bool leftMouseDown = false;
         bool leftMousePressed = false;   // rising edge (was up, now down)
         bool leftMouseReleased = false;  // falling edge (was down, now up)
+        bool leftMouseDoubleClick = false;
+
+        // Keyboard/text input data (for UITextInput interaction)
+        std::vector<uint32_t> charInput;
+        // Key state query function (key code -> pressed this frame)
+        // Uses GLFW key codes as integer values
+        std::function<bool(int)> isKeyPressed;
+        std::function<bool(int)> isKeyDown;
+        std::function<std::string()> getClipboardText;
+        std::function<void(const std::string&)> setClipboardText;
     };
 
     class FramePreparationSystem
@@ -75,6 +86,9 @@ namespace controllers::offscreen
         void prepareUILabelsScreenSpace(const FrameContext& ctx);
         void prepareUILabelsWorldSpace(const FrameContext& ctx);
         void processUIButtonInteraction(const FrameContext& ctx);
+        void processUITextInputInteraction(const FrameContext& ctx);
 
+        // Track which text input entity is currently focused (-1 = none)
+        entt::entity focusedTextInput = entt::null;
     };
 }

@@ -20,6 +20,10 @@ namespace services {
         
         bool isKeyDown(int keyCode) const override;
         bool isKeyReleased(int keyCode) const override;
+        bool isKeyPressed(int keyCode) const override;
+        const std::vector<uint32_t>& getCharInput() const override;
+        std::string getClipboardText() const override;
+        void setClipboardText(const std::string& text) override;
 
         // Mouse State
         bool isMouseButtonDown(int button) const override;

@@ -159,6 +159,9 @@ namespace serialization
         static json serializeUIButton(const components::UIButtonComponent& button);
         static void deserializeUIButton(const json& j, components::UIButtonComponent& button);
 
+        static json serializeUITextInput(const components::UITextInputComponent& textInput);
+        static void deserializeUITextInput(const json& j, components::UITextInputComponent& textInput);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

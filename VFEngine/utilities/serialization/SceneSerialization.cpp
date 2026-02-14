@@ -218,6 +218,12 @@ namespace serialization
                 entity.getComponent<components::UIButtonComponent>());
         }
 
+        if (entity.hasComponent<components::UITextInputComponent>())
+        {
+            componentsJson["uiTextInput"] = serializeUITextInput(
+                entity.getComponent<components::UITextInputComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1889,6 +1895,74 @@ namespace serialization
         button.interactable = j.value("interactable", true);
     }
 
+    json SceneSerialization::serializeUITextInput(const components::UITextInputComponent& textInput)
+    {
+        json j;
+
+        j["text"] = textInput.text;
+        j["placeholderText"] = textInput.placeholderText;
+
+        if (!textInput.fontPath.empty())
+        {
+            j["fontPath"] = textInput.fontPath;
+        }
+
+        j["fontSize"] = textInput.fontSize;
+        j["textColor"] = json::array({textInput.textColor.r, textInput.textColor.g, textInput.textColor.b, textInput.textColor.a});
+        j["placeholderColor"] = json::array({textInput.placeholderColor.r, textInput.placeholderColor.g, textInput.placeholderColor.b, textInput.placeholderColor.a});
+        j["normalColor"] = json::array({textInput.normalColor.r, textInput.normalColor.g, textInput.normalColor.b, textInput.normalColor.a});
+        j["hoveredColor"] = json::array({textInput.hoveredColor.r, textInput.hoveredColor.g, textInput.hoveredColor.b, textInput.hoveredColor.a});
+        j["focusedColor"] = json::array({textInput.focusedColor.r, textInput.focusedColor.g, textInput.focusedColor.b, textInput.focusedColor.a});
+        j["disabledColor"] = json::array({textInput.disabledColor.r, textInput.disabledColor.g, textInput.disabledColor.b, textInput.disabledColor.a});
+
+        j["colorTransitionDuration"] = textInput.colorTransitionDuration;
+        j["interactable"] = textInput.interactable;
+        j["maxLength"] = textInput.maxLength;
+
+        j["selectionColor"] = json::array({textInput.selectionColor.r, textInput.selectionColor.g, textInput.selectionColor.b, textInput.selectionColor.a});
+        j["caretColor"] = json::array({textInput.caretColor.r, textInput.caretColor.g, textInput.caretColor.b, textInput.caretColor.a});
+        j["caretWidth"] = textInput.caretWidth;
+        j["caretBlinkRate"] = textInput.caretBlinkRate;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITextInput(const json& j, components::UITextInputComponent& textInput)
+    {
+        textInput.text = j.value("text", std::string(""));
+        textInput.placeholderText = j.value("placeholderText", std::string("Enter text..."));
+        textInput.fontPath = j.value("fontPath", std::string(""));
+        textInput.fontSize = j.value("fontSize", 16.0f);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("textColor", textInput.textColor);
+        deserializeVec4("placeholderColor", textInput.placeholderColor);
+        deserializeVec4("normalColor", textInput.normalColor);
+        deserializeVec4("hoveredColor", textInput.hoveredColor);
+        deserializeVec4("focusedColor", textInput.focusedColor);
+        deserializeVec4("disabledColor", textInput.disabledColor);
+        deserializeVec4("selectionColor", textInput.selectionColor);
+        deserializeVec4("caretColor", textInput.caretColor);
+
+        textInput.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        textInput.interactable = j.value("interactable", true);
+        textInput.maxLength = j.value("maxLength", 0);
+        textInput.caretWidth = j.value("caretWidth", 2.0f);
+        textInput.caretBlinkRate = j.value("caretBlinkRate", 0.53f);
+
+        textInput.currentDisplayColor = textInput.normalColor;
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2221,6 +2295,12 @@ namespace serialization
             {
                 auto& buttonComp = entity.addOrReplaceComponent<components::UIButtonComponent>();
                 deserializeUIButton(componentsJson["uiButton"], buttonComp);
+            }
+
+            if (componentsJson.contains("uiTextInput"))
+            {
+                auto& textInputComp = entity.addOrReplaceComponent<components::UITextInputComponent>();
+                deserializeUITextInput(componentsJson["uiTextInput"], textInputComp);
             }
         }
 

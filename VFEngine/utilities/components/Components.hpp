@@ -36,6 +36,7 @@ namespace components
     struct UILayoutGroupComponent;
     struct UILabelComponent;
     struct UIButtonComponent;
+    struct UITextInputComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -43,7 +44,8 @@ namespace components
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
-                                               UILayoutGroupComponent, UILabelComponent, UIButtonComponent>;
+                                               UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
+                                               UITextInputComponent>;
 
     struct WorldTransformComponent
     {
@@ -654,5 +656,50 @@ namespace components
         // Runtime state (NOT serialized)
         UIButtonState currentState = UIButtonState::Normal;
         glm::vec4 currentDisplayColor{1.0f, 1.0f, 1.0f, 1.0f}; // lerped display color
+    };
+
+    enum class UITextInputState : uint8_t
+    {
+        Normal,
+        Hovered,
+        Focused,
+        Disabled
+    };
+
+    struct UITextInputComponent
+    {
+        // Config (serialized)
+        std::string text;
+        std::string placeholderText = "Enter text...";
+        std::string fontPath;
+        float fontSize = 16.0f;
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 placeholderColor{0.5f, 0.5f, 0.5f, 0.7f};
+
+        // Per-state background colors
+        glm::vec4 normalColor{0.2f, 0.2f, 0.2f, 1.0f};
+        glm::vec4 hoveredColor{0.25f, 0.25f, 0.25f, 1.0f};
+        glm::vec4 focusedColor{0.15f, 0.15f, 0.3f, 1.0f};
+        glm::vec4 disabledColor{0.15f, 0.15f, 0.15f, 0.5f};
+
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+        int maxLength = 0; // 0 = unlimited
+
+        // Caret and selection
+        glm::vec4 selectionColor{0.3f, 0.5f, 0.8f, 0.5f};
+        glm::vec4 caretColor{1.0f, 1.0f, 1.0f, 1.0f};
+        float caretWidth = 2.0f;
+        float caretBlinkRate = 0.53f; // seconds per blink cycle
+
+        // Runtime state (NOT serialized)
+        UITextInputState currentState = UITextInputState::Normal;
+        int cursorPosition = 0;
+        int selectionStart = -1; // -1 = no selection
+        int selectionEnd = -1;   // -1 = no selection
+        float caretBlinkTimer = 0.0f;
+        bool caretVisible = true;
+        glm::vec4 currentDisplayColor{0.2f, 0.2f, 0.2f, 1.0f};
+        float scrollOffsetX = 0.0f; // horizontal scroll for text wider than field
     };
 }
