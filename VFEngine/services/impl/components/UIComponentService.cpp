@@ -839,6 +839,122 @@ namespace services {
         return true;
     }
 
+    // ========== UI Checkbox CRUD ==========
+
+    bool UIComponentService::addUICheckboxComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UICheckboxComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UICheckboxComponent>();
+
+        // Auto-add UIRectComponent if missing (checkbox needs rect for layout/hit-testing)
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        // Auto-add UIImageComponent if missing (checkbox background)
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            sceneEntity.addComponent<components::UIImageComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUICheckboxComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UICheckboxComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UICheckboxComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUICheckboxComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UICheckboxComponent>();
+    }
+
+    std::optional<UICheckboxData> UIComponentService::getUICheckboxData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UICheckboxComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UICheckboxComponent>();
+
+        UICheckboxData data;
+        data.isChecked = comp.isChecked;
+        data.groupName = comp.groupName;
+        data.allowUncheck = comp.allowUncheck;
+        data.uncheckedColor = comp.uncheckedColor;
+        data.checkedColor = comp.checkedColor;
+        data.hoveredColor = comp.hoveredColor;
+        data.disabledColor = comp.disabledColor;
+        data.uncheckedTexture = comp.uncheckedTexture;
+        data.checkedTexture = comp.checkedTexture;
+        data.hoveredTexture = comp.hoveredTexture;
+        data.disabledTexture = comp.disabledTexture;
+        data.colorTransitionDuration = comp.colorTransitionDuration;
+        data.interactable = comp.interactable;
+        data.labelToggle = comp.labelToggle;
+        data.currentState = static_cast<uint8_t>(comp.currentState);
+        return data;
+    }
+
+    bool UIComponentService::setUICheckboxData(EntityHandle entity, const UICheckboxData& checkboxData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UICheckboxComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UICheckboxComponent>();
+        comp.isChecked = checkboxData.isChecked;
+        comp.groupName = checkboxData.groupName;
+        comp.allowUncheck = checkboxData.allowUncheck;
+        comp.uncheckedColor = checkboxData.uncheckedColor;
+        comp.checkedColor = checkboxData.checkedColor;
+        comp.hoveredColor = checkboxData.hoveredColor;
+        comp.disabledColor = checkboxData.disabledColor;
+        comp.uncheckedTexture = checkboxData.uncheckedTexture;
+        comp.checkedTexture = checkboxData.checkedTexture;
+        comp.hoveredTexture = checkboxData.hoveredTexture;
+        comp.disabledTexture = checkboxData.disabledTexture;
+        comp.colorTransitionDuration = checkboxData.colorTransitionDuration;
+        comp.interactable = checkboxData.interactable;
+        comp.labelToggle = checkboxData.labelToggle;
+        comp.currentState = static_cast<components::UICheckboxState>(checkboxData.currentState);
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -1071,6 +1187,33 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUITextInputDataQuery>(
             [this](const events::ui::GetUITextInputDataQuery& query) {
                 return getUITextInputData(query.entity);
+            });
+
+        // Checkbox commands
+        dispatcher.registerCommandHandler<events::ui::AddUICheckboxComponentCommand>(
+            [this](const events::ui::AddUICheckboxComponentCommand& cmd) {
+                return addUICheckboxComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUICheckboxComponentCommand>(
+            [this](const events::ui::RemoveUICheckboxComponentCommand& cmd) {
+                return removeUICheckboxComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUICheckboxDataCommand>(
+            [this](const events::ui::SetUICheckboxDataCommand& cmd) {
+                return setUICheckboxData(cmd.entity, cmd.checkboxData);
+            });
+
+        // Checkbox queries
+        dispatcher.registerQueryHandler<events::ui::HasUICheckboxComponentQuery>(
+            [this](const events::ui::HasUICheckboxComponentQuery& query) {
+                return hasUICheckboxComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUICheckboxDataQuery>(
+            [this](const events::ui::GetUICheckboxDataQuery& query) {
+                return getUICheckboxData(query.entity);
             });
     }
 

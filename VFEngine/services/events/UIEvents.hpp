@@ -410,4 +410,70 @@ namespace events::ui {
         std::string_view getName() const override { return "UITextInputUnfocused"; }
     };
 
+    // ============================================
+    // UI Checkbox Commands
+    // ============================================
+
+    struct AddUICheckboxComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUICheckboxComponent"; }
+    };
+
+    struct RemoveUICheckboxComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUICheckboxComponent"; }
+    };
+
+    struct SetUICheckboxDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UICheckboxData checkboxData;
+
+        std::string_view getName() const override { return "SetUICheckboxData"; }
+    };
+
+    // ============================================
+    // UI Checkbox Queries
+    // ============================================
+
+    struct HasUICheckboxComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUICheckboxComponent"; }
+    };
+
+    struct GetUICheckboxDataQuery : IQuery<std::optional<services::UICheckboxData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUICheckboxData"; }
+    };
+
+    // ============================================
+    // UI Checkbox Notifications
+    // ============================================
+
+    struct UICheckboxToggledNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        bool newCheckedState;
+        bool previousCheckedState;
+
+        std::string_view getName() const override { return "UICheckboxToggled"; }
+    };
+
+    struct UICheckboxHoverEnterNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UICheckboxHoverEnter"; }
+    };
+
+    struct UICheckboxHoverExitNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UICheckboxHoverExit"; }
+    };
+
 }

@@ -1103,6 +1103,9 @@ namespace controllers::offscreen
         // --- Button interaction (state machine + visual override) ---
         processUIButtonInteraction(ctx);
 
+        // --- Checkbox interaction (toggle, radio groups, visual override) ---
+        processUICheckboxInteraction(ctx);
+
         // --- Text input interaction (focus, editing, state machine) ---
         processUITextInputInteraction(ctx);
 
@@ -2693,6 +2696,367 @@ namespace controllers::offscreen
                     break;
                 default:
                     if (!comp.normalTexture.empty()) stateTexture = &comp.normalTexture;
+                    break;
+                }
+
+                if (stateTexture)
+                    imageComp.texturePath = *stateTexture;
+            }
+        }
+    }
+
+    void FramePreparationSystem::processUICheckboxInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto checkboxView = registry.view<components::UICheckboxComponent, components::UIRectComponent>();
+
+        if (checkboxView.size_hint() == 0)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        // Pre-compute scroll container info for scissor clipping
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+
+                ScrollContainerInfo info;
+                info.scrollOffset = scrollComp.scrollOffset;
+                info.scissorRect = glm::vec4(sx, sy, sw, sh);
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = info;
+            }
+        }
+
+        // Helper to find scroll ancestor and get scissor/offset
+        auto findScrollInfo = [&](entt::entity entity) -> std::pair<entt::entity, glm::vec4>
+        {
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    break;
+                current = parentEntity;
+            }
+            glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                    scissor = it->second.scissorRect;
+            }
+            return {scrollAncestor, scissor};
+        };
+
+        // Helper to test mouse inside rect with scissor clipping
+        auto hitTestRect = [&](PixelRect rect, glm::vec4 scissor) -> bool
+        {
+            bool inside = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+            if (inside && scissor.z > 0.0f && scissor.w > 0.0f)
+            {
+                inside = ctx.mousePosition.x >= scissor.x
+                    && ctx.mousePosition.x <= scissor.x + scissor.z
+                    && ctx.mousePosition.y >= scissor.y
+                    && ctx.mousePosition.y <= scissor.y + scissor.w;
+            }
+            return inside;
+        };
+
+        // PHASE 1: Hit test to find hovered checkbox (smallest-area wins for z-order)
+        entt::entity hoveredCheckbox = entt::null;
+        float smallestArea = std::numeric_limits<float>::max();
+
+        for (auto checkboxEntity : checkboxView)
+        {
+            auto& checkboxComp = registry.get<components::UICheckboxComponent>(checkboxEntity);
+
+            if (!checkboxComp.interactable)
+                continue;
+
+            if (registry.all_of<components::NameComponent>(checkboxEntity))
+                if (!registry.get<components::NameComponent>(checkboxEntity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, checkboxEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(checkboxEntity))
+                canvas = &registry.get<components::UICanvasComponent>(checkboxEntity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(checkboxEntity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAncestor, scissor] = findScrollInfo(checkboxEntity);
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                }
+            }
+
+            bool insideRect = hitTestRect(rect, scissor);
+
+            // labelToggle: also test child UILabel rects
+            if (!insideRect && checkboxComp.labelToggle
+                && registry.all_of<components::ChildrenComponent>(checkboxEntity))
+            {
+                const auto& children = registry.get<components::ChildrenComponent>(checkboxEntity).children;
+                for (auto child : children)
+                {
+                    if (!registry.valid(child))
+                        continue;
+                    if (!registry.all_of<components::UILabelComponent, components::UIRectComponent>(child))
+                        continue;
+
+                    const auto& childRect = registry.get<components::UIRectComponent>(child);
+                    PixelRect childPixelRect = resolvePixelRect(childRect, vw, vh, scale);
+                    if (scrollAncestor != entt::null)
+                    {
+                        auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                        if (it != scrollContainers.end())
+                        {
+                            childPixelRect.x -= it->second.scrollOffset.x;
+                            childPixelRect.y -= it->second.scrollOffset.y;
+                        }
+                    }
+                    if (hitTestRect(childPixelRect, scissor))
+                    {
+                        insideRect = true;
+                        break;
+                    }
+                }
+            }
+
+            if (insideRect)
+            {
+                float area = rect.w * rect.h;
+                if (area < smallestArea)
+                {
+                    smallestArea = area;
+                    hoveredCheckbox = checkboxEntity;
+                }
+            }
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Helper to build notification payload
+        auto makeEntityPayload = [&](entt::entity entity) -> std::pair<services::EntityHandle, std::string>
+        {
+            services::EntityHandle handle = services::internal::toHandle(entity);
+            std::string name;
+            if (registry.all_of<components::NameComponent>(entity))
+                name = registry.get<components::NameComponent>(entity).name;
+            return {handle, std::move(name)};
+        };
+
+        // PHASE 2: State machine transitions + toggle logic
+        for (auto checkboxEntity : checkboxView)
+        {
+            auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
+
+            if (registry.all_of<components::NameComponent>(checkboxEntity))
+                if (!registry.get<components::NameComponent>(checkboxEntity).isActive)
+                    continue;
+
+            auto previousState = comp.currentState;
+            components::UICheckboxState newState = components::UICheckboxState::Normal;
+
+            if (!comp.interactable)
+            {
+                newState = components::UICheckboxState::Disabled;
+            }
+            else if (checkboxEntity == hoveredCheckbox)
+            {
+                newState = components::UICheckboxState::Hovered;
+
+                // Toggle on click release
+                if (ctx.leftMouseReleased)
+                {
+                    bool previousChecked = comp.isChecked;
+                    bool toggled = false;
+
+                    if (comp.groupName.empty())
+                    {
+                        // Independent checkbox: simply toggle
+                        comp.isChecked = !comp.isChecked;
+                        toggled = (comp.isChecked != previousChecked);
+                    }
+                    else
+                    {
+                        // Radio group logic
+                        if (comp.isChecked && !comp.allowUncheck)
+                        {
+                            // Already checked, can't uncheck in strict radio mode
+                        }
+                        else if (!comp.isChecked)
+                        {
+                            // Check this one, uncheck all others in the same group
+                            comp.isChecked = true;
+                            toggled = true;
+
+                            for (auto otherEntity : checkboxView)
+                            {
+                                if (otherEntity == checkboxEntity)
+                                    continue;
+                                auto& otherComp = registry.get<components::UICheckboxComponent>(otherEntity);
+                                if (otherComp.groupName == comp.groupName && otherComp.isChecked)
+                                {
+                                    otherComp.isChecked = false;
+
+                                    auto [handle, name] = makeEntityPayload(otherEntity);
+                                    events::ui::UICheckboxToggledNotification notif;
+                                    notif.entity = handle;
+                                    notif.entityName = std::move(name);
+                                    notif.newCheckedState = false;
+                                    notif.previousCheckedState = true;
+                                    dispatcher.publish(notif);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Radio group but allowUncheck is true: toggle off
+                            comp.isChecked = false;
+                            toggled = true;
+                        }
+                    }
+
+                    if (toggled)
+                    {
+                        auto [handle, name] = makeEntityPayload(checkboxEntity);
+                        events::ui::UICheckboxToggledNotification notif;
+                        notif.entity = handle;
+                        notif.entityName = std::move(name);
+                        notif.newCheckedState = comp.isChecked;
+                        notif.previousCheckedState = previousChecked;
+                        dispatcher.publish(notif);
+                    }
+                }
+            }
+
+            // Publish HoverEnter/HoverExit transitions
+            bool wasHovered = previousState == components::UICheckboxState::Hovered;
+            bool isHovered = newState == components::UICheckboxState::Hovered;
+
+            if (!wasHovered && isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(checkboxEntity);
+                events::ui::UICheckboxHoverEnterNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+            else if (wasHovered && !isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(checkboxEntity);
+                events::ui::UICheckboxHoverExitNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+
+            comp.currentState = newState;
+        }
+
+        // PHASE 3: Color lerp + visual override
+        for (auto checkboxEntity : checkboxView)
+        {
+            auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
+
+            // Target color depends on state AND isChecked
+            glm::vec4 targetColor;
+            switch (comp.currentState)
+            {
+            case components::UICheckboxState::Hovered:
+                targetColor = comp.hoveredColor;
+                break;
+            case components::UICheckboxState::Disabled:
+                targetColor = comp.disabledColor;
+                break;
+            default: // Normal
+                targetColor = comp.isChecked ? comp.checkedColor : comp.uncheckedColor;
+                break;
+            }
+
+            // Lerp toward target color
+            if (comp.colorTransitionDuration > 0.0f && ctx.deltaTime > 0.0f)
+            {
+                float t = std::min(1.0f, ctx.deltaTime / comp.colorTransitionDuration);
+                comp.currentDisplayColor = glm::mix(comp.currentDisplayColor, targetColor, t);
+            }
+            else
+            {
+                comp.currentDisplayColor = targetColor;
+            }
+
+            // Override UIImageComponent color tint
+            if (registry.all_of<components::UIImageComponent>(checkboxEntity))
+            {
+                auto& imageComp = registry.get<components::UIImageComponent>(checkboxEntity);
+                imageComp.colorTint = comp.currentDisplayColor;
+
+                // Texture swap: pick per-state texture if defined
+                const std::string* stateTexture = nullptr;
+                switch (comp.currentState)
+                {
+                case components::UICheckboxState::Hovered:
+                    if (!comp.hoveredTexture.empty()) stateTexture = &comp.hoveredTexture;
+                    break;
+                case components::UICheckboxState::Disabled:
+                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
+                    break;
+                default: // Normal - pick based on checked state
+                    if (comp.isChecked)
+                    {
+                        if (!comp.checkedTexture.empty()) stateTexture = &comp.checkedTexture;
+                    }
+                    else
+                    {
+                        if (!comp.uncheckedTexture.empty()) stateTexture = &comp.uncheckedTexture;
+                    }
                     break;
                 }
 

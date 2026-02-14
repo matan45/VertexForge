@@ -224,6 +224,12 @@ namespace serialization
                 entity.getComponent<components::UITextInputComponent>());
         }
 
+        if (entity.hasComponent<components::UICheckboxComponent>())
+        {
+            componentsJson["uiCheckbox"] = serializeUICheckbox(
+                entity.getComponent<components::UICheckboxComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1963,6 +1969,81 @@ namespace serialization
         textInput.currentDisplayColor = textInput.normalColor;
     }
 
+    json SceneSerialization::serializeUICheckbox(const components::UICheckboxComponent& checkbox)
+    {
+        json j;
+
+        j["isChecked"] = checkbox.isChecked;
+
+        if (!checkbox.groupName.empty())
+        {
+            j["groupName"] = checkbox.groupName;
+        }
+        j["allowUncheck"] = checkbox.allowUncheck;
+
+        j["uncheckedColor"] = json::array({checkbox.uncheckedColor.r, checkbox.uncheckedColor.g, checkbox.uncheckedColor.b, checkbox.uncheckedColor.a});
+        j["checkedColor"] = json::array({checkbox.checkedColor.r, checkbox.checkedColor.g, checkbox.checkedColor.b, checkbox.checkedColor.a});
+        j["hoveredColor"] = json::array({checkbox.hoveredColor.r, checkbox.hoveredColor.g, checkbox.hoveredColor.b, checkbox.hoveredColor.a});
+        j["disabledColor"] = json::array({checkbox.disabledColor.r, checkbox.disabledColor.g, checkbox.disabledColor.b, checkbox.disabledColor.a});
+
+        if (!checkbox.uncheckedTexture.empty())
+        {
+            j["uncheckedTexture"] = checkbox.uncheckedTexture;
+        }
+        if (!checkbox.checkedTexture.empty())
+        {
+            j["checkedTexture"] = checkbox.checkedTexture;
+        }
+        if (!checkbox.hoveredTexture.empty())
+        {
+            j["hoveredTexture"] = checkbox.hoveredTexture;
+        }
+        if (!checkbox.disabledTexture.empty())
+        {
+            j["disabledTexture"] = checkbox.disabledTexture;
+        }
+
+        j["colorTransitionDuration"] = checkbox.colorTransitionDuration;
+        j["interactable"] = checkbox.interactable;
+        j["labelToggle"] = checkbox.labelToggle;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUICheckbox(const json& j, components::UICheckboxComponent& checkbox)
+    {
+        checkbox.isChecked = j.value("isChecked", false);
+        checkbox.groupName = j.value("groupName", std::string(""));
+        checkbox.allowUncheck = j.value("allowUncheck", true);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("uncheckedColor", checkbox.uncheckedColor);
+        deserializeVec4("checkedColor", checkbox.checkedColor);
+        deserializeVec4("hoveredColor", checkbox.hoveredColor);
+        deserializeVec4("disabledColor", checkbox.disabledColor);
+
+        checkbox.uncheckedTexture = j.value("uncheckedTexture", std::string(""));
+        checkbox.checkedTexture = j.value("checkedTexture", std::string(""));
+        checkbox.hoveredTexture = j.value("hoveredTexture", std::string(""));
+        checkbox.disabledTexture = j.value("disabledTexture", std::string(""));
+
+        checkbox.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        checkbox.interactable = j.value("interactable", true);
+        checkbox.labelToggle = j.value("labelToggle", false);
+
+        checkbox.currentDisplayColor = checkbox.isChecked ? checkbox.checkedColor : checkbox.uncheckedColor;
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2301,6 +2382,12 @@ namespace serialization
             {
                 auto& textInputComp = entity.addOrReplaceComponent<components::UITextInputComponent>();
                 deserializeUITextInput(componentsJson["uiTextInput"], textInputComp);
+            }
+
+            if (componentsJson.contains("uiCheckbox"))
+            {
+                auto& checkboxComp = entity.addOrReplaceComponent<components::UICheckboxComponent>();
+                deserializeUICheckbox(componentsJson["uiCheckbox"], checkboxComp);
             }
         }
 

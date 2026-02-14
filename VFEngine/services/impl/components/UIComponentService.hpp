@@ -82,6 +82,13 @@ namespace services {
         bool hasUITextInputComponent(EntityHandle entity) const;
         std::optional<UITextInputData> getUITextInputData(EntityHandle entity) const;
         bool setUITextInputData(EntityHandle entity, const UITextInputData& textInputData);
+
+        // UI Checkbox Operations
+        bool addUICheckboxComponent(EntityHandle entity);
+        bool removeUICheckboxComponent(EntityHandle entity);
+        bool hasUICheckboxComponent(EntityHandle entity) const;
+        std::optional<UICheckboxData> getUICheckboxData(EntityHandle entity) const;
+        bool setUICheckboxData(EntityHandle entity, const UICheckboxData& checkboxData);
     };
 
 }

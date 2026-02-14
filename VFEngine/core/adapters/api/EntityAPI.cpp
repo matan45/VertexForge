@@ -618,6 +618,13 @@ namespace core::api
                         success = dispatcher.execute(cmd);
                         break;
                     }
+                case services::ComponentTypeId::UICheckbox:
+                    {
+                        events::ui::AddUICheckboxComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
                 default:
                     vfLogError("[Script] Entity.addComponent: component type '{}' cannot be added via script", typeName);
                     break;
@@ -738,6 +745,13 @@ namespace core::api
                 case services::ComponentTypeId::UITextInput:
                     {
                         events::ui::RemoveUITextInputComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UICheckbox:
+                    {
+                        events::ui::RemoveUICheckboxComponentCommand cmd;
                         cmd.entity = entity;
                         success = dispatcher.execute(cmd);
                         break;

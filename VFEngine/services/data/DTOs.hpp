@@ -355,4 +355,34 @@ namespace services
         // Runtime
         uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Focused, 3=Disabled
     };
+
+    struct UICheckboxData
+    {
+        // Checked state
+        bool isChecked = false;
+
+        // Radio group
+        std::string groupName;
+        bool allowUncheck = true;
+
+        // Per-state colors
+        glm::vec4 uncheckedColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 checkedColor{0.3f, 0.7f, 1.0f, 1.0f};
+        glm::vec4 hoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
+        glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
+
+        // Per-state textures
+        std::string uncheckedTexture;
+        std::string checkedTexture;
+        std::string hoveredTexture;
+        std::string disabledTexture;
+
+        // Config
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+        bool labelToggle = false;
+
+        // Runtime
+        uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Disabled
+    };
 }

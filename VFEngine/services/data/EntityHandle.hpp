@@ -60,6 +60,7 @@ namespace services {
         UILabel,
         UIButton,
         UITextInput,
+        UICheckbox,
     };
 
 }
