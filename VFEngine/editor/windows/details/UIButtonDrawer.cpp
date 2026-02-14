@@ -60,8 +60,6 @@ namespace windows::details
 
             drawCurrentState(data);
 
-            ImGui::TextDisabled("Label child entity auto-created with button");
-
             if (changed)
             {
                 events::ui::SetUIButtonDataCommand cmd;

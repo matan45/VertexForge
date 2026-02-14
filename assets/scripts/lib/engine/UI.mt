@@ -53,4 +53,18 @@ public class UI {
     public static function setButtonInteractable(int entityId, bool interactable): void {
         _native_ui_setButtonInteractable(entityId, interactable);
     }
+
+    // ============================================
+    // Label Text
+    // ============================================
+
+    // Get the text of a UILabel on the given entity
+    public static function getLabelText(int entityId): String {
+        return _native_ui_getLabelText(entityId);
+    }
+
+    // Set the text of a UILabel on the given entity
+    public static function setLabelText(int entityId, String text): void {
+        _native_ui_setLabelText(entityId, text);
+    }
 }

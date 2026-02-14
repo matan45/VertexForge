@@ -129,5 +129,65 @@ namespace core::api
 
                 return value::Value();
             });
+
+        // _native_ui_getLabelText(entityId) -> String
+        interpreter->registerNativeFunction("_native_ui_getLabelText",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(std::string(""));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getLabelText");
+                auto handle = intToEntity(entityId);
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery))
+                {
+                    return value::Value(std::string(""));
+                }
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(std::string(""));
+                }
+
+                return value::Value(data->text);
+            });
+
+        // _native_ui_setLabelText(entityId, text) -> void
+        interpreter->registerNativeFunction("_native_ui_setLabelText",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setLabelText");
+                std::string text = extractString(args[1], "_native_ui_setLabelText");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto labelData = data.value();
+                labelData.text = text;
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
     }
 }

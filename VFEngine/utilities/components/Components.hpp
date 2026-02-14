@@ -35,6 +35,7 @@ namespace components
     struct UIScrollComponent;
     struct UILayoutGroupComponent;
     struct UILabelComponent;
+    struct UIButtonComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -42,7 +43,7 @@ namespace components
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
-                                               UILayoutGroupComponent, UILabelComponent>;
+                                               UILayoutGroupComponent, UILabelComponent, UIButtonComponent>;
 
     struct WorldTransformComponent
     {
@@ -652,7 +653,6 @@ namespace components
 
         // Runtime state (NOT serialized)
         UIButtonState currentState = UIButtonState::Normal;
-        entt::entity labelEntity = entt::null; // auto-created child label
         glm::vec4 currentDisplayColor{1.0f, 1.0f, 1.0f, 1.0f}; // lerped display color
     };
 }

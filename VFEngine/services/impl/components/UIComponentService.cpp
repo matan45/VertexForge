@@ -627,26 +627,13 @@ namespace services {
             sceneEntity.addComponent<components::UIImageComponent>();
         }
 
-        // Auto-create child "Label" entity (Unity Button pattern)
-        scene::Entity labelEntity("Label");
-        sceneEntity.addChildren(labelEntity);
-
-        // Configure label with default "Button" text
-        auto& labelComp = labelEntity.addComponent<components::UILabelComponent>();
-        labelComp.text = "Button";
-        labelComp.horizontalAlignment = components::HorizontalAlignment::Center;
-        labelComp.verticalAlignment = components::VerticalAlignment::Middle;
-
-        // Configure label rect to stretch-fill the button
-        auto& labelRect = labelEntity.addComponent<components::UIRectComponent>();
-        labelRect.anchorMin = {0.0f, 0.0f};
-        labelRect.anchorMax = {1.0f, 1.0f};
-        labelRect.sizeDelta = {0.0f, 0.0f};
-        labelRect.anchoredPosition = {0.0f, 0.0f};
-
-        // Store child reference in button component
-        auto& buttonComp = sceneEntity.getComponent<components::UIButtonComponent>();
-        buttonComp.labelEntity = labelEntity.getHandle();
+        // Auto-add UILabelComponent if missing (button text)
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            auto& labelComp = sceneEntity.addComponent<components::UILabelComponent>();
+            labelComp.text = "Button";
+            labelComp.horizontalAlignment = components::HorizontalAlignment::Center;
+            labelComp.verticalAlignment = components::VerticalAlignment::Middle;
+        }
 
         return true;
     }
@@ -660,13 +647,6 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::UIButtonComponent>()) {
             return false;
-        }
-
-        // Clean up auto-created label child entity
-        const auto& buttonComp = sceneEntity.getComponent<components::UIButtonComponent>();
-        if (buttonComp.labelEntity != entt::null && registry.valid(buttonComp.labelEntity)) {
-            scene::Entity labelEntity(buttonComp.labelEntity);
-            sceneGraph->removeEntity(labelEntity);
         }
 
         sceneEntity.removeComponent<components::UIButtonComponent>();
