@@ -86,6 +86,7 @@ namespace controllers::offscreen
         void prepareUILabelsScreenSpace(const FrameContext& ctx);
         void prepareUILabelsWorldSpace(const FrameContext& ctx);
         void processUIButtonInteraction(const FrameContext& ctx);
+        void processUICheckboxInteraction(const FrameContext& ctx);
         void processUITextInputInteraction(const FrameContext& ctx);
 
         // Track which text input entity is currently focused (-1 = none)

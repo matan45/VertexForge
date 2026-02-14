@@ -28,6 +28,7 @@
 #include "details/UILayoutGroupDrawer.hpp"
 #include "details/UIButtonDrawer.hpp"
 #include "details/UITextInputDrawer.hpp"
+#include "details/UICheckboxDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -63,6 +64,7 @@ namespace windows
         details::UILayoutGroupDrawer uiLayoutGroupDrawer;
         details::UIButtonDrawer uiButtonDrawer;
         details::UITextInputDrawer uiTextInputDrawer;
+        details::UICheckboxDrawer uiCheckboxDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

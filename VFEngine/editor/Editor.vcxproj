@@ -181,6 +181,7 @@
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
     <ClInclude Include="windows\details\UIButtonDrawer.hpp" />
     <ClInclude Include="windows\details\UICanvasDrawer.hpp" />
+    <ClInclude Include="windows\details\UICheckboxDrawer.hpp" />
     <ClInclude Include="windows\details\UIImageDrawer.hpp" />
     <ClInclude Include="windows\details\UILabelDrawer.hpp" />
     <ClInclude Include="windows\details\UILayoutGroupDrawer.hpp" />
@@ -276,6 +277,7 @@
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
     <ClCompile Include="windows\details\UIButtonDrawer.cpp" />
     <ClCompile Include="windows\details\UICanvasDrawer.cpp" />
+    <ClCompile Include="windows\details\UICheckboxDrawer.cpp" />
     <ClCompile Include="windows\details\UIImageDrawer.cpp" />
     <ClCompile Include="windows\details\UILabelDrawer.cpp" />
     <ClCompile Include="windows\details\UILayoutGroupDrawer.cpp" />

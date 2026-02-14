@@ -60,6 +60,11 @@ namespace core
         ::events::SubscriptionToken textInputFocusedToken;
         ::events::SubscriptionToken textInputUnfocusedToken;
 
+        // UI Checkbox callback subscription tokens
+        ::events::SubscriptionToken checkboxToggledToken;
+        ::events::SubscriptionToken checkboxHoverEnterToken;
+        ::events::SubscriptionToken checkboxHoverExitToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -126,5 +131,13 @@ namespace core
                                          ::services::EntityHandle entity,
                                          const std::string& entityName,
                                          const std::string& text = "");
+
+        // UI Checkbox callback helpers
+        void subscribeToUICheckboxEvents();
+        void unsubscribeFromUICheckboxEvents();
+        void dispatchUICheckboxCallback(const char* methodName,
+                                        ::services::EntityHandle checkboxEntity,
+                                        const std::string& entityName,
+                                        bool newState = false, bool previousState = false);
     };
 }

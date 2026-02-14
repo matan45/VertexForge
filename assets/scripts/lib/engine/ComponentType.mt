@@ -46,4 +46,6 @@ public class ComponentType {
     public static final string UI_LAYOUT_GROUP = "UILayoutGroup";
     public static final string UI_LABEL = "UILabel";
     public static final string UI_BUTTON = "UIButton";
+    public static final string UI_TEXT_INPUT = "UITextInput";
+    public static final string UI_CHECKBOX = "UICheckbox";
 }

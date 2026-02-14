@@ -40,6 +40,7 @@ namespace core
             subscribeToPhysicsEvents();
             subscribeToUIButtonEvents();
             subscribeToUITextInputEvents();
+            subscribeToUICheckboxEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -64,6 +65,7 @@ namespace core
         unsubscribeFromPhysicsEvents();
         unsubscribeFromUIButtonEvents();
         unsubscribeFromUITextInputEvents();
+        unsubscribeFromUICheckboxEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -816,6 +818,107 @@ namespace core
                         {value::Value(static_cast<int>(entity.id)),
                          value::Value(entityName),
                          value::Value(text)});
+                }
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    // ============================================
+    // UI Checkbox event helpers
+    // ============================================
+
+    void ScriptingAdapter::subscribeToUICheckboxEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        checkboxToggledToken = dispatcher.subscribe<::events::ui::UICheckboxToggledNotification>(
+            [this](const ::events::ui::UICheckboxToggledNotification& notif)
+            {
+                dispatchUICheckboxCallback("onCheckboxToggled", notif.entity, notif.entityName,
+                                           notif.newCheckedState, notif.previousCheckedState);
+            });
+
+        checkboxHoverEnterToken = dispatcher.subscribe<::events::ui::UICheckboxHoverEnterNotification>(
+            [this](const ::events::ui::UICheckboxHoverEnterNotification& notif)
+            {
+                dispatchUICheckboxCallback("onCheckboxHoverEnter", notif.entity, notif.entityName);
+            });
+
+        checkboxHoverExitToken = dispatcher.subscribe<::events::ui::UICheckboxHoverExitNotification>(
+            [this](const ::events::ui::UICheckboxHoverExitNotification& notif)
+            {
+                dispatchUICheckboxCallback("onCheckboxHoverExit", notif.entity, notif.entityName);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI checkbox events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUICheckboxEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (checkboxToggledToken.isValid())
+        {
+            dispatcher.unsubscribe(checkboxToggledToken);
+        }
+        if (checkboxHoverEnterToken.isValid())
+        {
+            dispatcher.unsubscribe(checkboxHoverEnterToken);
+        }
+        if (checkboxHoverExitToken.isValid())
+        {
+            dispatcher.unsubscribe(checkboxHoverExitToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI checkbox events");
+    }
+
+    void ScriptingAdapter::dispatchUICheckboxCallback(const char* methodName,
+                                                       ::services::EntityHandle checkboxEntity,
+                                                       const std::string& entityName,
+                                                       bool newState, bool previousState)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUICheckboxListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (method == "onCheckboxToggled")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(checkboxEntity.id)),
+                         value::Value(entityName),
+                         value::Value(newState),
+                         value::Value(previousState)});
+                }
+                else
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(checkboxEntity.id)),
+                         value::Value(entityName)});
                 }
             }
             catch (const std::exception& e)

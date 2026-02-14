@@ -5,6 +5,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/UIEvents.hpp"
+#include "../../../services/events/SceneEvents.hpp"
 
 namespace core::api
 {
@@ -312,6 +313,171 @@ namespace core::api
                 dispatcher.execute(setCmd);
 
                 return value::Value();
+            });
+
+        // ============================================
+        // UI Checkbox
+        // ============================================
+
+        // _native_ui_isCheckboxChecked(entityId) -> bool
+        interpreter->registerNativeFunction("_native_ui_isCheckboxChecked",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(false);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_isCheckboxChecked");
+                auto handle = intToEntity(entityId);
+
+                events::ui::HasUICheckboxComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery))
+                {
+                    return value::Value(false);
+                }
+
+                events::ui::GetUICheckboxDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(false);
+                }
+
+                return value::Value(data->isChecked);
+            });
+
+        // _native_ui_setCheckboxChecked(entityId, checked) -> void
+        interpreter->registerNativeFunction("_native_ui_setCheckboxChecked",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setCheckboxChecked");
+                bool checked = std::holds_alternative<bool>(args[1]) ? std::get<bool>(args[1]) : false;
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUICheckboxDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto checkboxData = data.value();
+                checkboxData.isChecked = checked;
+
+                events::ui::SetUICheckboxDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.checkboxData = checkboxData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getCheckboxState(entityId) -> int (0=Normal, 1=Hovered, 2=Disabled)
+        interpreter->registerNativeFunction("_native_ui_getCheckboxState",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getCheckboxState");
+                auto handle = intToEntity(entityId);
+
+                events::ui::HasUICheckboxComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery))
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                events::ui::GetUICheckboxDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                return value::Value(static_cast<int64_t>(data->currentState));
+            });
+
+        // _native_ui_setCheckboxInteractable(entityId, interactable) -> void
+        interpreter->registerNativeFunction("_native_ui_setCheckboxInteractable",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setCheckboxInteractable");
+                bool interactable = std::holds_alternative<bool>(args[1]) ? std::get<bool>(args[1]) : true;
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUICheckboxDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto checkboxData = data.value();
+                checkboxData.interactable = interactable;
+
+                events::ui::SetUICheckboxDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.checkboxData = checkboxData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getCheckboxLabelText(entityId) -> String
+        // Walks children of the checkbox entity to find a UILabel and returns its text
+        interpreter->registerNativeFunction("_native_ui_getCheckboxLabelText",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(std::string(""));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getCheckboxLabelText");
+                auto handle = intToEntity(entityId);
+
+                // Get entity data to access children
+                events::scene::GetEntityQuery entityQuery;
+                entityQuery.entity = handle;
+                auto entityData = dispatcher.query(entityQuery);
+                if (!entityData.has_value())
+                {
+                    return value::Value(std::string(""));
+                }
+
+                // Walk children looking for one with UILabel
+                for (const auto& childHandle : entityData->children)
+                {
+                    events::ui::HasUILabelComponentQuery hasLabelQuery;
+                    hasLabelQuery.entity = childHandle;
+                    if (dispatcher.query(hasLabelQuery))
+                    {
+                        events::ui::GetUILabelDataQuery getLabelQuery;
+                        getLabelQuery.entity = childHandle;
+                        auto labelData = dispatcher.query(getLabelQuery);
+                        if (labelData.has_value())
+                        {
+                            return value::Value(labelData->text);
+                        }
+                    }
+                }
+
+                return value::Value(std::string(""));
             });
     }
 }

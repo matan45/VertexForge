@@ -67,4 +67,44 @@ public class UI {
     public static function setLabelText(int entityId, String text): void {
         _native_ui_setLabelText(entityId, text);
     }
+
+    // ============================================
+    // Checkbox State Constants
+    // ============================================
+    public static const int CHECKBOX_NORMAL = 0;
+    public static const int CHECKBOX_HOVERED = 1;
+    public static const int CHECKBOX_DISABLED = 2;
+
+    // ============================================
+    // Checkbox Queries
+    // ============================================
+
+    // Check if a checkbox entity is currently checked
+    public static function isCheckboxChecked(int entityId): bool {
+        return _native_ui_isCheckboxChecked(entityId);
+    }
+
+    // Set the checked state of a checkbox entity
+    public static function setCheckboxChecked(int entityId, bool checked): void {
+        _native_ui_setCheckboxChecked(entityId, checked);
+    }
+
+    // Get checkbox state as int (CHECKBOX_NORMAL, CHECKBOX_HOVERED, CHECKBOX_DISABLED)
+    public static function getCheckboxState(int entityId): int {
+        return _native_ui_getCheckboxState(entityId);
+    }
+
+    // ============================================
+    // Checkbox Control
+    // ============================================
+
+    // Set whether a checkbox is interactable (enabled/disabled)
+    public static function setCheckboxInteractable(int entityId, bool interactable): void {
+        _native_ui_setCheckboxInteractable(entityId, interactable);
+    }
+
+    // Get the label text of a checkbox's child UILabel (useful in onCheckboxToggled callbacks)
+    public static function getCheckboxLabelText(int entityId): String {
+        return _native_ui_getCheckboxLabelText(entityId);
+    }
 }

@@ -13,7 +13,7 @@ namespace windows::details
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
-                                 bool hasUITextInput)
+                                 bool hasUITextInput, bool hasUICheckbox)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -350,11 +350,25 @@ namespace windows::details
                 }
             }
 
+            if (!hasUICheckbox)
+            {
+                if (ImGui::Selectable("  UI Checkbox"))
+                {
+                    events::ui::AddUICheckboxComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Toggleable checkbox with radio group support");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
-                           hasUIButton && hasUITextInput;
+                           hasUIButton && hasUITextInput && hasUICheckbox;
             if (allAdded)
             {
                 ImGui::Spacing();

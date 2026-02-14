@@ -162,6 +162,9 @@ namespace serialization
         static json serializeUITextInput(const components::UITextInputComponent& textInput);
         static void deserializeUITextInput(const json& j, components::UITextInputComponent& textInput);
 
+        static json serializeUICheckbox(const components::UICheckboxComponent& checkbox);
+        static void deserializeUICheckbox(const json& j, components::UICheckboxComponent& checkbox);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

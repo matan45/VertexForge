@@ -702,4 +702,42 @@ namespace components
         glm::vec4 currentDisplayColor{0.2f, 0.2f, 0.2f, 1.0f};
         float scrollOffsetX = 0.0f; // horizontal scroll for text wider than field
     };
+
+    enum class UICheckboxState : uint8_t
+    {
+        Normal,
+        Hovered,
+        Disabled
+    };
+
+    struct UICheckboxComponent
+    {
+        // Checked state
+        bool isChecked = false;
+
+        // Radio group (empty = independent checkbox, non-empty = radio mode)
+        std::string groupName;
+        bool allowUncheck = true; // In radio group: false = can't uncheck by clicking
+
+        // Per-state colors
+        glm::vec4 uncheckedColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 checkedColor{0.3f, 0.7f, 1.0f, 1.0f};
+        glm::vec4 hoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
+        glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
+
+        // Per-state texture paths (empty = use color only)
+        std::string uncheckedTexture;
+        std::string checkedTexture;
+        std::string hoveredTexture;
+        std::string disabledTexture;
+
+        // Config
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+        bool labelToggle = false; // If true, clicking child UILabel also toggles
+
+        // Runtime state (NOT serialized)
+        UICheckboxState currentState = UICheckboxState::Normal;
+        glm::vec4 currentDisplayColor{1.0f, 1.0f, 1.0f, 1.0f};
+    };
 }
