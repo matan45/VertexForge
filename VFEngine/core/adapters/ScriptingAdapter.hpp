@@ -47,6 +47,13 @@ namespace core
         ::events::SubscriptionToken triggerEnterToken;
         ::events::SubscriptionToken triggerExitToken;
 
+        // UI Button callback subscription tokens
+        ::events::SubscriptionToken buttonClickedToken;
+        ::events::SubscriptionToken buttonPressedToken;
+        ::events::SubscriptionToken buttonReleasedToken;
+        ::events::SubscriptionToken buttonHoverEnterToken;
+        ::events::SubscriptionToken buttonHoverExitToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -98,5 +105,12 @@ namespace core
         void unsubscribeFromPhysicsEvents();
         void dispatchCollisionCallback(const char* methodName,
                                        ::services::EntityHandle self, ::services::EntityHandle other);
+
+        // UI Button callback helpers
+        void subscribeToUIButtonEvents();
+        void unsubscribeFromUIButtonEvents();
+        void dispatchUIButtonCallback(const char* methodName,
+                                      ::services::EntityHandle buttonEntity,
+                                      const std::string& entityName);
     };
 }

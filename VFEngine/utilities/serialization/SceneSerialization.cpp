@@ -212,6 +212,12 @@ namespace serialization
                 entity.getComponent<components::UILabelComponent>());
         }
 
+        if (entity.hasComponent<components::UIButtonComponent>())
+        {
+            componentsJson["uiButton"] = serializeUIButton(
+                entity.getComponent<components::UIButtonComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1811,6 +1817,78 @@ namespace serialization
         label.letterSpacing = j.value("letterSpacing", 0.0f);
     }
 
+    json SceneSerialization::serializeUIButton(const components::UIButtonComponent& button)
+    {
+        json j;
+
+        j["normalColor"] = json::array({button.normalColor.r, button.normalColor.g, button.normalColor.b, button.normalColor.a});
+        j["hoveredColor"] = json::array({button.hoveredColor.r, button.hoveredColor.g, button.hoveredColor.b, button.hoveredColor.a});
+        j["pressedColor"] = json::array({button.pressedColor.r, button.pressedColor.g, button.pressedColor.b, button.pressedColor.a});
+        j["disabledColor"] = json::array({button.disabledColor.r, button.disabledColor.g, button.disabledColor.b, button.disabledColor.a});
+
+        if (!button.normalTexture.empty())
+        {
+            j["normalTexture"] = button.normalTexture;
+        }
+        if (!button.hoverTexture.empty())
+        {
+            j["hoverTexture"] = button.hoverTexture;
+        }
+        if (!button.pressedTexture.empty())
+        {
+            j["pressedTexture"] = button.pressedTexture;
+        }
+        if (!button.disabledTexture.empty())
+        {
+            j["disabledTexture"] = button.disabledTexture;
+        }
+
+        j["colorTransitionDuration"] = button.colorTransitionDuration;
+        j["interactable"] = button.interactable;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIButton(const json& j, components::UIButtonComponent& button)
+    {
+        if (j.contains("normalColor") && j["normalColor"].is_array() && j["normalColor"].size() >= 4)
+        {
+            button.normalColor = glm::vec4(
+                j["normalColor"][0].get<float>(), j["normalColor"][1].get<float>(),
+                j["normalColor"][2].get<float>(), j["normalColor"][3].get<float>()
+            );
+        }
+        if (j.contains("hoveredColor") && j["hoveredColor"].is_array() && j["hoveredColor"].size() >= 4)
+        {
+            button.hoveredColor = glm::vec4(
+                j["hoveredColor"][0].get<float>(), j["hoveredColor"][1].get<float>(),
+                j["hoveredColor"][2].get<float>(), j["hoveredColor"][3].get<float>()
+            );
+        }
+        if (j.contains("pressedColor") && j["pressedColor"].is_array() && j["pressedColor"].size() >= 4)
+        {
+            button.pressedColor = glm::vec4(
+                j["pressedColor"][0].get<float>(), j["pressedColor"][1].get<float>(),
+                j["pressedColor"][2].get<float>(), j["pressedColor"][3].get<float>()
+            );
+        }
+        if (j.contains("disabledColor") && j["disabledColor"].is_array() && j["disabledColor"].size() >= 4)
+        {
+            button.disabledColor = glm::vec4(
+                j["disabledColor"][0].get<float>(), j["disabledColor"][1].get<float>(),
+                j["disabledColor"][2].get<float>(), j["disabledColor"][3].get<float>()
+            );
+        }
+
+        button.normalTexture = j.value("normalTexture", std::string(""));
+        button.hoverTexture = j.value("hoverTexture", std::string(""));
+        button.pressedTexture = j.value("pressedTexture", std::string(""));
+        button.disabledTexture = j.value("disabledTexture", std::string(""));
+
+        button.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        button.interactable = j.value("interactable", true);
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2137,6 +2215,12 @@ namespace serialization
             {
                 auto& labelComp = entity.addOrReplaceComponent<components::UILabelComponent>();
                 deserializeUILabel(componentsJson["uiLabel"], labelComp);
+            }
+
+            if (componentsJson.contains("uiButton"))
+            {
+                auto& buttonComp = entity.addOrReplaceComponent<components::UIButtonComponent>();
+                deserializeUIButton(componentsJson["uiButton"], buttonComp);
             }
         }
 

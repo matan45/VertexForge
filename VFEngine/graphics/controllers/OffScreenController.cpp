@@ -602,6 +602,12 @@ namespace controllers
             events::input::IsMouseButtonDownQuery mouseQuery;
             mouseQuery.button = 0;
             ctx.leftMouseDown = dispatcher.query(mouseQuery);
+            ctx.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+
+            // Edge detection for button press/release
+            ctx.leftMousePressed = !prevLeftMouseDown && ctx.leftMouseDown;
+            ctx.leftMouseReleased = prevLeftMouseDown && !ctx.leftMouseDown;
+            prevLeftMouseDown = ctx.leftMouseDown;
         }
 
         framePreparation->prepareUIImages(ctx);

@@ -303,4 +303,26 @@ namespace services
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
     };
+
+    struct UIButtonData
+    {
+        // Per-state colors
+        glm::vec4 normalColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 hoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
+        glm::vec4 pressedColor{0.7f, 0.7f, 0.7f, 1.0f};
+        glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
+
+        // Per-state texture paths (empty = use color only)
+        std::string normalTexture;
+        std::string hoverTexture;
+        std::string pressedTexture;
+        std::string disabledTexture;
+
+        // Config
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+
+        // Runtime
+        uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Pressed, 3=Disabled
+    };
 }

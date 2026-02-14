@@ -12,7 +12,7 @@ namespace windows::details
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
-                                 bool hasUIScroll, bool hasUILayoutGroup)
+                                 bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -321,10 +321,25 @@ namespace windows::details
                 }
             }
 
+            if (!hasUIButton)
+            {
+                if (ImGui::Selectable("  UI Button"))
+                {
+                    events::ui::AddUIButtonComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Interactive button with state colors and click events");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
-                           hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup;
+                           hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
+                           hasUIButton;
             if (allAdded)
             {
                 ImGui::Spacing();

@@ -58,6 +58,7 @@ namespace services {
         UIScroll,
         UILayoutGroup,
         UILabel,
+        UIButton,
     };
 
 }

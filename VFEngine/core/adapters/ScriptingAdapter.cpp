@@ -11,6 +11,7 @@
 
 #include "print/EditorLogger.hpp"
 #include "events/PhysicsEvents.hpp"
+#include "events/UIEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -37,6 +38,7 @@ namespace core
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             apiRegistry->registerEngineAPIs();
             subscribeToPhysicsEvents();
+            subscribeToUIButtonEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -59,6 +61,7 @@ namespace core
         }
 
         unsubscribeFromPhysicsEvents();
+        unsubscribeFromUIButtonEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -275,6 +278,10 @@ namespace core
             if (interpreter->classImplementsInterface(className, "ITriggerListener"))
             {
                 interfaces.insert("ITriggerListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUIButtonListener"))
+            {
+                interfaces.insert("IUIButtonListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -595,6 +602,108 @@ namespace core
                         vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
                     }
                 }
+            }
+        }
+    }
+
+    void ScriptingAdapter::subscribeToUIButtonEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        buttonClickedToken = dispatcher.subscribe<::events::ui::UIButtonClickedNotification>(
+            [this](const ::events::ui::UIButtonClickedNotification& notif)
+            {
+                dispatchUIButtonCallback("onButtonClicked", notif.entity, notif.entityName);
+            });
+
+        buttonPressedToken = dispatcher.subscribe<::events::ui::UIButtonPressedNotification>(
+            [this](const ::events::ui::UIButtonPressedNotification& notif)
+            {
+                dispatchUIButtonCallback("onButtonPressed", notif.entity, notif.entityName);
+            });
+
+        buttonReleasedToken = dispatcher.subscribe<::events::ui::UIButtonReleasedNotification>(
+            [this](const ::events::ui::UIButtonReleasedNotification& notif)
+            {
+                dispatchUIButtonCallback("onButtonReleased", notif.entity, notif.entityName);
+            });
+
+        buttonHoverEnterToken = dispatcher.subscribe<::events::ui::UIButtonHoverEnterNotification>(
+            [this](const ::events::ui::UIButtonHoverEnterNotification& notif)
+            {
+                dispatchUIButtonCallback("onButtonHoverEnter", notif.entity, notif.entityName);
+            });
+
+        buttonHoverExitToken = dispatcher.subscribe<::events::ui::UIButtonHoverExitNotification>(
+            [this](const ::events::ui::UIButtonHoverExitNotification& notif)
+            {
+                dispatchUIButtonCallback("onButtonHoverExit", notif.entity, notif.entityName);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI button events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUIButtonEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (buttonClickedToken.isValid())
+        {
+            dispatcher.unsubscribe(buttonClickedToken);
+        }
+        if (buttonPressedToken.isValid())
+        {
+            dispatcher.unsubscribe(buttonPressedToken);
+        }
+        if (buttonReleasedToken.isValid())
+        {
+            dispatcher.unsubscribe(buttonReleasedToken);
+        }
+        if (buttonHoverEnterToken.isValid())
+        {
+            dispatcher.unsubscribe(buttonHoverEnterToken);
+        }
+        if (buttonHoverExitToken.isValid())
+        {
+            dispatcher.unsubscribe(buttonHoverExitToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI button events");
+    }
+
+    void ScriptingAdapter::dispatchUIButtonCallback(const char* methodName,
+                                                     ::services::EntityHandle buttonEntity,
+                                                     const std::string& entityName)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUIButtonListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, methodName,
+                    {value::Value(static_cast<int>(buttonEntity.id)),
+                     value::Value(entityName)});
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
             }
         }
     }

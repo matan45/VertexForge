@@ -27,6 +27,9 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
+#include "../../../services/events/EventDispatcher.hpp"
+#include "../../../services/events/UIEvents.hpp"
+#include "../../../services/data/EntityConversion.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1096,6 +1099,9 @@ namespace controllers::offscreen
             renderHandler->setUIImageDrawList({});
             return;
         }
+
+        // --- Button interaction (state machine + visual override) ---
+        processUIButtonInteraction(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
 
@@ -2175,5 +2181,305 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUITextDrawList(std::move(drawList));
+    }
+
+    void FramePreparationSystem::processUIButtonInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto buttonView = registry.view<components::UIButtonComponent, components::UIRectComponent>();
+
+        if (buttonView.size_hint() == 0)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        // Pre-compute scroll container info for scissor clipping
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+
+                ScrollContainerInfo info;
+                info.scrollOffset = scrollComp.scrollOffset;
+                info.scissorRect = glm::vec4(sx, sy, sw, sh);
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = info;
+            }
+        }
+
+        // PHASE 1: Hit test to find hovered button (smallest-area wins for z-order)
+        entt::entity hoveredButton = entt::null;
+        float smallestArea = std::numeric_limits<float>::max();
+
+        for (auto buttonEntity : buttonView)
+        {
+            auto& buttonComp = registry.get<components::UIButtonComponent>(buttonEntity);
+
+            if (!buttonComp.interactable)
+                continue;
+
+            if (registry.all_of<components::NameComponent>(buttonEntity))
+                if (!registry.get<components::NameComponent>(buttonEntity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, buttonEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(buttonEntity))
+                canvas = &registry.get<components::UICanvasComponent>(buttonEntity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(buttonEntity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            // Find scroll ancestor and apply offset
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = buttonEntity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    break;
+                current = parentEntity;
+            }
+
+            glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                    scissor = it->second.scissorRect;
+                }
+            }
+
+            // Check mouse inside button rect
+            bool insideRect = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+
+            // Check mouse inside scissor (if clipped by scroll)
+            if (insideRect && scissor.z > 0.0f && scissor.w > 0.0f)
+            {
+                insideRect = ctx.mousePosition.x >= scissor.x
+                    && ctx.mousePosition.x <= scissor.x + scissor.z
+                    && ctx.mousePosition.y >= scissor.y
+                    && ctx.mousePosition.y <= scissor.y + scissor.w;
+            }
+
+            if (insideRect)
+            {
+                float area = rect.w * rect.h;
+                if (area < smallestArea)
+                {
+                    smallestArea = area;
+                    hoveredButton = buttonEntity;
+                }
+            }
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Helper to build notification payload
+        auto makeEntityPayload = [&](entt::entity entity) -> std::pair<services::EntityHandle, std::string>
+        {
+            services::EntityHandle handle = services::internal::toHandle(entity);
+            std::string name;
+            if (registry.all_of<components::NameComponent>(entity))
+                name = registry.get<components::NameComponent>(entity).name;
+            return {handle, std::move(name)};
+        };
+
+        // PHASE 2: State machine transitions
+        for (auto buttonEntity : buttonView)
+        {
+            auto& comp = registry.get<components::UIButtonComponent>(buttonEntity);
+
+            if (registry.all_of<components::NameComponent>(buttonEntity))
+                if (!registry.get<components::NameComponent>(buttonEntity).isActive)
+                    continue;
+
+            auto previousState = comp.currentState;
+            components::UIButtonState newState = components::UIButtonState::Normal;
+
+            if (!comp.interactable)
+            {
+                newState = components::UIButtonState::Disabled;
+            }
+            else if (buttonEntity == hoveredButton)
+            {
+                if (ctx.leftMousePressed)
+                {
+                    newState = components::UIButtonState::Pressed;
+                    auto [handle, name] = makeEntityPayload(buttonEntity);
+                    events::ui::UIButtonPressedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    dispatcher.publish(notif);
+                }
+                else if (previousState == components::UIButtonState::Pressed && ctx.leftMouseDown)
+                {
+                    newState = components::UIButtonState::Pressed;
+                }
+                else if (previousState == components::UIButtonState::Pressed && ctx.leftMouseReleased)
+                {
+                    newState = components::UIButtonState::Normal;
+                    auto [handle, name] = makeEntityPayload(buttonEntity);
+
+                    events::ui::UIButtonReleasedNotification relNotif;
+                    relNotif.entity = handle;
+                    relNotif.entityName = name;
+                    dispatcher.publish(relNotif);
+
+                    events::ui::UIButtonClickedNotification clickNotif;
+                    clickNotif.entity = handle;
+                    clickNotif.entityName = std::move(name);
+                    dispatcher.publish(clickNotif);
+                }
+                else
+                {
+                    newState = components::UIButtonState::Hovered;
+                }
+            }
+            else
+            {
+                if (previousState == components::UIButtonState::Pressed && ctx.leftMouseReleased)
+                {
+                    newState = components::UIButtonState::Normal;
+                    auto [handle, name] = makeEntityPayload(buttonEntity);
+                    events::ui::UIButtonReleasedNotification relNotif;
+                    relNotif.entity = handle;
+                    relNotif.entityName = std::move(name);
+                    dispatcher.publish(relNotif);
+                }
+                else
+                {
+                    newState = components::UIButtonState::Normal;
+                }
+            }
+
+            // Publish HoverEnter/HoverExit transitions
+            bool wasHovered = previousState == components::UIButtonState::Hovered
+                || previousState == components::UIButtonState::Pressed;
+            bool isHovered = newState == components::UIButtonState::Hovered
+                || newState == components::UIButtonState::Pressed;
+
+            if (!wasHovered && isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(buttonEntity);
+                events::ui::UIButtonHoverEnterNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+            else if (wasHovered && !isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(buttonEntity);
+                events::ui::UIButtonHoverExitNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+
+            comp.currentState = newState;
+        }
+
+        // PHASE 3: Color lerp + visual override
+        for (auto buttonEntity : buttonView)
+        {
+            auto& comp = registry.get<components::UIButtonComponent>(buttonEntity);
+
+            // Determine target color based on current state
+            glm::vec4 targetColor;
+            switch (comp.currentState)
+            {
+            case components::UIButtonState::Hovered:
+                targetColor = comp.hoveredColor;
+                break;
+            case components::UIButtonState::Pressed:
+                targetColor = comp.pressedColor;
+                break;
+            case components::UIButtonState::Disabled:
+                targetColor = comp.disabledColor;
+                break;
+            default:
+                targetColor = comp.normalColor;
+                break;
+            }
+
+            // Lerp toward target color
+            if (comp.colorTransitionDuration > 0.0f && ctx.deltaTime > 0.0f)
+            {
+                float t = std::min(1.0f, ctx.deltaTime / comp.colorTransitionDuration);
+                comp.currentDisplayColor = glm::mix(comp.currentDisplayColor, targetColor, t);
+            }
+            else
+            {
+                comp.currentDisplayColor = targetColor;
+            }
+
+            // Override UIImageComponent color tint
+            if (registry.all_of<components::UIImageComponent>(buttonEntity))
+            {
+                auto& imageComp = registry.get<components::UIImageComponent>(buttonEntity);
+                imageComp.colorTint = comp.currentDisplayColor;
+
+                // Texture swap: pick per-state texture if defined
+                const std::string* stateTexture = nullptr;
+                switch (comp.currentState)
+                {
+                case components::UIButtonState::Hovered:
+                    if (!comp.hoverTexture.empty()) stateTexture = &comp.hoverTexture;
+                    break;
+                case components::UIButtonState::Pressed:
+                    if (!comp.pressedTexture.empty()) stateTexture = &comp.pressedTexture;
+                    break;
+                case components::UIButtonState::Disabled:
+                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
+                    break;
+                default:
+                    if (!comp.normalTexture.empty()) stateTexture = &comp.normalTexture;
+                    break;
+                }
+
+                if (stateTexture)
+                    imageComp.texturePath = *stateTexture;
+            }
+        }
     }
 }

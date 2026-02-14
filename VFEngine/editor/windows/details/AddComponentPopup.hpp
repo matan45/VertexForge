@@ -10,7 +10,7 @@ namespace windows::details {
                   bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                   bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                   bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
-                  bool hasUIScroll, bool hasUILayoutGroup);
+                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton);
     };
 
 }
