@@ -75,6 +75,13 @@ namespace services {
         bool hasUIButtonComponent(EntityHandle entity) const;
         std::optional<UIButtonData> getUIButtonData(EntityHandle entity) const;
         bool setUIButtonData(EntityHandle entity, const UIButtonData& buttonData);
+
+        // UI TextInput Operations
+        bool addUITextInputComponent(EntityHandle entity);
+        bool removeUITextInputComponent(EntityHandle entity);
+        bool hasUITextInputComponent(EntityHandle entity) const;
+        std::optional<UITextInputData> getUITextInputData(EntityHandle entity) const;
+        bool setUITextInputData(EntityHandle entity, const UITextInputData& textInputData);
     };
 
 }

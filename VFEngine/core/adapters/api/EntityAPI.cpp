@@ -611,6 +611,13 @@ namespace core::api
                         success = dispatcher.execute(cmd);
                         break;
                     }
+                case services::ComponentTypeId::UITextInput:
+                    {
+                        events::ui::AddUITextInputComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
                 default:
                     vfLogError("[Script] Entity.addComponent: component type '{}' cannot be added via script", typeName);
                     break;
@@ -724,6 +731,13 @@ namespace core::api
                 case services::ComponentTypeId::UIButton:
                     {
                         events::ui::RemoveUIButtonComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UITextInput:
+                    {
+                        events::ui::RemoveUITextInputComponentCommand cmd;
                         cmd.entity = entity;
                         success = dispatcher.execute(cmd);
                         break;

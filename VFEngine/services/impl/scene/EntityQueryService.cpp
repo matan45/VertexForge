@@ -264,6 +264,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UITextInput:
+            {
+                auto view = registry.view<components::UITextInputComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -339,6 +348,8 @@ namespace services
             return registry.all_of<components::UILabelComponent>(enttEntity);
         case ComponentTypeId::UIButton:
             return registry.all_of<components::UIButtonComponent>(enttEntity);
+        case ComponentTypeId::UITextInput:
+            return registry.all_of<components::UITextInputComponent>(enttEntity);
         default:
             return false;
         }
@@ -401,6 +412,8 @@ namespace services
             types.push_back(ComponentTypeId::UILabel);
         if (registry.all_of<components::UIButtonComponent>(enttEntity))
             types.push_back(ComponentTypeId::UIButton);
+        if (registry.all_of<components::UITextInputComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UITextInput);
 
         return types;
     }

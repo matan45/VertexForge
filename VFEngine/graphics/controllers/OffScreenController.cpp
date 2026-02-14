@@ -608,6 +608,32 @@ namespace controllers
             ctx.leftMousePressed = !prevLeftMouseDown && ctx.leftMouseDown;
             ctx.leftMouseReleased = prevLeftMouseDown && !ctx.leftMouseDown;
             prevLeftMouseDown = ctx.leftMouseDown;
+
+            // Double-click detection
+            events::input::IsDoubleClickQuery dblClickQuery;
+            dblClickQuery.button = 0;
+            ctx.leftMouseDoubleClick = dispatcher.query(dblClickQuery);
+
+            // Keyboard/text input data for UITextInput interaction
+            ctx.charInput = dispatcher.query(events::input::GetCharInputQuery{});
+            ctx.isKeyPressed = [&dispatcher](int keyCode) {
+                events::input::IsKeyPressedQuery q;
+                q.keyCode = keyCode;
+                return dispatcher.query(q);
+            };
+            ctx.isKeyDown = [&dispatcher](int keyCode) {
+                events::input::IsKeyDownQuery q;
+                q.keyCode = keyCode;
+                return dispatcher.query(q);
+            };
+            ctx.getClipboardText = [&dispatcher]() {
+                return dispatcher.query(events::input::GetClipboardTextQuery{});
+            };
+            ctx.setClipboardText = [&dispatcher](const std::string& text) {
+                events::input::SetClipboardTextCommand cmd;
+                cmd.text = text;
+                dispatcher.execute(cmd);
+            };
         }
 
         framePreparation->prepareUIImages(ctx);

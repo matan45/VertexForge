@@ -35,7 +35,7 @@ public class Entity {
     // Valid types: "Transform", "Camera", "Mesh", "Material", "Script",
     //              "AudioSource2D", "AudioSource3D", "IBL", "Billboard", "Text",
     //              "UICanvas", "UIRect", "UIImage", "UIScroll", "UILayoutGroup",
-    //              "UILabel", "UIButton"
+    //              "UILabel", "UIButton", "UITextInput"
     // Use ComponentType constants for type safety (e.g., ComponentType::UI_BUTTON)
     public static function findWithComponent(string componentType): int[] {
         return _native_entity_findWithComponent(componentType);

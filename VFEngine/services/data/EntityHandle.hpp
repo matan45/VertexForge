@@ -59,6 +59,7 @@ namespace services {
         UILayoutGroup,
         UILabel,
         UIButton,
+        UITextInput,
     };
 
 }

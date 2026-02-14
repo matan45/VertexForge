@@ -12,7 +12,8 @@ namespace windows::details
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
-                                 bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton)
+                                 bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
+                                 bool hasUITextInput)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -335,11 +336,25 @@ namespace windows::details
                 }
             }
 
+            if (!hasUITextInput)
+            {
+                if (ImGui::Selectable("  UI Text Input"))
+                {
+                    events::ui::AddUITextInputComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Editable text input field with focus and selection");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
-                           hasUIButton;
+                           hasUIButton && hasUITextInput;
             if (allAdded)
             {
                 ImGui::Spacing();

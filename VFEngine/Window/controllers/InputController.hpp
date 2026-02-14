@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <string>
 
 struct GLFWwindow;
 
@@ -39,6 +40,17 @@ namespace window
         using ScrollCallbackFn = void(*)(GLFWwindow*, double, double);
         ScrollCallbackFn previousScrollCallback = nullptr;
 
+        // Previous char callback for chaining (e.g. ImGui's callback)
+        using CharCallbackFn = void(*)(GLFWwindow*, unsigned int);
+        CharCallbackFn previousCharCallback = nullptr;
+
+        // Character input buffer (accumulated per frame, cleared on update())
+        std::vector<uint32_t> charBuffer;
+
+        // Key pressed edge detection (rising-edge: down this frame, not last frame)
+        bool wasKeyDown[512]{};
+        bool keyPressed[512]{};
+
     public:
         explicit InputController(Window* window);
         ~InputController();
@@ -46,6 +58,14 @@ namespace window
         // Keyboard State
         bool isKeyDown(int keyCode) const;
         bool isKeyReleased(int keyCode) const;
+        bool isKeyPressed(int keyCode) const;
+
+        // Character Input
+        const std::vector<uint32_t>& getCharInput() const;
+
+        // Clipboard
+        std::string getClipboardText() const;
+        void setClipboardText(const std::string& text);
 
         // Mouse State
         bool isMouseButtonDown(int button) const;
@@ -66,5 +86,6 @@ namespace window
         
     private:
         static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+        static void charCallback(GLFWwindow* window, unsigned int codepoint);
     };
 }

@@ -325,4 +325,40 @@ namespace services
         // Runtime
         uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Pressed, 3=Disabled
     };
+
+    struct UITextInputData
+    {
+        // Config
+        std::string text;
+        std::string placeholderText = "Enter text...";
+        std::string fontPath;
+        float fontSize = 16.0f;
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 placeholderColor{0.5f, 0.5f, 0.5f, 0.7f};
+
+        // Per-state background colors
+        glm::vec4 normalColor{0.2f, 0.2f, 0.2f, 1.0f};
+        glm::vec4 hoveredColor{0.25f, 0.25f, 0.25f, 1.0f};
+        glm::vec4 focusedColor{0.15f, 0.15f, 0.3f, 1.0f};
+        glm::vec4 disabledColor{0.15f, 0.15f, 0.15f, 0.5f};
+
+        // Per-state texture paths (empty = use color only)
+        std::string normalTexture;
+        std::string hoveredTexture;
+        std::string focusedTexture;
+        std::string disabledTexture;
+
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+        int maxLength = 0; // 0 = unlimited
+
+        // Caret and selection
+        glm::vec4 selectionColor{0.3f, 0.5f, 0.8f, 0.5f};
+        glm::vec4 caretColor{1.0f, 1.0f, 1.0f, 1.0f};
+        float caretWidth = 2.0f;
+        float caretBlinkRate = 0.53f;
+
+        // Runtime
+        uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Focused, 3=Disabled
+    };
 }

@@ -54,6 +54,12 @@ namespace core
         ::events::SubscriptionToken buttonHoverEnterToken;
         ::events::SubscriptionToken buttonHoverExitToken;
 
+        // UI TextInput callback subscription tokens
+        ::events::SubscriptionToken textInputSubmitToken;
+        ::events::SubscriptionToken textInputChangedToken;
+        ::events::SubscriptionToken textInputFocusedToken;
+        ::events::SubscriptionToken textInputUnfocusedToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -112,5 +118,13 @@ namespace core
         void dispatchUIButtonCallback(const char* methodName,
                                       ::services::EntityHandle buttonEntity,
                                       const std::string& entityName);
+
+        // UI TextInput callback helpers
+        void subscribeToUITextInputEvents();
+        void unsubscribeFromUITextInputEvents();
+        void dispatchUITextInputCallback(const char* methodName,
+                                         ::services::EntityHandle entity,
+                                         const std::string& entityName,
+                                         const std::string& text = "");
     };
 }

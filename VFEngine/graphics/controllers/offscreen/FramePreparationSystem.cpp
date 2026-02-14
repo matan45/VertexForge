@@ -1103,6 +1103,9 @@ namespace controllers::offscreen
         // --- Button interaction (state machine + visual override) ---
         processUIButtonInteraction(ctx);
 
+        // --- Text input interaction (focus, editing, state machine) ---
+        processUITextInputInteraction(ctx);
+
         std::vector<render::ui::UIImageRenderData> drawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -1746,6 +1749,122 @@ namespace controllers::offscreen
             }
         }
 
+        // --- Text input caret and selection quads ---
+        if (focusedTextInput != entt::null && registry.valid(focusedTextInput)
+            && registry.all_of<components::UITextInputComponent, components::UIRectComponent>(focusedTextInput))
+        {
+            const auto& tiComp = registry.get<components::UITextInputComponent>(focusedTextInput);
+
+            if (tiComp.currentState == components::UITextInputState::Focused && !tiComp.fontPath.empty())
+            {
+                const auto& rectComp = registry.get<components::UIRectComponent>(focusedTextInput);
+
+                const components::UICanvasComponent* canvas = findCanvasForEntity(registry, focusedTextInput);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(focusedTextInput))
+                    canvas = &registry.get<components::UICanvasComponent>(focusedTextInput);
+
+                if (canvas)
+                {
+                    float vw = static_cast<float>(ctx.viewportWidth);
+                    float vh = static_cast<float>(ctx.viewportHeight);
+                    float scale = 1.0f;
+                    if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                        scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+                    PixelRect tiRect = resolvePixelRect(rectComp, vw, vh, scale);
+
+                    // Scroll ancestor offset
+                    entt::entity scrollAncestor = entt::null;
+                    entt::entity current = focusedTextInput;
+                    while (registry.all_of<components::ParentComponent>(current))
+                    {
+                        entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                        if (parentEntity == entt::null || !registry.valid(parentEntity)) break;
+                        if (scrollAncestor == entt::null && registry.all_of<components::UIScrollComponent>(parentEntity))
+                            scrollAncestor = parentEntity;
+                        if (registry.all_of<components::UICanvasComponent>(parentEntity)) break;
+                        current = parentEntity;
+                    }
+
+                    glm::vec4 scissor = glm::vec4(tiRect.x, tiRect.y, tiRect.w, tiRect.h);
+                    if (scrollAncestor != entt::null)
+                    {
+                        auto scrollView2 = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+                        if (registry.all_of<components::UIScrollComponent, components::UIRectComponent>(scrollAncestor))
+                        {
+                            const auto& scrollComp2 = registry.get<components::UIScrollComponent>(scrollAncestor);
+                            tiRect.x -= scrollComp2.scrollOffset.x;
+                            tiRect.y -= scrollComp2.scrollOffset.y;
+
+                            const auto* scrollCanvas2 = findCanvasForEntity(registry, scrollAncestor);
+                            if (scrollCanvas2)
+                            {
+                                float sc2 = 1.0f;
+                                if (scrollCanvas2->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                                    sc2 = std::min(vw / scrollCanvas2->referenceWidth, vh / scrollCanvas2->referenceHeight);
+                                const auto& scrollRect2 = registry.get<components::UIRectComponent>(scrollAncestor);
+                                PixelRect sRect = resolvePixelRect(scrollRect2, vw, vh, sc2);
+
+                                float sx = std::max(sRect.x, tiRect.x);
+                                float sy = std::max(sRect.y, tiRect.y);
+                                float sw = std::min(sRect.x + sRect.w, tiRect.x + tiRect.w) - sx;
+                                float sh = std::min(sRect.y + sRect.h, tiRect.y + tiRect.h) - sy;
+                                scissor = glm::vec4(sx, sy, std::max(0.0f, sw), std::max(0.0f, sh));
+                            }
+                        }
+                    }
+
+                    float padding = 4.0f * scale;
+                    float scaledFontSize = tiComp.fontSize * scale;
+
+                    // Compute caret X position using character width estimation
+                    // (Precise font-based positioning would require font data access here;
+                    //  the average-width approach is sufficient for most fonts)
+                    float avgCharWidth = scaledFontSize * 0.55f;
+                    float caretX = static_cast<float>(tiComp.cursorPosition) * avgCharWidth;
+                    float selStartX = 0.0f;
+                    float selEndX = 0.0f;
+                    bool hasSelectionRange = tiComp.selectionStart >= 0 && tiComp.selectionEnd >= 0
+                        && tiComp.selectionStart != tiComp.selectionEnd;
+
+                    if (hasSelectionRange)
+                    {
+                        int selMin = std::min(tiComp.selectionStart, tiComp.selectionEnd);
+                        int selMax = std::max(tiComp.selectionStart, tiComp.selectionEnd);
+                        selStartX = static_cast<float>(selMin) * avgCharWidth;
+                        selEndX = static_cast<float>(selMax) * avgCharWidth;
+                    }
+
+                    // Apply scroll offset
+                    float textStartX = tiRect.x + padding - tiComp.scrollOffsetX;
+
+                    // Selection highlight (behind text)
+                    if (hasSelectionRange)
+                    {
+                        render::ui::UIImageRenderData selection;
+                        selection.texturePath = "__white_1x1__";
+                        selection.position = glm::vec2(textStartX + selStartX, tiRect.y + 2.0f * scale);
+                        selection.size = glm::vec2(selEndX - selStartX, tiRect.h - 4.0f * scale);
+                        selection.colorTint = tiComp.selectionColor;
+                        selection.scissorRect = scissor;
+                        drawList.push_back(std::move(selection));
+                    }
+
+                    // Caret (blinking)
+                    if (tiComp.caretVisible)
+                    {
+                        render::ui::UIImageRenderData caret;
+                        caret.texturePath = "__white_1x1__";
+                        caret.position = glm::vec2(textStartX + caretX, tiRect.y + 2.0f * scale);
+                        caret.size = glm::vec2(tiComp.caretWidth * scale, tiRect.h - 4.0f * scale);
+                        caret.colorTint = tiComp.caretColor;
+                        caret.scissorRect = scissor;
+                        drawList.push_back(std::move(caret));
+                    }
+                }
+            }
+        }
+
         renderHandler->setUIImageDrawList(std::move(drawList));
     }
 
@@ -2180,6 +2299,106 @@ namespace controllers::offscreen
             drawList.push_back(std::move(renderData));
         }
 
+        // --- Emit text input text/placeholder ---
+        {
+            auto textInputView = registry.view<components::UITextInputComponent, components::UIRectComponent>();
+            for (auto entity : textInputView)
+            {
+                if (registry.all_of<components::NameComponent>(entity))
+                    if (!registry.get<components::NameComponent>(entity).isActive)
+                        continue;
+
+                const auto& tiComp = registry.get<components::UITextInputComponent>(entity);
+                if (tiComp.fontPath.empty())
+                    continue;
+
+                // Determine display text and color
+                bool showPlaceholder = tiComp.text.empty()
+                    && tiComp.currentState != components::UITextInputState::Focused;
+                const std::string& displayText = showPlaceholder ? tiComp.placeholderText : tiComp.text;
+                const glm::vec4& textColor = showPlaceholder ? tiComp.placeholderColor : tiComp.textColor;
+
+                if (displayText.empty())
+                    continue;
+
+                const auto& rectComp = registry.get<components::UIRectComponent>(entity);
+
+                const components::UICanvasComponent* canvas = nullptr;
+                entt::entity scrollAncestor = entt::null;
+                entt::entity current = entity;
+                while (registry.all_of<components::ParentComponent>(current))
+                {
+                    entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                    if (parentEntity == entt::null || !registry.valid(parentEntity))
+                        break;
+                    if (scrollAncestor == entt::null
+                        && registry.all_of<components::UIScrollComponent>(parentEntity))
+                        scrollAncestor = parentEntity;
+                    if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    {
+                        canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                        break;
+                    }
+                    current = parentEntity;
+                }
+                if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                    canvas = &registry.get<components::UICanvasComponent>(entity);
+                if (!canvas) continue;
+
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(viewportW / canvas->referenceWidth, viewportH / canvas->referenceHeight);
+
+                PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
+
+                glm::vec4 scissor{0.0f};
+                if (scrollAncestor != entt::null)
+                {
+                    auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                    if (it != scrollContainers.end())
+                    {
+                        rect.x -= it->second.scrollOffset.x;
+                        rect.y -= it->second.scrollOffset.y;
+                        scissor = it->second.scissorRect;
+                    }
+                }
+
+                // Use the text input rect itself as scissor to clip overflow
+                if (scissor.z <= 0.0f || scissor.w <= 0.0f)
+                {
+                    scissor = glm::vec4(rect.x, rect.y, rect.w, rect.h);
+                }
+                else
+                {
+                    // Intersect with scroll scissor
+                    float sx = std::max(scissor.x, rect.x);
+                    float sy = std::max(scissor.y, rect.y);
+                    float sw = std::min(scissor.x + scissor.z, rect.x + rect.w) - sx;
+                    float sh = std::min(scissor.y + scissor.w, rect.y + rect.h) - sy;
+                    scissor = glm::vec4(sx, sy, std::max(0.0f, sw), std::max(0.0f, sh));
+                }
+
+                // Small padding inside the rect
+                float padding = 4.0f * scale;
+
+                render::ui::UITextRenderData renderData;
+                renderData.fontPath = tiComp.fontPath;
+                renderData.text = displayText;
+                renderData.fontSize = tiComp.fontSize * scale;
+                renderData.color = textColor;
+                renderData.lineSpacing = 1.0f;
+                renderData.letterSpacing = 0.0f;
+                renderData.wordWrap = false;
+                renderData.horizontalAlignment = 0; // Left
+                renderData.verticalAlignment = 1;   // Middle (vertically centered)
+                renderData.overflow = 1;             // Clip
+                renderData.position = glm::vec2(rect.x + padding - tiComp.scrollOffsetX, rect.y);
+                renderData.size = glm::vec2(rect.w - padding * 2.0f + tiComp.scrollOffsetX, rect.h);
+                renderData.scissorRect = scissor;
+                drawList.push_back(std::move(renderData));
+            }
+        }
+
         renderHandler->setUITextDrawList(std::move(drawList));
     }
 
@@ -2470,6 +2689,739 @@ namespace controllers::offscreen
                     if (!comp.pressedTexture.empty()) stateTexture = &comp.pressedTexture;
                     break;
                 case components::UIButtonState::Disabled:
+                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
+                    break;
+                default:
+                    if (!comp.normalTexture.empty()) stateTexture = &comp.normalTexture;
+                    break;
+                }
+
+                if (stateTexture)
+                    imageComp.texturePath = *stateTexture;
+            }
+        }
+    }
+
+    // GLFW key code constants (matching GLFW/glfw3.h)
+    namespace keycode
+    {
+        constexpr int Backspace = 259;
+        constexpr int Delete = 261;
+        constexpr int Right = 262;
+        constexpr int Left = 263;
+        constexpr int Home = 268;
+        constexpr int End = 269;
+        constexpr int Enter = 257;
+        constexpr int Escape = 256;
+        constexpr int Tab = 258;
+        constexpr int A = 65;
+        constexpr int C = 67;
+        constexpr int V = 86;
+        constexpr int X = 88;
+        constexpr int LeftControl = 341;
+        constexpr int RightControl = 345;
+        constexpr int LeftShift = 340;
+        constexpr int RightShift = 344;
+    }
+
+    void FramePreparationSystem::processUITextInputInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto textInputView = registry.view<components::UITextInputComponent, components::UIRectComponent>();
+
+        if (textInputView.size_hint() == 0)
+        {
+            focusedTextInput = entt::null;
+            return;
+        }
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        // Pre-compute scroll container info for scissor clipping
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+
+                ScrollContainerInfo info;
+                info.scrollOffset = scrollComp.scrollOffset;
+                info.scissorRect = glm::vec4(sx, sy, sw, sh);
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = info;
+            }
+        }
+
+        // Helper: check if Ctrl key is held
+        bool ctrlDown = ctx.isKeyDown && (ctx.isKeyDown(keycode::LeftControl) || ctx.isKeyDown(keycode::RightControl));
+        bool shiftDown = ctx.isKeyDown && (ctx.isKeyDown(keycode::LeftShift) || ctx.isKeyDown(keycode::RightShift));
+
+        // PHASE 1: Hit test to find hovered text input (smallest-area wins)
+        entt::entity hoveredTextInput = entt::null;
+        float smallestArea = std::numeric_limits<float>::max();
+
+        for (auto entity : textInputView)
+        {
+            auto& comp = registry.get<components::UITextInputComponent>(entity);
+
+            if (!comp.interactable)
+                continue;
+
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, entity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(entity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            // Find scroll ancestor
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    break;
+                current = parentEntity;
+            }
+
+            glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                    scissor = it->second.scissorRect;
+                }
+            }
+
+            bool insideRect = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+
+            if (insideRect && scissor.z > 0.0f && scissor.w > 0.0f)
+            {
+                insideRect = ctx.mousePosition.x >= scissor.x
+                    && ctx.mousePosition.x <= scissor.x + scissor.z
+                    && ctx.mousePosition.y >= scissor.y
+                    && ctx.mousePosition.y <= scissor.y + scissor.w;
+            }
+
+            if (insideRect)
+            {
+                float area = rect.w * rect.h;
+                if (area < smallestArea)
+                {
+                    smallestArea = area;
+                    hoveredTextInput = entity;
+                }
+            }
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto makeEntityPayload = [&](entt::entity entity) -> std::pair<services::EntityHandle, std::string>
+        {
+            services::EntityHandle handle = services::internal::toHandle(entity);
+            std::string name;
+            if (registry.all_of<components::NameComponent>(entity))
+                name = registry.get<components::NameComponent>(entity).name;
+            return {handle, std::move(name)};
+        };
+
+        // Helper: check if entity has a valid selection range
+        auto hasSelection = [](const components::UITextInputComponent& comp) -> bool
+        {
+            return comp.selectionStart >= 0 && comp.selectionEnd >= 0
+                && comp.selectionStart != comp.selectionEnd;
+        };
+
+        // Helper: delete selected text, returns true if selection was deleted
+        auto deleteSelection = [](components::UITextInputComponent& comp) -> bool
+        {
+            if (comp.selectionStart < 0 || comp.selectionEnd < 0
+                || comp.selectionStart == comp.selectionEnd)
+                return false;
+
+            int selMin = std::min(comp.selectionStart, comp.selectionEnd);
+            int selMax = std::max(comp.selectionStart, comp.selectionEnd);
+            selMin = std::max(0, std::min(selMin, static_cast<int>(comp.text.size())));
+            selMax = std::max(0, std::min(selMax, static_cast<int>(comp.text.size())));
+
+            comp.text.erase(selMin, selMax - selMin);
+            comp.cursorPosition = selMin;
+            comp.selectionStart = -1;
+            comp.selectionEnd = -1;
+            return true;
+        };
+
+        // Helper: get selected text
+        auto getSelectedText = [](const components::UITextInputComponent& comp) -> std::string
+        {
+            if (comp.selectionStart < 0 || comp.selectionEnd < 0
+                || comp.selectionStart == comp.selectionEnd)
+                return "";
+
+            int selMin = std::min(comp.selectionStart, comp.selectionEnd);
+            int selMax = std::max(comp.selectionStart, comp.selectionEnd);
+            selMin = std::max(0, std::min(selMin, static_cast<int>(comp.text.size())));
+            selMax = std::max(0, std::min(selMax, static_cast<int>(comp.text.size())));
+
+            return comp.text.substr(selMin, selMax - selMin);
+        };
+
+        // Helper: find word boundary (for Ctrl+arrow / double-click)
+        auto findWordBoundaryLeft = [](const std::string& text, int pos) -> int
+        {
+            if (pos <= 0) return 0;
+            int p = pos - 1;
+            // Skip non-alphanumeric
+            while (p > 0 && !std::isalnum(static_cast<unsigned char>(text[p])))
+                --p;
+            // Skip alphanumeric
+            while (p > 0 && std::isalnum(static_cast<unsigned char>(text[p - 1])))
+                --p;
+            return p;
+        };
+
+        auto findWordBoundaryRight = [](const std::string& text, int pos) -> int
+        {
+            int len = static_cast<int>(text.size());
+            if (pos >= len) return len;
+            int p = pos;
+            // Skip alphanumeric
+            while (p < len && std::isalnum(static_cast<unsigned char>(text[p])))
+                ++p;
+            // Skip non-alphanumeric
+            while (p < len && !std::isalnum(static_cast<unsigned char>(text[p])))
+                ++p;
+            return p;
+        };
+
+        // PHASE 2: Focus management
+        if (ctx.leftMousePressed)
+        {
+            if (hoveredTextInput != entt::null)
+            {
+                // Click on a text input -> focus it
+                if (focusedTextInput != hoveredTextInput)
+                {
+                    // Unfocus previous
+                    if (focusedTextInput != entt::null && registry.valid(focusedTextInput)
+                        && registry.all_of<components::UITextInputComponent>(focusedTextInput))
+                    {
+                        auto& prevComp = registry.get<components::UITextInputComponent>(focusedTextInput);
+                        prevComp.currentState = components::UITextInputState::Normal;
+                        prevComp.selectionStart = -1;
+                        prevComp.selectionEnd = -1;
+
+                        auto [handle, name] = makeEntityPayload(focusedTextInput);
+                        events::ui::UITextInputUnfocusedNotification notif;
+                        notif.entity = handle;
+                        notif.entityName = std::move(name);
+                        dispatcher.publish(notif);
+                    }
+
+                    focusedTextInput = hoveredTextInput;
+                    auto& comp = registry.get<components::UITextInputComponent>(focusedTextInput);
+                    comp.currentState = components::UITextInputState::Focused;
+                    comp.cursorPosition = static_cast<int>(comp.text.size());
+                    comp.caretBlinkTimer = 0.0f;
+                    comp.caretVisible = true;
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+
+                    auto [handle, name] = makeEntityPayload(focusedTextInput);
+                    events::ui::UITextInputFocusedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    dispatcher.publish(notif);
+                }
+            }
+            else
+            {
+                // Click outside -> unfocus
+                if (focusedTextInput != entt::null && registry.valid(focusedTextInput)
+                    && registry.all_of<components::UITextInputComponent>(focusedTextInput))
+                {
+                    auto& comp = registry.get<components::UITextInputComponent>(focusedTextInput);
+                    comp.currentState = components::UITextInputState::Normal;
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+
+                    auto [handle, name] = makeEntityPayload(focusedTextInput);
+                    events::ui::UITextInputUnfocusedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    dispatcher.publish(notif);
+                }
+                focusedTextInput = entt::null;
+            }
+        }
+
+        // Double-click on focused text input -> select word
+        if (ctx.leftMouseDoubleClick && focusedTextInput != entt::null
+            && hoveredTextInput == focusedTextInput
+            && registry.valid(focusedTextInput)
+            && registry.all_of<components::UITextInputComponent>(focusedTextInput))
+        {
+            auto& comp = registry.get<components::UITextInputComponent>(focusedTextInput);
+            if (!comp.text.empty())
+            {
+                int pos = comp.cursorPosition;
+                comp.selectionStart = findWordBoundaryLeft(comp.text, pos);
+                comp.selectionEnd = findWordBoundaryRight(comp.text, pos);
+                comp.cursorPosition = comp.selectionEnd;
+            }
+        }
+
+        // Escape -> unfocus
+        if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Escape) && focusedTextInput != entt::null)
+        {
+            if (registry.valid(focusedTextInput)
+                && registry.all_of<components::UITextInputComponent>(focusedTextInput))
+            {
+                auto& comp = registry.get<components::UITextInputComponent>(focusedTextInput);
+                comp.currentState = components::UITextInputState::Normal;
+                comp.selectionStart = -1;
+                comp.selectionEnd = -1;
+
+                auto [handle, name] = makeEntityPayload(focusedTextInput);
+                events::ui::UITextInputUnfocusedNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+            focusedTextInput = entt::null;
+        }
+
+        // PHASE 3: Text editing (when focused)
+        if (focusedTextInput != entt::null && registry.valid(focusedTextInput)
+            && registry.all_of<components::UITextInputComponent>(focusedTextInput))
+        {
+            auto& comp = registry.get<components::UITextInputComponent>(focusedTextInput);
+            bool textChanged = false;
+            int textLen = static_cast<int>(comp.text.size());
+
+            // Character input
+            for (uint32_t codepoint : ctx.charInput)
+            {
+                // Skip control characters
+                if (codepoint < 32 || codepoint == 127)
+                    continue;
+
+                // Delete selection first if any
+                deleteSelection(comp);
+                textLen = static_cast<int>(comp.text.size());
+
+                // Check max length
+                if (comp.maxLength > 0 && textLen >= comp.maxLength)
+                    continue;
+
+                // Insert character (ASCII only for simplicity — handles most use cases)
+                if (codepoint < 128)
+                {
+                    comp.text.insert(comp.cursorPosition, 1, static_cast<char>(codepoint));
+                }
+                else
+                {
+                    // UTF-8 encode
+                    std::string utf8;
+                    if (codepoint < 0x80)
+                    {
+                        utf8 += static_cast<char>(codepoint);
+                    }
+                    else if (codepoint < 0x800)
+                    {
+                        utf8 += static_cast<char>(0xC0 | (codepoint >> 6));
+                        utf8 += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    }
+                    else if (codepoint < 0x10000)
+                    {
+                        utf8 += static_cast<char>(0xE0 | (codepoint >> 12));
+                        utf8 += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                        utf8 += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    }
+                    else
+                    {
+                        utf8 += static_cast<char>(0xF0 | (codepoint >> 18));
+                        utf8 += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+                        utf8 += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                        utf8 += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    }
+                    comp.text.insert(comp.cursorPosition, utf8);
+                }
+
+                comp.cursorPosition++;
+                textChanged = true;
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+            textLen = static_cast<int>(comp.text.size());
+
+            // Backspace
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Backspace))
+            {
+                if (hasSelection(comp))
+                {
+                    deleteSelection(comp);
+                    textChanged = true;
+                }
+                else if (comp.cursorPosition > 0)
+                {
+                    if (ctrlDown)
+                    {
+                        int newPos = findWordBoundaryLeft(comp.text, comp.cursorPosition);
+                        comp.text.erase(newPos, comp.cursorPosition - newPos);
+                        comp.cursorPosition = newPos;
+                    }
+                    else
+                    {
+                        comp.text.erase(comp.cursorPosition - 1, 1);
+                        comp.cursorPosition--;
+                    }
+                    textChanged = true;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Delete
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Delete))
+            {
+                textLen = static_cast<int>(comp.text.size());
+                if (hasSelection(comp))
+                {
+                    deleteSelection(comp);
+                    textChanged = true;
+                }
+                else if (comp.cursorPosition < textLen)
+                {
+                    if (ctrlDown)
+                    {
+                        int newPos = findWordBoundaryRight(comp.text, comp.cursorPosition);
+                        comp.text.erase(comp.cursorPosition, newPos - comp.cursorPosition);
+                    }
+                    else
+                    {
+                        comp.text.erase(comp.cursorPosition, 1);
+                    }
+                    textChanged = true;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Left arrow
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Left))
+            {
+                textLen = static_cast<int>(comp.text.size());
+                int prevPos = comp.cursorPosition;
+
+                if (ctrlDown)
+                    comp.cursorPosition = findWordBoundaryLeft(comp.text, comp.cursorPosition);
+                else if (comp.cursorPosition > 0)
+                    comp.cursorPosition--;
+
+                if (shiftDown)
+                {
+                    if (comp.selectionStart < 0) comp.selectionStart = prevPos;
+                    comp.selectionEnd = comp.cursorPosition;
+                }
+                else
+                {
+                    if (hasSelection(comp))
+                        comp.cursorPosition = std::min(comp.selectionStart, comp.selectionEnd);
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Right arrow
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Right))
+            {
+                textLen = static_cast<int>(comp.text.size());
+                int prevPos = comp.cursorPosition;
+
+                if (ctrlDown)
+                    comp.cursorPosition = findWordBoundaryRight(comp.text, comp.cursorPosition);
+                else if (comp.cursorPosition < textLen)
+                    comp.cursorPosition++;
+
+                if (shiftDown)
+                {
+                    if (comp.selectionStart < 0) comp.selectionStart = prevPos;
+                    comp.selectionEnd = comp.cursorPosition;
+                }
+                else
+                {
+                    if (hasSelection(comp))
+                        comp.cursorPosition = std::max(comp.selectionStart, comp.selectionEnd);
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Home
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Home))
+            {
+                int prevPos = comp.cursorPosition;
+                comp.cursorPosition = 0;
+
+                if (shiftDown)
+                {
+                    if (comp.selectionStart < 0) comp.selectionStart = prevPos;
+                    comp.selectionEnd = 0;
+                }
+                else
+                {
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // End
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::End))
+            {
+                textLen = static_cast<int>(comp.text.size());
+                int prevPos = comp.cursorPosition;
+                comp.cursorPosition = textLen;
+
+                if (shiftDown)
+                {
+                    if (comp.selectionStart < 0) comp.selectionStart = prevPos;
+                    comp.selectionEnd = textLen;
+                }
+                else
+                {
+                    comp.selectionStart = -1;
+                    comp.selectionEnd = -1;
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Ctrl+A -> select all
+            if (ctx.isKeyPressed && ctrlDown && ctx.isKeyPressed(keycode::A))
+            {
+                textLen = static_cast<int>(comp.text.size());
+                comp.selectionStart = 0;
+                comp.selectionEnd = textLen;
+                comp.cursorPosition = textLen;
+            }
+
+            // Ctrl+C -> copy
+            if (ctx.isKeyPressed && ctrlDown && ctx.isKeyPressed(keycode::C))
+            {
+                if (hasSelection(comp) && ctx.setClipboardText)
+                {
+                    ctx.setClipboardText(getSelectedText(comp));
+                }
+            }
+
+            // Ctrl+X -> cut
+            if (ctx.isKeyPressed && ctrlDown && ctx.isKeyPressed(keycode::X))
+            {
+                if (hasSelection(comp) && ctx.setClipboardText)
+                {
+                    ctx.setClipboardText(getSelectedText(comp));
+                    deleteSelection(comp);
+                    textChanged = true;
+                }
+            }
+
+            // Ctrl+V -> paste
+            if (ctx.isKeyPressed && ctrlDown && ctx.isKeyPressed(keycode::V))
+            {
+                if (ctx.getClipboardText)
+                {
+                    std::string clipboard = ctx.getClipboardText();
+                    if (!clipboard.empty())
+                    {
+                        deleteSelection(comp);
+                        textLen = static_cast<int>(comp.text.size());
+
+                        // Enforce max length
+                        if (comp.maxLength > 0)
+                        {
+                            int remaining = comp.maxLength - textLen;
+                            if (remaining <= 0)
+                                clipboard.clear();
+                            else if (static_cast<int>(clipboard.size()) > remaining)
+                                clipboard = clipboard.substr(0, remaining);
+                        }
+
+                        if (!clipboard.empty())
+                        {
+                            comp.text.insert(comp.cursorPosition, clipboard);
+                            comp.cursorPosition += static_cast<int>(clipboard.size());
+                            textChanged = true;
+                        }
+                    }
+                }
+                comp.caretBlinkTimer = 0.0f;
+                comp.caretVisible = true;
+            }
+
+            // Enter -> submit
+            if (ctx.isKeyPressed && ctx.isKeyPressed(keycode::Enter))
+            {
+                auto [handle, name] = makeEntityPayload(focusedTextInput);
+                events::ui::UITextInputSubmitNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                notif.text = comp.text;
+                dispatcher.publish(notif);
+            }
+
+            // Publish text changed notification
+            if (textChanged)
+            {
+                auto [handle, name] = makeEntityPayload(focusedTextInput);
+                events::ui::UITextInputChangedNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                notif.text = comp.text;
+                dispatcher.publish(notif);
+            }
+
+            // Clamp cursor position
+            comp.cursorPosition = std::max(0, std::min(comp.cursorPosition, static_cast<int>(comp.text.size())));
+        }
+
+        // PHASE 4: State machine transitions + color lerp + visual override
+        for (auto entity : textInputView)
+        {
+            auto& comp = registry.get<components::UITextInputComponent>(entity);
+
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+            // State machine
+            if (!comp.interactable)
+            {
+                comp.currentState = components::UITextInputState::Disabled;
+            }
+            else if (entity == focusedTextInput)
+            {
+                comp.currentState = components::UITextInputState::Focused;
+            }
+            else if (entity == hoveredTextInput)
+            {
+                comp.currentState = components::UITextInputState::Hovered;
+            }
+            else
+            {
+                comp.currentState = components::UITextInputState::Normal;
+            }
+
+            // Caret blink timer (only when focused)
+            if (comp.currentState == components::UITextInputState::Focused && comp.caretBlinkRate > 0.0f)
+            {
+                comp.caretBlinkTimer += ctx.deltaTime;
+                if (comp.caretBlinkTimer >= comp.caretBlinkRate)
+                {
+                    comp.caretBlinkTimer -= comp.caretBlinkRate;
+                    comp.caretVisible = !comp.caretVisible;
+                }
+            }
+            else
+            {
+                comp.caretVisible = false;
+            }
+
+            // Color lerp
+            glm::vec4 targetColor;
+            switch (comp.currentState)
+            {
+            case components::UITextInputState::Hovered:
+                targetColor = comp.hoveredColor;
+                break;
+            case components::UITextInputState::Focused:
+                targetColor = comp.focusedColor;
+                break;
+            case components::UITextInputState::Disabled:
+                targetColor = comp.disabledColor;
+                break;
+            default:
+                targetColor = comp.normalColor;
+                break;
+            }
+
+            if (comp.colorTransitionDuration > 0.0f && ctx.deltaTime > 0.0f)
+            {
+                float t = std::min(1.0f, ctx.deltaTime / comp.colorTransitionDuration);
+                comp.currentDisplayColor = glm::mix(comp.currentDisplayColor, targetColor, t);
+            }
+            else
+            {
+                comp.currentDisplayColor = targetColor;
+            }
+
+            // Override UIImageComponent color tint
+            if (registry.all_of<components::UIImageComponent>(entity))
+            {
+                auto& imageComp = registry.get<components::UIImageComponent>(entity);
+                imageComp.colorTint = comp.currentDisplayColor;
+
+                const std::string* stateTexture = nullptr;
+                switch (comp.currentState)
+                {
+                case components::UITextInputState::Hovered:
+                    if (!comp.hoveredTexture.empty()) stateTexture = &comp.hoveredTexture;
+                    break;
+                case components::UITextInputState::Focused:
+                    if (!comp.focusedTexture.empty()) stateTexture = &comp.focusedTexture;
+                    break;
+                case components::UITextInputState::Disabled:
                     if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
                     break;
                 default:

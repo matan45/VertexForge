@@ -39,6 +39,7 @@ namespace core
             apiRegistry->registerEngineAPIs();
             subscribeToPhysicsEvents();
             subscribeToUIButtonEvents();
+            subscribeToUITextInputEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -62,6 +63,7 @@ namespace core
 
         unsubscribeFromPhysicsEvents();
         unsubscribeFromUIButtonEvents();
+        unsubscribeFromUITextInputEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -282,6 +284,10 @@ namespace core
             if (interpreter->classImplementsInterface(className, "IUIButtonListener"))
             {
                 interfaces.insert("IUIButtonListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUITextInputListener"))
+            {
+                interfaces.insert("IUITextInputListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -700,6 +706,117 @@ namespace core
                 interpreter->callMethod(instance, methodName,
                     {value::Value(static_cast<int>(buttonEntity.id)),
                      value::Value(entityName)});
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    // ============================================
+    // UI TextInput event helpers
+    // ============================================
+
+    void ScriptingAdapter::subscribeToUITextInputEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        textInputSubmitToken = dispatcher.subscribe<::events::ui::UITextInputSubmitNotification>(
+            [this](const ::events::ui::UITextInputSubmitNotification& notif)
+            {
+                dispatchUITextInputCallback("onTextInputSubmit", notif.entity, notif.entityName, notif.text);
+            });
+
+        textInputChangedToken = dispatcher.subscribe<::events::ui::UITextInputChangedNotification>(
+            [this](const ::events::ui::UITextInputChangedNotification& notif)
+            {
+                dispatchUITextInputCallback("onTextInputChanged", notif.entity, notif.entityName, notif.text);
+            });
+
+        textInputFocusedToken = dispatcher.subscribe<::events::ui::UITextInputFocusedNotification>(
+            [this](const ::events::ui::UITextInputFocusedNotification& notif)
+            {
+                dispatchUITextInputCallback("onTextInputFocused", notif.entity, notif.entityName);
+            });
+
+        textInputUnfocusedToken = dispatcher.subscribe<::events::ui::UITextInputUnfocusedNotification>(
+            [this](const ::events::ui::UITextInputUnfocusedNotification& notif)
+            {
+                dispatchUITextInputCallback("onTextInputUnfocused", notif.entity, notif.entityName);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI text input events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUITextInputEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (textInputSubmitToken.isValid())
+        {
+            dispatcher.unsubscribe(textInputSubmitToken);
+        }
+        if (textInputChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(textInputChangedToken);
+        }
+        if (textInputFocusedToken.isValid())
+        {
+            dispatcher.unsubscribe(textInputFocusedToken);
+        }
+        if (textInputUnfocusedToken.isValid())
+        {
+            dispatcher.unsubscribe(textInputUnfocusedToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI text input events");
+    }
+
+    void ScriptingAdapter::dispatchUITextInputCallback(const char* methodName,
+                                                        ::services::EntityHandle entity,
+                                                        const std::string& entityName,
+                                                        const std::string& text)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUITextInputListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (text.empty() &&
+                    (method == "onTextInputFocused" ||
+                     method == "onTextInputUnfocused"))
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(entity.id)),
+                         value::Value(entityName)});
+                }
+                else
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(entity.id)),
+                         value::Value(entityName),
+                         value::Value(text)});
+                }
             }
             catch (const std::exception& e)
             {
