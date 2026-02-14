@@ -342,12 +342,6 @@ namespace services
         glm::vec4 focusedColor{0.15f, 0.15f, 0.3f, 1.0f};
         glm::vec4 disabledColor{0.15f, 0.15f, 0.15f, 0.5f};
 
-        // Per-state texture paths (empty = use color only)
-        std::string normalTexture;
-        std::string hoveredTexture;
-        std::string focusedTexture;
-        std::string disabledTexture;
-
         float colorTransitionDuration = 0.1f;
         bool interactable = true;
         int maxLength = 0; // 0 = unlimited

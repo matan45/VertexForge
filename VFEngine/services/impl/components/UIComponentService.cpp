@@ -795,10 +795,6 @@ namespace services {
         data.hoveredColor = comp.hoveredColor;
         data.focusedColor = comp.focusedColor;
         data.disabledColor = comp.disabledColor;
-        data.normalTexture = comp.normalTexture;
-        data.hoveredTexture = comp.hoveredTexture;
-        data.focusedTexture = comp.focusedTexture;
-        data.disabledTexture = comp.disabledTexture;
         data.colorTransitionDuration = comp.colorTransitionDuration;
         data.interactable = comp.interactable;
         data.maxLength = comp.maxLength;
@@ -832,10 +828,6 @@ namespace services {
         comp.hoveredColor = textInputData.hoveredColor;
         comp.focusedColor = textInputData.focusedColor;
         comp.disabledColor = textInputData.disabledColor;
-        comp.normalTexture = textInputData.normalTexture;
-        comp.hoveredTexture = textInputData.hoveredTexture;
-        comp.focusedTexture = textInputData.focusedTexture;
-        comp.disabledTexture = textInputData.disabledTexture;
         comp.colorTransitionDuration = textInputData.colorTransitionDuration;
         comp.interactable = textInputData.interactable;
         comp.maxLength = textInputData.maxLength;

@@ -61,9 +61,6 @@ namespace windows::details
             changed |= drawStateColors(data);
             ImGui::Spacing();
 
-            changed |= drawStateTextures(data);
-            ImGui::Spacing();
-
             changed |= drawCaretSettings(data);
             ImGui::Spacing();
 
@@ -219,80 +216,6 @@ namespace windows::details
                 changed = true;
             if (ImGui::ColorEdit4("Disabled Color##UITextInput", &data.disabledColor.x))
                 changed = true;
-
-            ImGui::TreePop();
-        }
-
-        return changed;
-    }
-
-    static bool drawTextureSlot(const char* label, std::string& texturePath, const char* uniqueId)
-    {
-        bool changed = false;
-
-        ImGui::Text("%s", label);
-
-        if (!texturePath.empty())
-        {
-            std::string filename = texturePath;
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-                filename = filename.substr(lastSlash + 1);
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", filename.c_str());
-        }
-
-        char selectId[64];
-        std::snprintf(selectId, sizeof(selectId), "Select##UITI_%s", uniqueId);
-        if (ImGui::Button(selectId))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    texturePath = path;
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected texture file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool wasEmpty = texturePath.empty();
-        if (wasEmpty) ImGui::BeginDisabled();
-        char clearId[64];
-        std::snprintf(clearId, sizeof(clearId), "Clear##UITI_%s", uniqueId);
-        if (ImGui::Button(clearId))
-        {
-            texturePath = "";
-            changed = true;
-        }
-        if (wasEmpty) ImGui::EndDisabled();
-
-        return changed;
-    }
-
-    bool UITextInputDrawer::drawStateTextures(services::UITextInputData& data)
-    {
-        bool changed = false;
-
-        if (ImGui::TreeNodeEx("State Textures##UITextInput"))
-        {
-            ImGui::TextDisabled("Empty = color only mode");
-            ImGui::Spacing();
-
-            changed |= drawTextureSlot("Normal", data.normalTexture, "normal");
-            changed |= drawTextureSlot("Hovered", data.hoveredTexture, "hovered");
-            changed |= drawTextureSlot("Focused", data.focusedTexture, "focused");
-            changed |= drawTextureSlot("Disabled", data.disabledTexture, "disabled");
 
             ImGui::TreePop();
         }

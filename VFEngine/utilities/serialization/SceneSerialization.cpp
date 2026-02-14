@@ -1915,11 +1915,6 @@ namespace serialization
         j["focusedColor"] = json::array({textInput.focusedColor.r, textInput.focusedColor.g, textInput.focusedColor.b, textInput.focusedColor.a});
         j["disabledColor"] = json::array({textInput.disabledColor.r, textInput.disabledColor.g, textInput.disabledColor.b, textInput.disabledColor.a});
 
-        if (!textInput.normalTexture.empty()) j["normalTexture"] = textInput.normalTexture;
-        if (!textInput.hoveredTexture.empty()) j["hoveredTexture"] = textInput.hoveredTexture;
-        if (!textInput.focusedTexture.empty()) j["focusedTexture"] = textInput.focusedTexture;
-        if (!textInput.disabledTexture.empty()) j["disabledTexture"] = textInput.disabledTexture;
-
         j["colorTransitionDuration"] = textInput.colorTransitionDuration;
         j["interactable"] = textInput.interactable;
         j["maxLength"] = textInput.maxLength;
@@ -1958,11 +1953,6 @@ namespace serialization
         deserializeVec4("disabledColor", textInput.disabledColor);
         deserializeVec4("selectionColor", textInput.selectionColor);
         deserializeVec4("caretColor", textInput.caretColor);
-
-        textInput.normalTexture = j.value("normalTexture", std::string(""));
-        textInput.hoveredTexture = j.value("hoveredTexture", std::string(""));
-        textInput.focusedTexture = j.value("focusedTexture", std::string(""));
-        textInput.disabledTexture = j.value("disabledTexture", std::string(""));
 
         textInput.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
         textInput.interactable = j.value("interactable", true);

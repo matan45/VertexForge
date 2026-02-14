@@ -3411,26 +3411,6 @@ namespace controllers::offscreen
             {
                 auto& imageComp = registry.get<components::UIImageComponent>(entity);
                 imageComp.colorTint = comp.currentDisplayColor;
-
-                const std::string* stateTexture = nullptr;
-                switch (comp.currentState)
-                {
-                case components::UITextInputState::Hovered:
-                    if (!comp.hoveredTexture.empty()) stateTexture = &comp.hoveredTexture;
-                    break;
-                case components::UITextInputState::Focused:
-                    if (!comp.focusedTexture.empty()) stateTexture = &comp.focusedTexture;
-                    break;
-                case components::UITextInputState::Disabled:
-                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
-                    break;
-                default:
-                    if (!comp.normalTexture.empty()) stateTexture = &comp.normalTexture;
-                    break;
-                }
-
-                if (stateTexture)
-                    imageComp.texturePath = *stateTexture;
             }
         }
     }

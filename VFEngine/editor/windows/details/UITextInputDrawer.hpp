@@ -14,7 +14,6 @@ namespace windows::details
         bool drawTextFields(services::UITextInputData& data);
         bool drawFontSettings(services::UITextInputData& data);
         bool drawStateColors(services::UITextInputData& data);
-        bool drawStateTextures(services::UITextInputData& data);
         bool drawCaretSettings(services::UITextInputData& data);
         bool drawSelectionColor(services::UITextInputData& data);
         bool drawTransitionDuration(services::UITextInputData& data);
