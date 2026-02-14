@@ -82,7 +82,7 @@ namespace window
 
     const std::vector<uint32_t>& InputController::getCharInput() const
     {
-        return charBuffer;
+        return frameCharBuffer;
     }
 
     bool InputController::isMouseButtonDown(int button) const
@@ -154,7 +154,8 @@ namespace window
         frameScrollDelta = scrollDelta;
         scrollDelta = glm::vec2(0.0f);
 
-        // Clear character input buffer from previous frame
+        // Swap character input buffer (same pattern as scroll delta)
+        frameCharBuffer.swap(charBuffer);
         charBuffer.clear();
 
         // Key pressed edge detection

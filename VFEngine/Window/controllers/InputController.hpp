@@ -44,8 +44,9 @@ namespace window
         using CharCallbackFn = void(*)(GLFWwindow*, unsigned int);
         CharCallbackFn previousCharCallback = nullptr;
 
-        // Character input buffer (accumulated per frame, cleared on update())
+        // Character input buffer (accumulated from callbacks, swapped on update())
         std::vector<uint32_t> charBuffer;
+        std::vector<uint32_t> frameCharBuffer;
 
         // Key pressed edge detection (rising-edge: down this frame, not last frame)
         bool wasKeyDown[512]{};
