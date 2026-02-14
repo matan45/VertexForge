@@ -68,6 +68,13 @@ namespace services {
         std::optional<UILabelData> getUILabelData(EntityHandle entity) const;
         bool setUILabelData(EntityHandle entity, const UILabelData& labelData);
         std::optional<glm::vec2> getUILabelPreferredSize(EntityHandle entity) const;
+
+        // UI Button Operations
+        bool addUIButtonComponent(EntityHandle entity);
+        bool removeUIButtonComponent(EntityHandle entity);
+        bool hasUIButtonComponent(EntityHandle entity) const;
+        std::optional<UIButtonData> getUIButtonData(EntityHandle entity) const;
+        bool setUIButtonData(EntityHandle entity, const UIButtonData& buttonData);
     };
 
 }

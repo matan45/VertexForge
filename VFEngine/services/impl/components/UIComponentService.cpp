@@ -601,6 +601,122 @@ namespace services {
         return std::nullopt;
     }
 
+    // ========== UI Button CRUD ==========
+
+    bool UIComponentService::addUIButtonComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UIButtonComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UIButtonComponent>();
+
+        // Auto-add UIRectComponent if missing (button needs rect for layout/hit-testing)
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        // Auto-add UIImageComponent if missing (button background)
+        if (!sceneEntity.hasComponent<components::UIImageComponent>()) {
+            sceneEntity.addComponent<components::UIImageComponent>();
+        }
+
+        // Auto-add UILabelComponent if missing (button text)
+        if (!sceneEntity.hasComponent<components::UILabelComponent>()) {
+            auto& labelComp = sceneEntity.addComponent<components::UILabelComponent>();
+            labelComp.text = "Button";
+            labelComp.horizontalAlignment = components::HorizontalAlignment::Center;
+            labelComp.verticalAlignment = components::VerticalAlignment::Middle;
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUIButtonComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIButtonComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UIButtonComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUIButtonComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UIButtonComponent>();
+    }
+
+    std::optional<UIButtonData> UIComponentService::getUIButtonData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIButtonComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UIButtonComponent>();
+
+        UIButtonData data;
+        data.normalColor = comp.normalColor;
+        data.hoveredColor = comp.hoveredColor;
+        data.pressedColor = comp.pressedColor;
+        data.disabledColor = comp.disabledColor;
+        data.normalTexture = comp.normalTexture;
+        data.hoverTexture = comp.hoverTexture;
+        data.pressedTexture = comp.pressedTexture;
+        data.disabledTexture = comp.disabledTexture;
+        data.colorTransitionDuration = comp.colorTransitionDuration;
+        data.interactable = comp.interactable;
+        data.currentState = static_cast<uint8_t>(comp.currentState);
+        return data;
+    }
+
+    bool UIComponentService::setUIButtonData(EntityHandle entity, const UIButtonData& buttonData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIButtonComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIButtonComponent>();
+        comp.normalColor = buttonData.normalColor;
+        comp.hoveredColor = buttonData.hoveredColor;
+        comp.pressedColor = buttonData.pressedColor;
+        comp.disabledColor = buttonData.disabledColor;
+        comp.normalTexture = buttonData.normalTexture;
+        comp.hoverTexture = buttonData.hoverTexture;
+        comp.pressedTexture = buttonData.pressedTexture;
+        comp.disabledTexture = buttonData.disabledTexture;
+        comp.colorTransitionDuration = buttonData.colorTransitionDuration;
+        comp.interactable = buttonData.interactable;
+        comp.currentState = static_cast<components::UIButtonState>(buttonData.currentState);
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -779,6 +895,33 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUILabelPreferredSizeQuery>(
             [this](const events::ui::GetUILabelPreferredSizeQuery& query) {
                 return getUILabelPreferredSize(query.entity);
+            });
+
+        // Button commands
+        dispatcher.registerCommandHandler<events::ui::AddUIButtonComponentCommand>(
+            [this](const events::ui::AddUIButtonComponentCommand& cmd) {
+                return addUIButtonComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUIButtonComponentCommand>(
+            [this](const events::ui::RemoveUIButtonComponentCommand& cmd) {
+                return removeUIButtonComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIButtonDataCommand>(
+            [this](const events::ui::SetUIButtonDataCommand& cmd) {
+                return setUIButtonData(cmd.entity, cmd.buttonData);
+            });
+
+        // Button queries
+        dispatcher.registerQueryHandler<events::ui::HasUIButtonComponentQuery>(
+            [this](const events::ui::HasUIButtonComponentQuery& query) {
+                return hasUIButtonComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIButtonDataQuery>(
+            [this](const events::ui::GetUIButtonDataQuery& query) {
+                return getUIButtonData(query.entity);
             });
     }
 

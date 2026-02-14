@@ -76,6 +76,7 @@ namespace controllers
         bool showClusterDebug = false;
         bool showShadowDebug = false;
         bool playModeActive = false;
+        bool prevLeftMouseDown = false;
         glm::vec2 uiViewportOffset{0.0f, 0.0f};
         glm::vec2 uiViewportPanelSize{0.0f, 0.0f};
         postprocess::PostProcessSettings currentPostProcessSettings;

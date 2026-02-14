@@ -36,4 +36,14 @@ public class ComponentType {
     // Editor/rendering components
     public static final string IBL = "IBL";
     public static final string BILLBOARD = "Billboard";
+    public static final string TEXT = "Text";
+
+    // UI components
+    public static final string UI_CANVAS = "UICanvas";
+    public static final string UI_RECT = "UIRect";
+    public static final string UI_IMAGE = "UIImage";
+    public static final string UI_SCROLL = "UIScroll";
+    public static final string UI_LAYOUT_GROUP = "UILayoutGroup";
+    public static final string UI_LABEL = "UILabel";
+    public static final string UI_BUTTON = "UIButton";
 }

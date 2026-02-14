@@ -26,6 +26,7 @@
 #include "details/UILabelDrawer.hpp"
 #include "details/UIScrollDrawer.hpp"
 #include "details/UILayoutGroupDrawer.hpp"
+#include "details/UIButtonDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -59,6 +60,7 @@ namespace windows
         details::UILabelDrawer uiLabelDrawer;
         details::UIScrollDrawer uiScrollDrawer;
         details::UILayoutGroupDrawer uiLayoutGroupDrawer;
+        details::UIButtonDrawer uiButtonDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

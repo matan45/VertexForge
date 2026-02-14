@@ -35,6 +35,8 @@ namespace controllers::offscreen
         glm::vec2 mousePosition{0.0f, 0.0f};
         glm::vec2 scrollDelta{0.0f, 0.0f};
         bool leftMouseDown = false;
+        bool leftMousePressed = false;   // rising edge (was up, now down)
+        bool leftMouseReleased = false;  // falling edge (was down, now up)
     };
 
     class FramePreparationSystem
@@ -72,6 +74,7 @@ namespace controllers::offscreen
         void prepareUIImagesWorldSpace(const FrameContext& ctx);
         void prepareUILabelsScreenSpace(const FrameContext& ctx);
         void prepareUILabelsWorldSpace(const FrameContext& ctx);
-        
+        void processUIButtonInteraction(const FrameContext& ctx);
+
     };
 }

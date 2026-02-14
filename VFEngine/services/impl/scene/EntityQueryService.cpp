@@ -255,6 +255,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UIButton:
+            {
+                auto view = registry.view<components::UIButtonComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -328,6 +337,8 @@ namespace services
             return registry.all_of<components::UILayoutGroupComponent>(enttEntity);
         case ComponentTypeId::UILabel:
             return registry.all_of<components::UILabelComponent>(enttEntity);
+        case ComponentTypeId::UIButton:
+            return registry.all_of<components::UIButtonComponent>(enttEntity);
         default:
             return false;
         }
@@ -388,6 +399,8 @@ namespace services
             types.push_back(ComponentTypeId::UILayoutGroup);
         if (registry.all_of<components::UILabelComponent>(enttEntity))
             types.push_back(ComponentTypeId::UILabel);
+        if (registry.all_of<components::UIButtonComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIButton);
 
         return types;
     }

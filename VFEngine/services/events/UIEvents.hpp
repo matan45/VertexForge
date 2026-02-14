@@ -259,4 +259,82 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUILabelPreferredSize"; }
     };
 
+    // ============================================
+    // UI Button Commands
+    // ============================================
+
+    struct AddUIButtonComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUIButtonComponent"; }
+    };
+
+    struct RemoveUIButtonComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUIButtonComponent"; }
+    };
+
+    struct SetUIButtonDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UIButtonData buttonData;
+
+        std::string_view getName() const override { return "SetUIButtonData"; }
+    };
+
+    // ============================================
+    // UI Button Queries
+    // ============================================
+
+    struct HasUIButtonComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUIButtonComponent"; }
+    };
+
+    struct GetUIButtonDataQuery : IQuery<std::optional<services::UIButtonData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIButtonData"; }
+    };
+
+    // ============================================
+    // UI Button Notifications
+    // ============================================
+
+    struct UIButtonClickedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIButtonClicked"; }
+    };
+
+    struct UIButtonPressedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIButtonPressed"; }
+    };
+
+    struct UIButtonReleasedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIButtonReleased"; }
+    };
+
+    struct UIButtonHoverEnterNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIButtonHoverEnter"; }
+    };
+
+    struct UIButtonHoverExitNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIButtonHoverExit"; }
+    };
+
 }
