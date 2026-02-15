@@ -6,7 +6,6 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
 #include "print/Logger.hpp"
-#include <cstring>
 
 namespace render::text
 {

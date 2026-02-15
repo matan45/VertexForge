@@ -46,7 +46,7 @@ namespace animation
 
         bool initialized = false;
     public:
-        AnimatorStateMachine();
+       explicit AnimatorStateMachine();
         ~AnimatorStateMachine();
 
         void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback);

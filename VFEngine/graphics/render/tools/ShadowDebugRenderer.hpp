@@ -1,16 +1,14 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include "../shadow/ShadowTypes.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <array>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -40,7 +38,7 @@ namespace render::mesh
     };
 
     // Color scheme: Cascade 0=Red, 1=Orange, 2=Yellow, 3=Green, Spot=Cyan, Point=Magenta
-    class ShadowDebugRenderer
+    class ShadowDebugRenderer : public DebugRendererBase
     {
     private:
         inline static constexpr std::array<glm::vec3, 8> ndcCorners = {{
@@ -68,9 +66,6 @@ namespace render::mesh
 
         static constexpr int SPHERE_SEGMENTS = 32;
 
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> frustumShader;
         std::shared_ptr<core::Shader> sphereShader;
 
@@ -89,8 +84,6 @@ namespace render::mesh
         vk::Buffer sphereIndexBuffer;
         vk::DeviceMemory sphereIndexBufferMemory;
         uint32_t sphereIndexCount = 0;
-
-        bool initialized = false;
 
     public:
         explicit ShadowDebugRenderer(core::Device& device, core::SwapChain& swapChain);

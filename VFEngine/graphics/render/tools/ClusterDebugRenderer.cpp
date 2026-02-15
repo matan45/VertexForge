@@ -4,13 +4,12 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/PipelineUtilities.hpp"
 #include <unordered_set>
 
 namespace render::mesh
 {
     ClusterDebugRenderer::ClusterDebugRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -29,17 +28,7 @@ namespace render::mesh
 
     void ClusterDebugRenderer::recreate(vk::RenderPass renderPass)
     {
-        if (wireframePipeline)
-        {
-            device.getLogicalDevice().destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
         createPipeline(renderPass);
     }
 
@@ -47,16 +36,8 @@ namespace render::mesh
     {
         auto& dev = device.getLogicalDevice();
 
-        if (wireframePipeline)
-        {
-            dev.destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            dev.destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
+
         if (descriptorPool)
         {
             dev.destroyDescriptorPool(descriptorPool);
@@ -68,20 +49,9 @@ namespace render::mesh
             descriptorSetLayout = nullptr;
         }
 
-        if (vertexBuffer)
-        {
-            dev.destroyBuffer(vertexBuffer);
-            dev.freeMemory(vertexBufferMemory);
-            vertexBuffer = nullptr;
-            vertexBufferMemory = nullptr;
-        }
-        if (indexBuffer)
-        {
-            dev.destroyBuffer(indexBuffer);
-            dev.freeMemory(indexBufferMemory);
-            indexBuffer = nullptr;
-            indexBufferMemory = nullptr;
-        }
+        destroyBufferPair(vertexBuffer, vertexBufferMemory);
+        destroyBufferPair(indexBuffer, indexBufferMemory);
+
         if (instanceBuffer)
         {
             dev.unmapMemory(instanceBufferMemory);

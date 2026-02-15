@@ -1,7 +1,7 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <string>
@@ -10,8 +10,6 @@
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -51,12 +49,9 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    class PhysicsDebugRenderer
+    class PhysicsDebugRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -88,8 +83,6 @@ namespace render::mesh
             uint32_t version = 0;
         };
         mutable std::unordered_map<std::string, HeightFieldCacheEntry> heightfieldCache;
-
-        bool initialized = false;
 
         static constexpr int SPHERE_SEGMENTS = 24;
 

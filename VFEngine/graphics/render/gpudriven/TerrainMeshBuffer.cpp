@@ -4,7 +4,6 @@
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
 #include "print/EditorLogger.hpp"
-#include <cstring>
 
 namespace render::gpudriven
 {

@@ -136,6 +136,15 @@ namespace render
         private:
             bool allocateShadowMaps(LightShadowData& data);
             void freeShadowMaps(LightShadowData& data);
+
+            void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
+            void updateSpotShadowMatrices(LightShadowData& data, uint32_t entityId);
+            void updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
+                                               const glm::mat4& cameraView, const glm::mat4& cameraProjection,
+                                               float cameraNear, float cameraFar);
+            void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
+            void handleAtlasResize(const types::RenderSettings& settings,
+                                   const types::ShadowAtlasConfig& atlasConfig);
         };
     }
 }

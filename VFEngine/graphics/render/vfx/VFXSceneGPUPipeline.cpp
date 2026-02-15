@@ -12,6 +12,54 @@
 #include "GPUVFXTypes.hpp"
 #include <filesystem>
 
+namespace
+{
+    void uploadStagedPixelData(core::Device& device, vk::Image image,
+                               const void* pixelData, vk::DeviceSize imageSize,
+                               uint32_t width, uint32_t height)
+    {
+        auto vkDevice = device.getLogicalDevice();
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingMemory;
+        core::BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
+        stagingRequest.size = imageSize;
+        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                    vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+        void* data = vkDevice.mapMemory(stagingMemory, 0, imageSize);
+        std::memcpy(data, pixelData, imageSize);
+        vkDevice.unmapMemory(stagingMemory);
+
+        auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
+
+        core::ImageUtilities::transitionImageLayout(
+            cmd.get(), image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::BufferImageCopy region{};
+        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent = vk::Extent3D{width, height, 1};
+
+        cmd->copyBufferToImage(stagingBuffer, image,
+                               vk::ImageLayout::eTransferDstOptimal, region);
+
+        core::ImageUtilities::transitionImageLayout(
+            cmd.get(), image,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+
+        vkDevice.destroyBuffer(stagingBuffer);
+        vkDevice.freeMemory(stagingMemory);
+    }
+}
+
 namespace render::vfx
 {
     VFXSceneGPUPipeline::VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain)
@@ -418,8 +466,7 @@ namespace render::vfx
         constexpr uint32_t texSize = 1;
 
         core::ImageInfoRequest imageInfo(
-            vkDevice,
-            device.getPhysicalDevice(),
+            vkDevice, device.getPhysicalDevice(),
             texSize, texSize, 1, 1,
             vk::Format::eR8G8B8A8Unorm,
             vk::ImageTiling::eOptimal,
@@ -429,68 +476,15 @@ namespace render::vfx
         core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
 
         core::ImageViewInfoRequest viewInfo(
-            vkDevice,
-            defaultTextureImage,
+            vkDevice, defaultTextureImage,
             vk::Format::eR8G8B8A8Unorm,
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D
         );
         core::ImageUtilities::createImageView(viewInfo, defaultTextureImageView);
 
-        // White pixel data
-        std::vector<uint8_t> pixelData = {255, 255, 255, 255};
-        vk::DeviceSize imageSize = pixelData.size();
-
-        // Create staging buffer
-        core::BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
-        stagingRequest.size = imageSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                    vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        // Copy pixel data to staging buffer
-        void* data = vkDevice.mapMemory(stagingMemory, 0, imageSize);
-        std::memcpy(data, pixelData.data(), imageSize);
-        vkDevice.unmapMemory(stagingMemory);
-
-        // Transition and copy
-        auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
-
-        core::ImageUtilities::transitionImageLayout(
-            cmd.get(), defaultTextureImage,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        vk::BufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = vk::Offset3D{0, 0, 0};
-        region.imageExtent = vk::Extent3D{texSize, texSize, 1};
-
-        cmd->copyBufferToImage(stagingBuffer, defaultTextureImage,
-                               vk::ImageLayout::eTransferDstOptimal, region);
-
-        core::ImageUtilities::transitionImageLayout(
-            cmd.get(), defaultTextureImage,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-
-        // Clean up staging buffer
-        vkDevice.destroyBuffer(stagingBuffer);
-        vkDevice.freeMemory(stagingMemory);
+        const std::array<uint8_t, 4> whitePixel = {255, 255, 255, 255};
+        uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
     }
 
     void VFXSceneGPUPipeline::createSampler()

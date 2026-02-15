@@ -74,9 +74,6 @@ namespace render::mesh
         bool usingDefaultTextures = false;
         std::unique_ptr<ibl::DefaultIBLTextureFactory> defaultIBLFactory;
 
-        mutable glm::mat4 currentView{1.0f};
-        mutable glm::mat4 currentProjection{1.0f};
-        mutable glm::vec3 currentCameraPos{0.0f};
 
     public:
         explicit SkinnedMeshPipeline(core::Device& device, core::SwapChain& swapChain,

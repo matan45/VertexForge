@@ -11,6 +11,8 @@ namespace controllers::offscreen
 {
     class IBLController
     {
+    private:
+        render::RenderPassHandler& renderHandler;
     public:
         explicit IBLController(render::RenderPassHandler& renderHandler);
         ~IBLController();
@@ -18,8 +20,5 @@ namespace controllers::offscreen
         void set(std::string_view iblPath);
         void setCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         void remove();
-
-    private:
-        render::RenderPassHandler& renderHandler;
     };
 }

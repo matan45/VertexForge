@@ -1,15 +1,13 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <array>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -21,7 +19,7 @@ namespace render::mesh
         glm::mat4 modelMatrix; // worldMatrix * scale(refWidth/pixelsPerUnit, refHeight/pixelsPerUnit, 1)
     };
 
-    class UICanvasDebugRenderer
+    class UICanvasDebugRenderer : public DebugRendererBase
     {
     private:
         // Unit quad corners (centered at origin)
@@ -62,9 +60,6 @@ namespace render::mesh
             3, 10, 3, 11   // corner 3
         }};
 
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -74,8 +69,6 @@ namespace render::mesh
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexBufferMemory;
-
-        bool initialized = false;
 
     public:
         explicit UICanvasDebugRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -90,8 +83,6 @@ namespace render::mesh
                     const std::vector<UICanvasOutlineRenderData>& canvasDrawList,
                     const glm::mat4& editorView,
                     const glm::mat4& editorProjection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

@@ -9,7 +9,7 @@
 namespace render::mesh
 {
     ShadowDebugRenderer::ShadowDebugRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -26,87 +26,19 @@ namespace render::mesh
 
     void ShadowDebugRenderer::recreate(vk::RenderPass renderPass)
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (frustumPipeline)
-        {
-            dev.destroyPipeline(frustumPipeline);
-            frustumPipeline = nullptr;
-        }
-        if (frustumPipelineLayout)
-        {
-            dev.destroyPipelineLayout(frustumPipelineLayout);
-            frustumPipelineLayout = nullptr;
-        }
-        if (spherePipeline)
-        {
-            dev.destroyPipeline(spherePipeline);
-            spherePipeline = nullptr;
-        }
-        if (spherePipelineLayout)
-        {
-            dev.destroyPipelineLayout(spherePipelineLayout);
-            spherePipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(frustumPipeline, frustumPipelineLayout);
+        destroyPipelineAndLayout(spherePipeline, spherePipelineLayout);
         createPipelines(renderPass);
     }
 
     void ShadowDebugRenderer::cleanUp()
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (frustumPipeline)
-        {
-            dev.destroyPipeline(frustumPipeline);
-            frustumPipeline = nullptr;
-        }
-        if (frustumPipelineLayout)
-        {
-            dev.destroyPipelineLayout(frustumPipelineLayout);
-            frustumPipelineLayout = nullptr;
-        }
-        if (spherePipeline)
-        {
-            dev.destroyPipeline(spherePipeline);
-            spherePipeline = nullptr;
-        }
-        if (spherePipelineLayout)
-        {
-            dev.destroyPipelineLayout(spherePipelineLayout);
-            spherePipelineLayout = nullptr;
-        }
-
-        if (frustumVertexBuffer)
-        {
-            dev.destroyBuffer(frustumVertexBuffer);
-            dev.freeMemory(frustumVertexBufferMemory);
-            frustumVertexBuffer = nullptr;
-            frustumVertexBufferMemory = nullptr;
-        }
-        if (frustumIndexBuffer)
-        {
-            dev.destroyBuffer(frustumIndexBuffer);
-            dev.freeMemory(frustumIndexBufferMemory);
-            frustumIndexBuffer = nullptr;
-            frustumIndexBufferMemory = nullptr;
-        }
-
-        if (sphereVertexBuffer)
-        {
-            dev.destroyBuffer(sphereVertexBuffer);
-            dev.freeMemory(sphereVertexBufferMemory);
-            sphereVertexBuffer = nullptr;
-            sphereVertexBufferMemory = nullptr;
-        }
-        if (sphereIndexBuffer)
-        {
-            dev.destroyBuffer(sphereIndexBuffer);
-            dev.freeMemory(sphereIndexBufferMemory);
-            sphereIndexBuffer = nullptr;
-            sphereIndexBufferMemory = nullptr;
-        }
-
+        destroyPipelineAndLayout(frustumPipeline, frustumPipelineLayout);
+        destroyPipelineAndLayout(spherePipeline, spherePipelineLayout);
+        destroyBufferPair(frustumVertexBuffer, frustumVertexBufferMemory);
+        destroyBufferPair(frustumIndexBuffer, frustumIndexBufferMemory);
+        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferMemory);
+        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferMemory);
         initialized = false;
     }
 

@@ -4,7 +4,6 @@
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
 #include <array>
-#include <cstring>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier

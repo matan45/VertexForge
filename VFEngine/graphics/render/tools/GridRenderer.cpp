@@ -8,7 +8,7 @@
 namespace render::mesh
 {
     GridRenderer::GridRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -24,50 +24,15 @@ namespace render::mesh
 
     void GridRenderer::recreate(vk::RenderPass renderPass)
     {
-        if (gridPipeline)
-        {
-            device.getLogicalDevice().destroyPipeline(gridPipeline);
-            gridPipeline = nullptr;
-        }
-        if (gridPipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(gridPipelineLayout);
-            gridPipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(gridPipeline, gridPipelineLayout);
         createPipeline(renderPass);
     }
 
     void GridRenderer::cleanUp()
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (gridPipeline)
-        {
-            dev.destroyPipeline(gridPipeline);
-            gridPipeline = nullptr;
-        }
-        if (gridPipelineLayout)
-        {
-            dev.destroyPipelineLayout(gridPipelineLayout);
-            gridPipelineLayout = nullptr;
-        }
-
-        if (vertexBuffer)
-        {
-            dev.destroyBuffer(vertexBuffer);
-            dev.freeMemory(vertexBufferMemory);
-            vertexBuffer = nullptr;
-            vertexBufferMemory = nullptr;
-        }
-        if (indexBuffer)
-        {
-            dev.destroyBuffer(indexBuffer);
-            dev.freeMemory(indexBufferMemory);
-            indexBuffer = nullptr;
-            indexBufferMemory = nullptr;
-        }
-
+        destroyPipelineAndLayout(gridPipeline, gridPipelineLayout);
+        destroyBufferPair(vertexBuffer, vertexBufferMemory);
+        destroyBufferPair(indexBuffer, indexBufferMemory);
         initialized = false;
     }
 

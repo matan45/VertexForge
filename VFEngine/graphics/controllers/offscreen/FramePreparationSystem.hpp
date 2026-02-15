@@ -1,7 +1,9 @@
 #pragma once
+#include "DebugFrameBuilder.hpp"
+#include "UIFrameBuilder.hpp"
+#include "UIInteractionSystem.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
-#include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include <string>
 #include <functional>
 #include <unordered_map>
@@ -54,13 +56,12 @@ namespace controllers::offscreen
     {
     private:
         std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
+        DebugFrameBuilder debugBuilder;
+        UIFrameBuilder uiFrameBuilder;
+        UIInteractionSystem uiInteraction;
 
         const render::mesh::ExtractedPBRValues* getCachedPBRValues(const std::string& materialPath);
         void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath);
-
-        void collectDirectionalLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
-        void collectPointLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
-        void collectSpotLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
 
     public:
         FramePreparationSystem() = default;
@@ -68,31 +69,18 @@ namespace controllers::offscreen
         void prepareMeshes(const FrameContext& ctx);
         void prepareBillboards(const FrameContext& ctx);
         void prepareText(const FrameContext& ctx);
-        void prepareCameraFrustums(const FrameContext& ctx);
-        void prepareAudioSpheres(const FrameContext& ctx);
-        void prepareGrid(const FrameContext& ctx);
-        void preparePhysicsColliders(const FrameContext& ctx);
-        void prepareLightGizmos(const FrameContext& ctx);
-        void prepareClusterDebug(const FrameContext& ctx);
-        void prepareUICanvasOutlines(const FrameContext& ctx);
-        void prepareUIImages(const FrameContext& ctx);
-        void prepareUILabels(const FrameContext& ctx);
+
+        void prepareCameraFrustums(const FrameContext& ctx) { debugBuilder.prepareCameraFrustums(ctx); }
+        void prepareAudioSpheres(const FrameContext& ctx) { debugBuilder.prepareAudioSpheres(ctx); }
+        void prepareGrid(const FrameContext& ctx) { debugBuilder.prepareGrid(ctx); }
+        void preparePhysicsColliders(const FrameContext& ctx) { debugBuilder.preparePhysicsColliders(ctx); }
+        void prepareLightGizmos(const FrameContext& ctx) { debugBuilder.prepareLightGizmos(ctx); }
+        void prepareClusterDebug(const FrameContext& ctx) { debugBuilder.prepareClusterDebug(ctx); }
+        void prepareUICanvasOutlines(const FrameContext& ctx) { debugBuilder.prepareUICanvasOutlines(ctx); }
+
+        void prepareUIImages(const FrameContext& ctx) { uiFrameBuilder.prepareUIImages(ctx, uiInteraction); }
+        void prepareUILabels(const FrameContext& ctx) { uiFrameBuilder.prepareUILabels(ctx); }
 
         void invalidateMaterialCache(const std::string& materialPath);
-
-    private:
-        void prepareUIImagesScreenSpace(const FrameContext& ctx);
-        void prepareUIImagesWorldSpace(const FrameContext& ctx);
-        void prepareUILabelsScreenSpace(const FrameContext& ctx);
-        void prepareUILabelsWorldSpace(const FrameContext& ctx);
-        void processUIButtonInteraction(const FrameContext& ctx);
-        void processUICheckboxInteraction(const FrameContext& ctx);
-        void processUITextInputInteraction(const FrameContext& ctx);
-        void processUIDropdownInteraction(const FrameContext& ctx);
-        void processUITabsInteraction(const FrameContext& ctx);
-        void processUISliderInteraction(const FrameContext& ctx);
-
-        // Track which text input entity is currently focused (-1 = none)
-        entt::entity focusedTextInput = entt::null;
     };
 }
