@@ -1,14 +1,12 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -38,12 +36,9 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    class LightGizmoDebugRenderer
+    class LightGizmoDebugRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -67,8 +62,6 @@ namespace render::mesh
         vk::DeviceMemory arrowIndexBufferMemory;
         uint32_t arrowIndexCount = 0;
 
-        bool initialized = false;
-
         static constexpr int SPHERE_SEGMENTS = 32;
         static constexpr int CONE_SEGMENTS = 16;
         static constexpr float ARROW_LENGTH = 5.0f;
@@ -86,8 +79,6 @@ namespace render::mesh
                     const std::vector<LightGizmoRenderData>& lightGizmoDrawList,
                     const glm::mat4& view,
                     const glm::mat4& projection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

@@ -75,9 +75,6 @@ namespace render::mesh
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
 
-        mutable glm::mat4 currentView{1.0f};
-        mutable glm::mat4 currentProjection{1.0f};
-        mutable glm::vec3 currentCameraPos{0.0f};
         mutable float currentTime{0.0f};
 
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
@@ -204,5 +201,22 @@ namespace render::mesh
             material::BlendMode targetBlendMode,
             const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
             RenderState& state) const;
+
+        void bindSubmeshPipeline(
+            const vk::CommandBuffer& commandBuffer,
+            const ExtractedPBRValues& pbrValues,
+            const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
+            RenderState& state) const;
+
+        void bindSubmeshMaterial(
+            const vk::CommandBuffer& commandBuffer,
+            const ExtractedPBRValues& pbrValues,
+            RenderState& state) const;
+
+        MeshPushConstants buildSubmeshPushConstants(
+            const MeshRenderData& meshData,
+            const SubMeshGPUData& subMesh,
+            size_t subMeshIndex,
+            const ExtractedPBRValues& pbrValues) const;
     };
 }

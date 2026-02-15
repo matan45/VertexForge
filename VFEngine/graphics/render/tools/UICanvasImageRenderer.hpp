@@ -1,7 +1,7 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <string>
@@ -10,8 +10,6 @@
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
     class Texture;
 }
@@ -32,7 +30,7 @@ namespace render::mesh
         glm::vec4 colorTint;
     };
 
-    class UICanvasImageRenderer
+    class UICanvasImageRenderer : public DebugRendererBase
     {
     private:
         struct Vertex
@@ -49,9 +47,6 @@ namespace render::mesh
         }};
 
         inline static constexpr std::array<uint32_t, 6> indices = {0, 1, 2, 2, 3, 0};
-
-        core::Device& device;
-        core::SwapChain& swapChain;
 
         std::shared_ptr<core::Shader> shader;
 
@@ -73,8 +68,6 @@ namespace render::mesh
         std::unordered_map<std::string, TextureEntry> textureCache;
         static constexpr uint32_t MAX_TEXTURES = 64;
 
-        bool initialized = false;
-
     public:
         explicit UICanvasImageRenderer(core::Device& device, core::SwapChain& swapChain);
         ~UICanvasImageRenderer();
@@ -88,8 +81,6 @@ namespace render::mesh
                     const std::vector<UICanvasImageRenderData>& imageDrawList,
                     const glm::mat4& editorView,
                     const glm::mat4& editorProjection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

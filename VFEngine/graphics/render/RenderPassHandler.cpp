@@ -209,11 +209,9 @@ namespace render
         }
     }
 
-    void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
+    std::unordered_set<std::string> RenderPassHandler::collectCustomShaderMaterials(
+        const std::vector<mesh::MeshRenderData>& meshes) const
     {
-        currentMeshDrawList.clear();
-        customShaderMeshDrawList.clear();
-
         std::unordered_set<std::string> uniqueMaterials;
         for (const auto& mesh : meshes)
         {
@@ -238,13 +236,54 @@ namespace render
                 customShaderMaterials.insert(matPath);
             }
         }
+        return customShaderMaterials;
+    }
+
+    void RenderPassHandler::updateDebugBoundingBoxState()
+    {
+        if (!debugRendererInitialized || !debugRenderer)
+        {
+            return;
+        }
+
+        bool hasBoundingBoxes = false;
+        for (const auto& mesh : currentMeshDrawList)
+        {
+            if (mesh.showBoundingBox) { hasBoundingBoxes = true; break; }
+        }
+        if (!hasBoundingBoxes)
+        {
+            for (const auto& mesh : customShaderMeshDrawList)
+            {
+                if (mesh.showBoundingBox) { hasBoundingBoxes = true; break; }
+            }
+        }
+        debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
+    }
+
+    void RenderPassHandler::rebuildCombinedMeshDrawList()
+    {
+        combinedMeshDrawList.clear();
+        combinedMeshDrawList.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    currentMeshDrawList.begin(), currentMeshDrawList.end());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
+    }
+
+    void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
+    {
+        currentMeshDrawList.clear();
+        customShaderMeshDrawList.clear();
+
+        auto customShaderMaterials = collectCustomShaderMaterials(meshes);
 
         for (auto& mesh : meshes)
         {
             bool needsCustomShader = false;
 
-            if (!mesh.defaultMaterialPath.empty() &&
-                customShaderMaterials.contains(mesh.defaultMaterialPath))
+            if (!mesh.defaultMaterialPath.empty()
+                && customShaderMaterials.contains(mesh.defaultMaterialPath))
             {
                 needsCustomShader = true;
             }
@@ -253,8 +292,8 @@ namespace render
             {
                 for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
                 {
-                    if (!matInfo.materialPath.empty() &&
-                        customShaderMaterials.contains(matInfo.materialPath))
+                    if (!matInfo.materialPath.empty()
+                        && customShaderMaterials.contains(matInfo.materialPath))
                     {
                         needsCustomShader = true;
                         break;
@@ -272,34 +311,8 @@ namespace render
             }
         }
 
-        if (debugRendererInitialized && debugRenderer)
-        {
-            bool hasBoundingBoxes = false;
-            for (const auto& mesh : currentMeshDrawList)
-            {
-                if (mesh.showBoundingBox)
-                {
-                    hasBoundingBoxes = true;
-                    break;
-                }
-            }
-            for (const auto& mesh : customShaderMeshDrawList)
-            {
-                if (mesh.showBoundingBox)
-                {
-                    hasBoundingBoxes = true;
-                    break;
-                }
-            }
-            debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
-        }
-
-        combinedMeshDrawList.clear();
-        combinedMeshDrawList.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
-        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
-                                    currentMeshDrawList.begin(), currentMeshDrawList.end());
-        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
-                                    customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
+        updateDebugBoundingBoxState();
+        rebuildCombinedMeshDrawList();
     }
 
     void RenderPassHandler::initBillboardPipeline()
@@ -838,26 +851,8 @@ namespace render
         cameraOcclusionManager->updateCamera(cameraId, viewProj, nearPlane);
     }
 
-    void RenderPassHandler::recreate()
+    void RenderPassHandler::recreateOverlayPipelines()
     {
-        iblRenderer->recreate();
-        clearColor->recreate();
-
-        if (meshPipelineInitialized)
-        {
-            meshPipeline->recreate();
-
-            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-            {
-                gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
-            }
-
-            if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-            {
-                vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
-            }
-        }
-
         if (debugRendererInitialized)
         {
             debugRenderer->recreate(meshPipeline->getRenderPass());
@@ -882,6 +877,29 @@ namespace render
         {
             uiTextPipeline->recreate();
         }
+    }
+
+    void RenderPassHandler::recreate()
+    {
+        iblRenderer->recreate();
+        clearColor->recreate();
+
+        if (meshPipelineInitialized)
+        {
+            meshPipeline->recreate();
+
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
+            }
+
+            if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            {
+                vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+            }
+        }
+
+        recreateOverlayPipelines();
 
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
@@ -906,23 +924,8 @@ namespace render
         }
     }
 
-    void RenderPassHandler::cleanUp() const
+    void RenderPassHandler::cleanUpPipelines() const
     {
-        if (terrainRaycastPipeline)
-        {
-            terrainRaycastPipeline->cleanup();
-        }
-
-        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-        {
-            gpuDrivenRenderer->cleanup();
-        }
-
-        if (cameraOcclusionManager)
-        {
-            cameraOcclusionManager->cleanup();
-        }
-
         if (billboardPipelineInitialized)
         {
             billboardPipeline->cleanUp();
@@ -953,6 +956,26 @@ namespace render
         {
             meshPipeline->cleanUpShader();
         }
+    }
+
+    void RenderPassHandler::cleanUp() const
+    {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->cleanup();
+        }
+
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanup();
+        }
+
+        if (cameraOcclusionManager)
+        {
+            cameraOcclusionManager->cleanup();
+        }
+
+        cleanUpPipelines();
 
         if (postProcessPipeline)
         {
@@ -969,32 +992,36 @@ namespace render
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
+        drawSceneMeshes(commandBuffer, imageIndex);
+        drawOverlays(commandBuffer, imageIndex);
+        executeOcclusionPasses(commandBuffer);
+        executePostProcess(commandBuffer, imageIndex);
+        drawUIOverlays(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
-        bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->
-            getInstanceCount() > 0;
+        bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized()
+            && vfxRuntimeProvider->getInstanceCount() > 0;
         bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
 
         if (hasVFX)
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
-        bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
-                                  terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
-        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes ||
-            hasDebugItems || hasVFX || hasTerrainToRender);
+        bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
+            && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+
+        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
+            || hasDebugItems || hasVFX || hasTerrainToRender);
 
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
             gpuDrivenRenderer->updateScene(
-                currentMeshDrawList,
-                currentView,
-                currentProjection,
-                currentCameraPosition,
-                currentNearPlane,
-                currentFarPlane,
-                currentTime
-            );
+                currentMeshDrawList, currentView, currentProjection,
+                currentCameraPosition, currentNearPlane, currentFarPlane, currentTime);
 
             if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
             {
@@ -1004,75 +1031,85 @@ namespace render
             }
         }
 
-        if (needsMeshPass)
+        if (!needsMeshPass)
         {
-            render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
+            return;
+        }
+
+        render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
+
+        if (hasVFX)
+        {
+            vfxRuntimeProvider->recordComputeCommands(commandBuffer);
+        }
+
+        bool hasMeshesToRender = !currentMeshDrawList.empty();
+
+        if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+        {
+            drawGPUDrivenMeshPass(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
+        }
+        else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
+        {
+            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
+                                              debugRendererPtr, currentView, currentProjection);
 
             if (hasVFX)
-            {
-                vfxRuntimeProvider->recordComputeCommands(commandBuffer);
-            }
-
-            bool hasMeshesToRender = !currentMeshDrawList.empty();
-
-            if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
-            {
-                updateGPUDrivenHiZ();
-
-                gpuDrivenRenderer->dispatchCompute(commandBuffer);
-
-                vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
-
-                meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-
-                gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
-
-                if (gpuDrivenRenderer->isTerrainRenderingEnabled())
-                {
-                    gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
-                }
-
-                if (hasCustomShaderMeshes)
-                {
-                    meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
-                }
-
-                if (debugRendererPtr)
-                {
-                    debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
-                                             [this](const std::string& meshId)
-                                             {
-                                                 return meshPipeline->getMesh(meshId);
-                                             });
-                }
-
-                if (hasVFX)
-                {
-                    vfxRuntimeProvider->recordDrawCommands(commandBuffer);
-                }
-
-                meshPipeline->endRenderPass(commandBuffer);
-            }
-            else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
-            {
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
-                                                  debugRendererPtr, currentView, currentProjection);
-
-                if (hasVFX)
-                {
-                    meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-                    vfxRuntimeProvider->recordDrawCommands(commandBuffer);
-                    meshPipeline->endRenderPass(commandBuffer);
-                }
-            }
-            else if (hasVFX)
             {
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPass(commandBuffer);
             }
         }
+        else if (hasVFX)
+        {
+            meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+            vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer);
+        }
+    }
 
+    void RenderPassHandler::drawGPUDrivenMeshPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                                   DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes,
+                                                   bool hasVFX) const
+    {
+        updateGPUDrivenHiZ();
+        gpuDrivenRenderer->dispatchCompute(commandBuffer);
+
+        vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+        meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+
+        gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+        if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        if (hasCustomShaderMeshes)
+        {
+            meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+        }
+
+        if (debugRendererPtr)
+        {
+            debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
+                                     [this](const std::string& meshId)
+                                     {
+                                         return meshPipeline->getMesh(meshId);
+                                     });
+        }
+
+        if (hasVFX)
+        {
+            vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+        }
+
+        meshPipeline->endRenderPass(commandBuffer);
+    }
+
+    void RenderPassHandler::drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
         if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
         {
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
@@ -1082,109 +1119,122 @@ namespace render
         {
             textPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
+    }
 
+    void RenderPassHandler::executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const
+    {
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
 
-        if (cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
         {
-            cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
-
-            if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
-            {
-                cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
-            }
-
-            if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
-            {
-                // Transition depth image to shader-read for the raycast compute shader.
-                // generateHiZ() transitions it back to attachment layout, so we must re-transition.
-                vk::ImageMemoryBarrier toShaderRead{};
-                toShaderRead.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-                toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                toShaderRead.image = offscreenResources.depthImage.depthImage;
-                toShaderRead.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-                    vk::ImageAspectFlagBits::eStencil;
-                toShaderRead.subresourceRange.baseMipLevel = 0;
-                toShaderRead.subresourceRange.levelCount = 1;
-                toShaderRead.subresourceRange.baseArrayLayer = 0;
-                toShaderRead.subresourceRange.layerCount = 1;
-                toShaderRead.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-                toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-                commandBuffer.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eLateFragmentTests,
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    {}, {}, {}, toShaderRead);
-
-                glm::mat4 invViewProjection = glm::inverse(currentProjection * currentView);
-                auto extent = swapChain.getSwapchainExtent();
-                terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
-                terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
-
-                vk::ImageMemoryBarrier toAttachment{};
-                toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-                toAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                toAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                toAttachment.image = offscreenResources.depthImage.depthImage;
-                toAttachment.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-                    vk::ImageAspectFlagBits::eStencil;
-                toAttachment.subresourceRange.baseMipLevel = 0;
-                toAttachment.subresourceRange.levelCount = 1;
-                toAttachment.subresourceRange.baseArrayLayer = 0;
-                toAttachment.subresourceRange.layerCount = 1;
-                toAttachment.srcAccessMask = vk::AccessFlagBits::eShaderRead;
-                toAttachment.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                    vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-                commandBuffer.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
-                    {}, {}, {}, toAttachment);
-            }
+            return;
         }
 
-        // Pass camera data for depth-based effects (DoF)
+        cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
+
+        if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
+        {
+            cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
+        }
+
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            dispatchTerrainRaycast(commandBuffer);
+        }
+    }
+
+    void RenderPassHandler::dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const
+    {
+        vk::ImageMemoryBarrier toShaderRead{};
+        toShaderRead.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShaderRead.image = offscreenResources.depthImage.depthImage;
+        toShaderRead.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
+            | vk::ImageAspectFlagBits::eStencil;
+        toShaderRead.subresourceRange.baseMipLevel = 0;
+        toShaderRead.subresourceRange.levelCount = 1;
+        toShaderRead.subresourceRange.baseArrayLayer = 0;
+        toShaderRead.subresourceRange.layerCount = 1;
+        toShaderRead.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eLateFragmentTests,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, toShaderRead);
+
+        glm::mat4 invViewProjection = glm::inverse(currentProjection * currentView);
+        auto extent = swapChain.getSwapchainExtent();
+        terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
+        terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
+
+        vk::ImageMemoryBarrier toAttachment{};
+        toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        toAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toAttachment.image = offscreenResources.depthImage.depthImage;
+        toAttachment.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
+            | vk::ImageAspectFlagBits::eStencil;
+        toAttachment.subresourceRange.baseMipLevel = 0;
+        toAttachment.subresourceRange.levelCount = 1;
+        toAttachment.subresourceRange.baseArrayLayer = 0;
+        toAttachment.subresourceRange.layerCount = 1;
+        toAttachment.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        toAttachment.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
+            | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eEarlyFragmentTests,
+            {}, {}, {}, toAttachment);
+    }
+
+    void RenderPassHandler::executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
         postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane,
                                            currentCameraPosition, currentView, currentTime);
 
-        // Compute sun screen position for god rays
         if (gpuDrivenRendererInitialized)
         {
-            auto* lbm = gpuDrivenRenderer->getLightBufferManager();
-            auto sunDir = lbm->getFirstDirectionalLightDirection();
-            if (sunDir)
-            {
-                glm::vec3 sunWorldPos = currentCameraPosition - (*sunDir) * currentFarPlane;
-                glm::vec4 clip = currentProjection * currentView * glm::vec4(sunWorldPos, 1.0f);
-                if (clip.w > 0.0f)
-                {
-                    glm::vec2 screenUV = (glm::vec2(clip) / clip.w) * 0.5f + 0.5f;
-                    postProcessPipeline->setSunData(screenUV, true);
-                }
-                else
-                {
-                    postProcessPipeline->setSunData({0.5f, 0.5f}, false);
-                }
-            }
-            else
-            {
-                postProcessPipeline->setSunData({0.5f, 0.5f}, false);
-            }
+            updateSunScreenPosition();
         }
 
-        // Post-processing chain (ping-pong effects, then blit back to scene color)
         postProcessPipeline->execute(commandBuffer, imageIndex);
+    }
 
-        // UI overlay pass (after post-processing, renders on top of everything)
+    void RenderPassHandler::updateSunScreenPosition() const
+    {
+        auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+        auto sunDir = lbm->getFirstDirectionalLightDirection();
+        if (!sunDir)
+        {
+            postProcessPipeline->setSunData({0.5f, 0.5f}, false);
+            return;
+        }
+
+        glm::vec3 sunWorldPos = currentCameraPosition - (*sunDir) * currentFarPlane;
+        glm::vec4 clip = currentProjection * currentView * glm::vec4(sunWorldPos, 1.0f);
+        if (clip.w > 0.0f)
+        {
+            glm::vec2 screenUV = (glm::vec2(clip) / clip.w) * 0.5f + 0.5f;
+            postProcessPipeline->setSunData(screenUV, true);
+        }
+        else
+        {
+            postProcessPipeline->setSunData({0.5f, 0.5f}, false);
+        }
+    }
+
+    void RenderPassHandler::drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
         if (uiPipelineInitialized && !currentUIImageDrawList.empty())
         {
             uiPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
-        // UI text overlay (after UI images, text renders on top)
         if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
         {
             uiTextPipeline->recordCommandBuffer(commandBuffer, imageIndex);

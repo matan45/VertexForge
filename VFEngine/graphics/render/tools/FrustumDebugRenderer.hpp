@@ -1,15 +1,13 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <array>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -30,7 +28,7 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    class FrustumDebugRenderer
+    class FrustumDebugRenderer : public DebugRendererBase
     {
     private:
         // Static NDC corners for frustum (Vulkan: z = 0 near, z = 1 far)
@@ -58,9 +56,6 @@ namespace render::mesh
             0, 4,  1, 5,  2, 6,  3, 7
         }};
 
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -71,8 +66,6 @@ namespace render::mesh
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexBufferMemory;
-
-        bool initialized = false;
 
     public:
         explicit FrustumDebugRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -87,8 +80,6 @@ namespace render::mesh
                     const std::vector<CameraFrustumRenderData>& cameraDrawList,
                     const glm::mat4& editorView,
                     const glm::mat4& editorProjection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

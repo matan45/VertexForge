@@ -1,13 +1,11 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -23,12 +21,9 @@ namespace render::mesh
         glm::vec4 gridParams;   // 16 bytes - x: gridSize, y: cellSize, z: fadeStart, w: fadeEnd
     };
 
-    class GridRenderer
+    class GridRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> gridShader;
 
         vk::Pipeline gridPipeline;
@@ -41,7 +36,6 @@ namespace render::mesh
 
         uint32_t indexCount = 0;
 
-        bool initialized = false;
         bool visible = true;
 
         // Grid parameters
@@ -66,14 +60,8 @@ namespace render::mesh
                     const glm::mat4& view,
                     const glm::mat4& projection) const;
 
-        bool isInitialized() const { return initialized; }
-
         void setVisible(bool show) { visible = show; }
         bool isVisible() const { return visible; }
-
-        void setGridColor(const glm::vec4& color) { gridColor = color; }
-        void setGridSize(float size) { gridSize = size; fadeEnd = size; fadeStart = size * 0.8f; }
-        void setCellSize(float size) { cellSize = size; }
 
     private:
         void loadShader();

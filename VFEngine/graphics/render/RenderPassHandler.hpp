@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace services
 {
@@ -259,5 +260,23 @@ namespace render
         void updateGPUDrivenHiZ() const;
         bool materialRequiresCustomShader(const std::string& materialPath) const;
         static bool computeMaterialRequiresCustomShader(const std::string& materialPath);
+
+        std::unordered_set<std::string> collectCustomShaderMaterials(
+            const std::vector<mesh::MeshRenderData>& meshes) const;
+        void updateDebugBoundingBoxState();
+        void rebuildCombinedMeshDrawList();
+
+        void recreateOverlayPipelines();
+        void cleanUpPipelines() const;
+
+        void drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void drawGPUDrivenMeshPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                   DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes, bool hasVFX) const;
+        void drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
+        void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;
+        void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void updateSunScreenPosition() const;
+        void drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
     };
 }
