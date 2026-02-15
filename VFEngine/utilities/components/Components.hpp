@@ -39,6 +39,7 @@ namespace components
     struct UIButtonComponent;
     struct UITextInputComponent;
     struct UIDropdownComponent;
+    struct UITabsComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -47,7 +48,8 @@ namespace components
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
-                                               UITextInputComponent, UIDropdownComponent>;
+                                               UITextInputComponent, UIDropdownComponent,
+                                               UITabsComponent>;
 
     struct WorldTransformComponent
     {
@@ -792,5 +794,23 @@ namespace components
 
         // Global singleton tracker: only one dropdown can be open at a time
         static inline entt::entity activeDropdownEntity = entt::null;
+    };
+
+    enum class TabBarPosition : uint8_t
+    {
+        Top,
+        Bottom,
+        Left,
+        Right
+    };
+
+    struct UITabsComponent
+    {
+        // Config (serialized)
+        TabBarPosition tabBarPosition = TabBarPosition::Top;
+        int activeTabIndex = 0;
+
+        // Runtime state (NOT serialized)
+        int previousTabIndex = -1;
     };
 }

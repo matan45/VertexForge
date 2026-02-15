@@ -62,6 +62,7 @@ namespace services {
         UITextInput,
         UICheckbox,
         UIDropdown,
+        UITabs,
     };
 
 }

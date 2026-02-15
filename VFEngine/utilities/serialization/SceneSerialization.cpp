@@ -236,6 +236,12 @@ namespace serialization
                 entity.getComponent<components::UIDropdownComponent>());
         }
 
+        if (entity.hasComponent<components::UITabsComponent>())
+        {
+            componentsJson["uiTabs"] = serializeUITabs(
+                entity.getComponent<components::UITabsComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -2150,6 +2156,42 @@ namespace serialization
         dropdown.currentDisplayColor = dropdown.normalColor;
     }
 
+    json SceneSerialization::serializeUITabs(const components::UITabsComponent& tabs)
+    {
+        json j;
+
+        std::string posStr;
+        switch (tabs.tabBarPosition)
+        {
+        case components::TabBarPosition::Top: posStr = "Top"; break;
+        case components::TabBarPosition::Bottom: posStr = "Bottom"; break;
+        case components::TabBarPosition::Left: posStr = "Left"; break;
+        case components::TabBarPosition::Right: posStr = "Right"; break;
+        default: posStr = "Top"; break;
+        }
+        j["tabBarPosition"] = posStr;
+        j["activeTabIndex"] = tabs.activeTabIndex;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITabs(const json& j, components::UITabsComponent& tabs)
+    {
+        if (j.contains("tabBarPosition"))
+        {
+            std::string posStr = j["tabBarPosition"].get<std::string>();
+            if (posStr == "Bottom") tabs.tabBarPosition = components::TabBarPosition::Bottom;
+            else if (posStr == "Left") tabs.tabBarPosition = components::TabBarPosition::Left;
+            else if (posStr == "Right") tabs.tabBarPosition = components::TabBarPosition::Right;
+            else tabs.tabBarPosition = components::TabBarPosition::Top;
+        }
+
+        tabs.activeTabIndex = j.value("activeTabIndex", 0);
+
+        // Reset runtime state
+        tabs.previousTabIndex = -1;
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2500,6 +2542,12 @@ namespace serialization
             {
                 auto& dropdownComp = entity.addOrReplaceComponent<components::UIDropdownComponent>();
                 deserializeUIDropdown(componentsJson["uiDropdown"], dropdownComp);
+            }
+
+            if (componentsJson.contains("uiTabs"))
+            {
+                auto& tabsComp = entity.addOrReplaceComponent<components::UITabsComponent>();
+                deserializeUITabs(componentsJson["uiTabs"], tabsComp);
             }
         }
 

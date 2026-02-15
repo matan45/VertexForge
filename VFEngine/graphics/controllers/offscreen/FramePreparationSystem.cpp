@@ -1112,6 +1112,9 @@ namespace controllers::offscreen
         // --- Dropdown interaction (open/close, option selection, state machine) ---
         processUIDropdownInteraction(ctx);
 
+        // --- Tabs interaction (tab switching logic only) ---
+        processUITabsInteraction(ctx);
+
         std::vector<render::ui::UIImageRenderData> drawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -4382,6 +4385,140 @@ namespace controllers::offscreen
             {
                 auto& imageComp = registry.get<components::UIImageComponent>(dropdownEntity);
                 imageComp.colorTint = comp.currentDisplayColor;
+            }
+        }
+    }
+
+    // ========== UI Tabs Interaction ==========
+    void FramePreparationSystem::processUITabsInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        if (!ctx.leftMouseReleased)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto tabsView = registry.view<components::UITabsComponent, components::UIRectComponent>();
+
+        if (tabsView.size_hint() == 0)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        for (auto tabsEntity : tabsView)
+        {
+            if (registry.all_of<components::NameComponent>(tabsEntity))
+                if (!registry.get<components::NameComponent>(tabsEntity).isActive)
+                    continue;
+
+            if (!registry.all_of<components::ChildrenComponent>(tabsEntity))
+                continue;
+
+            const auto& children = registry.get<components::ChildrenComponent>(tabsEntity).children;
+
+            // Find tab bar: first child with UILayoutGroupComponent
+            entt::entity tabBarEntity = entt::null;
+            for (auto childEntity : children)
+            {
+                if (!registry.valid(childEntity)) continue;
+                if (registry.all_of<components::UILayoutGroupComponent>(childEntity))
+                {
+                    tabBarEntity = childEntity;
+                    break;
+                }
+            }
+
+            if (tabBarEntity == entt::null)
+                continue;
+
+            // Get tab bar children (tab buttons)
+            if (!registry.all_of<components::ChildrenComponent>(tabBarEntity))
+                continue;
+
+            const auto& tabButtons = registry.get<components::ChildrenComponent>(tabBarEntity).children;
+
+            // Find canvas for scale
+            const auto* canvas = findCanvasForEntity(registry, tabsEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(tabsEntity))
+                canvas = &registry.get<components::UICanvasComponent>(tabsEntity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            // Hit test each tab button
+            for (int i = 0; i < static_cast<int>(tabButtons.size()); ++i)
+            {
+                auto btnEntity = tabButtons[i];
+                if (!registry.valid(btnEntity)) continue;
+                if (!registry.all_of<components::UIRectComponent>(btnEntity)) continue;
+
+                if (registry.all_of<components::NameComponent>(btnEntity))
+                    if (!registry.get<components::NameComponent>(btnEntity).isActive)
+                        continue;
+
+                const auto& btnRect = registry.get<components::UIRectComponent>(btnEntity);
+                PixelRect rect = resolvePixelRect(btnRect, vw, vh, scale);
+
+                bool inside = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                    && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+
+                if (inside)
+                {
+                    auto& tabsComp = registry.get<components::UITabsComponent>(tabsEntity);
+
+                    int previousTabIndex = tabsComp.activeTabIndex;
+                    tabsComp.previousTabIndex = previousTabIndex;
+                    tabsComp.activeTabIndex = i;
+
+                    // Collect panels (non-tab-bar children)
+                    std::vector<entt::entity> panels;
+                    for (auto childEntity : children)
+                    {
+                        if (!registry.valid(childEntity)) continue;
+                        if (childEntity == tabBarEntity) continue;
+                        panels.push_back(childEntity);
+                    }
+
+                    // Toggle panel visibility
+                    for (int p = 0; p < static_cast<int>(panels.size()); ++p)
+                    {
+                        if (registry.all_of<components::NameComponent>(panels[p]))
+                        {
+                            auto& nameComp = registry.get<components::NameComponent>(panels[p]);
+                            nameComp.isActive = (p == i);
+                        }
+                    }
+
+                    // Publish notifications
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    services::EntityHandle handle = services::internal::toHandle(tabsEntity);
+                    std::string entityName;
+                    if (registry.all_of<components::NameComponent>(tabsEntity))
+                        entityName = registry.get<components::NameComponent>(tabsEntity).name;
+
+                    events::ui::UITabSelectedNotification selectedNotif;
+                    selectedNotif.entity = handle;
+                    selectedNotif.entityName = entityName;
+                    selectedNotif.tabIndex = i;
+                    dispatcher.publish(selectedNotif);
+
+                    if (previousTabIndex != i)
+                    {
+                        events::ui::UITabChangedNotification changedNotif;
+                        changedNotif.entity = handle;
+                        changedNotif.entityName = entityName;
+                        changedNotif.newTabIndex = i;
+                        changedNotif.previousTabIndex = previousTabIndex;
+                        dispatcher.publish(changedNotif);
+                    }
+
+                    break; // Only one tab can be clicked per frame
+                }
             }
         }
     }

@@ -188,6 +188,7 @@
     <ClInclude Include="windows\details\UILayoutGroupDrawer.hpp" />
     <ClInclude Include="windows\details\UIRectDrawer.hpp" />
     <ClInclude Include="windows\details\UIScrollDrawer.hpp" />
+    <ClInclude Include="windows\details\UITabsDrawer.hpp" />
     <ClInclude Include="windows\details\UITextInputDrawer.hpp" />
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
@@ -285,6 +286,7 @@
     <ClCompile Include="windows\details\UILayoutGroupDrawer.cpp" />
     <ClCompile Include="windows\details\UIRectDrawer.cpp" />
     <ClCompile Include="windows\details\UIScrollDrawer.cpp" />
+    <ClCompile Include="windows\details\UITabsDrawer.cpp" />
     <ClCompile Include="windows\details\UITextInputDrawer.cpp" />
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />

@@ -13,7 +13,8 @@ namespace windows::details
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
-                                 bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown)
+                                 bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
+                                 bool hasUITabs)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -378,11 +379,26 @@ namespace windows::details
                 }
             }
 
+            if (!hasUITabs)
+            {
+                if (ImGui::Selectable("  UI Tabs"))
+                {
+                    events::ui::AddUITabsComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Tabbed panel container with switchable content views");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
-                           hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown;
+                           hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
+                           hasUITabs;
             if (allAdded)
             {
                 ImGui::Spacing();

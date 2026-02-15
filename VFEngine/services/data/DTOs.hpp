@@ -423,4 +423,11 @@ namespace services
         bool isOpen = false;
         int hoveredOptionIndex = -1;
     };
+
+    struct UITabsData
+    {
+        uint8_t tabBarPosition = 0; // 0=Top, 1=Bottom, 2=Left, 3=Right
+        int activeTabIndex = 0;
+        int previousTabIndex = -1;
+    };
 }

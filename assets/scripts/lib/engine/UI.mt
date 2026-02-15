@@ -177,4 +177,35 @@ public class UI {
     public static function closeDropdown(int entityId): void {
         _native_ui_closeDropdown(entityId);
     }
+
+    // ============================================
+    // Tabs Bar Position Constants
+    // ============================================
+    public static const int TAB_BAR_TOP = 0;
+    public static const int TAB_BAR_BOTTOM = 1;
+    public static const int TAB_BAR_LEFT = 2;
+    public static const int TAB_BAR_RIGHT = 3;
+
+    // ============================================
+    // Tabs Queries
+    // ============================================
+
+    // Get the currently active tab index
+    public static function getTabsActiveIndex(int entityId): int {
+        return _native_ui_getTabsActiveIndex(entityId);
+    }
+
+    // Get the tab bar position (TAB_BAR_TOP, TAB_BAR_BOTTOM, TAB_BAR_LEFT, TAB_BAR_RIGHT)
+    public static function getTabsBarPosition(int entityId): int {
+        return _native_ui_getTabsBarPosition(entityId);
+    }
+
+    // ============================================
+    // Tabs Control
+    // ============================================
+
+    // Set the active tab index (triggers tab switching and notifications)
+    public static function setTabsActiveIndex(int entityId, int index): void {
+        _native_ui_setTabsActiveIndex(entityId, index);
+    }
 }

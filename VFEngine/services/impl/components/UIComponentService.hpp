@@ -99,6 +99,14 @@ namespace services {
         bool setUIDropdownSelectedIndex(EntityHandle entity, int selectedIndex);
         bool openUIDropdown(EntityHandle entity);
         bool closeUIDropdown(EntityHandle entity);
+
+        // UI Tabs Operations
+        bool addUITabsComponent(EntityHandle entity);
+        bool removeUITabsComponent(EntityHandle entity);
+        bool hasUITabsComponent(EntityHandle entity) const;
+        std::optional<UITabsData> getUITabsData(EntityHandle entity) const;
+        bool setUITabsData(EntityHandle entity, const UITabsData& tabsData);
+        bool selectTab(EntityHandle entity, int tabIndex);
     };
 
 }
