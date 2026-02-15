@@ -6,33 +6,22 @@
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/PostProcessEvents.hpp"
 
-namespace
-{
-    using namespace core::api;
-
-    bool extractBool(const std::vector<value::Value>& args, size_t index)
-    {
-        if (index < args.size() && std::holds_alternative<bool>(args[index]))
-        {
-            return std::get<bool>(args[index]);
-        }
-        return false;
-    }
-
-    template<typename Mutator>
-    value::Value modifySettings(events::EventDispatcher& dispatcher, Mutator&& mutator)
-    {
-        auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-        mutator(settings);
-        events::postprocess::ApplyPostProcessSettingsCommand cmd;
-        cmd.settings = settings;
-        dispatcher.execute(cmd);
-        return value::Value(std::monostate{});
-    }
-}
-
 namespace core::api
 {
+    namespace
+    {
+        template<typename Mutator>
+        value::Value modifySettings(events::EventDispatcher& dispatcher, Mutator&& mutator)
+        {
+            auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            mutator(settings);
+            events::postprocess::ApplyPostProcessSettingsCommand cmd;
+            cmd.settings = settings;
+            dispatcher.execute(cmd);
+            return value::Value(std::monostate{});
+        }
+    }
+
     void PostProcessAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -51,7 +40,7 @@ namespace core::api
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 events::postprocess::SetPostProcessEnabledCommand cmd;
-                cmd.enabled = extractBool(args, 0);
+                cmd.enabled = extractBool(args[0]);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
@@ -72,7 +61,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.toneMapping.enabled = extractBool(args, 0);
+                    s.toneMapping.enabled = extractBool(args[0]);
                 });
             });
 
@@ -160,7 +149,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.fxaa.enabled = extractBool(args, 0);
+                    s.fxaa.enabled = extractBool(args[0]);
                 });
             });
 
@@ -232,7 +221,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.bloom.enabled = extractBool(args, 0);
+                    s.bloom.enabled = extractBool(args[0]);
                 });
             });
 
@@ -320,7 +309,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.vignette.enabled = extractBool(args, 0);
+                    s.vignette.enabled = extractBool(args[0]);
                 });
             });
 
@@ -388,7 +377,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.chromaticAberration.enabled = extractBool(args, 0);
+                    s.chromaticAberration.enabled = extractBool(args[0]);
                 });
             });
 
@@ -424,7 +413,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.filmGrain.enabled = extractBool(args, 0);
+                    s.filmGrain.enabled = extractBool(args[0]);
                 });
             });
 
@@ -476,7 +465,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.godRays.enabled = extractBool(args, 0);
+                    s.godRays.enabled = extractBool(args[0]);
                 });
             });
 
@@ -596,7 +585,7 @@ namespace core::api
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.depthOfField.enabled = extractBool(args, 0);
+                    s.depthOfField.enabled = extractBool(args[0]);
                 });
             });
 

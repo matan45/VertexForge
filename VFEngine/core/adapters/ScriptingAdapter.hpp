@@ -1,6 +1,5 @@
 #pragma once
 #include "../../services/providers/IScriptingProvider.hpp"
-#include "../../services/events/EventDispatcher.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>
@@ -16,6 +15,7 @@ namespace services
 namespace core
 {
     class ScriptUIEventBridge;
+    class ScriptPhysicsEventBridge;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
@@ -23,31 +23,21 @@ namespace core
         std::unique_ptr<::services::ScriptInterpreter> interpreter;
         std::unique_ptr<NativeAPIRegistry> apiRegistry;
         std::unique_ptr<ScriptUIEventBridge> uiEventBridge;
+        std::unique_ptr<ScriptPhysicsEventBridge> physicsEventBridge;
 
-        // Script instance tracking
-        std::unordered_map<uint64_t, std::string> instanceToClassName; // instanceId -> class name
-        std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity; // instanceId -> entity
-        std::unordered_map<uint64_t, std::any> instanceToObject; // instanceId -> script object instance (type-erased)
-        std::unordered_map<std::string, std::string> pathToClassName; // scriptPath -> class name
-
-        // Interface implementation cache (for collision/trigger callbacks)
-        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces; // instanceId -> implemented interfaces
-
+        std::unordered_map<uint64_t, std::string> instanceToClassName;
+        std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;
+        std::unordered_map<uint64_t, std::any> instanceToObject;
+        std::unordered_map<std::string, std::string> pathToClassName;
+        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces;
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
 
-        // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
 
         uint64_t nextInstanceId = 1;
         std::string scriptLibraryPath;
         bool initialized = false;
         bool compiled = false;
-
-        // Physics collision callback subscription tokens
-        ::events::SubscriptionToken collisionStartToken;
-        ::events::SubscriptionToken collisionEndToken;
-        ::events::SubscriptionToken triggerEnterToken;
-        ::events::SubscriptionToken triggerExitToken;
 
     public:
         explicit ScriptingAdapter();
@@ -92,13 +82,6 @@ namespace core
                       const std::string& file = "", int line = 0);
 
         std::string extractClassName(const std::string& scriptPath);
-
         std::string getLibraryPath(const std::string& manifestPath) const;
-
-        // Physics collision callback helpers
-        void subscribeToPhysicsEvents();
-        void unsubscribeFromPhysicsEvents();
-        void dispatchCollisionCallback(const char* methodName,
-                                       ::services::EntityHandle self, ::services::EntityHandle other);
     };
 }

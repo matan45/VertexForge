@@ -4,8 +4,11 @@
 #include <value/NativeArray.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>
 #include "../../../services/data/EntityHandle.hpp"
+#include "../../../services/data/EntityConversion.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "print/EditorLogger.hpp"
 
+#include <glm/vec3.hpp>
 #include <string>
 #include <optional>
 
@@ -86,6 +89,19 @@ namespace core::api
             vfLogError("[Script] {}: expected number argument", context);
         }
         return 0.0f;
+    }
+
+    inline bool extractBool(const value::Value& val, const char* context = nullptr)
+    {
+        if (std::holds_alternative<bool>(val))
+        {
+            return std::get<bool>(val);
+        }
+        if (context && !std::holds_alternative<std::monostate>(val))
+        {
+            vfLogError("[Script] {}: expected boolean argument", context);
+        }
+        return false;
     }
 
     inline int64_t entityToInt(const services::EntityHandle& handle)
@@ -186,5 +202,31 @@ namespace core::api
         case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
         default: return "Unknown";
         }
+    }
+
+    inline std::optional<entt::entity> resolveEntity(const value::Value& val)
+    {
+        int64_t id = extractInt64(val);
+        if (id < 0)
+        {
+            return std::nullopt;
+        }
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entity = services::internal::fromHandle(
+            services::EntityHandle{static_cast<uint64_t>(id)});
+        if (!registry.valid(entity))
+        {
+            return std::nullopt;
+        }
+        return entity;
+    }
+
+    inline value::Value makeVec3Array(const glm::vec3& v)
+    {
+        auto arr = std::make_shared<value::NativeArray>(3, value::ValueType::FLOAT);
+        arr->set(0, value::Value(v.x));
+        arr->set(1, value::Value(v.y));
+        arr->set(2, value::Value(v.z));
+        return value::Value(arr);
     }
 }

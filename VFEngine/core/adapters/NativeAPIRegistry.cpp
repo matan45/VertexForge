@@ -1,6 +1,7 @@
 #include "NativeAPIRegistry.hpp"
 #include "api/LogAPI.hpp"
 #include "api/EntityAPI.hpp"
+#include "api/EntityComponentAPI.hpp"
 #include "api/AudioAPI.hpp"
 #include "api/InputAPI.hpp"
 #include "api/PhysicsAPI.hpp"
@@ -32,6 +33,7 @@ namespace core
     {
         api::LogAPI::registerAPI(interpreter);
         api::EntityAPI::registerAPI(interpreter);
+        api::EntityComponentAPI::registerAPI(interpreter);
         api::AudioAPI::registerAPI(interpreter);
         api::InputAPI::registerAPI(interpreter);
         api::PhysicsAPI::registerAPI(interpreter);

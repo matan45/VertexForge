@@ -72,9 +72,6 @@ namespace core
         bool hasTerrainCollider(services::EntityHandle entity) const override;
 
     private:
-        physics::RigidBodyCreateInfo toPhysicsBodyInfo(const services::RigidBodyData& data) const;
-        physics::ColliderCreateInfo toPhysicsColliderInfo(const services::ColliderData& data) const;
-
         void onContactAdded(const physics::ContactEvent& event);
         void onContactRemoved(const physics::ContactEvent& event);
     };

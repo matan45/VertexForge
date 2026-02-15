@@ -5,6 +5,7 @@
 
 #include "ScriptingAdapter.hpp"
 #include "ScriptUIEventBridge.hpp"
+#include "ScriptPhysicsEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <filesystem>
 #include <fstream>
@@ -12,12 +13,26 @@
 #include <array>
 
 #include "print/EditorLogger.hpp"
-#include "events/PhysicsEvents.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/Components.hpp"
 
 namespace core
 {
+    namespace
+    {
+        void callScriptMethod(::services::ScriptInterpreter* interpreter,
+                              std::unordered_map<uint64_t, std::any>& instanceToObject,
+                              std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
+                              uint64_t instanceId, const char* methodName,
+                              const std::vector<value::Value>& args)
+        {
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end()) return;
+
+            NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            auto& instance = std::any_cast<value::Value&>(objIt->second);
+            interpreter->callMethod(instance, methodName, args);
+        }
+    }
+
     ScriptingAdapter::ScriptingAdapter() = default;
 
     ScriptingAdapter::~ScriptingAdapter()
@@ -27,10 +42,7 @@ namespace core
 
     bool ScriptingAdapter::init()
     {
-        if (initialized)
-        {
-            return true;
-        }
+        if (initialized) return true;
 
         try
         {
@@ -42,7 +54,10 @@ namespace core
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
-            subscribeToPhysicsEvents();
+            physicsEventBridge = std::make_unique<ScriptPhysicsEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
+            physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
 
             initialized = true;
@@ -60,16 +75,10 @@ namespace core
 
     void ScriptingAdapter::cleanUp()
     {
-        if (!initialized)
-        {
-            return;
-        }
+        if (!initialized) return;
 
-        unsubscribeFromPhysicsEvents();
-        if (uiEventBridge)
-        {
-            uiEventBridge->unsubscribeAll();
-        }
+        if (physicsEventBridge) physicsEventBridge->unsubscribeAll();
+        if (uiEventBridge) uiEventBridge->unsubscribeAll();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -135,9 +144,7 @@ namespace core
                 compiled = false;
                 vfLogError("[ScriptingAdapter] Build failed with {} errors", result.errors.size());
                 for (const auto& error : result.errors)
-                {
                     vfLogError("[Script] {}", error);
-                }
             }
 
             return result;
@@ -289,12 +296,9 @@ namespace core
             for (const auto* iface : kCheckedInterfaces)
             {
                 if (interpreter->classImplementsInterface(className, iface))
-                {
                     interfaces.insert(iface);
-                }
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
-
             instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
 
             services::ScriptInstanceInfo info;
@@ -354,13 +358,7 @@ namespace core
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onStart", {});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onStart", {});
         }
         catch (const std::exception& e)
         {
@@ -372,27 +370,16 @@ namespace core
 
     void ScriptingAdapter::callOnUpdate(uint64_t instanceId, float deltaTime)
     {
-        if (!isScriptLoaded(instanceId))
-        {
-            return;
-        }
+        if (!isScriptLoaded(instanceId)) return;
 
         auto stateIt = instanceToPlaybackState.find(instanceId);
         if (stateIt == instanceToPlaybackState.end() ||
             stateIt->second != services::ScriptPlaybackState::Playing)
-        {
             return;
-        }
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onUpdate", {value::Value(deltaTime)});
         }
         catch (const std::exception& e)
         {
@@ -404,20 +391,11 @@ namespace core
 
     void ScriptingAdapter::callOnDestroy(uint64_t instanceId)
     {
-        if (!isScriptLoaded(instanceId))
-        {
-            return;
-        }
+        if (!isScriptLoaded(instanceId)) return;
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onDestroy", {});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onDestroy", {});
         }
         catch (const std::exception& e)
         {
@@ -437,9 +415,7 @@ namespace core
 
         auto& state = instanceToPlaybackState[instanceId];
         if (state == services::ScriptPlaybackState::Stopped)
-        {
             callOnStart(instanceId);
-        }
         state = services::ScriptPlaybackState::Playing;
         vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
     }
@@ -469,10 +445,7 @@ namespace core
     std::string ScriptingAdapter::extractClassName(const std::string& scriptPath)
     {
         std::ifstream file(scriptPath);
-        if (!file.is_open())
-        {
-            return "";
-        }
+        if (!file.is_open()) return "";
 
         std::string content((std::istreambuf_iterator<char>(file)),
                             std::istreambuf_iterator<char>());
@@ -482,137 +455,13 @@ namespace core
         std::smatch match;
 
         if (std::regex_search(content, match, scriptAnnotationPattern))
-        {
             return match[1].str();
-        }
 
         // Fallback for backwards compatibility
         std::regex anyClassPattern(R"(\bclass\s+(\w+)\b)");
         if (std::regex_search(content, match, anyClassPattern))
-        {
             return match[1].str();
-        }
 
         return "";
-    }
-
-    void ScriptingAdapter::subscribeToPhysicsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        collisionStartToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
-            [this](const ::events::physics::CollisionStartNotification& notif)
-            {
-                dispatchCollisionCallback("onCollisionEnter", notif.entityA, notif.entityB);
-                dispatchCollisionCallback("onCollisionEnter", notif.entityB, notif.entityA);
-            });
-
-        collisionEndToken = dispatcher.subscribe<::events::physics::CollisionEndNotification>(
-            [this](const ::events::physics::CollisionEndNotification& notif)
-            {
-                dispatchCollisionCallback("onCollisionExit", notif.entityA, notif.entityB);
-                dispatchCollisionCallback("onCollisionExit", notif.entityB, notif.entityA);
-            });
-
-        triggerEnterToken = dispatcher.subscribe<::events::physics::TriggerEnterNotification>(
-            [this](const ::events::physics::TriggerEnterNotification& notif)
-            {
-                dispatchCollisionCallback("onTriggerEnter", notif.triggerEntity, notif.otherEntity);
-            });
-
-        triggerExitToken = dispatcher.subscribe<::events::physics::TriggerExitNotification>(
-            [this](const ::events::physics::TriggerExitNotification& notif)
-            {
-                dispatchCollisionCallback("onTriggerExit", notif.triggerEntity, notif.otherEntity);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to physics collision events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromPhysicsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (collisionStartToken.isValid())
-        {
-            dispatcher.unsubscribe(collisionStartToken);
-        }
-        if (collisionEndToken.isValid())
-        {
-            dispatcher.unsubscribe(collisionEndToken);
-        }
-        if (triggerEnterToken.isValid())
-        {
-            dispatcher.unsubscribe(triggerEnterToken);
-        }
-        if (triggerExitToken.isValid())
-        {
-            dispatcher.unsubscribe(triggerExitToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from physics collision events");
-    }
-
-    void ScriptingAdapter::dispatchCollisionCallback(const char* methodName,
-                                                     ::services::EntityHandle self, ::services::EntityHandle other)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!registry.valid(static_cast<entt::entity>(self.id)))
-        {
-            return;
-        }
-
-        auto* scriptComp = registry.try_get<components::ScriptComponent>(
-            static_cast<entt::entity>(self.id));
-
-        if (!scriptComp)
-        {
-            return;
-        }
-
-        std::string requiredInterface;
-        std::string methodStr(methodName);
-        if (methodStr == "onCollisionEnter" || methodStr == "onCollisionExit")
-        {
-            requiredInterface = "ICollisionListener";
-        }
-        else if (methodStr == "onTriggerEnter" || methodStr == "onTriggerExit")
-        {
-            requiredInterface = "ITriggerListener";
-        }
-        else
-        {
-            return;
-        }
-
-        for (const auto& [instanceId, entityHandle] : instanceToEntity)
-        {
-            if (entityHandle.id == self.id)
-            {
-                auto interfaceIt = instanceToInterfaces.find(instanceId);
-                if (interfaceIt == instanceToInterfaces.end() ||
-                    interfaceIt->second.find(requiredInterface) == interfaceIt->second.end())
-                {
-                    continue;
-                }
-
-                auto objIt = instanceToObject.find(instanceId);
-                if (objIt != instanceToObject.end())
-                {
-                    try
-                    {
-                        NativeAPIRegistry::setCurrentEntity(self);
-                        auto& instance = std::any_cast<value::Value&>(objIt->second);
-                        interpreter->callMethod(instance, methodName,
-                                                {value::Value(static_cast<int>(other.id))});
-                    }
-                    catch (const std::exception& e)
-                    {
-                        vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-                    }
-                }
-            }
-        }
     }
 }
