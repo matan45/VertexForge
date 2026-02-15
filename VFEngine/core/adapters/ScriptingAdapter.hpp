@@ -65,6 +65,11 @@ namespace core
         ::events::SubscriptionToken checkboxHoverEnterToken;
         ::events::SubscriptionToken checkboxHoverExitToken;
 
+        // UI Dropdown callback subscription tokens
+        ::events::SubscriptionToken dropdownOpenedToken;
+        ::events::SubscriptionToken dropdownClosedToken;
+        ::events::SubscriptionToken dropdownSelectionChangedToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -139,5 +144,13 @@ namespace core
                                         ::services::EntityHandle checkboxEntity,
                                         const std::string& entityName,
                                         bool newState = false, bool previousState = false);
+
+        // UI Dropdown callback helpers
+        void subscribeToUIDropdownEvents();
+        void unsubscribeFromUIDropdownEvents();
+        void dispatchUIDropdownCallback(const char* methodName,
+                                        ::services::EntityHandle dropdownEntity,
+                                        const std::string& entityName,
+                                        int previousIndex = -1, int newIndex = -1);
     };
 }

@@ -476,4 +476,90 @@ namespace events::ui {
         std::string_view getName() const override { return "UICheckboxHoverExit"; }
     };
 
+    // ============================================
+    // UI Dropdown Commands
+    // ============================================
+
+    struct AddUIDropdownComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUIDropdownComponent"; }
+    };
+
+    struct RemoveUIDropdownComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUIDropdownComponent"; }
+    };
+
+    struct SetUIDropdownDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UIDropdownData dropdownData;
+
+        std::string_view getName() const override { return "SetUIDropdownData"; }
+    };
+
+    struct SetUIDropdownSelectedIndexCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        int selectedIndex;
+
+        std::string_view getName() const override { return "SetUIDropdownSelectedIndex"; }
+    };
+
+    struct OpenUIDropdownCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "OpenUIDropdown"; }
+    };
+
+    struct CloseUIDropdownCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "CloseUIDropdown"; }
+    };
+
+    // ============================================
+    // UI Dropdown Queries
+    // ============================================
+
+    struct HasUIDropdownComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUIDropdownComponent"; }
+    };
+
+    struct GetUIDropdownDataQuery : IQuery<std::optional<services::UIDropdownData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIDropdownData"; }
+    };
+
+    // ============================================
+    // UI Dropdown Notifications
+    // ============================================
+
+    struct UIDropdownOpenedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIDropdownOpened"; }
+    };
+
+    struct UIDropdownClosedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIDropdownClosed"; }
+    };
+
+    struct UIDropdownSelectionChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        int previousIndex;
+        int newIndex;
+        std::string selectedValue;
+
+        std::string_view getName() const override { return "UIDropdownSelectionChanged"; }
+    };
+
 }

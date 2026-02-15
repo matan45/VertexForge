@@ -89,6 +89,16 @@ namespace services {
         bool hasUICheckboxComponent(EntityHandle entity) const;
         std::optional<UICheckboxData> getUICheckboxData(EntityHandle entity) const;
         bool setUICheckboxData(EntityHandle entity, const UICheckboxData& checkboxData);
+
+        // UI Dropdown Operations
+        bool addUIDropdownComponent(EntityHandle entity);
+        bool removeUIDropdownComponent(EntityHandle entity);
+        bool hasUIDropdownComponent(EntityHandle entity) const;
+        std::optional<UIDropdownData> getUIDropdownData(EntityHandle entity) const;
+        bool setUIDropdownData(EntityHandle entity, const UIDropdownData& dropdownData);
+        bool setUIDropdownSelectedIndex(EntityHandle entity, int selectedIndex);
+        bool openUIDropdown(EntityHandle entity);
+        bool closeUIDropdown(EntityHandle entity);
     };
 
 }

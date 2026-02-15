@@ -41,6 +41,7 @@ namespace core
             subscribeToUIButtonEvents();
             subscribeToUITextInputEvents();
             subscribeToUICheckboxEvents();
+            subscribeToUIDropdownEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -66,6 +67,7 @@ namespace core
         unsubscribeFromUIButtonEvents();
         unsubscribeFromUITextInputEvents();
         unsubscribeFromUICheckboxEvents();
+        unsubscribeFromUIDropdownEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -290,6 +292,14 @@ namespace core
             if (interpreter->classImplementsInterface(className, "IUITextInputListener"))
             {
                 interfaces.insert("IUITextInputListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUICheckboxListener"))
+            {
+                interfaces.insert("IUICheckboxListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUIDropdownListener"))
+            {
+                interfaces.insert("IUIDropdownListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -918,6 +928,104 @@ namespace core
                 {
                     interpreter->callMethod(instance, methodName,
                         {value::Value(static_cast<int>(checkboxEntity.id)),
+                         value::Value(entityName)});
+                }
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    void ScriptingAdapter::subscribeToUIDropdownEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        dropdownOpenedToken = dispatcher.subscribe<::events::ui::UIDropdownOpenedNotification>(
+            [this](const ::events::ui::UIDropdownOpenedNotification& notif)
+            {
+                dispatchUIDropdownCallback("onDropdownOpened", notif.entity, notif.entityName);
+            });
+
+        dropdownClosedToken = dispatcher.subscribe<::events::ui::UIDropdownClosedNotification>(
+            [this](const ::events::ui::UIDropdownClosedNotification& notif)
+            {
+                dispatchUIDropdownCallback("onDropdownClosed", notif.entity, notif.entityName);
+            });
+
+        dropdownSelectionChangedToken = dispatcher.subscribe<::events::ui::UIDropdownSelectionChangedNotification>(
+            [this](const ::events::ui::UIDropdownSelectionChangedNotification& notif)
+            {
+                dispatchUIDropdownCallback("onDropdownSelectionChanged", notif.entity, notif.entityName,
+                                           notif.previousIndex, notif.newIndex);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI dropdown events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUIDropdownEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (dropdownOpenedToken.isValid())
+        {
+            dispatcher.unsubscribe(dropdownOpenedToken);
+        }
+        if (dropdownClosedToken.isValid())
+        {
+            dispatcher.unsubscribe(dropdownClosedToken);
+        }
+        if (dropdownSelectionChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(dropdownSelectionChangedToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI dropdown events");
+    }
+
+    void ScriptingAdapter::dispatchUIDropdownCallback(const char* methodName,
+                                                       ::services::EntityHandle dropdownEntity,
+                                                       const std::string& entityName,
+                                                       int previousIndex, int newIndex)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUIDropdownListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (method == "onDropdownSelectionChanged")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(dropdownEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<int64_t>(previousIndex)),
+                         value::Value(static_cast<int64_t>(newIndex))});
+                }
+                else
+                {
+                    // onDropdownOpened, onDropdownClosed
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(dropdownEntity.id)),
                          value::Value(entityName)});
                 }
             }

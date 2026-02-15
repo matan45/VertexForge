@@ -479,5 +479,218 @@ namespace core::api
 
                 return value::Value(std::string(""));
             });
+
+        // ============================================
+        // UI Dropdown
+        // ============================================
+
+        // _native_ui_getDropdownSelectedIndex(entityId) -> int
+        interpreter->registerNativeFunction("_native_ui_getDropdownSelectedIndex",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getDropdownSelectedIndex");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIDropdownDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                return value::Value(static_cast<int64_t>(data->selectedIndex));
+            });
+
+        // _native_ui_setDropdownSelectedIndex(entityId, index) -> void
+        interpreter->registerNativeFunction("_native_ui_setDropdownSelectedIndex",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setDropdownSelectedIndex");
+                int64_t index = extractInt64(args[1], "_native_ui_setDropdownSelectedIndex");
+                auto handle = intToEntity(entityId);
+
+                events::ui::SetUIDropdownSelectedIndexCommand cmd;
+                cmd.entity = handle;
+                cmd.selectedIndex = static_cast<int>(index);
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getDropdownSelectedValue(entityId) -> String
+        interpreter->registerNativeFunction("_native_ui_getDropdownSelectedValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(std::string(""));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getDropdownSelectedValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIDropdownDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(std::string(""));
+                }
+
+                if (data->selectedIndex >= 0 && data->selectedIndex < static_cast<int>(data->options.size()))
+                {
+                    return value::Value(data->options[data->selectedIndex].text);
+                }
+
+                return value::Value(std::string(""));
+            });
+
+        // _native_ui_getDropdownState(entityId) -> int (0=Normal, 1=Hovered, 2=Open, 3=Disabled)
+        interpreter->registerNativeFunction("_native_ui_getDropdownState",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getDropdownState");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIDropdownDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                return value::Value(static_cast<int64_t>(data->currentState));
+            });
+
+        // _native_ui_setDropdownInteractable(entityId, interactable) -> void
+        interpreter->registerNativeFunction("_native_ui_setDropdownInteractable",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setDropdownInteractable");
+                bool interactable = std::holds_alternative<bool>(args[1]) ? std::get<bool>(args[1]) : true;
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIDropdownDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto dropdownData = data.value();
+                dropdownData.interactable = interactable;
+
+                events::ui::SetUIDropdownDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.dropdownData = dropdownData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_setDropdownOptions(entityId, optionsStr) -> void (pipe-delimited)
+        interpreter->registerNativeFunction("_native_ui_setDropdownOptions",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setDropdownOptions");
+                std::string optionsStr = extractString(args[1], "_native_ui_setDropdownOptions");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIDropdownDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto dropdownData = data.value();
+                dropdownData.options.clear();
+
+                // Split by pipe delimiter
+                std::string::size_type start = 0;
+                std::string::size_type pos = optionsStr.find('|');
+                while (pos != std::string::npos)
+                {
+                    dropdownData.options.push_back({optionsStr.substr(start, pos - start), ""});
+                    start = pos + 1;
+                    pos = optionsStr.find('|', start);
+                }
+                if (start < optionsStr.size())
+                {
+                    dropdownData.options.push_back({optionsStr.substr(start), ""});
+                }
+
+                // Clamp selectedIndex
+                if (dropdownData.selectedIndex >= static_cast<int>(dropdownData.options.size()))
+                {
+                    dropdownData.selectedIndex = static_cast<int>(dropdownData.options.size()) - 1;
+                }
+
+                events::ui::SetUIDropdownDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.dropdownData = dropdownData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_openDropdown(entityId) -> void
+        interpreter->registerNativeFunction("_native_ui_openDropdown",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_openDropdown");
+                auto handle = intToEntity(entityId);
+
+                events::ui::OpenUIDropdownCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_closeDropdown(entityId) -> void
+        interpreter->registerNativeFunction("_native_ui_closeDropdown",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_closeDropdown");
+                auto handle = intToEntity(entityId);
+
+                events::ui::CloseUIDropdownCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
     }
 }

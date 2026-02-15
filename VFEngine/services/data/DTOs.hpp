@@ -385,4 +385,42 @@ namespace services
         // Runtime
         uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Disabled
     };
+
+    struct DropdownOptionData
+    {
+        std::string text;
+        std::string iconPath; // empty = no icon
+    };
+
+    struct UIDropdownData
+    {
+        // Config
+        std::vector<DropdownOptionData> options;
+        int selectedIndex = -1;
+        std::string placeholderText = "Select...";
+        int maxVisibleItems = 5;
+        bool interactable = true;
+
+        // Header state colors
+        glm::vec4 normalColor{0.25f, 0.25f, 0.25f, 1.0f};
+        glm::vec4 hoveredColor{0.3f, 0.3f, 0.3f, 1.0f};
+        glm::vec4 openColor{0.2f, 0.2f, 0.35f, 1.0f};
+        glm::vec4 disabledColor{0.15f, 0.15f, 0.15f, 0.5f};
+
+        // List colors
+        glm::vec4 listBackgroundColor{0.18f, 0.18f, 0.18f, 1.0f};
+        glm::vec4 itemNormalColor{0.18f, 0.18f, 0.18f, 0.0f};
+        glm::vec4 itemHoveredColor{0.3f, 0.5f, 0.8f, 0.5f};
+
+        // Font
+        std::string fontPath;
+        float fontSize = 16.0f;
+
+        float colorTransitionDuration = 0.1f;
+
+        // Runtime
+        uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Open, 3=Disabled
+        bool isOpen = false;
+        int hoveredOptionIndex = -1;
+    };
 }
