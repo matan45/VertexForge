@@ -64,19 +64,19 @@ namespace window
 
     bool InputController::isKeyDown(int keyCode) const
     {
-        if (!glfwWindow) return false;
+        if (!glfwWindow || keyCode < 0 || keyCode > GLFW_KEY_LAST) return false;
         return glfwGetKey(glfwWindow, keyCode) == GLFW_PRESS;
     }
 
     bool InputController::isKeyReleased(int keyCode) const
     {
-        if (!glfwWindow) return false;
+        if (!glfwWindow || keyCode < 0 || keyCode > GLFW_KEY_LAST) return false;
         return glfwGetKey(glfwWindow, keyCode) == GLFW_RELEASE;
     }
 
     bool InputController::isKeyPressed(int keyCode) const
     {
-        if (keyCode < 0 || keyCode >= 512) return false;
+        if (keyCode < 0 || keyCode >= MAX_KEYS) return false;
         return keyPressed[keyCode];
     }
 
@@ -87,19 +87,19 @@ namespace window
 
     bool InputController::isMouseButtonDown(int button) const
     {
-        if (!glfwWindow) return false;
+        if (!glfwWindow || button < 0 || button > GLFW_MOUSE_BUTTON_LAST) return false;
         return glfwGetMouseButton(glfwWindow, button) == GLFW_PRESS;
     }
 
     bool InputController::isMouseButtonReleased(int button) const
     {
-        if (!glfwWindow) return false;
+        if (!glfwWindow || button < 0 || button > GLFW_MOUSE_BUTTON_LAST) return false;
         return glfwGetMouseButton(glfwWindow, button) == GLFW_RELEASE;
     }
 
     bool InputController::isDoubleClick(int button) const
     {
-        if (button < 0 || button >= 8) return false;
+        if (button < 0 || button >= MAX_MOUSE_BUTTONS) return false;
         return doubleClickDetected[button];
     }
 
@@ -159,7 +159,7 @@ namespace window
         charBuffer.clear();
 
         // Key pressed edge detection
-        for (int key = 0; key < 512; ++key)
+        for (int key = 0; key < MAX_KEYS; ++key)
         {
             bool down = (glfwWindow && glfwGetKey(glfwWindow, key) == GLFW_PRESS);
             keyPressed[key] = down && !wasKeyDown[key];
@@ -168,7 +168,7 @@ namespace window
 
         // Double-click detection
         double currentTime = glfwGetTime();
-        for (int button = 0; button < 8; ++button)
+        for (int button = 0; button < MAX_MOUSE_BUTTONS; ++button)
         {
             doubleClickDetected[button] = false;
 

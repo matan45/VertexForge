@@ -63,6 +63,7 @@ namespace render::text
         void init();
         void recreate();
         void cleanUp();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { bufferManager.setDeletionQueue(queue); }
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos) const;

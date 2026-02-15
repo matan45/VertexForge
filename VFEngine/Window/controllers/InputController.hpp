@@ -1,9 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <GLFW/glfw3.h>
 #include <unordered_map>
 #include <string>
-
-struct GLFWwindow;
 
 namespace window
 {
@@ -26,10 +25,10 @@ namespace window
         // Double-click detection
         static constexpr double DOUBLE_CLICK_TIME = 0.3; // seconds
         static constexpr float DOUBLE_CLICK_DISTANCE = 5.0f; // pixels
-        double lastClickTime[8]{0.0}; // per button
-        glm::vec2 lastClickPos[8]{glm::vec2(0.0f)};
-        bool wasButtonDown[8]{false};
-        bool doubleClickDetected[8]{false};
+        double lastClickTime[GLFW_MOUSE_BUTTON_LAST + 1]{0.0}; // per button
+        glm::vec2 lastClickPos[GLFW_MOUSE_BUTTON_LAST + 1]{glm::vec2(0.0f)};
+        bool wasButtonDown[GLFW_MOUSE_BUTTON_LAST + 1]{false};
+        bool doubleClickDetected[GLFW_MOUSE_BUTTON_LAST + 1]{false};
 
         // Static registry mapping GLFW windows to InputController instances.
         // Thread Safety: Only accessed from main thread where GLFW callbacks execute.
@@ -49,8 +48,10 @@ namespace window
         std::vector<uint32_t> frameCharBuffer;
 
         // Key pressed edge detection (rising-edge: down this frame, not last frame)
-        bool wasKeyDown[512]{};
-        bool keyPressed[512]{};
+        static constexpr int MAX_KEYS = GLFW_KEY_LAST + 1;
+        static constexpr int MAX_MOUSE_BUTTONS = GLFW_MOUSE_BUTTON_LAST + 1;
+        bool wasKeyDown[MAX_KEYS]{};
+        bool keyPressed[MAX_KEYS]{};
 
     public:
         explicit InputController(Window* window);

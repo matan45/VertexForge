@@ -1,6 +1,7 @@
 #include "BillboardBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 
 namespace render::billboard
 {
@@ -123,6 +124,28 @@ namespace render::billboard
         }
     }
 
+    void BillboardBufferManager::resizeInstanceBuffer(uint32_t requiredCount)
+    {
+        if (instanceBuffer)
+        {
+            if (deletionQueue)
+            {
+                deletionQueue->queueBuffer(instanceBuffer, instanceBufferMemory);
+            }
+            else
+            {
+                auto& dev = device.getLogicalDevice();
+                dev.waitIdle();
+                dev.destroyBuffer(instanceBuffer);
+                dev.freeMemory(instanceBufferMemory);
+            }
+            instanceBuffer = nullptr;
+        }
+
+        maxInstances = requiredCount * 2;
+        createInstanceBuffer();
+    }
+
     void BillboardBufferManager::updateInstanceBuffer(const std::vector<BillboardRenderData>& billboards)
     {
         if (billboards.empty())
@@ -131,8 +154,14 @@ namespace render::billboard
             return;
         }
 
-        currentInstanceCount = static_cast<uint32_t>(std::min(billboards.size(),
-                                                               static_cast<size_t>(maxInstances)));
+        uint32_t count = static_cast<uint32_t>(billboards.size());
+
+        if (count > maxInstances)
+        {
+            resizeInstanceBuffer(count);
+        }
+
+        currentInstanceCount = count;
 
         std::vector<BillboardInstanceData> instanceData(currentInstanceCount);
         for (uint32_t i = 0; i < currentInstanceCount; ++i)

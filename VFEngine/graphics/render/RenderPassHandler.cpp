@@ -443,6 +443,23 @@ namespace render
         {
             gpuDrivenRenderer->setDeletionQueue(queue);
         }
+
+        if (textPipeline)
+        {
+            textPipeline->setDeletionQueue(queue);
+        }
+        if (uiPipeline)
+        {
+            uiPipeline->setDeletionQueue(queue);
+        }
+        if (uiTextPipeline)
+        {
+            uiTextPipeline->setDeletionQueue(queue);
+        }
+        if (billboardPipeline)
+        {
+            billboardPipeline->setDeletionQueue(queue);
+        }
     }
 
     void RenderPassHandler::readBackLightOcclusionResults()

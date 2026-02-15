@@ -72,6 +72,7 @@ namespace render::ui
         void init();
         void recreate();
         void cleanUp();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { bufferManager.setDeletionQueue(queue); }
 
         void setUIImageDrawList(const std::vector<UIImageRenderData>& images);
 

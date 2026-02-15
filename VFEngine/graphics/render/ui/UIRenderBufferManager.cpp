@@ -1,6 +1,7 @@
 #include "UIRenderBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 
 namespace render::ui
 {
@@ -91,13 +92,19 @@ namespace render::ui
 
     void UIRenderBufferManager::resizeInstanceBuffer(uint32_t requiredCount)
     {
-        auto& dev = device.getLogicalDevice();
-        dev.waitIdle();
-
         if (instanceBuffer)
         {
-            dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
+            if (deletionQueue)
+            {
+                deletionQueue->queueBuffer(instanceBuffer, instanceBufferMemory);
+            }
+            else
+            {
+                auto& dev = device.getLogicalDevice();
+                dev.waitIdle();
+                dev.destroyBuffer(instanceBuffer);
+                dev.freeMemory(instanceBufferMemory);
+            }
             instanceBuffer = nullptr;
         }
 

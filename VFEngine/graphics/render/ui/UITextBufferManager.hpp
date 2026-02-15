@@ -7,6 +7,7 @@
 namespace core
 {
     class Device;
+    class DeferredDeletionQueue;
 }
 
 namespace render::ui
@@ -15,6 +16,7 @@ namespace render::ui
     {
     private:
         core::Device& device;
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         vk::Buffer quadVertexBuffer;
         vk::DeviceMemory quadVertexBufferMemory;
@@ -32,6 +34,7 @@ namespace render::ui
 
         void init();
         void cleanUp();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
 
         void updateInstanceBuffer(const std::vector<UITextCharInstance>& instances);
 
