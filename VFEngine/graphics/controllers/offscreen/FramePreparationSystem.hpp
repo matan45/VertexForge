@@ -88,6 +88,7 @@ namespace controllers::offscreen
         void processUIButtonInteraction(const FrameContext& ctx);
         void processUICheckboxInteraction(const FrameContext& ctx);
         void processUITextInputInteraction(const FrameContext& ctx);
+        void processUIDropdownInteraction(const FrameContext& ctx);
 
         // Track which text input entity is currently focused (-1 = none)
         entt::entity focusedTextInput = entt::null;

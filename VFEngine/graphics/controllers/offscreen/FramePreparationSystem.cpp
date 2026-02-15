@@ -1109,6 +1109,9 @@ namespace controllers::offscreen
         // --- Text input interaction (focus, editing, state machine) ---
         processUITextInputInteraction(ctx);
 
+        // --- Dropdown interaction (open/close, option selection, state machine) ---
+        processUIDropdownInteraction(ctx);
+
         std::vector<render::ui::UIImageRenderData> drawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -1868,6 +1871,80 @@ namespace controllers::offscreen
             }
         }
 
+        // --- Emit dropdown option list backgrounds (rendered on top of everything) ---
+        {
+            auto dropdownView = registry.view<components::UIDropdownComponent, components::UIRectComponent>();
+            for (auto dropdownEntity : dropdownView)
+            {
+                auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
+                if (!comp.isOpen || comp.options.empty())
+                    continue;
+
+                if (registry.all_of<components::NameComponent>(dropdownEntity))
+                    if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
+                        continue;
+
+                const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
+                    canvas = &registry.get<components::UICanvasComponent>(dropdownEntity);
+                if (!canvas) continue;
+
+                float viewW = static_cast<float>(ctx.viewportWidth);
+                float viewH = static_cast<float>(ctx.viewportHeight);
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(viewW / canvas->referenceWidth, viewH / canvas->referenceHeight);
+
+                const auto& rectComp = registry.get<components::UIRectComponent>(dropdownEntity);
+                PixelRect headerRect = resolvePixelRect(rectComp, viewW, viewH, scale);
+
+                int visibleCount = std::min(static_cast<int>(comp.options.size()),
+                                            comp.maxVisibleItems);
+                float itemHeight = headerRect.h;
+                float listHeight = itemHeight * visibleCount;
+
+                // Scissor rect for the option list area
+                float listX = headerRect.x;
+                float listY = headerRect.y + headerRect.h;
+                glm::vec4 listScissor(listX, listY, headerRect.w, listHeight);
+
+                // List background
+                render::ui::UIImageRenderData listBg;
+                listBg.texturePath = "__white_1x1__";
+                listBg.position = glm::vec2(listX, listY);
+                listBg.size = glm::vec2(headerRect.w, listHeight);
+                listBg.colorTint = comp.listBackgroundColor;
+                listBg.scissorRect = glm::vec4(0.0f);
+                drawList.push_back(std::move(listBg));
+
+                // Individual option items
+                for (int i = 0; i < static_cast<int>(comp.options.size()); ++i)
+                {
+                    float optionY = listY + i * itemHeight - comp.listScrollOffset;
+
+                    // Skip items outside visible area
+                    if (optionY + itemHeight < listY || optionY > listY + listHeight)
+                        continue;
+
+                    glm::vec4 itemColor = (i == comp.hoveredOptionIndex)
+                        ? comp.itemHoveredColor
+                        : (i == comp.selectedIndex ? glm::vec4(comp.itemHoveredColor.r * 0.7f,
+                                                               comp.itemHoveredColor.g * 0.7f,
+                                                               comp.itemHoveredColor.b * 0.7f,
+                                                               comp.itemHoveredColor.a * 0.5f)
+                                                   : comp.itemNormalColor);
+
+                    render::ui::UIImageRenderData itemBg;
+                    itemBg.texturePath = "__white_1x1__";
+                    itemBg.position = glm::vec2(listX, optionY);
+                    itemBg.size = glm::vec2(headerRect.w, itemHeight);
+                    itemBg.colorTint = itemColor;
+                    itemBg.scissorRect = listScissor;
+                    drawList.push_back(std::move(itemBg));
+                }
+            }
+        }
+
         renderHandler->setUIImageDrawList(std::move(drawList));
     }
 
@@ -2399,6 +2476,101 @@ namespace controllers::offscreen
                 renderData.size = glm::vec2(rect.w - padding * 2.0f + tiComp.scrollOffsetX, rect.h);
                 renderData.scissorRect = scissor;
                 drawList.push_back(std::move(renderData));
+            }
+        }
+
+        // --- Emit dropdown option text labels ---
+        {
+            auto dropdownView = registry.view<components::UIDropdownComponent, components::UIRectComponent>();
+            for (auto dropdownEntity : dropdownView)
+            {
+                auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
+                if (!comp.isOpen || comp.options.empty())
+                    continue;
+
+                if (registry.all_of<components::NameComponent>(dropdownEntity))
+                    if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
+                        continue;
+
+                const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
+                    canvas = &registry.get<components::UICanvasComponent>(dropdownEntity);
+                if (!canvas) continue;
+
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(viewportW / canvas->referenceWidth, viewportH / canvas->referenceHeight);
+
+                const auto& rectComp = registry.get<components::UIRectComponent>(dropdownEntity);
+                PixelRect headerRect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
+
+                int visibleCount = std::min(static_cast<int>(comp.options.size()),
+                                            comp.maxVisibleItems);
+                float itemHeight = headerRect.h;
+                float listHeight = itemHeight * visibleCount;
+
+                float listX = headerRect.x;
+                float listY = headerRect.y + headerRect.h;
+                glm::vec4 listScissor(listX, listY, headerRect.w, listHeight);
+
+                // Determine font: use dropdown's font, or entity's own UILabel, or child label
+                std::string fontPath = comp.fontPath;
+                float fontSize = comp.fontSize;
+                if (fontPath.empty())
+                {
+                    // Check if the dropdown entity itself has a UILabelComponent
+                    if (registry.all_of<components::UILabelComponent>(dropdownEntity))
+                    {
+                        const auto& label = registry.get<components::UILabelComponent>(dropdownEntity);
+                        fontPath = label.fontPath;
+                        if (fontSize <= 0.0f)
+                            fontSize = label.fontSize;
+                    }
+                    // Fall back to child label
+                    if (fontPath.empty() && registry.all_of<components::ChildrenComponent>(dropdownEntity))
+                    {
+                        const auto& children = registry.get<components::ChildrenComponent>(dropdownEntity).children;
+                        for (auto child : children)
+                        {
+                            if (registry.valid(child) && registry.all_of<components::UILabelComponent>(child))
+                            {
+                                const auto& label = registry.get<components::UILabelComponent>(child);
+                                fontPath = label.fontPath;
+                                if (fontSize <= 0.0f)
+                                    fontSize = label.fontSize;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (fontPath.empty())
+                    continue;
+
+                float padding = 4.0f * scale;
+
+                for (int i = 0; i < static_cast<int>(comp.options.size()); ++i)
+                {
+                    float optionY = listY + i * itemHeight - comp.listScrollOffset;
+
+                    if (optionY + itemHeight < listY || optionY > listY + listHeight)
+                        continue;
+
+                    render::ui::UITextRenderData renderData;
+                    renderData.fontPath = fontPath;
+                    renderData.text = comp.options[i].text;
+                    renderData.fontSize = fontSize * scale;
+                    renderData.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    renderData.lineSpacing = 1.0f;
+                    renderData.letterSpacing = 0.0f;
+                    renderData.wordWrap = false;
+                    renderData.horizontalAlignment = 0; // Left
+                    renderData.verticalAlignment = 1;   // Middle
+                    renderData.overflow = 1;             // Clip
+                    renderData.position = glm::vec2(listX + padding, optionY);
+                    renderData.size = glm::vec2(headerRect.w - padding * 2.0f, itemHeight);
+                    renderData.scissorRect = listScissor;
+                    drawList.push_back(std::move(renderData));
+                }
             }
         }
 
@@ -3774,6 +3946,441 @@ namespace controllers::offscreen
             if (registry.all_of<components::UIImageComponent>(entity))
             {
                 auto& imageComp = registry.get<components::UIImageComponent>(entity);
+                imageComp.colorTint = comp.currentDisplayColor;
+            }
+        }
+    }
+
+    void FramePreparationSystem::processUIDropdownInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto dropdownView = registry.view<components::UIDropdownComponent, components::UIRectComponent>();
+
+        if (dropdownView.size_hint() == 0)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        // Pre-compute scroll container info for scissor clipping
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+
+                ScrollContainerInfo info;
+                info.scrollOffset = scrollComp.scrollOffset;
+                info.scissorRect = glm::vec4(sx, sy, sw, sh);
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = info;
+            }
+        }
+
+        auto findScrollInfo = [&](entt::entity entity) -> std::pair<entt::entity, glm::vec4>
+        {
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    break;
+                current = parentEntity;
+            }
+            glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                    scissor = it->second.scissorRect;
+            }
+            return {scrollAncestor, scissor};
+        };
+
+        auto hitTestRect = [&](PixelRect rect, glm::vec4 scissor) -> bool
+        {
+            bool inside = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+            if (inside && scissor.z > 0.0f && scissor.w > 0.0f)
+            {
+                inside = ctx.mousePosition.x >= scissor.x
+                    && ctx.mousePosition.x <= scissor.x + scissor.z
+                    && ctx.mousePosition.y >= scissor.y
+                    && ctx.mousePosition.y <= scissor.y + scissor.w;
+            }
+            return inside;
+        };
+
+        // PHASE 1: Hit test to find hovered dropdown header (smallest-area wins for z-order)
+        entt::entity hoveredDropdown = entt::null;
+        float smallestArea = std::numeric_limits<float>::max();
+
+        // Also track if mouse is over any open dropdown's option list
+        entt::entity hoveredOptionListOwner = entt::null;
+        int hoveredOptionIdx = -1;
+
+        for (auto dropdownEntity : dropdownView)
+        {
+            auto& dropdownComp = registry.get<components::UIDropdownComponent>(dropdownEntity);
+
+            if (registry.all_of<components::NameComponent>(dropdownEntity))
+                if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
+                canvas = &registry.get<components::UICanvasComponent>(dropdownEntity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(dropdownEntity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAncestor, scissor] = findScrollInfo(dropdownEntity);
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                }
+            }
+
+            // Hit test on header rect
+            if (dropdownComp.interactable && hitTestRect(rect, scissor))
+            {
+                float area = rect.w * rect.h;
+                if (area < smallestArea)
+                {
+                    smallestArea = area;
+                    hoveredDropdown = dropdownEntity;
+                }
+            }
+
+            // If this dropdown is open, hit test on the option list area below the header
+            if (dropdownComp.isOpen && !dropdownComp.options.empty())
+            {
+                int visibleCount = std::min(static_cast<int>(dropdownComp.options.size()),
+                                            dropdownComp.maxVisibleItems);
+                float itemHeight = rect.h; // each option same height as header
+                float listHeight = itemHeight * visibleCount;
+
+                PixelRect listRect;
+                listRect.x = rect.x;
+                listRect.y = rect.y + rect.h; // below header
+                listRect.w = rect.w;
+                listRect.h = listHeight;
+
+                if (hitTestRect(listRect, scissor))
+                {
+                    hoveredOptionListOwner = dropdownEntity;
+                    float relativeY = ctx.mousePosition.y - listRect.y + dropdownComp.listScrollOffset;
+                    int idx = static_cast<int>(relativeY / itemHeight);
+                    if (idx >= 0 && idx < static_cast<int>(dropdownComp.options.size()))
+                        hoveredOptionIdx = idx;
+                    else
+                        hoveredOptionIdx = -1;
+                }
+            }
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto makeEntityPayload = [&](entt::entity entity) -> std::pair<services::EntityHandle, std::string>
+        {
+            services::EntityHandle handle = services::internal::toHandle(entity);
+            std::string name;
+            if (registry.all_of<components::NameComponent>(entity))
+                name = registry.get<components::NameComponent>(entity).name;
+            return {handle, std::move(name)};
+        };
+
+        // PHASE 2: Handle clicks and state transitions
+        bool clickedOnDropdownUI = false; // track if click was consumed by any dropdown
+
+        for (auto dropdownEntity : dropdownView)
+        {
+            auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
+
+            if (registry.all_of<components::NameComponent>(dropdownEntity))
+                if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
+                    continue;
+
+            auto previousState = comp.currentState;
+            components::UIDropdownState newState = components::UIDropdownState::Normal;
+
+            if (!comp.interactable)
+            {
+                newState = components::UIDropdownState::Disabled;
+                if (comp.isOpen)
+                {
+                    // Close disabled dropdown
+                    comp.isOpen = false;
+                    comp.hoveredOptionIndex = -1;
+                    comp.listScrollOffset = 0.0f;
+                    if (components::UIDropdownComponent::activeDropdownEntity == dropdownEntity)
+                        components::UIDropdownComponent::activeDropdownEntity = entt::null;
+
+                    auto [handle, name] = makeEntityPayload(dropdownEntity);
+                    events::ui::UIDropdownClosedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    dispatcher.publish(notif);
+                }
+            }
+            else if (comp.isOpen)
+            {
+                newState = components::UIDropdownState::Open;
+
+                // Update hovered option index
+                if (hoveredOptionListOwner == dropdownEntity)
+                    comp.hoveredOptionIndex = hoveredOptionIdx;
+                else
+                    comp.hoveredOptionIndex = -1;
+
+                if (ctx.leftMouseReleased)
+                {
+                    if (hoveredOptionListOwner == dropdownEntity && hoveredOptionIdx >= 0)
+                    {
+                        // Option selected
+                        clickedOnDropdownUI = true;
+                        int previousIndex = comp.selectedIndex;
+                        int newIndex = hoveredOptionIdx;
+
+                        comp.selectedIndex = newIndex;
+
+                        // Close the dropdown
+                        comp.isOpen = false;
+                        comp.hoveredOptionIndex = -1;
+                        comp.listScrollOffset = 0.0f;
+                        components::UIDropdownComponent::activeDropdownEntity = entt::null;
+                        newState = components::UIDropdownState::Normal;
+
+                        // Update UILabel to show selected text
+                        bool labelUpdated = false;
+                        // Check entity's own UILabel first
+                        if (registry.all_of<components::UILabelComponent>(dropdownEntity))
+                        {
+                            auto& label = registry.get<components::UILabelComponent>(dropdownEntity);
+                            label.text = comp.options[newIndex].text;
+                            labelUpdated = true;
+                        }
+                        // Fall back to child UILabel
+                        if (!labelUpdated && registry.all_of<components::ChildrenComponent>(dropdownEntity))
+                        {
+                            const auto& children = registry.get<components::ChildrenComponent>(dropdownEntity).children;
+                            for (auto child : children)
+                            {
+                                if (registry.valid(child) && registry.all_of<components::UILabelComponent>(child))
+                                {
+                                    auto& label = registry.get<components::UILabelComponent>(child);
+                                    label.text = comp.options[newIndex].text;
+                                    break;
+                                }
+                            }
+                        }
+
+                        auto [handle, name] = makeEntityPayload(dropdownEntity);
+
+                        // Publish selection changed if index actually changed
+                        if (previousIndex != newIndex)
+                        {
+                            events::ui::UIDropdownSelectionChangedNotification selNotif;
+                            selNotif.entity = handle;
+                            selNotif.entityName = name;
+                            selNotif.previousIndex = previousIndex;
+                            selNotif.newIndex = newIndex;
+                            selNotif.selectedValue = comp.options[newIndex].text;
+                            dispatcher.publish(selNotif);
+                        }
+
+                        // Publish closed
+                        events::ui::UIDropdownClosedNotification closeNotif;
+                        closeNotif.entity = handle;
+                        closeNotif.entityName = std::move(name);
+                        dispatcher.publish(closeNotif);
+                    }
+                    else if (dropdownEntity == hoveredDropdown)
+                    {
+                        // Clicked on header while open -> close
+                        clickedOnDropdownUI = true;
+                        comp.isOpen = false;
+                        comp.hoveredOptionIndex = -1;
+                        comp.listScrollOffset = 0.0f;
+                        components::UIDropdownComponent::activeDropdownEntity = entt::null;
+                        newState = components::UIDropdownState::Hovered;
+
+                        auto [handle, name] = makeEntityPayload(dropdownEntity);
+                        events::ui::UIDropdownClosedNotification notif;
+                        notif.entity = handle;
+                        notif.entityName = std::move(name);
+                        dispatcher.publish(notif);
+                    }
+                    else
+                    {
+                        // Clicked elsewhere -> close
+                        comp.isOpen = false;
+                        comp.hoveredOptionIndex = -1;
+                        comp.listScrollOffset = 0.0f;
+                        components::UIDropdownComponent::activeDropdownEntity = entt::null;
+                        newState = components::UIDropdownState::Normal;
+
+                        auto [handle, name] = makeEntityPayload(dropdownEntity);
+                        events::ui::UIDropdownClosedNotification notif;
+                        notif.entity = handle;
+                        notif.entityName = std::move(name);
+                        dispatcher.publish(notif);
+                    }
+                }
+            }
+            else if (dropdownEntity == hoveredDropdown)
+            {
+                newState = components::UIDropdownState::Hovered;
+
+                // Click to open
+                if (ctx.leftMouseReleased)
+                {
+                    clickedOnDropdownUI = true;
+
+                    // Close any other open dropdown
+                    if (components::UIDropdownComponent::activeDropdownEntity != entt::null
+                        && components::UIDropdownComponent::activeDropdownEntity != dropdownEntity
+                        && registry.valid(components::UIDropdownComponent::activeDropdownEntity))
+                    {
+                        auto& otherComp = registry.get<components::UIDropdownComponent>(
+                            components::UIDropdownComponent::activeDropdownEntity);
+                        otherComp.isOpen = false;
+                        otherComp.hoveredOptionIndex = -1;
+                        otherComp.listScrollOffset = 0.0f;
+
+                        auto [otherHandle, otherName] = makeEntityPayload(
+                            components::UIDropdownComponent::activeDropdownEntity);
+                        events::ui::UIDropdownClosedNotification closeNotif;
+                        closeNotif.entity = otherHandle;
+                        closeNotif.entityName = std::move(otherName);
+                        dispatcher.publish(closeNotif);
+                    }
+
+                    comp.isOpen = true;
+                    comp.hoveredOptionIndex = -1;
+                    components::UIDropdownComponent::activeDropdownEntity = dropdownEntity;
+                    newState = components::UIDropdownState::Open;
+
+                    auto [handle, name] = makeEntityPayload(dropdownEntity);
+                    events::ui::UIDropdownOpenedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    dispatcher.publish(notif);
+                }
+            }
+
+            comp.currentState = newState;
+        }
+
+        // Handle scroll on open dropdown's option list
+        if (components::UIDropdownComponent::activeDropdownEntity != entt::null
+            && registry.valid(components::UIDropdownComponent::activeDropdownEntity)
+            && ctx.scrollDelta.y != 0.0f
+            && hoveredOptionListOwner != entt::null)
+        {
+            auto& comp = registry.get<components::UIDropdownComponent>(
+                components::UIDropdownComponent::activeDropdownEntity);
+            if (comp.isOpen)
+            {
+                int visibleCount = std::min(static_cast<int>(comp.options.size()),
+                                            comp.maxVisibleItems);
+                int totalOptions = static_cast<int>(comp.options.size());
+                if (totalOptions > visibleCount)
+                {
+                    // Get header height for item height calculation
+                    const auto& rectComp = registry.get<components::UIRectComponent>(
+                        components::UIDropdownComponent::activeDropdownEntity);
+                    const auto* canvas = findCanvasForEntity(registry,
+                        components::UIDropdownComponent::activeDropdownEntity);
+                    float scale = 1.0f;
+                    if (canvas && canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                        scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+                    PixelRect headerRect = resolvePixelRect(rectComp, vw, vh, scale);
+                    float itemHeight = headerRect.h;
+
+                    float maxScroll = (totalOptions - visibleCount) * itemHeight;
+                    comp.listScrollOffset -= ctx.scrollDelta.y * itemHeight;
+                    comp.listScrollOffset = std::max(0.0f, std::min(comp.listScrollOffset, maxScroll));
+                }
+            }
+        }
+
+        // PHASE 3: Color lerp + visual override
+        for (auto dropdownEntity : dropdownView)
+        {
+            auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
+
+            glm::vec4 targetColor;
+            switch (comp.currentState)
+            {
+            case components::UIDropdownState::Hovered:
+                targetColor = comp.hoveredColor;
+                break;
+            case components::UIDropdownState::Open:
+                targetColor = comp.openColor;
+                break;
+            case components::UIDropdownState::Disabled:
+                targetColor = comp.disabledColor;
+                break;
+            default:
+                targetColor = comp.normalColor;
+                break;
+            }
+
+            if (comp.colorTransitionDuration > 0.0f && ctx.deltaTime > 0.0f)
+            {
+                float t = std::min(1.0f, ctx.deltaTime / comp.colorTransitionDuration);
+                comp.currentDisplayColor = glm::mix(comp.currentDisplayColor, targetColor, t);
+            }
+            else
+            {
+                comp.currentDisplayColor = targetColor;
+            }
+
+            // Override UIImageComponent color tint on header
+            if (registry.all_of<components::UIImageComponent>(dropdownEntity))
+            {
+                auto& imageComp = registry.get<components::UIImageComponent>(dropdownEntity);
                 imageComp.colorTint = comp.currentDisplayColor;
             }
         }
