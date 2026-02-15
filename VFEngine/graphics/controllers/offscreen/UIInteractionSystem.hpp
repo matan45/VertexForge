@@ -21,5 +21,11 @@ namespace controllers::offscreen
 
     private:
         entt::entity focusedTextInput = entt::null;
+
+        // Text input sub-methods
+        void textInputHitTest(const FrameContext& ctx, entt::entity& hoveredTextInput);
+        void textInputFocusManagement(const FrameContext& ctx, entt::entity hoveredTextInput);
+        void textInputEditing(const FrameContext& ctx);
+        void textInputStateAndVisuals(const FrameContext& ctx, entt::entity hoveredTextInput);
     };
 }

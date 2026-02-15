@@ -269,6 +269,7 @@ namespace render
         void recreateOverlayPipelines();
         void cleanUpPipelines() const;
 
+        void updateGPUDrivenSceneData() const;
         void drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawGPUDrivenMeshPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                    DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes, bool hasVFX) const;

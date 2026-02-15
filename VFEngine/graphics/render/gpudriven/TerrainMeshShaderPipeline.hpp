@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <array>
 #include "GPUDrivenTypes.hpp"
 
 namespace core
@@ -193,6 +194,9 @@ namespace render::gpudriven
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
 
+        void createEmptyDescriptorSet();
+        void createWeightMapDescriptor();
+        void createTerrainLayerBuffer();
         void createTileDataBuffer();
         void createStatsBuffer();
         void createTerrainDataDescriptor();
@@ -206,5 +210,12 @@ namespace render::gpudriven
                                            vk::DescriptorSetLayout shadowDataLayout,
                                            vk::DescriptorSetLayout shadowTextureLayout,
                                            vk::RenderPass renderPass);
+        bool loadTerrainShaders();
+        void cleanupDescriptorResources();
+        bool validateDescriptorsForDispatch() const;
+        void bindDescriptorSetsInBatches(vk::CommandBuffer cmd,
+                                         const std::array<vk::DescriptorSet, 12>& sets) const;
+        TerrainPushConstants buildTerrainPushConstants(uint32_t viewMode, float screenWidth, float screenHeight,
+                                                       float lodBias, float errorThreshold, float textureScale) const;
     };
 }

@@ -32,7 +32,35 @@ namespace render::shadow
         createAtlasImage();
         createAtlasSamplers();
         createDescriptorResources();
+        transitionAtlasToShaderRead();
+        updateDescriptorSet();
 
+        initialized = true;
+    }
+
+    void ShadowAtlasManager::destroyAtlasResources()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        if (atlasImageView)
+        {
+            logicalDevice.destroyImageView(atlasImageView);
+            atlasImageView = nullptr;
+        }
+        if (atlasImage)
+        {
+            logicalDevice.destroyImage(atlasImage);
+            atlasImage = nullptr;
+        }
+        if (atlasMemory)
+        {
+            logicalDevice.freeMemory(atlasMemory);
+            atlasMemory = nullptr;
+        }
+    }
+
+    void ShadowAtlasManager::transitionAtlasToShaderRead()
+    {
         const auto& logicalDevice = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
 
@@ -60,10 +88,6 @@ namespace render::shadow
         );
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
-
-        updateDescriptorSet();
-
-        initialized = true;
     }
 
     void ShadowAtlasManager::cleanup()
@@ -96,22 +120,7 @@ namespace render::shadow
             atlasSampler = nullptr;
         }
 
-        if (atlasImageView)
-        {
-            logicalDevice.destroyImageView(atlasImageView);
-            atlasImageView = nullptr;
-        }
-
-        if (atlasImage)
-        {
-            logicalDevice.destroyImage(atlasImage);
-            atlasImage = nullptr;
-        }
-        if (atlasMemory)
-        {
-            logicalDevice.freeMemory(atlasMemory);
-            atlasMemory = nullptr;
-        }
+        destroyAtlasResources();
 
         tiles.clear();
         handleToTileIndex.clear();
@@ -542,21 +551,7 @@ namespace render::shadow
             }
         }
 
-        if (atlasImageView)
-        {
-            logicalDevice.destroyImageView(atlasImageView);
-            atlasImageView = nullptr;
-        }
-        if (atlasImage)
-        {
-            logicalDevice.destroyImage(atlasImage);
-            atlasImage = nullptr;
-        }
-        if (atlasMemory)
-        {
-            logicalDevice.freeMemory(atlasMemory);
-            atlasMemory = nullptr;
-        }
+        destroyAtlasResources();
 
         tiles.clear();
         handleToTileIndex.clear();
@@ -567,34 +562,7 @@ namespace render::shadow
         atlasHeight = newHeight;
 
         createAtlasImage();
-
-        auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
-
-        vk::ImageMemoryBarrier barrier{};
-        barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = atlasImage;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-
-        cmd->pipelineBarrier(
-            vk::PipelineStageFlagBits::eTopOfPipe,
-            vk::PipelineStageFlagBits::eFragmentShader,
-            {},
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
-        );
-
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
-
+        transitionAtlasToShaderRead();
         updateDescriptorSet();
 
         result.requestedCount = static_cast<uint32_t>(allocations.size());

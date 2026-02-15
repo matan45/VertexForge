@@ -1,8 +1,6 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <cstdint>
-#include <cstddef>
 
 namespace render::lighting
 {

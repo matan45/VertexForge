@@ -5,7 +5,6 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
-#include <cstring>
 
 namespace render::occlusion
 {

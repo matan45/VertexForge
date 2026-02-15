@@ -21,7 +21,6 @@ namespace render::vfx
     class VFXSceneGPUPipeline
     {
     private:
-    private:
         core::Device& device;
         core::SwapChain& swapChain;
 

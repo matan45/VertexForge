@@ -7,7 +7,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/OffScreen.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "math/Frustum.hpp"

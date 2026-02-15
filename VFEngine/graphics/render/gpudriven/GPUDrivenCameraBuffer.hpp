@@ -43,7 +43,7 @@ namespace render::gpudriven
         uint32_t frameIndex = 0;
 
     public:
-        GPUDrivenCameraBuffer(core::Device& device, core::SwapChain& swapChain);
+        explicit GPUDrivenCameraBuffer(core::Device& device, core::SwapChain& swapChain);
         ~GPUDrivenCameraBuffer();
 
         GPUDrivenCameraBuffer(const GPUDrivenCameraBuffer&) = delete;

@@ -169,6 +169,14 @@ namespace render::gpudriven
                                 const BoneOffsetResolver& boneOffsetResolver,
                                 float time);
 
+        void populateLODData(GPUObjectData& obj, const mesh::MeshRenderData& meshRender,
+                             const SubmeshLocation& submeshLoc, const BoneOffsetResolver& boneOffsetResolver);
+
+        std::string resolveMaterialProperties(GPUObjectData& obj, const mesh::MeshRenderData& meshRender,
+                                               const SubmeshLocation& submeshLoc);
+
+        void applyDynamicEmission(GPUObjectData& obj, const std::string& materialPath, float time);
+
         static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName,
                                           uint32_t submeshIndex)
         {

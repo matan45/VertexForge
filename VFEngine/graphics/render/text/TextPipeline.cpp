@@ -2,11 +2,9 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/OffScreen.hpp"
 #include "text/TextLayout.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace render::text
 {

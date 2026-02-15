@@ -4,7 +4,6 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/PipelineUtilities.hpp"
 #include <unordered_set>
 
 namespace render::mesh

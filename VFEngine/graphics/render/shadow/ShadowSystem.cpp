@@ -1,6 +1,5 @@
 #include "ShadowSystem.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/BufferUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"

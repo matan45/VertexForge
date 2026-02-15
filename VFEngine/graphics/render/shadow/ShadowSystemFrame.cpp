@@ -2,8 +2,6 @@
 #include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/Utilities.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Logger.hpp"

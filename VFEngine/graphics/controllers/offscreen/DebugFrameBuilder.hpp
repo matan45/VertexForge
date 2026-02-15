@@ -3,6 +3,13 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include <vector>
 
+namespace render::mesh
+{
+    struct PhysicsColliderRenderData;
+    struct UICanvasOutlineRenderData;
+    struct ClusterDebugRenderData;
+}
+
 namespace controllers::offscreen
 {
     struct FrameContext;
@@ -24,5 +31,10 @@ namespace controllers::offscreen
         void collectDirectionalLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
         void collectPointLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
         void collectSpotLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
+        void collectStandardColliders(std::vector<render::mesh::PhysicsColliderRenderData>& drawList);
+        void collectTerrainColliders(std::vector<render::mesh::PhysicsColliderRenderData>& drawList);
+        void collectUIRectOutlines(std::vector<render::mesh::UICanvasOutlineRenderData>& drawList);
+        void collectLightClusterHighlights(const FrameContext& ctx,
+                                           render::mesh::ClusterDebugRenderData& debugData);
     };
 }

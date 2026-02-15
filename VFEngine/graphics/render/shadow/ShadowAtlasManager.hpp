@@ -95,6 +95,8 @@ namespace render::shadow
         void createAtlasSamplers();
         void createDescriptorResources();
         void updateDescriptorSet();
+        void destroyAtlasResources();
+        void transitionAtlasToShaderRead();
 
         [[nodiscard]] bool canFitTile(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const;
     };

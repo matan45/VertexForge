@@ -7,8 +7,6 @@
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/OffScreen.hpp"
-#include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "math/Frustum.hpp"
 #include <algorithm>

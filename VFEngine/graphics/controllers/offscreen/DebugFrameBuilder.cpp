@@ -156,6 +156,75 @@ namespace controllers::offscreen
         }
     }
 
+    void DebugFrameBuilder::collectStandardColliders(
+        std::vector<render::mesh::PhysicsColliderRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ColliderComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+            }
+
+            const auto& colliderComp = view.get<components::ColliderComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::PhysicsColliderRenderData renderData;
+            renderData.worldMatrix = worldTransform.worldMatrix
+                * glm::translate(glm::mat4(1.0f), colliderComp.offset);
+            renderData.shape = colliderComp.shape;
+            renderData.size = colliderComp.size;
+            renderData.radius = colliderComp.size.x;
+            renderData.height = colliderComp.height;
+            renderData.isTrigger = colliderComp.isTrigger;
+
+            if (colliderComp.shape == components::ColliderShape::ConvexMesh ||
+                colliderComp.shape == components::ColliderShape::TriangleMesh)
+            {
+                if (!colliderComp.meshPath.empty())
+                    renderData.meshPath = colliderComp.meshPath;
+                else if (registry.all_of<components::MeshComponent>(entity))
+                    renderData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+            }
+
+            renderData.bodyType = registry.all_of<components::RigidBodyComponent>(entity)
+                ? static_cast<uint8_t>(registry.get<components::RigidBodyComponent>(entity).type)
+                : 0;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void DebugFrameBuilder::collectTerrainColliders(
+        std::vector<render::mesh::PhysicsColliderRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto terrainDebugView = registry.view<components::TerrainTileColliderDebugComponent>();
+
+        for (auto entity : terrainDebugView)
+        {
+            const auto& debugComp = terrainDebugView.get<components::TerrainTileColliderDebugComponent>(entity);
+            if (debugComp.debugData.vertices.empty() || debugComp.debugData.lineIndices.empty())
+                continue;
+
+            render::mesh::PhysicsColliderRenderData renderData;
+            renderData.worldMatrix = glm::mat4(1.0f);
+            renderData.shape = types::ColliderShape::HeightField;
+            renderData.bodyType = 0;
+            renderData.heightfieldVertices = &debugComp.debugData.vertices;
+            renderData.heightfieldLineIndices = &debugComp.debugData.lineIndices;
+            renderData.heightfieldCacheKey = std::to_string(static_cast<uint32_t>(entity)) + "_"
+                + std::to_string(debugComp.tileX) + "_" + std::to_string(debugComp.tileZ);
+            renderData.heightfieldVersion = debugComp.debugData.version;
+
+            drawList.push_back(renderData);
+        }
+    }
+
     void DebugFrameBuilder::preparePhysicsColliders(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
@@ -167,80 +236,8 @@ namespace controllers::offscreen
         }
 
         std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::ColliderComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
-            }
-
-            const auto& colliderComp = view.get<components::ColliderComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            render::mesh::PhysicsColliderRenderData renderData;
-
-            glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
-            renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
-
-            renderData.shape = colliderComp.shape;
-            renderData.size = colliderComp.size;
-            renderData.radius = colliderComp.size.x;
-            renderData.height = colliderComp.height;
-            renderData.isTrigger = colliderComp.isTrigger;
-
-            if ((colliderComp.shape == components::ColliderShape::ConvexMesh ||
-                colliderComp.shape == components::ColliderShape::TriangleMesh))
-            {
-                if (!colliderComp.meshPath.empty())
-                {
-                    renderData.meshPath = colliderComp.meshPath;
-                }
-                else if (registry.all_of<components::MeshComponent>(entity))
-                {
-                    const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                    renderData.meshPath = meshComp.meshPath;
-                }
-            }
-
-            if (registry.all_of<components::RigidBodyComponent>(entity))
-            {
-                const auto& rbComp = registry.get<components::RigidBodyComponent>(entity);
-                renderData.bodyType = static_cast<uint8_t>(rbComp.type);
-            }
-            else
-            {
-                renderData.bodyType = 0;
-            }
-
-            colliderDrawList.push_back(renderData);
-        }
-
-        auto terrainDebugView = registry.view<components::TerrainTileColliderDebugComponent>();
-        for (auto entity : terrainDebugView)
-        {
-            const auto& debugComp = terrainDebugView.get<components::TerrainTileColliderDebugComponent>(entity);
-            if (debugComp.debugData.vertices.empty() || debugComp.debugData.lineIndices.empty())
-                continue;
-
-            render::mesh::PhysicsColliderRenderData renderData;
-            renderData.worldMatrix = glm::mat4(1.0f); // identity - vertices are world-space
-            renderData.shape = types::ColliderShape::HeightField;
-            renderData.bodyType = 0; // static
-            renderData.heightfieldVertices = &debugComp.debugData.vertices;
-            renderData.heightfieldLineIndices = &debugComp.debugData.lineIndices;
-            renderData.heightfieldCacheKey = std::to_string(static_cast<uint32_t>(entity)) + "_" + std::to_string(debugComp.tileX) + "_" + std::to_string(debugComp.tileZ);
-            renderData.heightfieldVersion = debugComp.debugData.version;
-
-            colliderDrawList.push_back(renderData);
-        }
+        collectStandardColliders(colliderDrawList);
+        collectTerrainColliders(colliderDrawList);
 
         if (!colliderDrawList.empty())
         {
@@ -406,13 +403,57 @@ namespace controllers::offscreen
         renderHandler->setLightGizmoDrawList(std::move(lightGizmoDrawList));
     }
 
+    void DebugFrameBuilder::collectLightClusterHighlights(
+        const FrameContext& ctx,
+        render::mesh::ClusterDebugRenderData& debugData)
+    {
+        glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
+
+        auto* clusterGridManager = ctx.renderHandler->getGPUDrivenRenderer()->getClusterGridManager();
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+        for (auto entity : pointView)
+        {
+            const auto& lightComp = pointView.get<components::PointLightComponent>(entity);
+            if (!lightComp.showGizmo)
+                continue;
+
+            const auto& worldTransform = pointView.get<components::WorldTransformComponent>(entity);
+            glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(glm::vec3(worldTransform.worldMatrix[3]), 1.0f));
+
+            auto affected = clusterGridManager->getClusterIndicesForPointLight(viewPos, lightComp.radius);
+            debugData.highlightedClusterIndices.insert(
+                debugData.highlightedClusterIndices.end(), affected.begin(), affected.end());
+        }
+
+        auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+        for (auto entity : spotView)
+        {
+            const auto& lightComp = spotView.get<components::SpotLightComponent>(entity);
+            if (!lightComp.showGizmo)
+                continue;
+
+            const auto& worldTransform = spotView.get<components::WorldTransformComponent>(entity);
+            glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+            glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+            glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
+            glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
+
+            float outerAngleCos = std::cos(glm::radians(lightComp.outerAngle));
+            auto affected = clusterGridManager->getClusterIndicesForSpotLight(
+                viewPos, viewDir, lightComp.range, outerAngleCos);
+            debugData.highlightedClusterIndices.insert(
+                debugData.highlightedClusterIndices.end(), affected.begin(), affected.end());
+        }
+    }
+
     void DebugFrameBuilder::prepareClusterDebug(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
         if (!renderHandler)
-        {
             return;
-        }
 
         if (ctx.playModeActive || !ctx.showDebugRendering || !ctx.showClusterDebug)
         {
@@ -430,15 +471,11 @@ namespace controllers::offscreen
 
         auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
         if (!gpuRenderer)
-        {
             return;
-        }
 
         auto* clusterGridManager = gpuRenderer->getClusterGridManager();
         if (!clusterGridManager || !clusterGridManager->isInitialized())
-        {
             return;
-        }
 
         glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
 
@@ -446,99 +483,18 @@ namespace controllers::offscreen
         debugData.clusterAABBs = clusterGridManager->getClusterAABBs();
         debugData.invViewMatrix = glm::inverse(viewMatrix);
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
-        for (auto entity : pointView)
-        {
-            const auto& lightComp = pointView.get<components::PointLightComponent>(entity);
-
-            if (lightComp.showGizmo)
-            {
-                const auto& worldTransform = pointView.get<components::WorldTransformComponent>(entity);
-                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
-
-                auto affectedClusters = clusterGridManager->getClusterIndicesForPointLight(viewPos, lightComp.radius);
-                debugData.highlightedClusterIndices.insert(
-                    debugData.highlightedClusterIndices.end(),
-                    affectedClusters.begin(),
-                    affectedClusters.end()
-                );
-            }
-        }
-
-        auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
-        for (auto entity : spotView)
-        {
-            const auto& lightComp = spotView.get<components::SpotLightComponent>(entity);
-
-            if (lightComp.showGizmo)
-            {
-                const auto& worldTransform = spotView.get<components::WorldTransformComponent>(entity);
-                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-                glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
-                glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
-
-                float outerAngleCos = std::cos(glm::radians(lightComp.outerAngle));
-                auto affectedClusters = clusterGridManager->getClusterIndicesForSpotLight(
-                    viewPos, viewDir, lightComp.range, outerAngleCos);
-                debugData.highlightedClusterIndices.insert(
-                    debugData.highlightedClusterIndices.end(),
-                    affectedClusters.begin(),
-                    affectedClusters.end()
-                );
-            }
-        }
+        collectLightClusterHighlights(ctx, debugData);
 
         debugData.showAllClusters = debugData.highlightedClusterIndices.empty();
-
         renderHandler->setClusterDebugData(std::move(debugData));
     }
 
-    void DebugFrameBuilder::prepareUICanvasOutlines(const FrameContext& ctx)
+    void DebugFrameBuilder::collectUIRectOutlines(
+        std::vector<render::mesh::UICanvasOutlineRenderData>& drawList)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        if (ctx.playModeActive || !ctx.showDebugRendering)
-        {
-            renderHandler->setUICanvasOutlineDrawList({});
-            return;
-        }
-
-        std::vector<render::mesh::UICanvasOutlineRenderData> drawList;
-
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::UICanvasComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
-            }
-
-            const auto& canvasComp = view.get<components::UICanvasComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            float width = canvasComp.referenceWidth / canvasComp.pixelsPerUnit;
-            float height = canvasComp.referenceHeight / canvasComp.pixelsPerUnit;
-
-            render::mesh::UICanvasOutlineRenderData renderData;
-            renderData.modelMatrix = worldTransform.worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(width, height, 1.0f));
-
-            drawList.push_back(renderData);
-        }
-
-        // --- UIRect wireframe outlines for all rect elements ---
         auto rectView = registry.view<components::UIRectComponent>();
+
         for (auto entity : rectView)
         {
             if (registry.all_of<components::NameComponent>(entity))
@@ -547,13 +503,11 @@ namespace controllers::offscreen
                     continue;
             }
 
-            // Skip canvas entities themselves (already drawn above)
             if (registry.all_of<components::UICanvasComponent>(entity))
                 continue;
 
             const auto& rectComp = rectView.get<components::UIRectComponent>(entity);
 
-            // Walk parent hierarchy to find canvas
             const components::UICanvasComponent* canvas = nullptr;
             entt::entity canvasEntity = entt::null;
             entt::entity current = entity;
@@ -610,6 +564,46 @@ namespace controllers::offscreen
             renderData.modelMatrix = rectModel;
             drawList.push_back(renderData);
         }
+    }
+
+    void DebugFrameBuilder::prepareUICanvasOutlines(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        if (ctx.playModeActive || !ctx.showDebugRendering)
+        {
+            renderHandler->setUICanvasOutlineDrawList({});
+            return;
+        }
+
+        std::vector<render::mesh::UICanvasOutlineRenderData> drawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::UICanvasComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                    continue;
+            }
+
+            const auto& canvasComp = view.get<components::UICanvasComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            float width = canvasComp.referenceWidth / canvasComp.pixelsPerUnit;
+            float height = canvasComp.referenceHeight / canvasComp.pixelsPerUnit;
+
+            render::mesh::UICanvasOutlineRenderData renderData;
+            renderData.modelMatrix = worldTransform.worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(width, height, 1.0f));
+
+            drawList.push_back(renderData);
+        }
+
+        collectUIRectOutlines(drawList);
 
         if (!drawList.empty())
         {

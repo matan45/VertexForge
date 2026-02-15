@@ -123,6 +123,8 @@ namespace controllers
         bool isInitialized() const { return initialized; }
 
     private:
+        void loadAndAssignTextures(const std::array<std::string, TextureManagerImpl::MAX_TEXTURES>& texturePaths);
+
         static std::optional<float> evaluateFloatValue(const material::ShaderGraph& graph, uint32_t nodeId, float time);
         static std::optional<float> getInputFloat(const material::ShaderGraph& graph, uint32_t nodeId, const std::string& pinName, float time);
         static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time);

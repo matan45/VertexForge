@@ -121,6 +121,7 @@
     <ClInclude Include="controllers\offscreen\LightBVHManager.hpp" />
     <ClInclude Include="controllers\offscreen\MeshAssetManager.hpp" />
     <ClInclude Include="controllers\offscreen\SceneBVHManager.hpp" />
+    <ClInclude Include="controllers\offscreen\UICommon.hpp" />
     <ClInclude Include="controllers\offscreen\UIFrameBuilder.hpp" />
     <ClInclude Include="controllers\offscreen\UIInteractionSystem.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
@@ -277,7 +278,10 @@
     <ClCompile Include="controllers\offscreen\MeshAssetManager.cpp" />
     <ClCompile Include="controllers\offscreen\SceneBVHManager.cpp" />
     <ClCompile Include="controllers\offscreen\UIFrameBuilder.cpp" />
+    <ClCompile Include="controllers\offscreen\UIFrameBuilderScreenSpace.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystem.cpp" />
+    <ClCompile Include="controllers\offscreen\UIInteractionSystemTextInput.cpp" />
+    <ClCompile Include="controllers\offscreen\UIInteractionSystemWidgets.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\DeferredDeletionQueue.cpp" />
@@ -300,6 +304,7 @@
     <ClCompile Include="render\IBL.cpp" />
     <ClCompile Include="render\OffScreenViewPort.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
+    <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />

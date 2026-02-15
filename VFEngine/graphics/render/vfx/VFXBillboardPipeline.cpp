@@ -10,7 +10,6 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
-#include <cstring>
 #include <filesystem>
 
 namespace render::vfx

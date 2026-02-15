@@ -7,7 +7,6 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <cmath>
-#include <cstring>
 
 namespace render::lighting
 {
