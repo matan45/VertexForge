@@ -171,6 +171,9 @@ namespace serialization
         static json serializeUITabs(const components::UITabsComponent& tabs);
         static void deserializeUITabs(const json& j, components::UITabsComponent& tabs);
 
+        static json serializeUISlider(const components::UISliderComponent& slider);
+        static void deserializeUISlider(const json& j, components::UISliderComponent& slider);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

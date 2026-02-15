@@ -639,6 +639,13 @@ namespace core::api
                         success = dispatcher.execute(cmd);
                         break;
                     }
+                case services::ComponentTypeId::UISlider:
+                    {
+                        events::ui::AddUISliderComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
                 default:
                     vfLogError("[Script] Entity.addComponent: component type '{}' cannot be added via script", typeName);
                     break;
@@ -780,6 +787,13 @@ namespace core::api
                 case services::ComponentTypeId::UITabs:
                     {
                         events::ui::RemoveUITabsComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UISlider:
+                    {
+                        events::ui::RemoveUISliderComponentCommand cmd;
                         cmd.entity = entity;
                         success = dispatcher.execute(cmd);
                         break;

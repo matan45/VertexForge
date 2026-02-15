@@ -74,6 +74,13 @@ namespace core
         ::events::SubscriptionToken tabSelectedToken;
         ::events::SubscriptionToken tabChangedToken;
 
+        // UI Slider callback subscription tokens
+        ::events::SubscriptionToken sliderValueChangedToken;
+        ::events::SubscriptionToken sliderDragStartToken;
+        ::events::SubscriptionToken sliderDragEndToken;
+        ::events::SubscriptionToken sliderHoverEnterToken;
+        ::events::SubscriptionToken sliderHoverExitToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -164,5 +171,14 @@ namespace core
                                     ::services::EntityHandle tabsEntity,
                                     const std::string& entityName,
                                     int tabIndex = -1, int previousTabIndex = -1);
+
+        // UI Slider callback helpers
+        void subscribeToUISliderEvents();
+        void unsubscribeFromUISliderEvents();
+        void dispatchUISliderCallback(const char* methodName,
+                                      ::services::EntityHandle sliderEntity,
+                                      const std::string& entityName,
+                                      float newValue = 0.0f, float previousValue = 0.0f,
+                                      float finalValue = 0.0f);
     };
 }

@@ -208,4 +208,61 @@ public class UI {
     public static function setTabsActiveIndex(int entityId, int index): void {
         _native_ui_setTabsActiveIndex(entityId, index);
     }
+
+    // ============================================
+    // Slider Orientation Constants
+    // ============================================
+    public static const int SLIDER_HORIZONTAL = 0;
+    public static const int SLIDER_VERTICAL = 1;
+
+    // ============================================
+    // Slider State Constants
+    // ============================================
+    public static const int SLIDER_NORMAL = 0;
+    public static const int SLIDER_HOVERED = 1;
+    public static const int SLIDER_PRESSED = 2;
+    public static const int SLIDER_DISABLED = 3;
+
+    // ============================================
+    // Slider Queries
+    // ============================================
+
+    // Get the current value of a slider
+    public static function getSliderValue(int entityId): float {
+        return _native_ui_getSliderValue(entityId);
+    }
+
+    // Get slider state as int (SLIDER_NORMAL, SLIDER_HOVERED, SLIDER_PRESSED, SLIDER_DISABLED)
+    public static function getSliderState(int entityId): int {
+        return _native_ui_getSliderState(entityId);
+    }
+
+    // Get the minimum value of a slider
+    public static function getSliderMin(int entityId): float {
+        return _native_ui_getSliderMin(entityId);
+    }
+
+    // Get the maximum value of a slider
+    public static function getSliderMax(int entityId): float {
+        return _native_ui_getSliderMax(entityId);
+    }
+
+    // ============================================
+    // Slider Control
+    // ============================================
+
+    // Set the value of a slider (clamped to min/max)
+    public static function setSliderValue(int entityId, float value): void {
+        _native_ui_setSliderValue(entityId, value);
+    }
+
+    // Set whether a slider is interactable (enabled/disabled)
+    public static function setSliderInteractable(int entityId, bool interactable): void {
+        _native_ui_setSliderInteractable(entityId, interactable);
+    }
+
+    // Set the min and max range of a slider
+    public static function setSliderMinMax(int entityId, float min, float max): void {
+        _native_ui_setSliderMinMax(entityId, min, max);
+    }
 }

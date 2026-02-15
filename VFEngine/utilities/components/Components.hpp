@@ -40,6 +40,7 @@ namespace components
     struct UITextInputComponent;
     struct UIDropdownComponent;
     struct UITabsComponent;
+    struct UISliderComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -49,7 +50,7 @@ namespace components
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,
-                                               UITabsComponent>;
+                                               UITabsComponent, UISliderComponent>;
 
     struct WorldTransformComponent
     {
@@ -812,5 +813,56 @@ namespace components
 
         // Runtime state (NOT serialized)
         int previousTabIndex = -1;
+    };
+
+    enum class UISliderOrientation : uint8_t
+    {
+        Horizontal,
+        Vertical
+    };
+
+    enum class UISliderState : uint8_t
+    {
+        Normal,
+        Hovered,
+        Pressed,
+        Disabled
+    };
+
+    struct UISliderComponent
+    {
+        // Value config (serialized)
+        float minValue = 0.0f;
+        float maxValue = 1.0f;
+        float value = 0.5f;
+        float stepSize = 0.0f; // 0 = continuous (no snapping)
+        UISliderOrientation orientation = UISliderOrientation::Horizontal;
+        bool clickTrackToSet = true;
+
+        // Handle appearance (serialized)
+        float handleSizeRatio = 0.08f; // handle width as fraction of track length
+        glm::vec4 handleNormalColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 handleHoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
+        glm::vec4 handlePressedColor{0.7f, 0.7f, 0.7f, 1.0f};
+        glm::vec4 handleDisabledColor{0.5f, 0.5f, 0.5f, 0.5f};
+        std::string handleNormalTexture;
+        std::string handleHoveredTexture;
+        std::string handlePressedTexture;
+        std::string handleDisabledTexture;
+
+        // Fill appearance (serialized)
+        glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
+        std::string fillTexture;
+
+        // Config (serialized)
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+
+        // Runtime state (NOT serialized)
+        UISliderState currentState = UISliderState::Normal;
+        glm::vec4 currentHandleDisplayColor{1.0f, 1.0f, 1.0f, 1.0f};
+        bool isDragging = false;
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
+        float dragStartValue = 0.0f;
     };
 }

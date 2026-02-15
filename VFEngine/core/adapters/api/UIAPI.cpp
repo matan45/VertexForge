@@ -760,5 +760,181 @@ namespace core::api
 
                 return value::Value(static_cast<int64_t>(data->tabBarPosition));
             });
+
+        // ============================================
+        // UI Slider Native Functions
+        // ============================================
+
+        // _native_ui_getSliderValue(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getSliderValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getSliderValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->value);
+            });
+
+        // _native_ui_setSliderValue(entityId, value) -> void
+        interpreter->registerNativeFunction("_native_ui_setSliderValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setSliderValue");
+                float val = extractFloat(args[1], "_native_ui_setSliderValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::SetUISliderValueCommand cmd;
+                cmd.entity = handle;
+                cmd.value = val;
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getSliderState(entityId) -> int64_t
+        interpreter->registerNativeFunction("_native_ui_getSliderState",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getSliderState");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                return value::Value(static_cast<int64_t>(data->currentState));
+            });
+
+        // _native_ui_setSliderInteractable(entityId, interactable) -> void
+        interpreter->registerNativeFunction("_native_ui_setSliderInteractable",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setSliderInteractable");
+                bool interactable = std::holds_alternative<bool>(args[1]) ? std::get<bool>(args[1]) : true;
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto sliderData = data.value();
+                sliderData.interactable = interactable;
+
+                events::ui::SetUISliderDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.sliderData = sliderData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getSliderMin(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getSliderMin",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getSliderMin");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->minValue);
+            });
+
+        // _native_ui_getSliderMax(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getSliderMax",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getSliderMax");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->maxValue);
+            });
+
+        // _native_ui_setSliderMinMax(entityId, min, max) -> void
+        interpreter->registerNativeFunction("_native_ui_setSliderMinMax",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 3)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setSliderMinMax");
+                float minVal = extractFloat(args[1], "_native_ui_setSliderMinMax");
+                float maxVal = extractFloat(args[2], "_native_ui_setSliderMinMax");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUISliderDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto sliderData = data.value();
+                sliderData.minValue = minVal;
+                sliderData.maxValue = maxVal;
+
+                events::ui::SetUISliderDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.sliderData = sliderData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
     }
 }

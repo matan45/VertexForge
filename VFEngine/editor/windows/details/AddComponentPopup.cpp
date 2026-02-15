@@ -14,7 +14,7 @@ namespace windows::details
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
-                                 bool hasUITabs)
+                                 bool hasUITabs, bool hasUISlider)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -393,12 +393,26 @@ namespace windows::details
                 }
             }
 
+            if (!hasUISlider)
+            {
+                if (ImGui::Selectable("  UI Slider"))
+                {
+                    events::ui::AddUISliderComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Draggable slider for numeric value input");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
                            hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
-                           hasUITabs;
+                           hasUITabs && hasUISlider;
             if (allAdded)
             {
                 ImGui::Spacing();

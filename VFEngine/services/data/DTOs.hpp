@@ -430,4 +430,38 @@ namespace services
         int activeTabIndex = 0;
         int previousTabIndex = -1;
     };
+
+    struct UISliderData
+    {
+        // Value config
+        float minValue = 0.0f;
+        float maxValue = 1.0f;
+        float value = 0.5f;
+        float stepSize = 0.0f;
+        uint8_t orientation = 0; // 0=Horizontal, 1=Vertical
+        bool clickTrackToSet = true;
+
+        // Handle appearance
+        float handleSizeRatio = 0.08f;
+        glm::vec4 handleNormalColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 handleHoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
+        glm::vec4 handlePressedColor{0.7f, 0.7f, 0.7f, 1.0f};
+        glm::vec4 handleDisabledColor{0.5f, 0.5f, 0.5f, 0.5f};
+        std::string handleNormalTexture;
+        std::string handleHoveredTexture;
+        std::string handlePressedTexture;
+        std::string handleDisabledTexture;
+
+        // Fill appearance
+        glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
+        std::string fillTexture;
+
+        // Config
+        float colorTransitionDuration = 0.1f;
+        bool interactable = true;
+
+        // Runtime
+        uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Pressed, 3=Disabled
+        bool isDragging = false;
+    };
 }
