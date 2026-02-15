@@ -192,6 +192,132 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::Text:
+            {
+                auto view = registry.view<components::TextComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UICanvas:
+            {
+                auto view = registry.view<components::UICanvasComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIRect:
+            {
+                auto view = registry.view<components::UIRectComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIImage:
+            {
+                auto view = registry.view<components::UIImageComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIScroll:
+            {
+                auto view = registry.view<components::UIScrollComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UILayoutGroup:
+            {
+                auto view = registry.view<components::UILayoutGroupComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UILabel:
+            {
+                auto view = registry.view<components::UILabelComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIButton:
+            {
+                auto view = registry.view<components::UIButtonComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UITextInput:
+            {
+                auto view = registry.view<components::UITextInputComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UICheckbox:
+            {
+                auto view = registry.view<components::UICheckboxComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIDropdown:
+            {
+                auto view = registry.view<components::UIDropdownComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UITabs:
+            {
+                auto view = registry.view<components::UITabsComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UISlider:
+            {
+                auto view = registry.view<components::UISliderComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::UIProgressBar:
+            {
+                auto view = registry.view<components::UIProgressBarComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -251,6 +377,34 @@ namespace services
             return registry.all_of<components::AnimatorComponent>(enttEntity);
         case ComponentTypeId::VFX:
             return registry.all_of<components::VFXComponent>(enttEntity);
+        case ComponentTypeId::Text:
+            return registry.all_of<components::TextComponent>(enttEntity);
+        case ComponentTypeId::UICanvas:
+            return registry.all_of<components::UICanvasComponent>(enttEntity);
+        case ComponentTypeId::UIRect:
+            return registry.all_of<components::UIRectComponent>(enttEntity);
+        case ComponentTypeId::UIImage:
+            return registry.all_of<components::UIImageComponent>(enttEntity);
+        case ComponentTypeId::UIScroll:
+            return registry.all_of<components::UIScrollComponent>(enttEntity);
+        case ComponentTypeId::UILayoutGroup:
+            return registry.all_of<components::UILayoutGroupComponent>(enttEntity);
+        case ComponentTypeId::UILabel:
+            return registry.all_of<components::UILabelComponent>(enttEntity);
+        case ComponentTypeId::UIButton:
+            return registry.all_of<components::UIButtonComponent>(enttEntity);
+        case ComponentTypeId::UITextInput:
+            return registry.all_of<components::UITextInputComponent>(enttEntity);
+        case ComponentTypeId::UICheckbox:
+            return registry.all_of<components::UICheckboxComponent>(enttEntity);
+        case ComponentTypeId::UIDropdown:
+            return registry.all_of<components::UIDropdownComponent>(enttEntity);
+        case ComponentTypeId::UITabs:
+            return registry.all_of<components::UITabsComponent>(enttEntity);
+        case ComponentTypeId::UISlider:
+            return registry.all_of<components::UISliderComponent>(enttEntity);
+        case ComponentTypeId::UIProgressBar:
+            return registry.all_of<components::UIProgressBarComponent>(enttEntity);
         default:
             return false;
         }
@@ -297,6 +451,34 @@ namespace services
             types.push_back(ComponentTypeId::Animator);
         if (registry.all_of<components::VFXComponent>(enttEntity))
             types.push_back(ComponentTypeId::VFX);
+        if (registry.all_of<components::TextComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Text);
+        if (registry.all_of<components::UICanvasComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UICanvas);
+        if (registry.all_of<components::UIRectComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIRect);
+        if (registry.all_of<components::UIImageComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIImage);
+        if (registry.all_of<components::UIScrollComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIScroll);
+        if (registry.all_of<components::UILayoutGroupComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UILayoutGroup);
+        if (registry.all_of<components::UILabelComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UILabel);
+        if (registry.all_of<components::UIButtonComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIButton);
+        if (registry.all_of<components::UITextInputComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UITextInput);
+        if (registry.all_of<components::UICheckboxComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UICheckbox);
+        if (registry.all_of<components::UIDropdownComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIDropdown);
+        if (registry.all_of<components::UITabsComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UITabs);
+        if (registry.all_of<components::UISliderComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UISlider);
+        if (registry.all_of<components::UIProgressBarComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIProgressBar);
 
         return types;
     }

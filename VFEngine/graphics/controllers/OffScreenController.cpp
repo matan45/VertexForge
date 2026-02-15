@@ -20,6 +20,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/InputEvents.hpp"
 #include "time/Timer.hpp"
 
 namespace controllers
@@ -176,6 +177,18 @@ namespace controllers
         ctx.showGrid = showGrid;
 
         framePreparation->prepareBillboards(ctx);
+    }
+
+    void OffScreenController::prepareFrameText()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+
+        framePreparation->prepareText(ctx);
     }
 
     void OffScreenController::prepareFrameCameraFrustums()
@@ -542,6 +555,88 @@ namespace controllers
 
         debugRenderer->setShadowFrustumDrawList(std::move(shadowDrawList));
         debugRenderer->setShowShadowDebug(showShadowDebug);
+    }
+
+    void OffScreenController::prepareFrameUICanvasOutlines()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+
+        framePreparation->prepareUICanvasOutlines(ctx);
+    }
+
+    void OffScreenController::prepareFrameUIImages()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.viewportWidth = swapChain.getSwapchainExtent().width;
+        ctx.viewportHeight = swapChain.getSwapchainExtent().height;
+
+        if (ctx.playModeActive)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            glm::vec2 rawMouse = dispatcher.query(events::input::GetMousePositionQuery{}) - uiViewportOffset;
+
+            // Scale mouse from viewport panel coordinates to framebuffer coordinates
+            if (uiViewportPanelSize.x > 0.0f && uiViewportPanelSize.y > 0.0f)
+            {
+                float fbW = static_cast<float>(ctx.viewportWidth);
+                float fbH = static_cast<float>(ctx.viewportHeight);
+                rawMouse.x *= fbW / uiViewportPanelSize.x;
+                rawMouse.y *= fbH / uiViewportPanelSize.y;
+            }
+
+            ctx.mousePosition = rawMouse;
+            ctx.scrollDelta = dispatcher.query(events::input::GetScrollDeltaQuery{});
+            events::input::IsMouseButtonDownQuery mouseQuery;
+            mouseQuery.button = 0;
+            ctx.leftMouseDown = dispatcher.query(mouseQuery);
+            ctx.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+
+            // Edge detection for button press/release
+            ctx.leftMousePressed = !prevLeftMouseDown && ctx.leftMouseDown;
+            ctx.leftMouseReleased = prevLeftMouseDown && !ctx.leftMouseDown;
+            prevLeftMouseDown = ctx.leftMouseDown;
+
+            // Double-click detection
+            events::input::IsDoubleClickQuery dblClickQuery;
+            dblClickQuery.button = 0;
+            ctx.leftMouseDoubleClick = dispatcher.query(dblClickQuery);
+
+            // Keyboard/text input data for UITextInput interaction
+            ctx.charInput = dispatcher.query(events::input::GetCharInputQuery{});
+            ctx.isKeyPressed = [&dispatcher](int keyCode) {
+                events::input::IsKeyPressedQuery q;
+                q.keyCode = keyCode;
+                return dispatcher.query(q);
+            };
+            ctx.isKeyDown = [&dispatcher](int keyCode) {
+                events::input::IsKeyDownQuery q;
+                q.keyCode = keyCode;
+                return dispatcher.query(q);
+            };
+            ctx.getClipboardText = [&dispatcher]() {
+                return dispatcher.query(events::input::GetClipboardTextQuery{});
+            };
+            ctx.setClipboardText = [&dispatcher](const std::string& text) {
+                events::input::SetClipboardTextCommand cmd;
+                cmd.text = text;
+                dispatcher.execute(cmd);
+            };
+        }
+
+        framePreparation->prepareUIImages(ctx);
     }
 
     void OffScreenController::setPlayMode(bool playMode)

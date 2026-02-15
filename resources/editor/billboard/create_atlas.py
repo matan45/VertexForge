@@ -35,7 +35,8 @@ ICON_FILES = {
     4: "2d-audio",       # material
     5: "3d-audio",              # folder
     6: "particles",              # folder
-    7: "billboard"               # scene
+    7: "billboard",               # scene
+    8: "text",               # scene
 }
 
 def find_icon_file(base_name):

@@ -8,7 +8,9 @@
 #include "components/AnimatorComponentService.hpp"
 #include "components/VFXComponentService.hpp"
 #include "components/BillboardComponentService.hpp"
+#include "components/TextComponentService.hpp"
 #include "components/LightComponentService.hpp"
+#include "components/UIComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
 #include "scene/TransformComponentService.hpp"
@@ -32,7 +34,9 @@ namespace services
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
         , billboardService(std::make_unique<BillboardComponentService>(sceneGraph))
+        , textService(std::make_unique<TextComponentService>(sceneGraph))
         , lightService(std::make_unique<LightComponentService>())
+        , uiService(std::make_unique<UIComponentService>(sceneGraph))
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
@@ -58,7 +62,9 @@ namespace services
         animatorService->registerEventHandlers(dispatcher);
         vfxService->registerEventHandlers(dispatcher);
         billboardService->registerEventHandlers(dispatcher);
+        textService->registerEventHandlers(dispatcher);
         lightService->registerEventHandlers(dispatcher);
+        uiService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);

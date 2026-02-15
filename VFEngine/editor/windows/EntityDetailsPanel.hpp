@@ -14,11 +14,25 @@
 #include "details/RigidBodyDrawer.hpp"
 #include "details/VFXDrawer.hpp"
 #include "details/BillboardDrawer.hpp"
+#include "details/TextDrawer.hpp"
 #include "details/DirectionalLightDrawer.hpp"
 #include "details/PointLightDrawer.hpp"
 #include "details/SpotLightDrawer.hpp"
 #include "details/TerrainDrawer.hpp"
 #include "details/TerrainTileDrawer.hpp"
+#include "details/UICanvasDrawer.hpp"
+#include "details/UIRectDrawer.hpp"
+#include "details/UIImageDrawer.hpp"
+#include "details/UILabelDrawer.hpp"
+#include "details/UIScrollDrawer.hpp"
+#include "details/UILayoutGroupDrawer.hpp"
+#include "details/UIButtonDrawer.hpp"
+#include "details/UITextInputDrawer.hpp"
+#include "details/UICheckboxDrawer.hpp"
+#include "details/UIDropdownDrawer.hpp"
+#include "details/UITabsDrawer.hpp"
+#include "details/UISliderDrawer.hpp"
+#include "details/UIProgressBarDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -40,11 +54,25 @@ namespace windows
         details::RigidBodyDrawer rigidBodyDrawer;
         details::VFXDrawer vfxDrawer;
         details::BillboardDrawer billboardDrawer;
+        details::TextDrawer textDrawer;
         details::DirectionalLightDrawer directionalLightDrawer;
         details::PointLightDrawer pointLightDrawer;
         details::SpotLightDrawer spotLightDrawer;
         details::TerrainDrawer terrainDrawer;
         details::TerrainTileDrawer terrainTileDrawer;
+        details::UICanvasDrawer uiCanvasDrawer;
+        details::UIRectDrawer uiRectDrawer;
+        details::UIImageDrawer uiImageDrawer;
+        details::UILabelDrawer uiLabelDrawer;
+        details::UIScrollDrawer uiScrollDrawer;
+        details::UILayoutGroupDrawer uiLayoutGroupDrawer;
+        details::UIButtonDrawer uiButtonDrawer;
+        details::UITextInputDrawer uiTextInputDrawer;
+        details::UICheckboxDrawer uiCheckboxDrawer;
+        details::UIDropdownDrawer uiDropdownDrawer;
+        details::UITabsDrawer uiTabsDrawer;
+        details::UISliderDrawer uiSliderDrawer;
+        details::UIProgressBarDrawer uiProgressBarDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

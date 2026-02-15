@@ -128,6 +128,20 @@ namespace core::api
         if (type == "RigidBody") return services::ComponentTypeId::RigidBody;
         if (type == "Animator") return services::ComponentTypeId::Animator;
         if (type == "VFX") return services::ComponentTypeId::VFX;
+        if (type == "Text") return services::ComponentTypeId::Text;
+        if (type == "UICanvas") return services::ComponentTypeId::UICanvas;
+        if (type == "UIRect") return services::ComponentTypeId::UIRect;
+        if (type == "UIImage") return services::ComponentTypeId::UIImage;
+        if (type == "UIScroll") return services::ComponentTypeId::UIScroll;
+        if (type == "UILayoutGroup") return services::ComponentTypeId::UILayoutGroup;
+        if (type == "UILabel") return services::ComponentTypeId::UILabel;
+        if (type == "UIButton") return services::ComponentTypeId::UIButton;
+        if (type == "UITextInput") return services::ComponentTypeId::UITextInput;
+        if (type == "UICheckbox") return services::ComponentTypeId::UICheckbox;
+        if (type == "UIDropdown") return services::ComponentTypeId::UIDropdown;
+        if (type == "UITabs") return services::ComponentTypeId::UITabs;
+        if (type == "UISlider") return services::ComponentTypeId::UISlider;
+        if (type == "UIProgressBar") return services::ComponentTypeId::UIProgressBar;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -156,6 +170,20 @@ namespace core::api
         case services::ComponentTypeId::RigidBody: return "RigidBody";
         case services::ComponentTypeId::Animator: return "Animator";
         case services::ComponentTypeId::VFX: return "VFX";
+        case services::ComponentTypeId::Text: return "Text";
+        case services::ComponentTypeId::UICanvas: return "UICanvas";
+        case services::ComponentTypeId::UIRect: return "UIRect";
+        case services::ComponentTypeId::UIImage: return "UIImage";
+        case services::ComponentTypeId::UIScroll: return "UIScroll";
+        case services::ComponentTypeId::UILayoutGroup: return "UILayoutGroup";
+        case services::ComponentTypeId::UILabel: return "UILabel";
+        case services::ComponentTypeId::UIButton: return "UIButton";
+        case services::ComponentTypeId::UITextInput: return "UITextInput";
+        case services::ComponentTypeId::UICheckbox: return "UICheckbox";
+        case services::ComponentTypeId::UIDropdown: return "UIDropdown";
+        case services::ComponentTypeId::UITabs: return "UITabs";
+        case services::ComponentTypeId::UISlider: return "UISlider";
+        case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
         default: return "Unknown";
         }
     }

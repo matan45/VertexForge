@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -69,8 +69,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>assimp-vc145-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc145-mtd.lib;freetyped.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Debug;..\..\dependencies\freetype\build\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\assimp\build\bin\Debug\assimp-vc145-mtd.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\build\bin\Debug\assimp-vc145-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\build\bin\Debug\assimp-vc145-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
@@ -81,7 +81,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -97,8 +97,8 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Lib>
-      <AdditionalDependencies>assimp-vc145-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc145-mt.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Release;..\..\dependencies\freetype\build\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\assimp\build\bin\Release\assimp-vc145-mt.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\build\bin\Release\assimp-vc145-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\build\bin\Release\assimp-vc145-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul)</Command>
@@ -116,6 +116,7 @@
     <ClInclude Include="types\Audio.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
+    <ClInclude Include="types\SDFGenerator.hpp" />
     <ClInclude Include="types\Texture.hpp" />
     <ClInclude Include="types\VHACDCallback.hpp" />
   </ItemGroup>
@@ -131,6 +132,7 @@
     <ClCompile Include="types\Audio.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
+    <ClCompile Include="types\SDFGenerator.cpp" />
     <ClCompile Include="types\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>

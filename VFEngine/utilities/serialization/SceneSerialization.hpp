@@ -63,6 +63,9 @@ namespace serialization
         static json serializeBillboard(const components::BillboardComponent& billboard);
         static void deserializeBillboard(const json& j, components::BillboardComponent& billboard);
 
+        static json serializeText(const components::TextComponent& text);
+        static void deserializeText(const json& j, components::TextComponent& text);
+
         static json serializeAudioSource2D(const components::AudioSource2DComponent& audioSource);
         static void deserializeAudioSource2D(const json& j, components::AudioSource2DComponent& audioSource);
 
@@ -134,5 +137,68 @@ namespace serialization
 
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
+
+        static json serializeUICanvas(const components::UICanvasComponent& canvas);
+        static void deserializeUICanvas(const json& j, components::UICanvasComponent& canvas);
+
+        static json serializeUIRect(const components::UIRectComponent& rect);
+        static void deserializeUIRect(const json& j, components::UIRectComponent& rect);
+
+        static json serializeUIImage(const components::UIImageComponent& image);
+        static void deserializeUIImage(const json& j, components::UIImageComponent& image);
+
+        static json serializeUIScroll(const components::UIScrollComponent& scroll);
+        static void deserializeUIScroll(const json& j, components::UIScrollComponent& scroll);
+
+        static json serializeUILayoutGroup(const components::UILayoutGroupComponent& layoutGroup);
+        static void deserializeUILayoutGroup(const json& j, components::UILayoutGroupComponent& layoutGroup);
+
+        static json serializeUILabel(const components::UILabelComponent& label);
+        static void deserializeUILabel(const json& j, components::UILabelComponent& label);
+
+        static json serializeUIButton(const components::UIButtonComponent& button);
+        static void deserializeUIButton(const json& j, components::UIButtonComponent& button);
+
+        static json serializeUITextInput(const components::UITextInputComponent& textInput);
+        static void deserializeUITextInput(const json& j, components::UITextInputComponent& textInput);
+
+        static json serializeUICheckbox(const components::UICheckboxComponent& checkbox);
+        static void deserializeUICheckbox(const json& j, components::UICheckboxComponent& checkbox);
+
+        static json serializeUIDropdown(const components::UIDropdownComponent& dropdown);
+        static void deserializeUIDropdown(const json& j, components::UIDropdownComponent& dropdown);
+
+        static json serializeUITabs(const components::UITabsComponent& tabs);
+        static void deserializeUITabs(const json& j, components::UITabsComponent& tabs);
+
+        static json serializeUISlider(const components::UISliderComponent& slider);
+        static void deserializeUISlider(const json& j, components::UISliderComponent& slider);
+
+        static json serializeUIProgressBar(const components::UIProgressBarComponent& progressBar);
+        static void deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& progressBar);
+
+        static std::string uiScaleModeToString(components::UIScaleMode mode);
+        static components::UIScaleMode stringToUIScaleMode(const std::string& str);
+
+        static std::string scrollbarVisibilityToString(components::ScrollbarVisibility visibility);
+        static components::ScrollbarVisibility stringToScrollbarVisibility(const std::string& str);
+
+        static std::string layoutDirectionToString(components::LayoutDirection direction);
+        static components::LayoutDirection stringToLayoutDirection(const std::string& str);
+
+        static std::string childAlignmentToString(components::ChildAlignment alignment);
+        static components::ChildAlignment stringToChildAlignment(const std::string& str);
+
+        static std::string horizontalAlignmentToString(components::HorizontalAlignment alignment);
+        static components::HorizontalAlignment stringToHorizontalAlignment(const std::string& str);
+
+        static std::string verticalAlignmentToString(components::VerticalAlignment alignment);
+        static components::VerticalAlignment stringToVerticalAlignment(const std::string& str);
+
+        static std::string textOverflowToString(components::TextOverflow overflow);
+        static components::TextOverflow stringToTextOverflow(const std::string& str);
+
+        static std::string fontStyleToString(components::FontStyle style);
+        static components::FontStyle stringToFontStyle(const std::string& str);
     };
 }

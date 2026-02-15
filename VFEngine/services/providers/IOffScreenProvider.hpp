@@ -161,6 +161,7 @@ namespace services {
         virtual void prepareFrameLightGizmos() = 0;
 
         virtual void prepareFrameBillboards() = 0;
+        virtual void prepareFrameText() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;
@@ -194,6 +195,9 @@ namespace services {
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
 
+        virtual void prepareFrameUICanvasOutlines() = 0;
+        virtual void prepareFrameUIImages() = 0;
+
         virtual void setFrustumCullingEnabled(bool enabled) = 0;
         virtual void setOcclusionCullingEnabled(bool enabled) = 0;
         virtual void setLODSelectionEnabled(bool enabled) = 0;
@@ -208,6 +212,8 @@ namespace services {
         virtual void setTerrainErrorThreshold(float threshold) = 0;
         virtual void setTerrainTextureScale(float scale) = 0;
         virtual void setTerrainShadowLOD(uint32_t lod) = 0;
+
+        virtual void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) = 0;
     };
 
 }

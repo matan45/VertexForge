@@ -268,7 +268,7 @@ namespace resource
         uint32_t atlasWidth = 0;
         uint32_t atlasHeight = 0;
 
-        uint32_t reserved = 0;
+        uint32_t glyphFlags = 0;
     };
 
     struct KerningPair

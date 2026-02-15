@@ -24,6 +24,28 @@ namespace services {
         return inputController->isKeyReleased(keyCode);
     }
 
+    bool InputServiceImpl::isKeyPressed(int keyCode) const {
+        if (!inputController) return false;
+        return inputController->isKeyPressed(keyCode);
+    }
+
+    static const std::vector<uint32_t> emptyCharInput;
+
+    const std::vector<uint32_t>& InputServiceImpl::getCharInput() const {
+        if (!inputController) return emptyCharInput;
+        return inputController->getCharInput();
+    }
+
+    std::string InputServiceImpl::getClipboardText() const {
+        if (!inputController) return "";
+        return inputController->getClipboardText();
+    }
+
+    void InputServiceImpl::setClipboardText(const std::string& text) {
+        if (!inputController) return;
+        inputController->setClipboardText(text);
+    }
+
     bool InputServiceImpl::isMouseButtonDown(int button) const {
         if (!inputController) return false;
         return inputController->isMouseButtonDown(button);
@@ -152,6 +174,11 @@ namespace services {
                 return getMouseDelta();
             });
 
+        dispatcher.registerQueryHandler<events::input::GetScrollDeltaQuery>(
+            [this](const events::input::GetScrollDeltaQuery&) {
+                return getScrollDelta();
+            });
+
         dispatcher.registerQueryHandler<events::input::IsKeyReleasedQuery>(
             [this](const events::input::IsKeyReleasedQuery& query) {
                 return isKeyReleased(query.keyCode);
@@ -165,6 +192,26 @@ namespace services {
         dispatcher.registerQueryHandler<events::input::IsDoubleClickQuery>(
             [this](const events::input::IsDoubleClickQuery& query) {
                 return isDoubleClick(query.button);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsKeyPressedQuery>(
+            [this](const events::input::IsKeyPressedQuery& query) {
+                return isKeyPressed(query.keyCode);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetCharInputQuery>(
+            [this](const events::input::GetCharInputQuery&) {
+                return getCharInput();
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetClipboardTextQuery>(
+            [this](const events::input::GetClipboardTextQuery&) {
+                return getClipboardText();
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetClipboardTextCommand>(
+            [this](const events::input::SetClipboardTextCommand& cmd) {
+                setClipboardText(cmd.text);
             });
     }
 

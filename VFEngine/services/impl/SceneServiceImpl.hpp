@@ -25,7 +25,9 @@ namespace services
     class AnimatorComponentService;
     class VFXComponentService;
     class BillboardComponentService;
+    class TextComponentService;
     class LightComponentService;
+    class UIComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -49,7 +51,9 @@ namespace services
         std::unique_ptr<AnimatorComponentService> animatorService;
         std::unique_ptr<VFXComponentService> vfxService;
         std::unique_ptr<BillboardComponentService> billboardService;
+        std::unique_ptr<TextComponentService> textService;
         std::unique_ptr<LightComponentService> lightService;
+        std::unique_ptr<UIComponentService> uiService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;

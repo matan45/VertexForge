@@ -148,7 +148,8 @@ project "Import"
       "dependencies/assimp/build/include",     -- Assimp generated headers (config.h)
 	  "dependencies/glm",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
-	  "dependencies/v-hacd"              -- V-HACD for convex decomposition
+	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
+	  "dependencies/freetype/include"    -- FreeType headers
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -159,8 +160,8 @@ project "Import"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
-      libdirs { "dependencies/assimp/build/lib/Debug" }
-      links { "assimp-vc145-mtd.lib" }  -- Assimp Debug library
+      libdirs { "dependencies/assimp/build/lib/Debug", "dependencies/freetype/build/Debug" }
+      links { "assimp-vc145-mtd.lib", "freetyped.lib" }
 
     -- Copy the DLL to the Editor's output directory after the build
    postbuildcommands {
@@ -171,8 +172,8 @@ project "Import"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-      libdirs { "dependencies/assimp/build/lib/Release" }
-      links { "assimp-vc145-mt.lib" }  -- Assimp Release library
+      libdirs { "dependencies/assimp/build/lib/Release", "dependencies/freetype/build/Release" }
+      links { "assimp-vc145-mt.lib", "freetype.lib" }
 
       -- Copy the DLL to the output directory after the build
       postbuildcommands {
@@ -283,6 +284,8 @@ project "Utilities"
    }
 
    links { "spdLog", "meshoptimizer" }
+
+   buildoptions { "/bigobj" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

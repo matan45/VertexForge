@@ -68,6 +68,7 @@ namespace render::billboard
         void init();
         void recreate();
         void cleanUp();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { bufferManager.setDeletionQueue(queue); }
 
         bool loadAtlas(const std::string& atlasPath);
 

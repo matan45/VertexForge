@@ -81,6 +81,7 @@ namespace windows
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
         bool hasBillboard = billboardDrawer.draw(handle);
+        bool hasText = textDrawer.draw(handle);
 
         bool hasDirectionalLight = directionalLightDrawer.draw(handle);
         bool hasPointLight = pointLightDrawer.draw(handle);
@@ -90,9 +91,28 @@ namespace windows
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
 
+        // UI components
+        bool hasUICanvas = uiCanvasDrawer.draw(handle);
+        bool hasUIRect = uiRectDrawer.draw(handle);
+        bool hasUIImage = uiImageDrawer.draw(handle);
+        bool hasUILabel = uiLabelDrawer.draw(handle);
+        bool hasUIScroll = uiScrollDrawer.draw(handle);
+        bool hasUILayoutGroup = uiLayoutGroupDrawer.draw(handle);
+        bool hasUIButton = uiButtonDrawer.draw(handle);
+        bool hasUITextInput = uiTextInputDrawer.draw(handle);
+        bool hasUICheckbox = uiCheckboxDrawer.draw(handle);
+        bool hasUIDropdown = uiDropdownDrawer.draw(handle);
+        bool hasUITabs = uiTabsDrawer.draw(handle);
+        bool hasUISlider = uiSliderDrawer.draw(handle);
+        bool hasUIProgressBar = uiProgressBarDrawer.draw(handle);
+
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX, hasBillboard,
-                               hasDirectionalLight, hasPointLight, hasSpotLight);
+                               hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
+                               hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
+                               hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
+                               hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
+                               hasUIProgressBar);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

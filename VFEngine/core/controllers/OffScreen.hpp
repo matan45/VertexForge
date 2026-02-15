@@ -60,6 +60,7 @@ namespace controllers {
 		void prepareFrameLightGizmos();
 
 		void prepareFrameBillboards();
+		void prepareFrameText();
 		void setShowBillboardIcons(bool show);
 		bool getShowBillboardIcons() const;
 		bool loadBillboardAtlas(const std::string& atlasPath);
@@ -93,6 +94,9 @@ namespace controllers {
 		bool getShowShadowDebug() const;
 		void prepareFrameShadowDebug();
 
+		void prepareFrameUICanvasOutlines();
+		void prepareFrameUIImages();
+
 		void setFrustumCullingEnabled(bool enabled);
 		void setOcclusionCullingEnabled(bool enabled);
 		void setLODSelectionEnabled(bool enabled);
@@ -106,6 +110,8 @@ namespace controllers {
 		void setTerrainErrorThreshold(float threshold);
 		void setTerrainTextureScale(float scale);
 		void setTerrainShadowLOD(uint32_t lod);
+
+		void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 
 		void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
 		postprocess::PostProcessSettings getPostProcessSettings() const;

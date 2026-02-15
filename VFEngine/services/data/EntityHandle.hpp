@@ -51,6 +51,20 @@ namespace services {
         RigidBody,
         Animator,
         VFX,
+        Text,
+        UICanvas,
+        UIRect,
+        UIImage,
+        UIScroll,
+        UILayoutGroup,
+        UILabel,
+        UIButton,
+        UITextInput,
+        UICheckbox,
+        UIDropdown,
+        UITabs,
+        UISlider,
+        UIProgressBar,
     };
 
 }

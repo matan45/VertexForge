@@ -58,6 +58,12 @@ namespace serialization
                 entity.getComponent<components::BillboardComponent>());
         }
 
+        if (entity.hasComponent<components::TextComponent>())
+        {
+            componentsJson["text"] = SceneSerialization::serializeText(
+                entity.getComponent<components::TextComponent>());
+        }
+
         if (entity.hasComponent<components::AudioSource2DComponent>())
         {
             componentsJson["audioSource2D"] = SceneSerialization::serializeAudioSource2D(
@@ -156,6 +162,12 @@ namespace serialization
         {
             auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
             SceneSerialization::deserializeBillboard(componentsJson["billboard"], billboardComp);
+        }
+
+        if (componentsJson.contains("text"))
+        {
+            auto& textComp = entity.addOrReplaceComponent<components::TextComponent>();
+            SceneSerialization::deserializeText(componentsJson["text"], textComp);
         }
 
         if (componentsJson.contains("audioSource2D"))

@@ -93,6 +93,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameText() {
+        if (offScreen) {
+            offScreen->prepareFrameText();
+        }
+    }
+
     void OffScreenAdapter::setShowBillboardIcons(bool show) {
         if (offScreen) {
             offScreen->setShowBillboardIcons(show);
@@ -217,6 +223,18 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameUICanvasOutlines() {
+        if (offScreen) {
+            offScreen->prepareFrameUICanvasOutlines();
+        }
+    }
+
+    void OffScreenAdapter::prepareFrameUIImages() {
+        if (offScreen) {
+            offScreen->prepareFrameUIImages();
+        }
+    }
+
     void OffScreenAdapter::setFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setFrustumCullingEnabled(enabled);
@@ -286,6 +304,12 @@ namespace core {
     void OffScreenAdapter::setTerrainShadowLOD(uint32_t lod) {
         if (offScreen) {
             offScreen->setTerrainShadowLOD(lod);
+        }
+    }
+
+    void OffScreenAdapter::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) {
+        if (offScreen) {
+            offScreen->setUIViewportOffset(offset, panelSize);
         }
     }
 

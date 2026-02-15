@@ -60,7 +60,7 @@
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -80,7 +80,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -153,6 +153,7 @@
     <ClInclude Include="terrain\TerrainWeightMap.hpp" />
     <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
     <ClInclude Include="terrain\WeightBrushApplicator.hpp" />
+    <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
@@ -209,6 +210,7 @@
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />
     <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
     <ClCompile Include="terrain\WeightBrushApplicator.cpp" />
+    <ClCompile Include="text\TextLayout.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />

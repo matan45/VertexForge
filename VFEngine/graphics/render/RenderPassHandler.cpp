@@ -9,6 +9,12 @@
 #include "mesh/MeshGPUCache.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
+#include "text/TextPipeline.hpp"
+#include "text/TextTypes.hpp"
+#include "ui/UIRenderPipeline.hpp"
+#include "ui/UIRenderTypes.hpp"
+#include "ui/UITextPipeline.hpp"
+#include "ui/UITextRenderTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
@@ -36,6 +42,9 @@ namespace render
         , iblRenderer{std::make_unique<IBL>(device, swapChain, offscreenResources)}
         , meshPipeline{std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources)}
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
+        , textPipeline{std::make_unique<text::TextPipeline>(device, swapChain, offscreenResources)}
+        , uiPipeline{std::make_unique<ui::UIRenderPipeline>(device, swapChain, offscreenResources)}
+        , uiTextPipeline{std::make_unique<ui::UITextPipeline>(device, swapChain, offscreenResources, textPipeline->getFontCache())}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
@@ -313,6 +322,80 @@ namespace render
         }
     }
 
+    void RenderPassHandler::initTextPipeline()
+    {
+        if (textPipelineInitialized)
+        {
+            return;
+        }
+
+        textPipeline->init();
+        textPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setTextDrawList(std::vector<text::TextRenderData>&& textEntities)
+    {
+        currentTextDrawList = std::move(textEntities);
+        if (textPipelineInitialized && textPipeline)
+        {
+            textPipeline->setTextDrawList(currentTextDrawList);
+        }
+    }
+
+    void RenderPassHandler::appendTextDrawList(std::vector<text::TextRenderData>&& textEntities)
+    {
+        currentTextDrawList.insert(currentTextDrawList.end(),
+                                   std::make_move_iterator(textEntities.begin()),
+                                   std::make_move_iterator(textEntities.end()));
+        if (textPipelineInitialized && textPipeline)
+        {
+            textPipeline->setTextDrawList(currentTextDrawList);
+        }
+    }
+
+    void RenderPassHandler::initUIRenderPipeline()
+    {
+        if (uiPipelineInitialized)
+        {
+            return;
+        }
+
+        uiPipeline->init();
+        uiPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setUIImageDrawList(std::vector<ui::UIImageRenderData>&& images)
+    {
+        currentUIImageDrawList = std::move(images);
+        if (uiPipelineInitialized && uiPipeline)
+        {
+            uiPipeline->setUIImageDrawList(currentUIImageDrawList);
+        }
+    }
+
+    void RenderPassHandler::initUITextPipeline()
+    {
+        if (uiTextPipelineInitialized)
+        {
+            return;
+        }
+
+        // Ensure TextPipeline is initialized (font cache must be ready)
+        initTextPipeline();
+
+        uiTextPipeline->init();
+        uiTextPipelineInitialized = true;
+    }
+
+    void RenderPassHandler::setUITextDrawList(std::vector<ui::UITextRenderData>&& labels)
+    {
+        currentUITextDrawList = std::move(labels);
+        if (uiTextPipelineInitialized && uiTextPipeline)
+        {
+            uiTextPipeline->setUITextDrawList(currentUITextDrawList);
+        }
+    }
+
     void RenderPassHandler::initDebugRenderer()
     {
         if (debugRendererInitialized)
@@ -359,6 +442,23 @@ namespace render
         if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
         {
             gpuDrivenRenderer->setDeletionQueue(queue);
+        }
+
+        if (textPipeline)
+        {
+            textPipeline->setDeletionQueue(queue);
+        }
+        if (uiPipeline)
+        {
+            uiPipeline->setDeletionQueue(queue);
+        }
+        if (uiTextPipeline)
+        {
+            uiTextPipeline->setDeletionQueue(queue);
+        }
+        if (billboardPipeline)
+        {
+            billboardPipeline->setDeletionQueue(queue);
         }
     }
 
@@ -590,6 +690,22 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setUICanvasOutlineDrawList(std::move(outlines));
+        }
+    }
+
+    void RenderPassHandler::setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setUICanvasImageDrawList(std::move(images));
+        }
+    }
+
     void RenderPassHandler::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
     {
         if (debugRenderer)
@@ -752,6 +868,21 @@ namespace render
             billboardPipeline->recreate();
         }
 
+        if (textPipelineInitialized)
+        {
+            textPipeline->recreate();
+        }
+
+        if (uiPipelineInitialized)
+        {
+            uiPipeline->recreate();
+        }
+
+        if (uiTextPipelineInitialized)
+        {
+            uiTextPipeline->recreate();
+        }
+
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -795,6 +926,21 @@ namespace render
         if (billboardPipelineInitialized)
         {
             billboardPipeline->cleanUp();
+        }
+
+        if (textPipelineInitialized)
+        {
+            textPipeline->cleanUp();
+        }
+
+        if (uiPipelineInitialized)
+        {
+            uiPipeline->cleanUp();
+        }
+
+        if (uiTextPipelineInitialized)
+        {
+            uiTextPipeline->cleanUp();
         }
 
         if (debugRendererInitialized)
@@ -932,6 +1078,11 @@ namespace render
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
+        if (textPipelineInitialized && !currentTextDrawList.empty())
+        {
+            textPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
 
         if (cameraOcclusionManager->isHiZInitialized(activeCameraId))
@@ -1026,6 +1177,18 @@ namespace render
 
         // Post-processing chain (ping-pong effects, then blit back to scene color)
         postProcessPipeline->execute(commandBuffer, imageIndex);
+
+        // UI overlay pass (after post-processing, renders on top of everything)
+        if (uiPipelineInitialized && !currentUIImageDrawList.empty())
+        {
+            uiPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
+        // UI text overlay (after UI images, text renders on top)
+        if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
+        {
+            uiTextPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
     }
 
     bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath) const

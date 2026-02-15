@@ -2,6 +2,8 @@
 #include "EventTypes.hpp"
 #include "../data/DTOs.hpp"
 #include <glm/glm.hpp>
+#include <vector>
+#include <cstdint>
 
 namespace events::input {
 
@@ -29,6 +31,10 @@ namespace events::input {
         std::string_view getName() const override { return "GetMouseDelta"; }
     };
 
+    struct GetScrollDeltaQuery : IQuery<glm::vec2> {
+        std::string_view getName() const override { return "GetScrollDelta"; }
+    };
+
     struct IsKeyReleasedQuery : IQuery<bool> {
         int keyCode;
 
@@ -45,6 +51,25 @@ namespace events::input {
         int button;
 
         std::string_view getName() const override { return "IsDoubleClick"; }
+    };
+
+    struct IsKeyPressedQuery : IQuery<bool> {
+        int keyCode;
+
+        std::string_view getName() const override { return "IsKeyPressed"; }
+    };
+
+    struct GetCharInputQuery : IQuery<std::vector<uint32_t>> {
+        std::string_view getName() const override { return "GetCharInput"; }
+    };
+
+    struct GetClipboardTextQuery : IQuery<std::string> {
+        std::string_view getName() const override { return "GetClipboardText"; }
+    };
+
+    struct SetClipboardTextCommand : ICommand<void> {
+        std::string text;
+        std::string_view getName() const override { return "SetClipboardText"; }
     };
 
     // ============================================

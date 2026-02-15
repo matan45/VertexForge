@@ -8,6 +8,7 @@
 #include "../../../services/events/SceneEvents.hpp"
 #include "../../../services/events/MaterialEvents.hpp"
 #include "../../../services/events/ScriptingEvents.hpp"
+#include "../../../services/events/UIEvents.hpp"
 
 namespace core::api
 {
@@ -561,6 +562,97 @@ namespace core::api
                         success = dispatcher.execute(cmd);
                         break;
                     }
+                case services::ComponentTypeId::UICanvas:
+                    {
+                        events::ui::AddUICanvasComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIRect:
+                    {
+                        events::ui::AddUIRectComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIImage:
+                    {
+                        events::ui::AddUIImageComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIScroll:
+                    {
+                        events::ui::AddUIScrollComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UILayoutGroup:
+                    {
+                        events::ui::AddUILayoutGroupComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UILabel:
+                    {
+                        events::ui::AddUILabelComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIButton:
+                    {
+                        events::ui::AddUIButtonComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UITextInput:
+                    {
+                        events::ui::AddUITextInputComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UICheckbox:
+                    {
+                        events::ui::AddUICheckboxComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIDropdown:
+                    {
+                        events::ui::AddUIDropdownComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UITabs:
+                    {
+                        events::ui::AddUITabsComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UISlider:
+                    {
+                        events::ui::AddUISliderComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIProgressBar:
+                    {
+                        events::ui::AddUIProgressBarComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
                 default:
                     vfLogError("[Script] Entity.addComponent: component type '{}' cannot be added via script", typeName);
                     break;
@@ -625,6 +717,97 @@ namespace core::api
                 case services::ComponentTypeId::AudioSource3D:
                     {
                         events::scene::RemoveAudioSource3DComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UICanvas:
+                    {
+                        events::ui::RemoveUICanvasComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIRect:
+                    {
+                        events::ui::RemoveUIRectComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIImage:
+                    {
+                        events::ui::RemoveUIImageComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIScroll:
+                    {
+                        events::ui::RemoveUIScrollComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UILayoutGroup:
+                    {
+                        events::ui::RemoveUILayoutGroupComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UILabel:
+                    {
+                        events::ui::RemoveUILabelComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIButton:
+                    {
+                        events::ui::RemoveUIButtonComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UITextInput:
+                    {
+                        events::ui::RemoveUITextInputComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UICheckbox:
+                    {
+                        events::ui::RemoveUICheckboxComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIDropdown:
+                    {
+                        events::ui::RemoveUIDropdownComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UITabs:
+                    {
+                        events::ui::RemoveUITabsComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UISlider:
+                    {
+                        events::ui::RemoveUISliderComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                case services::ComponentTypeId::UIProgressBar:
+                    {
+                        events::ui::RemoveUIProgressBarComponentCommand cmd;
                         cmd.entity = entity;
                         success = dispatcher.execute(cmd);
                         break;

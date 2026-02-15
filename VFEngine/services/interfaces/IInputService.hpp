@@ -1,6 +1,8 @@
 #pragma once
 #include "../data/DTOs.hpp"
 #include <glm/glm.hpp>
+#include <vector>
+#include <cstdint>
 
 namespace services {
 
@@ -43,6 +45,16 @@ namespace services {
 
         // Check if a key was just released this frame
         virtual bool isKeyReleased(int keyCode) const = 0;
+
+        // Check if a key was just pressed this frame (rising-edge detection)
+        virtual bool isKeyPressed(int keyCode) const = 0;
+
+        // Get accumulated character input for this frame (Unicode codepoints)
+        virtual const std::vector<uint32_t>& getCharInput() const = 0;
+
+        // Clipboard
+        virtual std::string getClipboardText() const = 0;
+        virtual void setClipboardText(const std::string& text) = 0;
 
         // ============================================
         // Mouse State

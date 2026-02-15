@@ -43,12 +43,15 @@ namespace services
         prepareCameras();
         prepareFrameMeshes();
         prepareFrameBillboards();
+        prepareFrameText();
         prepareFrameCameraFrustums();
         prepareFrameAudioSpheres();
         prepareFrameLightGizmos();
         prepareFramePhysicsColliders();
         prepareFrameClusterDebug();
         prepareFrameShadowDebug();
+        prepareFrameUICanvasOutlines();
+        prepareFrameUIImages();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -550,6 +553,15 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::render::SetUIViewportOffsetCommand>(
+            [this](const events::render::SetUIViewportOffsetCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setUIViewportOffset(cmd.offset, cmd.panelSize);
+                }
+            });
+
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
             [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
             {
@@ -668,6 +680,16 @@ namespace services
         offScreenProvider->prepareFrameBillboards();
     }
 
+    void EditorRenderServiceImpl::prepareFrameText()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameText();
+    }
+
     void EditorRenderServiceImpl::prepareFrameCameraFrustums()
     {
         if (!offScreenProvider)
@@ -736,5 +758,25 @@ namespace services
         }
 
         offScreenProvider->prepareFrameShadowDebug();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameUICanvasOutlines()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameUICanvasOutlines();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameUIImages()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameUIImages();
     }
 }

@@ -48,6 +48,7 @@ namespace core
         void prepareFrameLightGizmos() override;
 
         void prepareFrameBillboards() override;
+        void prepareFrameText() override;
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;
         bool loadBillboardAtlas(const std::string& atlasPath) override;
@@ -81,6 +82,9 @@ namespace core
         bool getShowShadowDebug() const override;
         void prepareFrameShadowDebug() override;
 
+        void prepareFrameUICanvasOutlines() override;
+        void prepareFrameUIImages() override;
+
         void setFrustumCullingEnabled(bool enabled) override;
         void setOcclusionCullingEnabled(bool enabled) override;
         void setLODSelectionEnabled(bool enabled) override;
@@ -94,5 +98,7 @@ namespace core
         void setTerrainErrorThreshold(float threshold) override;
         void setTerrainTextureScale(float scale) override;
         void setTerrainShadowLOD(uint32_t lod) override;
+
+        void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) override;
     };
 }

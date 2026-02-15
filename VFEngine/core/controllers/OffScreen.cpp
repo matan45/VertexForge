@@ -110,6 +110,11 @@ namespace controllers {
 		offScreenController->prepareFrameBillboards();
 	}
 
+	void OffScreen::prepareFrameText()
+	{
+		offScreenController->prepareFrameText();
+	}
+
 	void OffScreen::setShowBillboardIcons(bool show)
 	{
 		offScreenController->setShowBillboardIcons(show);
@@ -225,6 +230,16 @@ namespace controllers {
 		offScreenController->prepareFrameShadowDebug();
 	}
 
+	void OffScreen::prepareFrameUICanvasOutlines()
+	{
+		offScreenController->prepareFrameUICanvasOutlines();
+	}
+
+	void OffScreen::prepareFrameUIImages()
+	{
+		offScreenController->prepareFrameUIImages();
+	}
+
 	void OffScreen::setFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setFrustumCullingEnabled(enabled);
@@ -283,6 +298,11 @@ namespace controllers {
 	void OffScreen::setTerrainShadowLOD(uint32_t lod)
 	{
 		offScreenController->setTerrainShadowLOD(lod);
+	}
+
+	void OffScreen::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize)
+	{
+		offScreenController->setUIViewportOffset(offset, panelSize);
 	}
 
 	void OffScreen::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)

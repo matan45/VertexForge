@@ -109,6 +109,11 @@ namespace serialization
             componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
         }
 
+        if (entity.hasComponent<components::TextComponent>())
+        {
+            componentsJson["text"] = serializeText(entity.getComponent<components::TextComponent>());
+        }
+
         if (entity.hasComponent<components::AudioSource2DComponent>())
         {
             componentsJson["audioSource2D"] = serializeAudioSource2D(
@@ -169,6 +174,84 @@ namespace serialization
         {
             componentsJson["terrainTile"] = serializeTerrainTile(
                 entity.getComponent<components::TerrainTileComponent>());
+        }
+
+        if (entity.hasComponent<components::UICanvasComponent>())
+        {
+            componentsJson["uiCanvas"] = serializeUICanvas(
+                entity.getComponent<components::UICanvasComponent>());
+        }
+
+        if (entity.hasComponent<components::UIRectComponent>())
+        {
+            componentsJson["uiRect"] = serializeUIRect(
+                entity.getComponent<components::UIRectComponent>());
+        }
+
+        if (entity.hasComponent<components::UIImageComponent>())
+        {
+            componentsJson["uiImage"] = serializeUIImage(
+                entity.getComponent<components::UIImageComponent>());
+        }
+
+        if (entity.hasComponent<components::UIScrollComponent>())
+        {
+            componentsJson["uiScroll"] = serializeUIScroll(
+                entity.getComponent<components::UIScrollComponent>());
+        }
+
+        if (entity.hasComponent<components::UILayoutGroupComponent>())
+        {
+            componentsJson["uiLayoutGroup"] = serializeUILayoutGroup(
+                entity.getComponent<components::UILayoutGroupComponent>());
+        }
+
+        if (entity.hasComponent<components::UILabelComponent>())
+        {
+            componentsJson["uiLabel"] = serializeUILabel(
+                entity.getComponent<components::UILabelComponent>());
+        }
+
+        if (entity.hasComponent<components::UIButtonComponent>())
+        {
+            componentsJson["uiButton"] = serializeUIButton(
+                entity.getComponent<components::UIButtonComponent>());
+        }
+
+        if (entity.hasComponent<components::UITextInputComponent>())
+        {
+            componentsJson["uiTextInput"] = serializeUITextInput(
+                entity.getComponent<components::UITextInputComponent>());
+        }
+
+        if (entity.hasComponent<components::UICheckboxComponent>())
+        {
+            componentsJson["uiCheckbox"] = serializeUICheckbox(
+                entity.getComponent<components::UICheckboxComponent>());
+        }
+
+        if (entity.hasComponent<components::UIDropdownComponent>())
+        {
+            componentsJson["uiDropdown"] = serializeUIDropdown(
+                entity.getComponent<components::UIDropdownComponent>());
+        }
+
+        if (entity.hasComponent<components::UITabsComponent>())
+        {
+            componentsJson["uiTabs"] = serializeUITabs(
+                entity.getComponent<components::UITabsComponent>());
+        }
+
+        if (entity.hasComponent<components::UISliderComponent>())
+        {
+            componentsJson["uiSlider"] = serializeUISlider(
+                entity.getComponent<components::UISliderComponent>());
+        }
+
+        if (entity.hasComponent<components::UIProgressBarComponent>())
+        {
+            componentsJson["uiProgressBar"] = serializeUIProgressBar(
+                entity.getComponent<components::UIProgressBarComponent>());
         }
 
         entityJson["components"] = componentsJson;
@@ -334,6 +417,7 @@ namespace serialization
         case components::BillboardIconType::Audio3D: return "audio3D";
         case components::BillboardIconType::Particle: return "particle";
         case components::BillboardIconType::Billboard: return "billboard";
+        case components::BillboardIconType::Text: return "text";
         default: return "custom";
         }
     }
@@ -348,6 +432,7 @@ namespace serialization
         if (str == "audio3D") return components::BillboardIconType::Audio3D;
         if (str == "particle") return components::BillboardIconType::Particle;
         if (str == "billboard") return components::BillboardIconType::Billboard;
+        if (str == "text") return components::BillboardIconType::Text;
         // Legacy support
         if (str == "light") return components::BillboardIconType::PointLight;
         if (str == "audioSource") return components::BillboardIconType::Audio3D;
@@ -392,6 +477,36 @@ namespace serialization
         billboard.editorOnly = j.value("editorOnly", true);
         billboard.selectable = j.value("selectable", true);
         billboard.texturePath = j.value("texturePath", std::string(""));
+    }
+
+    json SceneSerialization::serializeText(const components::TextComponent& text)
+    {
+        json j;
+        j["fontPath"] = text.fontPath;
+        j["text"] = text.text;
+        j["fontSize"] = text.fontSize;
+        j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
+        j["lineSpacing"] = text.lineSpacing;
+        j["letterSpacing"] = text.letterSpacing;
+        j["maxWidth"] = text.maxWidth;
+        return j;
+    }
+
+    void SceneSerialization::deserializeText(const json& j, components::TextComponent& text)
+    {
+        text.fontPath = j.value("fontPath", std::string(""));
+        text.text = j.value("text", std::string("Hello World"));
+        text.fontSize = j.value("fontSize", 32.0f);
+        if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 4)
+        {
+            text.color = glm::vec4(
+                j["color"][0].get<float>(), j["color"][1].get<float>(),
+                j["color"][2].get<float>(), j["color"][3].get<float>()
+            );
+        }
+        text.lineSpacing = j.value("lineSpacing", 1.0f);
+        text.letterSpacing = j.value("letterSpacing", 0.0f);
+        text.maxWidth = j.value("maxWidth", 0.0f);
     }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
@@ -1499,6 +1614,805 @@ namespace serialization
             tile.boundingMaxY = it->get<float>();
     }
 
+    json SceneSerialization::serializeUICanvas(const components::UICanvasComponent& canvas)
+    {
+        json j;
+        j["referenceWidth"] = canvas.referenceWidth;
+        j["referenceHeight"] = canvas.referenceHeight;
+        j["scaleMode"] = uiScaleModeToString(canvas.scaleMode);
+        j["pixelsPerUnit"] = canvas.pixelsPerUnit;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUICanvas(const json& j, components::UICanvasComponent& canvas)
+    {
+        canvas.referenceWidth = j.value("referenceWidth", 1920.0f);
+        canvas.referenceHeight = j.value("referenceHeight", 1080.0f);
+        canvas.scaleMode = stringToUIScaleMode(j.value("scaleMode", "scaleWithScreenSize"));
+        canvas.pixelsPerUnit = j.value("pixelsPerUnit", 100.0f);
+    }
+
+    json SceneSerialization::serializeUIRect(const components::UIRectComponent& rect)
+    {
+        json j;
+        j["anchorMin"] = json::array({rect.anchorMin.x, rect.anchorMin.y});
+        j["anchorMax"] = json::array({rect.anchorMax.x, rect.anchorMax.y});
+        j["pivot"] = json::array({rect.pivot.x, rect.pivot.y});
+        j["sizeDelta"] = json::array({rect.sizeDelta.x, rect.sizeDelta.y});
+        j["anchoredPosition"] = json::array({rect.anchoredPosition.x, rect.anchoredPosition.y});
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIRect(const json& j, components::UIRectComponent& rect)
+    {
+        if (j.contains("anchorMin") && j["anchorMin"].is_array() && j["anchorMin"].size() >= 2)
+        {
+            rect.anchorMin = glm::vec2(j["anchorMin"][0].get<float>(), j["anchorMin"][1].get<float>());
+        }
+        if (j.contains("anchorMax") && j["anchorMax"].is_array() && j["anchorMax"].size() >= 2)
+        {
+            rect.anchorMax = glm::vec2(j["anchorMax"][0].get<float>(), j["anchorMax"][1].get<float>());
+        }
+        if (j.contains("pivot") && j["pivot"].is_array() && j["pivot"].size() >= 2)
+        {
+            rect.pivot = glm::vec2(j["pivot"][0].get<float>(), j["pivot"][1].get<float>());
+        }
+        if (j.contains("sizeDelta") && j["sizeDelta"].is_array() && j["sizeDelta"].size() >= 2)
+        {
+            rect.sizeDelta = glm::vec2(j["sizeDelta"][0].get<float>(), j["sizeDelta"][1].get<float>());
+        }
+        if (j.contains("anchoredPosition") && j["anchoredPosition"].is_array() && j["anchoredPosition"].size() >= 2)
+        {
+            rect.anchoredPosition = glm::vec2(j["anchoredPosition"][0].get<float>(), j["anchoredPosition"][1].get<float>());
+        }
+    }
+
+    json SceneSerialization::serializeUIImage(const components::UIImageComponent& image)
+    {
+        json j;
+        if (!image.texturePath.empty())
+        {
+            j["texturePath"] = image.texturePath;
+        }
+        j["colorTint"] = json::array({
+            image.colorTint.r, image.colorTint.g, image.colorTint.b, image.colorTint.a
+        });
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIImage(const json& j, components::UIImageComponent& image)
+    {
+        image.texturePath = j.value("texturePath", std::string(""));
+        if (j.contains("colorTint") && j["colorTint"].is_array() && j["colorTint"].size() >= 4)
+        {
+            image.colorTint = glm::vec4(
+                j["colorTint"][0].get<float>(), j["colorTint"][1].get<float>(),
+                j["colorTint"][2].get<float>(), j["colorTint"][3].get<float>()
+            );
+        }
+    }
+
+    std::string SceneSerialization::uiScaleModeToString(components::UIScaleMode mode)
+    {
+        switch (mode)
+        {
+        case components::UIScaleMode::ConstantPixelSize: return "constantPixelSize";
+        case components::UIScaleMode::ScaleWithScreenSize: return "scaleWithScreenSize";
+        default: return "scaleWithScreenSize";
+        }
+    }
+
+    components::UIScaleMode SceneSerialization::stringToUIScaleMode(const std::string& str)
+    {
+        if (str == "constantPixelSize") return components::UIScaleMode::ConstantPixelSize;
+        if (str == "scaleWithScreenSize") return components::UIScaleMode::ScaleWithScreenSize;
+        return components::UIScaleMode::ScaleWithScreenSize;
+    }
+
+    json SceneSerialization::serializeUIScroll(const components::UIScrollComponent& scroll)
+    {
+        json j;
+        j["horizontalScrollEnabled"] = scroll.horizontalScrollEnabled;
+        j["verticalScrollEnabled"] = scroll.verticalScrollEnabled;
+        j["horizontalScrollbarVisibility"] = scrollbarVisibilityToString(scroll.horizontalScrollbarVisibility);
+        j["verticalScrollbarVisibility"] = scrollbarVisibilityToString(scroll.verticalScrollbarVisibility);
+        j["scrollSensitivity"] = scroll.scrollSensitivity;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIScroll(const json& j, components::UIScrollComponent& scroll)
+    {
+        scroll.horizontalScrollEnabled = j.value("horizontalScrollEnabled", false);
+        scroll.verticalScrollEnabled = j.value("verticalScrollEnabled", true);
+        scroll.horizontalScrollbarVisibility = stringToScrollbarVisibility(j.value("horizontalScrollbarVisibility", "auto"));
+        scroll.verticalScrollbarVisibility = stringToScrollbarVisibility(j.value("verticalScrollbarVisibility", "auto"));
+        scroll.scrollSensitivity = j.value("scrollSensitivity", 1.0f);
+    }
+
+    std::string SceneSerialization::scrollbarVisibilityToString(components::ScrollbarVisibility visibility)
+    {
+        switch (visibility)
+        {
+        case components::ScrollbarVisibility::Auto: return "auto";
+        case components::ScrollbarVisibility::AlwaysVisible: return "alwaysVisible";
+        case components::ScrollbarVisibility::Hidden: return "hidden";
+        default: return "auto";
+        }
+    }
+
+    components::ScrollbarVisibility SceneSerialization::stringToScrollbarVisibility(const std::string& str)
+    {
+        if (str == "alwaysVisible") return components::ScrollbarVisibility::AlwaysVisible;
+        if (str == "hidden") return components::ScrollbarVisibility::Hidden;
+        return components::ScrollbarVisibility::Auto;
+    }
+
+    json SceneSerialization::serializeUILayoutGroup(const components::UILayoutGroupComponent& layoutGroup)
+    {
+        json j;
+        j["direction"] = layoutDirectionToString(layoutGroup.direction);
+        j["spacing"] = layoutGroup.spacing;
+        j["padding"] = {layoutGroup.padding.x, layoutGroup.padding.y, layoutGroup.padding.z, layoutGroup.padding.w};
+        j["childAlignment"] = childAlignmentToString(layoutGroup.childAlignment);
+        j["constraintCount"] = layoutGroup.constraintCount;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUILayoutGroup(const json& j, components::UILayoutGroupComponent& layoutGroup)
+    {
+        layoutGroup.direction = stringToLayoutDirection(j.value("direction", "vertical"));
+        layoutGroup.spacing = j.value("spacing", 0.0f);
+        if (j.contains("padding") && j["padding"].is_array() && j["padding"].size() == 4)
+        {
+            layoutGroup.padding.x = j["padding"][0].get<float>();
+            layoutGroup.padding.y = j["padding"][1].get<float>();
+            layoutGroup.padding.z = j["padding"][2].get<float>();
+            layoutGroup.padding.w = j["padding"][3].get<float>();
+        }
+        layoutGroup.childAlignment = stringToChildAlignment(j.value("childAlignment", "start"));
+        layoutGroup.constraintCount = j.value("constraintCount", 2);
+    }
+
+    std::string SceneSerialization::layoutDirectionToString(components::LayoutDirection direction)
+    {
+        switch (direction)
+        {
+        case components::LayoutDirection::Vertical: return "vertical";
+        case components::LayoutDirection::Horizontal: return "horizontal";
+        case components::LayoutDirection::Grid: return "grid";
+        default: return "vertical";
+        }
+    }
+
+    components::LayoutDirection SceneSerialization::stringToLayoutDirection(const std::string& str)
+    {
+        if (str == "horizontal") return components::LayoutDirection::Horizontal;
+        if (str == "grid") return components::LayoutDirection::Grid;
+        return components::LayoutDirection::Vertical;
+    }
+
+    std::string SceneSerialization::childAlignmentToString(components::ChildAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::ChildAlignment::Start: return "start";
+        case components::ChildAlignment::Center: return "center";
+        case components::ChildAlignment::End: return "end";
+        default: return "start";
+        }
+    }
+
+    components::ChildAlignment SceneSerialization::stringToChildAlignment(const std::string& str)
+    {
+        if (str == "center") return components::ChildAlignment::Center;
+        if (str == "end") return components::ChildAlignment::End;
+        return components::ChildAlignment::Start;
+    }
+
+    json SceneSerialization::serializeUILabel(const components::UILabelComponent& label)
+    {
+        json j;
+        if (!label.text.empty())
+        {
+            j["text"] = label.text;
+        }
+        if (!label.fontPath.empty())
+        {
+            j["fontPath"] = label.fontPath;
+        }
+        j["fontSize"] = label.fontSize;
+        j["fontStyle"] = fontStyleToString(label.fontStyle);
+        j["color"] = json::array({label.color.r, label.color.g, label.color.b, label.color.a});
+        j["horizontalAlignment"] = horizontalAlignmentToString(label.horizontalAlignment);
+        j["verticalAlignment"] = verticalAlignmentToString(label.verticalAlignment);
+        j["overflow"] = textOverflowToString(label.overflow);
+        j["wordWrap"] = label.wordWrap;
+        j["lineSpacing"] = label.lineSpacing;
+        j["letterSpacing"] = label.letterSpacing;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUILabel(const json& j, components::UILabelComponent& label)
+    {
+        label.text = j.value("text", std::string("Label"));
+        label.fontPath = j.value("fontPath", std::string(""));
+        label.fontSize = j.value("fontSize", 16.0f);
+        label.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
+        if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 4)
+        {
+            label.color = glm::vec4(
+                j["color"][0].get<float>(), j["color"][1].get<float>(),
+                j["color"][2].get<float>(), j["color"][3].get<float>()
+            );
+        }
+        label.horizontalAlignment = stringToHorizontalAlignment(j.value("horizontalAlignment", "left"));
+        label.verticalAlignment = stringToVerticalAlignment(j.value("verticalAlignment", "top"));
+        label.overflow = stringToTextOverflow(j.value("overflow", "overflow"));
+        label.wordWrap = j.value("wordWrap", true);
+        label.lineSpacing = j.value("lineSpacing", 1.0f);
+        label.letterSpacing = j.value("letterSpacing", 0.0f);
+    }
+
+    json SceneSerialization::serializeUIButton(const components::UIButtonComponent& button)
+    {
+        json j;
+
+        j["normalColor"] = json::array({button.normalColor.r, button.normalColor.g, button.normalColor.b, button.normalColor.a});
+        j["hoveredColor"] = json::array({button.hoveredColor.r, button.hoveredColor.g, button.hoveredColor.b, button.hoveredColor.a});
+        j["pressedColor"] = json::array({button.pressedColor.r, button.pressedColor.g, button.pressedColor.b, button.pressedColor.a});
+        j["disabledColor"] = json::array({button.disabledColor.r, button.disabledColor.g, button.disabledColor.b, button.disabledColor.a});
+
+        if (!button.normalTexture.empty())
+        {
+            j["normalTexture"] = button.normalTexture;
+        }
+        if (!button.hoverTexture.empty())
+        {
+            j["hoverTexture"] = button.hoverTexture;
+        }
+        if (!button.pressedTexture.empty())
+        {
+            j["pressedTexture"] = button.pressedTexture;
+        }
+        if (!button.disabledTexture.empty())
+        {
+            j["disabledTexture"] = button.disabledTexture;
+        }
+
+        j["colorTransitionDuration"] = button.colorTransitionDuration;
+        j["interactable"] = button.interactable;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIButton(const json& j, components::UIButtonComponent& button)
+    {
+        if (j.contains("normalColor") && j["normalColor"].is_array() && j["normalColor"].size() >= 4)
+        {
+            button.normalColor = glm::vec4(
+                j["normalColor"][0].get<float>(), j["normalColor"][1].get<float>(),
+                j["normalColor"][2].get<float>(), j["normalColor"][3].get<float>()
+            );
+        }
+        if (j.contains("hoveredColor") && j["hoveredColor"].is_array() && j["hoveredColor"].size() >= 4)
+        {
+            button.hoveredColor = glm::vec4(
+                j["hoveredColor"][0].get<float>(), j["hoveredColor"][1].get<float>(),
+                j["hoveredColor"][2].get<float>(), j["hoveredColor"][3].get<float>()
+            );
+        }
+        if (j.contains("pressedColor") && j["pressedColor"].is_array() && j["pressedColor"].size() >= 4)
+        {
+            button.pressedColor = glm::vec4(
+                j["pressedColor"][0].get<float>(), j["pressedColor"][1].get<float>(),
+                j["pressedColor"][2].get<float>(), j["pressedColor"][3].get<float>()
+            );
+        }
+        if (j.contains("disabledColor") && j["disabledColor"].is_array() && j["disabledColor"].size() >= 4)
+        {
+            button.disabledColor = glm::vec4(
+                j["disabledColor"][0].get<float>(), j["disabledColor"][1].get<float>(),
+                j["disabledColor"][2].get<float>(), j["disabledColor"][3].get<float>()
+            );
+        }
+
+        button.normalTexture = j.value("normalTexture", std::string(""));
+        button.hoverTexture = j.value("hoverTexture", std::string(""));
+        button.pressedTexture = j.value("pressedTexture", std::string(""));
+        button.disabledTexture = j.value("disabledTexture", std::string(""));
+
+        button.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        button.interactable = j.value("interactable", true);
+    }
+
+    json SceneSerialization::serializeUITextInput(const components::UITextInputComponent& textInput)
+    {
+        json j;
+
+        j["text"] = textInput.text;
+        j["placeholderText"] = textInput.placeholderText;
+
+        if (!textInput.fontPath.empty())
+        {
+            j["fontPath"] = textInput.fontPath;
+        }
+
+        j["fontSize"] = textInput.fontSize;
+        j["textColor"] = json::array({textInput.textColor.r, textInput.textColor.g, textInput.textColor.b, textInput.textColor.a});
+        j["placeholderColor"] = json::array({textInput.placeholderColor.r, textInput.placeholderColor.g, textInput.placeholderColor.b, textInput.placeholderColor.a});
+        j["normalColor"] = json::array({textInput.normalColor.r, textInput.normalColor.g, textInput.normalColor.b, textInput.normalColor.a});
+        j["hoveredColor"] = json::array({textInput.hoveredColor.r, textInput.hoveredColor.g, textInput.hoveredColor.b, textInput.hoveredColor.a});
+        j["focusedColor"] = json::array({textInput.focusedColor.r, textInput.focusedColor.g, textInput.focusedColor.b, textInput.focusedColor.a});
+        j["disabledColor"] = json::array({textInput.disabledColor.r, textInput.disabledColor.g, textInput.disabledColor.b, textInput.disabledColor.a});
+
+        j["colorTransitionDuration"] = textInput.colorTransitionDuration;
+        j["interactable"] = textInput.interactable;
+        j["maxLength"] = textInput.maxLength;
+
+        j["selectionColor"] = json::array({textInput.selectionColor.r, textInput.selectionColor.g, textInput.selectionColor.b, textInput.selectionColor.a});
+        j["caretColor"] = json::array({textInput.caretColor.r, textInput.caretColor.g, textInput.caretColor.b, textInput.caretColor.a});
+        j["caretWidth"] = textInput.caretWidth;
+        j["caretBlinkRate"] = textInput.caretBlinkRate;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITextInput(const json& j, components::UITextInputComponent& textInput)
+    {
+        textInput.text = j.value("text", std::string(""));
+        textInput.placeholderText = j.value("placeholderText", std::string("Enter text..."));
+        textInput.fontPath = j.value("fontPath", std::string(""));
+        textInput.fontSize = j.value("fontSize", 16.0f);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("textColor", textInput.textColor);
+        deserializeVec4("placeholderColor", textInput.placeholderColor);
+        deserializeVec4("normalColor", textInput.normalColor);
+        deserializeVec4("hoveredColor", textInput.hoveredColor);
+        deserializeVec4("focusedColor", textInput.focusedColor);
+        deserializeVec4("disabledColor", textInput.disabledColor);
+        deserializeVec4("selectionColor", textInput.selectionColor);
+        deserializeVec4("caretColor", textInput.caretColor);
+
+        textInput.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        textInput.interactable = j.value("interactable", true);
+        textInput.maxLength = j.value("maxLength", 0);
+        textInput.caretWidth = j.value("caretWidth", 2.0f);
+        textInput.caretBlinkRate = j.value("caretBlinkRate", 0.53f);
+
+        textInput.currentDisplayColor = textInput.normalColor;
+    }
+
+    json SceneSerialization::serializeUICheckbox(const components::UICheckboxComponent& checkbox)
+    {
+        json j;
+
+        j["isChecked"] = checkbox.isChecked;
+
+        if (!checkbox.groupName.empty())
+        {
+            j["groupName"] = checkbox.groupName;
+        }
+        j["allowUncheck"] = checkbox.allowUncheck;
+
+        j["uncheckedColor"] = json::array({checkbox.uncheckedColor.r, checkbox.uncheckedColor.g, checkbox.uncheckedColor.b, checkbox.uncheckedColor.a});
+        j["checkedColor"] = json::array({checkbox.checkedColor.r, checkbox.checkedColor.g, checkbox.checkedColor.b, checkbox.checkedColor.a});
+        j["hoveredColor"] = json::array({checkbox.hoveredColor.r, checkbox.hoveredColor.g, checkbox.hoveredColor.b, checkbox.hoveredColor.a});
+        j["disabledColor"] = json::array({checkbox.disabledColor.r, checkbox.disabledColor.g, checkbox.disabledColor.b, checkbox.disabledColor.a});
+
+        if (!checkbox.uncheckedTexture.empty())
+        {
+            j["uncheckedTexture"] = checkbox.uncheckedTexture;
+        }
+        if (!checkbox.checkedTexture.empty())
+        {
+            j["checkedTexture"] = checkbox.checkedTexture;
+        }
+        if (!checkbox.hoveredTexture.empty())
+        {
+            j["hoveredTexture"] = checkbox.hoveredTexture;
+        }
+        if (!checkbox.disabledTexture.empty())
+        {
+            j["disabledTexture"] = checkbox.disabledTexture;
+        }
+
+        j["colorTransitionDuration"] = checkbox.colorTransitionDuration;
+        j["interactable"] = checkbox.interactable;
+        j["labelToggle"] = checkbox.labelToggle;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUICheckbox(const json& j, components::UICheckboxComponent& checkbox)
+    {
+        checkbox.isChecked = j.value("isChecked", false);
+        checkbox.groupName = j.value("groupName", std::string(""));
+        checkbox.allowUncheck = j.value("allowUncheck", true);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("uncheckedColor", checkbox.uncheckedColor);
+        deserializeVec4("checkedColor", checkbox.checkedColor);
+        deserializeVec4("hoveredColor", checkbox.hoveredColor);
+        deserializeVec4("disabledColor", checkbox.disabledColor);
+
+        checkbox.uncheckedTexture = j.value("uncheckedTexture", std::string(""));
+        checkbox.checkedTexture = j.value("checkedTexture", std::string(""));
+        checkbox.hoveredTexture = j.value("hoveredTexture", std::string(""));
+        checkbox.disabledTexture = j.value("disabledTexture", std::string(""));
+
+        checkbox.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        checkbox.interactable = j.value("interactable", true);
+        checkbox.labelToggle = j.value("labelToggle", false);
+
+        checkbox.currentDisplayColor = checkbox.isChecked ? checkbox.checkedColor : checkbox.uncheckedColor;
+    }
+
+    json SceneSerialization::serializeUIDropdown(const components::UIDropdownComponent& dropdown)
+    {
+        json j;
+
+        // Options array
+        json optionsArr = json::array();
+        for (const auto& opt : dropdown.options)
+        {
+            json optJson;
+            optJson["text"] = opt.text;
+            if (!opt.iconPath.empty())
+            {
+                optJson["iconPath"] = opt.iconPath;
+            }
+            optionsArr.push_back(optJson);
+        }
+        j["options"] = optionsArr;
+
+        j["selectedIndex"] = dropdown.selectedIndex;
+        j["placeholderText"] = dropdown.placeholderText;
+        j["maxVisibleItems"] = dropdown.maxVisibleItems;
+        j["interactable"] = dropdown.interactable;
+
+        // Header state colors
+        j["normalColor"] = json::array({dropdown.normalColor.r, dropdown.normalColor.g,
+                                         dropdown.normalColor.b, dropdown.normalColor.a});
+        j["hoveredColor"] = json::array({dropdown.hoveredColor.r, dropdown.hoveredColor.g,
+                                          dropdown.hoveredColor.b, dropdown.hoveredColor.a});
+        j["openColor"] = json::array({dropdown.openColor.r, dropdown.openColor.g,
+                                       dropdown.openColor.b, dropdown.openColor.a});
+        j["disabledColor"] = json::array({dropdown.disabledColor.r, dropdown.disabledColor.g,
+                                           dropdown.disabledColor.b, dropdown.disabledColor.a});
+
+        // List colors
+        j["listBackgroundColor"] = json::array({dropdown.listBackgroundColor.r, dropdown.listBackgroundColor.g,
+                                                 dropdown.listBackgroundColor.b, dropdown.listBackgroundColor.a});
+        j["itemNormalColor"] = json::array({dropdown.itemNormalColor.r, dropdown.itemNormalColor.g,
+                                             dropdown.itemNormalColor.b, dropdown.itemNormalColor.a});
+        j["itemHoveredColor"] = json::array({dropdown.itemHoveredColor.r, dropdown.itemHoveredColor.g,
+                                              dropdown.itemHoveredColor.b, dropdown.itemHoveredColor.a});
+
+        // Font
+        if (!dropdown.fontPath.empty())
+        {
+            j["fontPath"] = dropdown.fontPath;
+        }
+        j["fontSize"] = dropdown.fontSize;
+
+        j["colorTransitionDuration"] = dropdown.colorTransitionDuration;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIDropdown(const json& j, components::UIDropdownComponent& dropdown)
+    {
+        // Options array
+        if (j.contains("options") && j["options"].is_array())
+        {
+            dropdown.options.clear();
+            for (const auto& optJson : j["options"])
+            {
+                components::DropdownOption opt;
+                opt.text = optJson.value("text", std::string(""));
+                opt.iconPath = optJson.value("iconPath", std::string(""));
+                dropdown.options.push_back(opt);
+            }
+        }
+
+        dropdown.selectedIndex = j.value("selectedIndex", -1);
+        dropdown.placeholderText = j.value("placeholderText", std::string("Select..."));
+        dropdown.maxVisibleItems = j.value("maxVisibleItems", 5);
+        dropdown.interactable = j.value("interactable", true);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("normalColor", dropdown.normalColor);
+        deserializeVec4("hoveredColor", dropdown.hoveredColor);
+        deserializeVec4("openColor", dropdown.openColor);
+        deserializeVec4("disabledColor", dropdown.disabledColor);
+        deserializeVec4("listBackgroundColor", dropdown.listBackgroundColor);
+        deserializeVec4("itemNormalColor", dropdown.itemNormalColor);
+        deserializeVec4("itemHoveredColor", dropdown.itemHoveredColor);
+
+        dropdown.fontPath = j.value("fontPath", std::string(""));
+        dropdown.fontSize = j.value("fontSize", 16.0f);
+        dropdown.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+
+        // Reset runtime state
+        dropdown.currentDisplayColor = dropdown.normalColor;
+    }
+
+    json SceneSerialization::serializeUITabs(const components::UITabsComponent& tabs)
+    {
+        json j;
+
+        std::string posStr;
+        switch (tabs.tabBarPosition)
+        {
+        case components::TabBarPosition::Top: posStr = "Top"; break;
+        case components::TabBarPosition::Bottom: posStr = "Bottom"; break;
+        case components::TabBarPosition::Left: posStr = "Left"; break;
+        case components::TabBarPosition::Right: posStr = "Right"; break;
+        default: posStr = "Top"; break;
+        }
+        j["tabBarPosition"] = posStr;
+        j["activeTabIndex"] = tabs.activeTabIndex;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITabs(const json& j, components::UITabsComponent& tabs)
+    {
+        if (j.contains("tabBarPosition"))
+        {
+            std::string posStr = j["tabBarPosition"].get<std::string>();
+            if (posStr == "Bottom") tabs.tabBarPosition = components::TabBarPosition::Bottom;
+            else if (posStr == "Left") tabs.tabBarPosition = components::TabBarPosition::Left;
+            else if (posStr == "Right") tabs.tabBarPosition = components::TabBarPosition::Right;
+            else tabs.tabBarPosition = components::TabBarPosition::Top;
+        }
+
+        tabs.activeTabIndex = j.value("activeTabIndex", 0);
+
+        // Reset runtime state
+        tabs.previousTabIndex = -1;
+    }
+
+    json SceneSerialization::serializeUISlider(const components::UISliderComponent& slider)
+    {
+        json j;
+        j["minValue"] = slider.minValue;
+        j["maxValue"] = slider.maxValue;
+        j["value"] = slider.value;
+        j["stepSize"] = slider.stepSize;
+
+        switch (slider.orientation) {
+            case components::UISliderOrientation::Vertical: j["orientation"] = "Vertical"; break;
+            default: j["orientation"] = "Horizontal"; break;
+        }
+
+        j["clickTrackToSet"] = slider.clickTrackToSet;
+        j["handleSizeRatio"] = slider.handleSizeRatio;
+
+        j["handleNormalColor"] = json::array({slider.handleNormalColor.r, slider.handleNormalColor.g, slider.handleNormalColor.b, slider.handleNormalColor.a});
+        j["handleHoveredColor"] = json::array({slider.handleHoveredColor.r, slider.handleHoveredColor.g, slider.handleHoveredColor.b, slider.handleHoveredColor.a});
+        j["handlePressedColor"] = json::array({slider.handlePressedColor.r, slider.handlePressedColor.g, slider.handlePressedColor.b, slider.handlePressedColor.a});
+        j["handleDisabledColor"] = json::array({slider.handleDisabledColor.r, slider.handleDisabledColor.g, slider.handleDisabledColor.b, slider.handleDisabledColor.a});
+
+        if (!slider.handleNormalTexture.empty()) j["handleNormalTexture"] = slider.handleNormalTexture;
+        if (!slider.handleHoveredTexture.empty()) j["handleHoveredTexture"] = slider.handleHoveredTexture;
+        if (!slider.handlePressedTexture.empty()) j["handlePressedTexture"] = slider.handlePressedTexture;
+        if (!slider.handleDisabledTexture.empty()) j["handleDisabledTexture"] = slider.handleDisabledTexture;
+
+        j["fillColor"] = json::array({slider.fillColor.r, slider.fillColor.g, slider.fillColor.b, slider.fillColor.a});
+        if (!slider.fillTexture.empty()) j["fillTexture"] = slider.fillTexture;
+
+        j["colorTransitionDuration"] = slider.colorTransitionDuration;
+        j["interactable"] = slider.interactable;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUISlider(const json& j, components::UISliderComponent& slider)
+    {
+        slider.minValue = j.value("minValue", 0.0f);
+        slider.maxValue = j.value("maxValue", 1.0f);
+        slider.value = j.value("value", 0.5f);
+        slider.stepSize = j.value("stepSize", 0.0f);
+
+        std::string orientStr = j.value("orientation", std::string("Horizontal"));
+        if (orientStr == "Vertical")
+            slider.orientation = components::UISliderOrientation::Vertical;
+        else
+            slider.orientation = components::UISliderOrientation::Horizontal;
+
+        slider.clickTrackToSet = j.value("clickTrackToSet", true);
+        slider.handleSizeRatio = j.value("handleSizeRatio", 0.08f);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out) {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+                out = glm::vec4(j[key][0].get<float>(), j[key][1].get<float>(),
+                               j[key][2].get<float>(), j[key][3].get<float>());
+        };
+
+        deserializeVec4("handleNormalColor", slider.handleNormalColor);
+        deserializeVec4("handleHoveredColor", slider.handleHoveredColor);
+        deserializeVec4("handlePressedColor", slider.handlePressedColor);
+        deserializeVec4("handleDisabledColor", slider.handleDisabledColor);
+
+        slider.handleNormalTexture = j.value("handleNormalTexture", std::string(""));
+        slider.handleHoveredTexture = j.value("handleHoveredTexture", std::string(""));
+        slider.handlePressedTexture = j.value("handlePressedTexture", std::string(""));
+        slider.handleDisabledTexture = j.value("handleDisabledTexture", std::string(""));
+
+        deserializeVec4("fillColor", slider.fillColor);
+        slider.fillTexture = j.value("fillTexture", std::string(""));
+
+        slider.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        slider.interactable = j.value("interactable", true);
+
+        // Reset runtime state
+        slider.currentState = components::UISliderState::Normal;
+        slider.currentHandleDisplayColor = slider.handleNormalColor;
+        slider.isDragging = false;
+        slider.dragStartValue = 0.0f;
+    }
+
+    json SceneSerialization::serializeUIProgressBar(const components::UIProgressBarComponent& pb)
+    {
+        json j;
+        j["minValue"] = pb.minValue;
+        j["maxValue"] = pb.maxValue;
+        j["value"] = pb.value;
+
+        switch (pb.orientation) {
+            case components::UISliderOrientation::Vertical: j["orientation"] = "Vertical"; break;
+            default: j["orientation"] = "Horizontal"; break;
+        }
+
+        j["invertDirection"] = pb.invertDirection;
+        j["smoothInterpolation"] = pb.smoothInterpolation;
+        j["interpolationSpeed"] = pb.interpolationSpeed;
+
+        j["trackColor"] = json::array({pb.trackColor.r, pb.trackColor.g, pb.trackColor.b, pb.trackColor.a});
+        if (!pb.trackTexture.empty()) j["trackTexture"] = pb.trackTexture;
+
+        j["fillColor"] = json::array({pb.fillColor.r, pb.fillColor.g, pb.fillColor.b, pb.fillColor.a});
+        if (!pb.fillTexture.empty()) j["fillTexture"] = pb.fillTexture;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& pb)
+    {
+        pb.minValue = j.value("minValue", 0.0f);
+        pb.maxValue = j.value("maxValue", 1.0f);
+        pb.value = j.value("value", 0.0f);
+
+        std::string orientStr = j.value("orientation", std::string("Horizontal"));
+        if (orientStr == "Vertical")
+            pb.orientation = components::UISliderOrientation::Vertical;
+        else
+            pb.orientation = components::UISliderOrientation::Horizontal;
+
+        pb.invertDirection = j.value("invertDirection", false);
+        pb.smoothInterpolation = j.value("smoothInterpolation", false);
+        pb.interpolationSpeed = j.value("interpolationSpeed", 5.0f);
+
+        if (j.contains("trackColor") && j["trackColor"].is_array() && j["trackColor"].size() >= 4)
+            pb.trackColor = glm::vec4(j["trackColor"][0].get<float>(), j["trackColor"][1].get<float>(),
+                                       j["trackColor"][2].get<float>(), j["trackColor"][3].get<float>());
+        pb.trackTexture = j.value("trackTexture", std::string(""));
+
+        if (j.contains("fillColor") && j["fillColor"].is_array() && j["fillColor"].size() >= 4)
+            pb.fillColor = glm::vec4(j["fillColor"][0].get<float>(), j["fillColor"][1].get<float>(),
+                                      j["fillColor"][2].get<float>(), j["fillColor"][3].get<float>());
+        pb.fillTexture = j.value("fillTexture", std::string(""));
+
+        // Reset runtime state
+        pb.displayValue = pb.value;
+        pb.completedFired = (pb.value >= pb.maxValue);
+    }
+
+    std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::HorizontalAlignment::Left: return "left";
+        case components::HorizontalAlignment::Center: return "center";
+        case components::HorizontalAlignment::Right: return "right";
+        default: return "left";
+        }
+    }
+
+    components::HorizontalAlignment SceneSerialization::stringToHorizontalAlignment(const std::string& str)
+    {
+        if (str == "center") return components::HorizontalAlignment::Center;
+        if (str == "right") return components::HorizontalAlignment::Right;
+        return components::HorizontalAlignment::Left;
+    }
+
+    std::string SceneSerialization::verticalAlignmentToString(components::VerticalAlignment alignment)
+    {
+        switch (alignment)
+        {
+        case components::VerticalAlignment::Top: return "top";
+        case components::VerticalAlignment::Middle: return "middle";
+        case components::VerticalAlignment::Bottom: return "bottom";
+        default: return "top";
+        }
+    }
+
+    components::VerticalAlignment SceneSerialization::stringToVerticalAlignment(const std::string& str)
+    {
+        if (str == "middle") return components::VerticalAlignment::Middle;
+        if (str == "bottom") return components::VerticalAlignment::Bottom;
+        return components::VerticalAlignment::Top;
+    }
+
+    std::string SceneSerialization::textOverflowToString(components::TextOverflow overflow)
+    {
+        switch (overflow)
+        {
+        case components::TextOverflow::Overflow: return "overflow";
+        case components::TextOverflow::Clip: return "clip";
+        case components::TextOverflow::Ellipsis: return "ellipsis";
+        default: return "overflow";
+        }
+    }
+
+    components::TextOverflow SceneSerialization::stringToTextOverflow(const std::string& str)
+    {
+        if (str == "clip") return components::TextOverflow::Clip;
+        if (str == "ellipsis") return components::TextOverflow::Ellipsis;
+        return components::TextOverflow::Overflow;
+    }
+
+    std::string SceneSerialization::fontStyleToString(components::FontStyle style)
+    {
+        switch (style)
+        {
+        case components::FontStyle::Normal: return "normal";
+        case components::FontStyle::Bold: return "bold";
+        case components::FontStyle::Italic: return "italic";
+        case components::FontStyle::BoldItalic: return "boldItalic";
+        default: return "normal";
+        }
+    }
+
+    components::FontStyle SceneSerialization::stringToFontStyle(const std::string& str)
+    {
+        if (str == "bold") return components::FontStyle::Bold;
+        if (str == "italic") return components::FontStyle::Italic;
+        if (str == "boldItalic") return components::FontStyle::BoldItalic;
+        return components::FontStyle::Normal;
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1615,6 +2529,12 @@ namespace serialization
                 deserializeBillboard(componentsJson["billboard"], billboardComp);
             }
 
+            if (componentsJson.contains("text"))
+            {
+                auto& textComp = entity.addOrReplaceComponent<components::TextComponent>();
+                deserializeText(componentsJson["text"], textComp);
+            }
+
             if (componentsJson.contains("audioSource2D"))
             {
                 auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
@@ -1709,6 +2629,84 @@ namespace serialization
             {
                 auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
                 deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
+            }
+
+            if (componentsJson.contains("uiCanvas"))
+            {
+                auto& canvasComp = entity.addOrReplaceComponent<components::UICanvasComponent>();
+                deserializeUICanvas(componentsJson["uiCanvas"], canvasComp);
+            }
+
+            if (componentsJson.contains("uiRect"))
+            {
+                auto& rectComp = entity.addOrReplaceComponent<components::UIRectComponent>();
+                deserializeUIRect(componentsJson["uiRect"], rectComp);
+            }
+
+            if (componentsJson.contains("uiImage"))
+            {
+                auto& imageComp = entity.addOrReplaceComponent<components::UIImageComponent>();
+                deserializeUIImage(componentsJson["uiImage"], imageComp);
+            }
+
+            if (componentsJson.contains("uiScroll"))
+            {
+                auto& scrollComp = entity.addOrReplaceComponent<components::UIScrollComponent>();
+                deserializeUIScroll(componentsJson["uiScroll"], scrollComp);
+            }
+
+            if (componentsJson.contains("uiLayoutGroup"))
+            {
+                auto& layoutGroupComp = entity.addOrReplaceComponent<components::UILayoutGroupComponent>();
+                deserializeUILayoutGroup(componentsJson["uiLayoutGroup"], layoutGroupComp);
+            }
+
+            if (componentsJson.contains("uiLabel"))
+            {
+                auto& labelComp = entity.addOrReplaceComponent<components::UILabelComponent>();
+                deserializeUILabel(componentsJson["uiLabel"], labelComp);
+            }
+
+            if (componentsJson.contains("uiButton"))
+            {
+                auto& buttonComp = entity.addOrReplaceComponent<components::UIButtonComponent>();
+                deserializeUIButton(componentsJson["uiButton"], buttonComp);
+            }
+
+            if (componentsJson.contains("uiTextInput"))
+            {
+                auto& textInputComp = entity.addOrReplaceComponent<components::UITextInputComponent>();
+                deserializeUITextInput(componentsJson["uiTextInput"], textInputComp);
+            }
+
+            if (componentsJson.contains("uiCheckbox"))
+            {
+                auto& checkboxComp = entity.addOrReplaceComponent<components::UICheckboxComponent>();
+                deserializeUICheckbox(componentsJson["uiCheckbox"], checkboxComp);
+            }
+
+            if (componentsJson.contains("uiDropdown"))
+            {
+                auto& dropdownComp = entity.addOrReplaceComponent<components::UIDropdownComponent>();
+                deserializeUIDropdown(componentsJson["uiDropdown"], dropdownComp);
+            }
+
+            if (componentsJson.contains("uiTabs"))
+            {
+                auto& tabsComp = entity.addOrReplaceComponent<components::UITabsComponent>();
+                deserializeUITabs(componentsJson["uiTabs"], tabsComp);
+            }
+
+            if (componentsJson.contains("uiSlider"))
+            {
+                auto& sliderComp = entity.addOrReplaceComponent<components::UISliderComponent>();
+                deserializeUISlider(componentsJson["uiSlider"], sliderComp);
+            }
+
+            if (componentsJson.contains("uiProgressBar"))
+            {
+                auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
+                deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
             }
         }
 

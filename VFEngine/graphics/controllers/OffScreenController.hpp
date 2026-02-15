@@ -76,6 +76,9 @@ namespace controllers
         bool showClusterDebug = false;
         bool showShadowDebug = false;
         bool playModeActive = false;
+        bool prevLeftMouseDown = false;
+        glm::vec2 uiViewportOffset{0.0f, 0.0f};
+        glm::vec2 uiViewportPanelSize{0.0f, 0.0f};
         postprocess::PostProcessSettings currentPostProcessSettings;
 
     public:
@@ -101,6 +104,7 @@ namespace controllers
         void prepareCameras();
         void prepareFrameMeshes();
         void prepareFrameBillboards();
+        void prepareFrameText();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
         void prepareFrameLightGizmos();
@@ -156,6 +160,15 @@ namespace controllers
         void setShowShadowDebug(bool show) { showShadowDebug = show; }
         bool getShowShadowDebug() const { return showShadowDebug; }
         void prepareFrameShadowDebug();
+
+        void prepareFrameUICanvasOutlines();
+        void prepareFrameUIImages();
+
+        void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize)
+        {
+            uiViewportOffset = offset;
+            uiViewportPanelSize = panelSize;
+        }
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
         postprocess::PostProcessSettings getPostProcessSettings() const;

@@ -33,7 +33,11 @@ public class Entity {
 
     // Find all entities with a specific component type
     // Valid types: "Transform", "Camera", "Mesh", "Material", "Script",
-    //              "AudioSource2D", "AudioSource3D", "IBL", "Billboard"
+    //              "AudioSource2D", "AudioSource3D", "IBL", "Billboard", "Text",
+    //              "UICanvas", "UIRect", "UIImage", "UIScroll", "UILayoutGroup",
+    //              "UILabel", "UIButton", "UITextInput", "UICheckbox", "UIDropdown",
+    //              "UITabs", "UISlider", "UIProgressBar"
+    // Use ComponentType constants for type safety (e.g., ComponentType::UI_BUTTON)
     public static function findWithComponent(string componentType): int[] {
         return _native_entity_findWithComponent(componentType);
     }
@@ -130,14 +134,14 @@ public class Entity {
     // ============================================
 
     // Add a component to an entity
-    // Valid types: "Camera", "Mesh", "Material", "Script", "AudioSource2D", "AudioSource3D"
+    // Valid types: see ComponentType constants for full list
     // Returns true if component was added successfully
     public static function addComponent(int entityId, string componentType): bool {
         return _native_entity_addComponent(entityId, componentType);
     }
 
     // Remove a component from an entity
-    // Valid types: "Camera", "Mesh", "Material", "AudioSource2D", "AudioSource3D"
+    // Valid types: see ComponentType constants for full list
     // Returns true if component was removed successfully
     public static function removeComponent(int entityId, string componentType): bool {
         return _native_entity_removeComponent(entityId, componentType);

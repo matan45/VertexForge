@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "math/MathHelper.hpp"
+#include "text/TextLayout.hpp"
 #include <imgui.h>
 #include <filesystem>
 
@@ -301,6 +302,10 @@ namespace windows
 
             ImGui::Text("Style: %s", fontData.metadata.fontStyle.c_str());
             ImGui::Text("Base Size: %u px", fontData.metadata.baseFontSize);
+            if (resource::hasFlag(fontData.formatFlags, resource::FontFormatFlags::COLOR_EMOJI))
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Color Emoji Font");
+            }
         }
 
         ImGui::Spacing();
@@ -593,160 +598,22 @@ namespace windows
             return;
         }
 
+        auto layout = text::layoutText(fontData, text, fontSize);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        float scale = fontSize / static_cast<float>(fontData.metadata.baseFontSize);
-        float cursorX = startPos.x;
-        float cursorY = startPos.y;
-        float lineHeight = fontData.metadata.lineHeight * scale;
-
-        uint32_t prevCodepoint = 0;
-        size_t i = 0;
-
-        while (i < text.size())
+        for (const auto& glyph : layout.glyphs)
         {
-            uint32_t codepoint = decodeUTF8(text, i);
-
-            if (codepoint == '\n')
-            {
-                cursorX = startPos.x;
-                cursorY += lineHeight;
-                prevCodepoint = 0;
-                continue;
-            }
-
-            if (codepoint == '\r')
-            {
-                continue;
-            }
-
-            const resource::GlyphData* glyph = fontData.findGlyph(codepoint);
-            if (!glyph)
-            {
-                // Skip unknown characters
-                cursorX += fontSize * 0.5f;
-                prevCodepoint = codepoint;
-                continue;
-            }
-
-            if (prevCodepoint != 0)
-            {
-                cursorX += fontData.getKerning(prevCodepoint, codepoint) * scale;
-            }
-
-            float x = cursorX + glyph->bearingX * scale;
-            float y = cursorY + (fontData.metadata.ascender - glyph->bearingY) * scale;
-            float w = glyph->atlasWidth * scale;
-            float h = glyph->atlasHeight * scale;
-
-            float u0 = static_cast<float>(glyph->atlasX) / fontData.atlas.width;
-            float v0 = static_cast<float>(glyph->atlasY) / fontData.atlas.height;
-            float u1 = static_cast<float>(glyph->atlasX + glyph->atlasWidth) / fontData.atlas.width;
-            float v1 = static_cast<float>(glyph->atlasY + glyph->atlasHeight) / fontData.atlas.height;
+            float x = startPos.x + glyph.offset.x;
+            float y = startPos.y + glyph.offset.y;
 
             drawList->AddImage(
                 atlasHandle.imguiDescriptorSet,
                 ImVec2(x, y),
-                ImVec2(x + w, y + h),
-                ImVec2(u0, v0),
-                ImVec2(u1, v1),
+                ImVec2(x + glyph.size.x, y + glyph.size.y),
+                ImVec2(glyph.uvRect.x, glyph.uvRect.y),
+                ImVec2(glyph.uvRect.z, glyph.uvRect.w),
                 IM_COL32(255, 255, 255, 255)
             );
-
-            cursorX += glyph->advanceX * scale;
-            prevCodepoint = codepoint;
         }
-    }
-
-    uint32_t FontPreviewWindow::decodeUTF8(const std::string& text, size_t& index)
-    {
-        if (index >= text.size())
-        {
-            return 0;
-        }
-
-        unsigned char c = static_cast<unsigned char>(text[index]);
-
-        // Helper lambda to validate continuation byte (must be 10xxxxxx pattern)
-        auto isValidContinuation = [&text](size_t idx) -> bool
-        {
-            if (idx >= text.size()) return false;
-            unsigned char b = static_cast<unsigned char>(text[idx]);
-            return (b & 0xC0) == 0x80;
-        };
-
-        // ASCII (0xxxxxxx)
-        if ((c & 0x80) == 0)
-        {
-            index++;
-            return c;
-        }
-
-        // 2-byte sequence (110xxxxx 10xxxxxx)
-        if ((c & 0xE0) == 0xC0)
-        {
-            if (!isValidContinuation(index + 1))
-            {
-                index++;
-                return 0xFFFD;
-            }
-            uint32_t codepoint = (c & 0x1F) << 6;
-            codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F);
-            index += 2;
-            // Reject overlong encodings (codepoint must be >= 0x80 for 2-byte)
-            if (codepoint < 0x80)
-            {
-                return 0xFFFD;
-            }
-            return codepoint;
-        }
-
-        // 3-byte sequence (1110xxxx 10xxxxxx 10xxxxxx)
-        if ((c & 0xF0) == 0xE0)
-        {
-            if (!isValidContinuation(index + 1) || !isValidContinuation(index + 2))
-            {
-                index++;
-                return 0xFFFD;
-            }
-            uint32_t codepoint = (c & 0x0F) << 12;
-            codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F) << 6;
-            codepoint |= (static_cast<unsigned char>(text[index + 2]) & 0x3F);
-            index += 3;
-            // Reject overlong encodings (codepoint must be >= 0x800 for 3-byte)
-            // Also reject UTF-16 surrogate pairs (0xD800-0xDFFF)
-            if (codepoint < 0x800 || (codepoint >= 0xD800 && codepoint <= 0xDFFF))
-            {
-                return 0xFFFD;
-            }
-            return codepoint;
-        }
-
-        // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-        if ((c & 0xF8) == 0xF0)
-        {
-            if (!isValidContinuation(index + 1) || !isValidContinuation(index + 2) ||
-                !isValidContinuation(index + 3))
-            {
-                index++;
-                return 0xFFFD;
-            }
-            uint32_t codepoint = (c & 0x07) << 18;
-            codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F) << 12;
-            codepoint |= (static_cast<unsigned char>(text[index + 2]) & 0x3F) << 6;
-            codepoint |= (static_cast<unsigned char>(text[index + 3]) & 0x3F);
-            index += 4;
-            // Reject overlong encodings (codepoint must be >= 0x10000 for 4-byte)
-            // Also reject codepoints beyond Unicode max (0x10FFFF)
-            if (codepoint < 0x10000 || codepoint > 0x10FFFF)
-            {
-                return 0xFFFD;
-            }
-            return codepoint;
-        }
-
-        // Invalid lead byte (10xxxxxx continuation without lead, or 11111xxx invalid)
-        index++;
-        return 0xFFFD;
     }
 }

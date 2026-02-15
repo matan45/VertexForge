@@ -7,6 +7,7 @@
 namespace core
 {
     class Device;
+    class DeferredDeletionQueue;
 }
 
 namespace render::billboard
@@ -24,7 +25,8 @@ namespace render::billboard
     {
     private:
         core::Device& device;
-        
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
+
         vk::Buffer quadVertexBuffer;
         vk::DeviceMemory quadVertexBufferMemory;
         vk::Buffer quadIndexBuffer;
@@ -44,6 +46,7 @@ namespace render::billboard
 
         void init();
         void cleanUp();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos) const;
@@ -61,5 +64,6 @@ namespace render::billboard
         void createQuadBuffers();
         void createInstanceBuffer();
         void createCameraUBO();
+        void resizeInstanceBuffer(uint32_t requiredCount);
     };
 }

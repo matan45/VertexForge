@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/ScriptingEvents.hpp"
+#include "events/UIEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -9,7 +10,11 @@ namespace windows::details
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
                                  bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
-                                 bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight)
+                                 bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
+                                 bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
+                                 bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
+                                 bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
+                                 bool hasUITabs, bool hasUISlider, bool hasUIProgressBar)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -135,6 +140,20 @@ namespace windows::details
                 }
             }
 
+            if (!hasText)
+            {
+                if (ImGui::Selectable("  Text"))
+                {
+                    events::scene::AddTextComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("SDF text rendering with custom fonts");
+                }
+            }
+
             // Physics components section
             ImGui::Spacing();
             ImGui::TextDisabled("Physics");
@@ -215,9 +234,199 @@ namespace windows::details
                 }
             }
 
+            // UI components section
+            ImGui::Spacing();
+            ImGui::TextDisabled("UI");
+            ImGui::Separator();
+
+            if (!hasUICanvas)
+            {
+                if (ImGui::Selectable("  UI Canvas"))
+                {
+                    events::ui::AddUICanvasComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("UI Canvas with reference resolution and auto-scaling");
+                }
+            }
+
+            if (!hasUIRect)
+            {
+                if (ImGui::Selectable("  UI Rect"))
+                {
+                    events::ui::AddUIRectComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Rect transform for UI anchoring and layout");
+                }
+            }
+
+            if (!hasUIImage)
+            {
+                if (ImGui::Selectable("  UI Image"))
+                {
+                    events::ui::AddUIImageComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Screen-space image with texture and color tint");
+                }
+            }
+
+            if (!hasUILabel)
+            {
+                if (ImGui::Selectable("  UI Label"))
+                {
+                    events::ui::AddUILabelComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Text label with font, alignment, and overflow settings");
+                }
+            }
+
+            if (!hasUIScroll)
+            {
+                if (ImGui::Selectable("  UI Scroll"))
+                {
+                    events::ui::AddUIScrollComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Scrollable container with clipping and scrollbars");
+                }
+            }
+
+            if (!hasUILayoutGroup)
+            {
+                if (ImGui::Selectable("  UI Layout Group"))
+                {
+                    events::ui::AddUILayoutGroupComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Auto-stack children vertically or horizontally");
+                }
+            }
+
+            if (!hasUIButton)
+            {
+                if (ImGui::Selectable("  UI Button"))
+                {
+                    events::ui::AddUIButtonComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Interactive button with state colors and click events");
+                }
+            }
+
+            if (!hasUITextInput)
+            {
+                if (ImGui::Selectable("  UI Text Input"))
+                {
+                    events::ui::AddUITextInputComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Editable text input field with focus and selection");
+                }
+            }
+
+            if (!hasUICheckbox)
+            {
+                if (ImGui::Selectable("  UI Checkbox"))
+                {
+                    events::ui::AddUICheckboxComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Toggleable checkbox with radio group support");
+                }
+            }
+
+            if (!hasUIDropdown)
+            {
+                if (ImGui::Selectable("  UI Dropdown"))
+                {
+                    events::ui::AddUIDropdownComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Dropdown / combo box with selectable options");
+                }
+            }
+
+            if (!hasUITabs)
+            {
+                if (ImGui::Selectable("  UI Tabs"))
+                {
+                    events::ui::AddUITabsComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Tabbed panel container with switchable content views");
+                }
+            }
+
+            if (!hasUISlider)
+            {
+                if (ImGui::Selectable("  UI Slider"))
+                {
+                    events::ui::AddUISliderComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Draggable slider for numeric value input");
+                }
+            }
+
+            if (!hasUIProgressBar)
+            {
+                if (ImGui::Selectable("  UI Progress Bar"))
+                {
+                    events::ui::AddUIProgressBarComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Non-interactive bar displaying progress");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
-                           hasCollider && hasRigidBody && hasVFX && hasBillboard &&
-                           hasDirectionalLight && hasPointLight && hasSpotLight;
+                           hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
+                           hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
+                           hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
+                           hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
+                           hasUITabs && hasUISlider && hasUIProgressBar;
             if (allAdded)
             {
                 ImGui::Spacing();

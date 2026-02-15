@@ -53,12 +53,28 @@ namespace render
         struct PhysicsColliderRenderData;
         struct LightGizmoRenderData;
         struct ClusterDebugRenderData;
+        struct UICanvasOutlineRenderData;
+        struct UICanvasImageRenderData;
     }
 
     namespace billboard
     {
         class BillboardPipeline;
         struct BillboardRenderData;
+    }
+
+    namespace text
+    {
+        class TextPipeline;
+        struct TextRenderData;
+    }
+
+    namespace ui
+    {
+        class UIRenderPipeline;
+        struct UIImageRenderData;
+        class UITextPipeline;
+        struct UITextRenderData;
     }
 
     class RenderPassHandler
@@ -71,6 +87,9 @@ namespace render
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
+        std::unique_ptr<text::TextPipeline> textPipeline;
+        std::unique_ptr<ui::UIRenderPipeline> uiPipeline;
+        std::unique_ptr<ui::UITextPipeline> uiTextPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
@@ -87,6 +106,15 @@ namespace render
 
         bool billboardPipelineInitialized = false;
         std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
+
+        bool textPipelineInitialized = false;
+        std::vector<text::TextRenderData> currentTextDrawList;
+
+        bool uiPipelineInitialized = false;
+        std::vector<ui::UIImageRenderData> currentUIImageDrawList;
+
+        bool uiTextPipelineInitialized = false;
+        std::vector<ui::UITextRenderData> currentUITextDrawList;
 
         bool debugRendererInitialized = false;
         glm::mat4 currentView{1.0f};
@@ -135,6 +163,22 @@ namespace render
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
         void setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards);
 
+        void initTextPipeline();
+        text::TextPipeline* getTextPipeline() const { return textPipeline.get(); }
+        bool isTextPipelineInitialized() const { return textPipelineInitialized; }
+        void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+        void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+
+        void initUIRenderPipeline();
+        ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }
+        bool isUIRenderPipelineInitialized() const { return uiPipelineInitialized; }
+        void setUIImageDrawList(std::vector<ui::UIImageRenderData>&& images);
+
+        void initUITextPipeline();
+        ui::UITextPipeline* getUITextPipeline() const { return uiTextPipeline.get(); }
+        bool isUITextPipelineInitialized() const { return uiTextPipelineInitialized; }
+        void setUITextDrawList(std::vector<ui::UITextRenderData>&& labels);
+
         void initDebugRenderer();
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
         void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
@@ -145,6 +189,8 @@ namespace render
         void setShowClusterDebug(bool show);
         bool getShowClusterDebug() const;
         void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
+        void setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines);
+        void setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }

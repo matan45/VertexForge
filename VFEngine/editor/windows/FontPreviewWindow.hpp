@@ -63,6 +63,5 @@ namespace windows
         void drawLoadingIndicator();
 
         void renderTextWithGlyphs(const std::string& text, float fontSize, ImVec2 startPos);
-        static uint32_t decodeUTF8(const std::string& text, size_t& index);
     };
 }

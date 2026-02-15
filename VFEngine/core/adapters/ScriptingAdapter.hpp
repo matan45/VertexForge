@@ -47,6 +47,44 @@ namespace core
         ::events::SubscriptionToken triggerEnterToken;
         ::events::SubscriptionToken triggerExitToken;
 
+        // UI Button callback subscription tokens
+        ::events::SubscriptionToken buttonClickedToken;
+        ::events::SubscriptionToken buttonPressedToken;
+        ::events::SubscriptionToken buttonReleasedToken;
+        ::events::SubscriptionToken buttonHoverEnterToken;
+        ::events::SubscriptionToken buttonHoverExitToken;
+
+        // UI TextInput callback subscription tokens
+        ::events::SubscriptionToken textInputSubmitToken;
+        ::events::SubscriptionToken textInputChangedToken;
+        ::events::SubscriptionToken textInputFocusedToken;
+        ::events::SubscriptionToken textInputUnfocusedToken;
+
+        // UI Checkbox callback subscription tokens
+        ::events::SubscriptionToken checkboxToggledToken;
+        ::events::SubscriptionToken checkboxHoverEnterToken;
+        ::events::SubscriptionToken checkboxHoverExitToken;
+
+        // UI Dropdown callback subscription tokens
+        ::events::SubscriptionToken dropdownOpenedToken;
+        ::events::SubscriptionToken dropdownClosedToken;
+        ::events::SubscriptionToken dropdownSelectionChangedToken;
+
+        // UI Tabs callback subscription tokens
+        ::events::SubscriptionToken tabSelectedToken;
+        ::events::SubscriptionToken tabChangedToken;
+
+        // UI Slider callback subscription tokens
+        ::events::SubscriptionToken sliderValueChangedToken;
+        ::events::SubscriptionToken sliderDragStartToken;
+        ::events::SubscriptionToken sliderDragEndToken;
+        ::events::SubscriptionToken sliderHoverEnterToken;
+        ::events::SubscriptionToken sliderHoverExitToken;
+
+        // UI ProgressBar callback subscription tokens
+        ::events::SubscriptionToken progressBarValueChangedToken;
+        ::events::SubscriptionToken progressBarCompletedToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -98,5 +136,61 @@ namespace core
         void unsubscribeFromPhysicsEvents();
         void dispatchCollisionCallback(const char* methodName,
                                        ::services::EntityHandle self, ::services::EntityHandle other);
+
+        // UI Button callback helpers
+        void subscribeToUIButtonEvents();
+        void unsubscribeFromUIButtonEvents();
+        void dispatchUIButtonCallback(const char* methodName,
+                                      ::services::EntityHandle buttonEntity,
+                                      const std::string& entityName);
+
+        // UI TextInput callback helpers
+        void subscribeToUITextInputEvents();
+        void unsubscribeFromUITextInputEvents();
+        void dispatchUITextInputCallback(const char* methodName,
+                                         ::services::EntityHandle entity,
+                                         const std::string& entityName,
+                                         const std::string& text = "");
+
+        // UI Checkbox callback helpers
+        void subscribeToUICheckboxEvents();
+        void unsubscribeFromUICheckboxEvents();
+        void dispatchUICheckboxCallback(const char* methodName,
+                                        ::services::EntityHandle checkboxEntity,
+                                        const std::string& entityName,
+                                        bool newState = false, bool previousState = false);
+
+        // UI Dropdown callback helpers
+        void subscribeToUIDropdownEvents();
+        void unsubscribeFromUIDropdownEvents();
+        void dispatchUIDropdownCallback(const char* methodName,
+                                        ::services::EntityHandle dropdownEntity,
+                                        const std::string& entityName,
+                                        int previousIndex = -1, int newIndex = -1);
+
+        // UI Tabs callback helpers
+        void subscribeToUITabsEvents();
+        void unsubscribeFromUITabsEvents();
+        void dispatchUITabsCallback(const char* methodName,
+                                    ::services::EntityHandle tabsEntity,
+                                    const std::string& entityName,
+                                    int tabIndex = -1, int previousTabIndex = -1);
+
+        // UI Slider callback helpers
+        void subscribeToUISliderEvents();
+        void unsubscribeFromUISliderEvents();
+        void dispatchUISliderCallback(const char* methodName,
+                                      ::services::EntityHandle sliderEntity,
+                                      const std::string& entityName,
+                                      float newValue = 0.0f, float previousValue = 0.0f,
+                                      float finalValue = 0.0f);
+
+        // UI ProgressBar callback helpers
+        void subscribeToUIProgressBarEvents();
+        void unsubscribeFromUIProgressBarEvents();
+        void dispatchUIProgressBarCallback(const char* methodName,
+                                           ::services::EntityHandle progressBarEntity,
+                                           const std::string& entityName,
+                                           float newValue = 0.0f, float previousValue = 0.0f);
     };
 }

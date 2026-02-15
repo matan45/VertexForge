@@ -57,6 +57,14 @@ namespace windows
             glm::vec2 vp(viewportPos.x, viewportPos.y);
             glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
 
+            if (isPlayMode)
+            {
+                events::render::SetUIViewportOffsetCommand offsetCmd;
+                offsetCmd.offset = vp;
+                offsetCmd.panelSize = vs;
+                dispatcher.execute(offsetCmd);
+            }
+
             // Update sculpt/paint cursor UV BEFORE render so raycast uses current mouse position
             updateSculptCursorUV(vp, vs);
             updatePaintCursorUV(vp, vs);
