@@ -717,4 +717,70 @@ namespace events::ui {
         std::string_view getName() const override { return "UISliderHoverExit"; }
     };
 
+    // ============================================
+    // UI ProgressBar Commands
+    // ============================================
+
+    struct AddUIProgressBarComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUIProgressBarComponent"; }
+    };
+
+    struct RemoveUIProgressBarComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUIProgressBarComponent"; }
+    };
+
+    struct SetUIProgressBarDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UIProgressBarData progressBarData;
+
+        std::string_view getName() const override { return "SetUIProgressBarData"; }
+    };
+
+    struct SetUIProgressBarValueCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        float value;
+
+        std::string_view getName() const override { return "SetUIProgressBarValue"; }
+    };
+
+    // ============================================
+    // UI ProgressBar Queries
+    // ============================================
+
+    struct HasUIProgressBarComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUIProgressBarComponent"; }
+    };
+
+    struct GetUIProgressBarDataQuery : IQuery<std::optional<services::UIProgressBarData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIProgressBarData"; }
+    };
+
+    // ============================================
+    // UI ProgressBar Notifications
+    // ============================================
+
+    struct UIProgressBarValueChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        float newValue;
+        float previousValue;
+
+        std::string_view getName() const override { return "UIProgressBarValueChanged"; }
+    };
+
+    struct UIProgressBarCompletedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+
+        std::string_view getName() const override { return "UIProgressBarCompleted"; }
+    };
+
 }

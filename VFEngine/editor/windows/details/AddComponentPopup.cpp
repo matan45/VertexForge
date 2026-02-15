@@ -14,7 +14,7 @@ namespace windows::details
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
-                                 bool hasUITabs, bool hasUISlider)
+                                 bool hasUITabs, bool hasUISlider, bool hasUIProgressBar)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -407,12 +407,26 @@ namespace windows::details
                 }
             }
 
+            if (!hasUIProgressBar)
+            {
+                if (ImGui::Selectable("  UI Progress Bar"))
+                {
+                    events::ui::AddUIProgressBarComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Non-interactive bar displaying progress");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
                            hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
-                           hasUITabs && hasUISlider;
+                           hasUITabs && hasUISlider && hasUIProgressBar;
             if (allAdded)
             {
                 ImGui::Spacing();

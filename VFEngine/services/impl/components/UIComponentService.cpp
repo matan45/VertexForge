@@ -1563,6 +1563,165 @@ namespace services {
         return true;
     }
 
+    // ========== UI ProgressBar ==========
+
+    bool UIComponentService::addUIProgressBarComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UIProgressBarComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UIProgressBarComponent>();
+
+        // Auto-add UIRectComponent if missing
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUIProgressBarComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIProgressBarComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UIProgressBarComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUIProgressBarComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UIProgressBarComponent>();
+    }
+
+    std::optional<UIProgressBarData> UIComponentService::getUIProgressBarData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIProgressBarComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UIProgressBarComponent>();
+
+        UIProgressBarData data;
+        data.minValue = comp.minValue;
+        data.maxValue = comp.maxValue;
+        data.value = comp.value;
+        data.orientation = static_cast<uint8_t>(comp.orientation);
+        data.invertDirection = comp.invertDirection;
+        data.smoothInterpolation = comp.smoothInterpolation;
+        data.interpolationSpeed = comp.interpolationSpeed;
+        data.trackColor = comp.trackColor;
+        data.trackTexture = comp.trackTexture;
+        data.fillColor = comp.fillColor;
+        data.fillTexture = comp.fillTexture;
+        data.displayValue = comp.displayValue;
+        return data;
+    }
+
+    bool UIComponentService::setUIProgressBarData(EntityHandle entity, const UIProgressBarData& progressBarData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIProgressBarComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIProgressBarComponent>();
+        comp.minValue = progressBarData.minValue;
+        comp.maxValue = progressBarData.maxValue;
+        comp.value = progressBarData.value;
+        comp.orientation = static_cast<components::UISliderOrientation>(progressBarData.orientation);
+        comp.invertDirection = progressBarData.invertDirection;
+        comp.smoothInterpolation = progressBarData.smoothInterpolation;
+        comp.interpolationSpeed = progressBarData.interpolationSpeed;
+        comp.trackColor = progressBarData.trackColor;
+        comp.trackTexture = progressBarData.trackTexture;
+        comp.fillColor = progressBarData.fillColor;
+        comp.fillTexture = progressBarData.fillTexture;
+        return true;
+    }
+
+    bool UIComponentService::setUIProgressBarValue(EntityHandle entity, float value) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UIProgressBarComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UIProgressBarComponent>();
+        float previousValue = comp.value;
+
+        // Clamp to [min, max]
+        float newValue = std::max(comp.minValue, std::min(value, comp.maxValue));
+        comp.value = newValue;
+
+        // Publish value changed notification if value actually changed
+        if (newValue != previousValue) {
+            std::string entityName;
+            if (sceneEntity.hasComponent<components::NameComponent>()) {
+                entityName = sceneEntity.getComponent<components::NameComponent>().name;
+            }
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::ui::UIProgressBarValueChangedNotification notif;
+            notif.entity = entity;
+            notif.entityName = std::move(entityName);
+            notif.newValue = newValue;
+            notif.previousValue = previousValue;
+            dispatcher.publish(notif);
+        }
+
+        // Completion notification logic
+        if (newValue >= comp.maxValue && !comp.completedFired) {
+            comp.completedFired = true;
+
+            std::string entityName;
+            if (sceneEntity.hasComponent<components::NameComponent>()) {
+                entityName = sceneEntity.getComponent<components::NameComponent>().name;
+            }
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::ui::UIProgressBarCompletedNotification notif;
+            notif.entity = entity;
+            notif.entityName = std::move(entityName);
+            dispatcher.publish(notif);
+        } else if (newValue < comp.maxValue) {
+            comp.completedFired = false;
+        }
+
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -1928,6 +2087,38 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUISliderDataQuery>(
             [this](const events::ui::GetUISliderDataQuery& query) {
                 return getUISliderData(query.entity);
+            });
+
+        // ProgressBar commands
+        dispatcher.registerCommandHandler<events::ui::AddUIProgressBarComponentCommand>(
+            [this](const events::ui::AddUIProgressBarComponentCommand& cmd) {
+                return addUIProgressBarComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUIProgressBarComponentCommand>(
+            [this](const events::ui::RemoveUIProgressBarComponentCommand& cmd) {
+                return removeUIProgressBarComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIProgressBarDataCommand>(
+            [this](const events::ui::SetUIProgressBarDataCommand& cmd) {
+                return setUIProgressBarData(cmd.entity, cmd.progressBarData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIProgressBarValueCommand>(
+            [this](const events::ui::SetUIProgressBarValueCommand& cmd) {
+                return setUIProgressBarValue(cmd.entity, cmd.value);
+            });
+
+        // ProgressBar queries
+        dispatcher.registerQueryHandler<events::ui::HasUIProgressBarComponentQuery>(
+            [this](const events::ui::HasUIProgressBarComponentQuery& query) {
+                return hasUIProgressBarComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIProgressBarDataQuery>(
+            [this](const events::ui::GetUIProgressBarDataQuery& query) {
+                return getUIProgressBarData(query.entity);
             });
     }
 

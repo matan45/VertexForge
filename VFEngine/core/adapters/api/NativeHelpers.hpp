@@ -141,6 +141,7 @@ namespace core::api
         if (type == "UIDropdown") return services::ComponentTypeId::UIDropdown;
         if (type == "UITabs") return services::ComponentTypeId::UITabs;
         if (type == "UISlider") return services::ComponentTypeId::UISlider;
+        if (type == "UIProgressBar") return services::ComponentTypeId::UIProgressBar;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -182,6 +183,7 @@ namespace core::api
         case services::ComponentTypeId::UIDropdown: return "UIDropdown";
         case services::ComponentTypeId::UITabs: return "UITabs";
         case services::ComponentTypeId::UISlider: return "UISlider";
+        case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
         default: return "Unknown";
         }
     }

@@ -51,4 +51,5 @@ public class ComponentType {
     public static final string UI_DROPDOWN = "UIDropdown";
     public static final string UI_TABS = "UITabs";
     public static final string UI_SLIDER = "UISlider";
+    public static final string UI_PROGRESS_BAR = "UIProgressBar";
 }

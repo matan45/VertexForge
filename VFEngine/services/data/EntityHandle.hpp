@@ -64,6 +64,7 @@ namespace services {
         UIDropdown,
         UITabs,
         UISlider,
+        UIProgressBar,
     };
 
 }

@@ -309,6 +309,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UIProgressBar:
+            {
+                auto view = registry.view<components::UIProgressBarComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -394,6 +403,8 @@ namespace services
             return registry.all_of<components::UITabsComponent>(enttEntity);
         case ComponentTypeId::UISlider:
             return registry.all_of<components::UISliderComponent>(enttEntity);
+        case ComponentTypeId::UIProgressBar:
+            return registry.all_of<components::UIProgressBarComponent>(enttEntity);
         default:
             return false;
         }
@@ -466,6 +477,8 @@ namespace services
             types.push_back(ComponentTypeId::UITabs);
         if (registry.all_of<components::UISliderComponent>(enttEntity))
             types.push_back(ComponentTypeId::UISlider);
+        if (registry.all_of<components::UIProgressBarComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UIProgressBar);
 
         return types;
     }

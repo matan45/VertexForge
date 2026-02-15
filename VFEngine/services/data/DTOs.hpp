@@ -464,4 +464,29 @@ namespace services
         uint8_t currentState = 0; // 0=Normal, 1=Hovered, 2=Pressed, 3=Disabled
         bool isDragging = false;
     };
+
+    struct UIProgressBarData
+    {
+        // Value config
+        float minValue = 0.0f;
+        float maxValue = 1.0f;
+        float value = 0.0f;
+        uint8_t orientation = 0; // 0=Horizontal, 1=Vertical
+        bool invertDirection = false;
+
+        // Smooth interpolation
+        bool smoothInterpolation = false;
+        float interpolationSpeed = 5.0f;
+
+        // Track appearance
+        glm::vec4 trackColor{0.2f, 0.2f, 0.2f, 1.0f};
+        std::string trackTexture;
+
+        // Fill appearance
+        glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
+        std::string fillTexture;
+
+        // Runtime
+        float displayValue = 0.0f;
+    };
 }

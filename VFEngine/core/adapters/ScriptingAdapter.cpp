@@ -44,6 +44,7 @@ namespace core
             subscribeToUIDropdownEvents();
             subscribeToUITabsEvents();
             subscribeToUISliderEvents();
+            subscribeToUIProgressBarEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -72,6 +73,7 @@ namespace core
         unsubscribeFromUIDropdownEvents();
         unsubscribeFromUITabsEvents();
         unsubscribeFromUISliderEvents();
+        unsubscribeFromUIProgressBarEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -312,6 +314,10 @@ namespace core
             if (interpreter->classImplementsInterface(className, "IUISliderListener"))
             {
                 interfaces.insert("IUISliderListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUIProgressBarListener"))
+            {
+                interfaces.insert("IUIProgressBarListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -1263,6 +1269,98 @@ namespace core
                     // onSliderDragStart, onSliderHoverEnter, onSliderHoverExit
                     interpreter->callMethod(instance, methodName,
                         {value::Value(static_cast<int>(sliderEntity.id)),
+                         value::Value(entityName)});
+                }
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    // ============================================
+    // UI ProgressBar event helpers
+    // ============================================
+
+    void ScriptingAdapter::subscribeToUIProgressBarEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        progressBarValueChangedToken = dispatcher.subscribe<::events::ui::UIProgressBarValueChangedNotification>(
+            [this](const ::events::ui::UIProgressBarValueChangedNotification& notif)
+            {
+                dispatchUIProgressBarCallback("onProgressBarValueChanged", notif.entity, notif.entityName,
+                                              notif.newValue, notif.previousValue);
+            });
+
+        progressBarCompletedToken = dispatcher.subscribe<::events::ui::UIProgressBarCompletedNotification>(
+            [this](const ::events::ui::UIProgressBarCompletedNotification& notif)
+            {
+                dispatchUIProgressBarCallback("onProgressBarCompleted", notif.entity, notif.entityName);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI progress bar events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUIProgressBarEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (progressBarValueChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(progressBarValueChangedToken);
+        }
+        if (progressBarCompletedToken.isValid())
+        {
+            dispatcher.unsubscribe(progressBarCompletedToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI progress bar events");
+    }
+
+    void ScriptingAdapter::dispatchUIProgressBarCallback(const char* methodName,
+                                                          ::services::EntityHandle progressBarEntity,
+                                                          const std::string& entityName,
+                                                          float newValue, float previousValue)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUIProgressBarListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (method == "onProgressBarValueChanged")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(progressBarEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<float>(newValue)),
+                         value::Value(static_cast<float>(previousValue))});
+                }
+                else
+                {
+                    // onProgressBarCompleted
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(progressBarEntity.id)),
                          value::Value(entityName)});
                 }
             }

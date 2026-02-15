@@ -174,6 +174,9 @@ namespace serialization
         static json serializeUISlider(const components::UISliderComponent& slider);
         static void deserializeUISlider(const json& j, components::UISliderComponent& slider);
 
+        static json serializeUIProgressBar(const components::UIProgressBarComponent& progressBar);
+        static void deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& progressBar);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

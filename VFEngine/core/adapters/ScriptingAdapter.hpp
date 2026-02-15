@@ -81,6 +81,10 @@ namespace core
         ::events::SubscriptionToken sliderHoverEnterToken;
         ::events::SubscriptionToken sliderHoverExitToken;
 
+        // UI ProgressBar callback subscription tokens
+        ::events::SubscriptionToken progressBarValueChangedToken;
+        ::events::SubscriptionToken progressBarCompletedToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -180,5 +184,13 @@ namespace core
                                       const std::string& entityName,
                                       float newValue = 0.0f, float previousValue = 0.0f,
                                       float finalValue = 0.0f);
+
+        // UI ProgressBar callback helpers
+        void subscribeToUIProgressBarEvents();
+        void unsubscribeFromUIProgressBarEvents();
+        void dispatchUIProgressBarCallback(const char* methodName,
+                                           ::services::EntityHandle progressBarEntity,
+                                           const std::string& entityName,
+                                           float newValue = 0.0f, float previousValue = 0.0f);
     };
 }

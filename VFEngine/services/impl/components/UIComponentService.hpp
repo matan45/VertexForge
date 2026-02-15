@@ -115,6 +115,14 @@ namespace services {
         std::optional<UISliderData> getUISliderData(EntityHandle entity) const;
         bool setUISliderData(EntityHandle entity, const UISliderData& sliderData);
         bool setUISliderValue(EntityHandle entity, float value);
+
+        // UI ProgressBar Operations
+        bool addUIProgressBarComponent(EntityHandle entity);
+        bool removeUIProgressBarComponent(EntityHandle entity);
+        bool hasUIProgressBarComponent(EntityHandle entity) const;
+        std::optional<UIProgressBarData> getUIProgressBarData(EntityHandle entity) const;
+        bool setUIProgressBarData(EntityHandle entity, const UIProgressBarData& progressBarData);
+        bool setUIProgressBarValue(EntityHandle entity, float value);
     };
 
 }

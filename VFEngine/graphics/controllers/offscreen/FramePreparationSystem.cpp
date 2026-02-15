@@ -1778,6 +1778,131 @@ namespace controllers::offscreen
             }
         }
 
+        // --- Generate progress bar track + fill draw data ---
+        {
+            const std::string whiteTex = "__white_1x1__";
+            auto progressBarView = registry.view<components::UIProgressBarComponent, components::UIRectComponent>();
+            for (auto pbEntity : progressBarView)
+            {
+                if (registry.all_of<components::NameComponent>(pbEntity))
+                    if (!registry.get<components::NameComponent>(pbEntity).isActive)
+                        continue;
+
+                auto& pbComp = registry.get<components::UIProgressBarComponent>(pbEntity);
+                const auto& rectComp = registry.get<components::UIRectComponent>(pbEntity);
+
+                const auto* canvas = findCanvasForEntity(registry, pbEntity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(pbEntity))
+                    canvas = &registry.get<components::UICanvasComponent>(pbEntity);
+                if (!canvas) continue;
+
+                float pbVw = static_cast<float>(ctx.viewportWidth);
+                float pbVh = static_cast<float>(ctx.viewportHeight);
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(pbVw / canvas->referenceWidth, pbVh / canvas->referenceHeight);
+
+                PixelRect pbRect = resolvePixelRect(rectComp, pbVw, pbVh, scale);
+
+                // Apply scroll offset if inside a scroll container
+                entt::entity scrollAnc = entt::null;
+                {
+                    entt::entity cur = pbEntity;
+                    while (registry.all_of<components::ParentComponent>(cur))
+                    {
+                        entt::entity p = registry.get<components::ParentComponent>(cur).parent;
+                        if (p == entt::null || !registry.valid(p)) break;
+                        if (scrollAnc == entt::null && registry.all_of<components::UIScrollComponent>(p))
+                            scrollAnc = p;
+                        if (registry.all_of<components::UICanvasComponent>(p)) break;
+                        cur = p;
+                    }
+                }
+                glm::vec4 scissor{0.0f};
+                if (scrollAnc != entt::null)
+                {
+                    auto scIt = scrollContainers.find(static_cast<uint32_t>(scrollAnc));
+                    if (scIt != scrollContainers.end())
+                    {
+                        pbRect.x -= scIt->second.scrollOffset.x;
+                        pbRect.y -= scIt->second.scrollOffset.y;
+                        scissor = scIt->second.scissorRect;
+                    }
+                }
+
+                // Smooth interpolation: lerp displayValue toward value
+                if (pbComp.smoothInterpolation)
+                {
+                    float diff = pbComp.value - pbComp.displayValue;
+                    if (std::abs(diff) > 0.0001f)
+                    {
+                        pbComp.displayValue += diff * std::min(1.0f, pbComp.interpolationSpeed * ctx.deltaTime);
+                    }
+                    else
+                    {
+                        pbComp.displayValue = pbComp.value;
+                    }
+                }
+                else
+                {
+                    pbComp.displayValue = pbComp.value;
+                }
+
+                float normalizedValue = (pbComp.maxValue > pbComp.minValue)
+                    ? (pbComp.displayValue - pbComp.minValue) / (pbComp.maxValue - pbComp.minValue)
+                    : 0.0f;
+                normalizedValue = std::max(0.0f, std::min(1.0f, normalizedValue));
+
+                // Track background rect
+                std::string trackTex = pbComp.trackTexture.empty() ? whiteTex : pbComp.trackTexture;
+                {
+                    render::ui::UIImageRenderData track;
+                    track.texturePath = trackTex;
+                    track.position = glm::vec2(pbRect.x, pbRect.y);
+                    track.size = glm::vec2(pbRect.w, pbRect.h);
+                    track.colorTint = pbComp.trackColor;
+                    track.scissorRect = scissor;
+                    drawList.push_back(std::move(track));
+                }
+
+                // Fill rect
+                std::string fillTex = pbComp.fillTexture.empty() ? whiteTex : pbComp.fillTexture;
+                if (normalizedValue > 0.0f)
+                {
+                    if (pbComp.orientation == components::UISliderOrientation::Horizontal)
+                    {
+                        float fillW = pbRect.w * normalizedValue;
+                        float fillX = pbComp.invertDirection
+                            ? (pbRect.x + pbRect.w - fillW)
+                            : pbRect.x;
+
+                        render::ui::UIImageRenderData fill;
+                        fill.texturePath = fillTex;
+                        fill.position = glm::vec2(fillX, pbRect.y);
+                        fill.size = glm::vec2(fillW, pbRect.h);
+                        fill.colorTint = pbComp.fillColor;
+                        fill.scissorRect = scissor;
+                        drawList.push_back(std::move(fill));
+                    }
+                    else // Vertical
+                    {
+                        float fillH = pbRect.h * normalizedValue;
+                        float fillY = pbComp.invertDirection
+                            ? pbRect.y
+                            : (pbRect.y + pbRect.h - fillH);
+
+                        render::ui::UIImageRenderData fill;
+                        fill.texturePath = fillTex;
+                        fill.position = glm::vec2(pbRect.x, fillY);
+                        fill.size = glm::vec2(pbRect.w, fillH);
+                        fill.colorTint = pbComp.fillColor;
+                        fill.scissorRect = scissor;
+                        drawList.push_back(std::move(fill));
+                    }
+                }
+            }
+        }
+
         // --- Generate scrollbar draw data (rendered on top of content) ---
         {
             constexpr float SCROLLBAR_WIDTH = 8.0f;

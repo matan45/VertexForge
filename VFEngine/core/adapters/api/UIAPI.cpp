@@ -936,5 +936,172 @@ namespace core::api
 
                 return value::Value();
             });
+
+        // ============================================
+        // UI ProgressBar Native Functions
+        // ============================================
+
+        // _native_ui_getProgressBarValue(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getProgressBarValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getProgressBarValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->value);
+            });
+
+        // _native_ui_setProgressBarValue(entityId, value) -> void
+        interpreter->registerNativeFunction("_native_ui_setProgressBarValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setProgressBarValue");
+                float val = extractFloat(args[1], "_native_ui_setProgressBarValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::SetUIProgressBarValueCommand cmd;
+                cmd.entity = handle;
+                cmd.value = val;
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getProgressBarDisplayValue(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getProgressBarDisplayValue",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getProgressBarDisplayValue");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->displayValue);
+            });
+
+        // _native_ui_getProgressBarMin(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getProgressBarMin",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getProgressBarMin");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->minValue);
+            });
+
+        // _native_ui_getProgressBarMax(entityId) -> double
+        interpreter->registerNativeFunction("_native_ui_getProgressBarMax",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(0.0f);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getProgressBarMax");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(0.0f);
+                }
+
+                return value::Value(data->maxValue);
+            });
+
+        // _native_ui_setProgressBarMinMax(entityId, min, max) -> void
+        interpreter->registerNativeFunction("_native_ui_setProgressBarMinMax",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 3)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setProgressBarMinMax");
+                float minVal = extractFloat(args[1], "_native_ui_setProgressBarMinMax");
+                float maxVal = extractFloat(args[2], "_native_ui_setProgressBarMinMax");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value();
+                }
+
+                auto progressBarData = data.value();
+                progressBarData.minValue = minVal;
+                progressBarData.maxValue = maxVal;
+
+                events::ui::SetUIProgressBarDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.progressBarData = progressBarData;
+                dispatcher.execute(setCmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_isProgressBarCompleted(entityId) -> bool
+        interpreter->registerNativeFunction("_native_ui_isProgressBarCompleted",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(false);
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_isProgressBarCompleted");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUIProgressBarDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value())
+                {
+                    return value::Value(false);
+                }
+
+                return value::Value(data->value >= data->maxValue);
+            });
     }
 }

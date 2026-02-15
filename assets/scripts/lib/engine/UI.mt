@@ -265,4 +265,47 @@ public class UI {
     public static function setSliderMinMax(int entityId, float min, float max): void {
         _native_ui_setSliderMinMax(entityId, min, max);
     }
+
+    // ============================================
+    // Progress Bar Queries
+    // ============================================
+
+    // Get the current target value of a progress bar
+    public static function getProgressBarValue(int entityId): float {
+        return _native_ui_getProgressBarValue(entityId);
+    }
+
+    // Get the current display value (may differ from target when smooth interpolation is active)
+    public static function getProgressBarDisplayValue(int entityId): float {
+        return _native_ui_getProgressBarDisplayValue(entityId);
+    }
+
+    // Get the minimum value of a progress bar
+    public static function getProgressBarMin(int entityId): float {
+        return _native_ui_getProgressBarMin(entityId);
+    }
+
+    // Get the maximum value of a progress bar
+    public static function getProgressBarMax(int entityId): float {
+        return _native_ui_getProgressBarMax(entityId);
+    }
+
+    // Check if the progress bar has reached its maximum value
+    public static function isProgressBarCompleted(int entityId): bool {
+        return _native_ui_isProgressBarCompleted(entityId);
+    }
+
+    // ============================================
+    // Progress Bar Control
+    // ============================================
+
+    // Set the value of a progress bar (clamped to min/max)
+    public static function setProgressBarValue(int entityId, float value): void {
+        _native_ui_setProgressBarValue(entityId, value);
+    }
+
+    // Set the min and max range of a progress bar
+    public static function setProgressBarMinMax(int entityId, float min, float max): void {
+        _native_ui_setProgressBarMinMax(entityId, min, max);
+    }
 }

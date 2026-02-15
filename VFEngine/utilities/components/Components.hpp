@@ -865,4 +865,30 @@ namespace components
         glm::vec2 dragStartMousePos{0.0f, 0.0f};
         float dragStartValue = 0.0f;
     };
+
+    struct UIProgressBarComponent
+    {
+        // Value config (serialized)
+        float minValue = 0.0f;
+        float maxValue = 1.0f;
+        float value = 0.0f;
+        UISliderOrientation orientation = UISliderOrientation::Horizontal;
+        bool invertDirection = false;
+
+        // Smooth interpolation (serialized)
+        bool smoothInterpolation = false;
+        float interpolationSpeed = 5.0f;
+
+        // Track appearance (serialized)
+        glm::vec4 trackColor{0.2f, 0.2f, 0.2f, 1.0f};
+        std::string trackTexture;
+
+        // Fill appearance (serialized)
+        glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
+        std::string fillTexture;
+
+        // Runtime state (NOT serialized)
+        float displayValue = 0.0f;
+        bool completedFired = false;
+    };
 }

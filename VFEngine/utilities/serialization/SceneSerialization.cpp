@@ -248,6 +248,12 @@ namespace serialization
                 entity.getComponent<components::UISliderComponent>());
         }
 
+        if (entity.hasComponent<components::UIProgressBarComponent>())
+        {
+            componentsJson["uiProgressBar"] = serializeUIProgressBar(
+                entity.getComponent<components::UIProgressBarComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -2277,6 +2283,62 @@ namespace serialization
         slider.dragStartValue = 0.0f;
     }
 
+    json SceneSerialization::serializeUIProgressBar(const components::UIProgressBarComponent& pb)
+    {
+        json j;
+        j["minValue"] = pb.minValue;
+        j["maxValue"] = pb.maxValue;
+        j["value"] = pb.value;
+
+        switch (pb.orientation) {
+            case components::UISliderOrientation::Vertical: j["orientation"] = "Vertical"; break;
+            default: j["orientation"] = "Horizontal"; break;
+        }
+
+        j["invertDirection"] = pb.invertDirection;
+        j["smoothInterpolation"] = pb.smoothInterpolation;
+        j["interpolationSpeed"] = pb.interpolationSpeed;
+
+        j["trackColor"] = json::array({pb.trackColor.r, pb.trackColor.g, pb.trackColor.b, pb.trackColor.a});
+        if (!pb.trackTexture.empty()) j["trackTexture"] = pb.trackTexture;
+
+        j["fillColor"] = json::array({pb.fillColor.r, pb.fillColor.g, pb.fillColor.b, pb.fillColor.a});
+        if (!pb.fillTexture.empty()) j["fillTexture"] = pb.fillTexture;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& pb)
+    {
+        pb.minValue = j.value("minValue", 0.0f);
+        pb.maxValue = j.value("maxValue", 1.0f);
+        pb.value = j.value("value", 0.0f);
+
+        std::string orientStr = j.value("orientation", std::string("Horizontal"));
+        if (orientStr == "Vertical")
+            pb.orientation = components::UISliderOrientation::Vertical;
+        else
+            pb.orientation = components::UISliderOrientation::Horizontal;
+
+        pb.invertDirection = j.value("invertDirection", false);
+        pb.smoothInterpolation = j.value("smoothInterpolation", false);
+        pb.interpolationSpeed = j.value("interpolationSpeed", 5.0f);
+
+        if (j.contains("trackColor") && j["trackColor"].is_array() && j["trackColor"].size() >= 4)
+            pb.trackColor = glm::vec4(j["trackColor"][0].get<float>(), j["trackColor"][1].get<float>(),
+                                       j["trackColor"][2].get<float>(), j["trackColor"][3].get<float>());
+        pb.trackTexture = j.value("trackTexture", std::string(""));
+
+        if (j.contains("fillColor") && j["fillColor"].is_array() && j["fillColor"].size() >= 4)
+            pb.fillColor = glm::vec4(j["fillColor"][0].get<float>(), j["fillColor"][1].get<float>(),
+                                      j["fillColor"][2].get<float>(), j["fillColor"][3].get<float>());
+        pb.fillTexture = j.value("fillTexture", std::string(""));
+
+        // Reset runtime state
+        pb.displayValue = pb.value;
+        pb.completedFired = (pb.value >= pb.maxValue);
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2639,6 +2701,12 @@ namespace serialization
             {
                 auto& sliderComp = entity.addOrReplaceComponent<components::UISliderComponent>();
                 deserializeUISlider(componentsJson["uiSlider"], sliderComp);
+            }
+
+            if (componentsJson.contains("uiProgressBar"))
+            {
+                auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
+                deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
             }
         }
 

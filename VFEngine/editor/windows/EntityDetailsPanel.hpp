@@ -32,6 +32,7 @@
 #include "details/UIDropdownDrawer.hpp"
 #include "details/UITabsDrawer.hpp"
 #include "details/UISliderDrawer.hpp"
+#include "details/UIProgressBarDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -71,6 +72,7 @@ namespace windows
         details::UIDropdownDrawer uiDropdownDrawer;
         details::UITabsDrawer uiTabsDrawer;
         details::UISliderDrawer uiSliderDrawer;
+        details::UIProgressBarDrawer uiProgressBarDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:
