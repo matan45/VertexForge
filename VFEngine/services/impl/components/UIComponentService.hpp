@@ -107,6 +107,14 @@ namespace services {
         std::optional<UITabsData> getUITabsData(EntityHandle entity) const;
         bool setUITabsData(EntityHandle entity, const UITabsData& tabsData);
         bool selectTab(EntityHandle entity, int tabIndex);
+
+        // UI Slider Operations
+        bool addUISliderComponent(EntityHandle entity);
+        bool removeUISliderComponent(EntityHandle entity);
+        bool hasUISliderComponent(EntityHandle entity) const;
+        std::optional<UISliderData> getUISliderData(EntityHandle entity) const;
+        bool setUISliderData(EntityHandle entity, const UISliderData& sliderData);
+        bool setUISliderValue(EntityHandle entity, float value);
     };
 
 }

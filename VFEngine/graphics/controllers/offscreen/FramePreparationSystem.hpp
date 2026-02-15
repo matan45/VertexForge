@@ -90,6 +90,7 @@ namespace controllers::offscreen
         void processUITextInputInteraction(const FrameContext& ctx);
         void processUIDropdownInteraction(const FrameContext& ctx);
         void processUITabsInteraction(const FrameContext& ctx);
+        void processUISliderInteraction(const FrameContext& ctx);
 
         // Track which text input entity is currently focused (-1 = none)
         entt::entity focusedTextInput = entt::null;

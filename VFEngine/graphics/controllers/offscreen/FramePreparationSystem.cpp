@@ -1115,6 +1115,9 @@ namespace controllers::offscreen
         // --- Tabs interaction (tab switching logic only) ---
         processUITabsInteraction(ctx);
 
+        // --- Slider interaction (drag, click-to-set, state machine) ---
+        processUISliderInteraction(ctx);
+
         std::vector<render::ui::UIImageRenderData> drawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -1642,6 +1645,137 @@ namespace controllers::offscreen
             if (!canvas) continue;
 
             emitUIImage(entity, scrollAncestor, canvas);
+        }
+
+        // --- Generate slider fill + handle draw data (rendered on top of slider track) ---
+        {
+            const std::string whiteTex = "__white_1x1__";
+            auto sliderDrawView = registry.view<components::UISliderComponent, components::UIRectComponent, components::UIImageComponent>();
+            for (auto sliderEntity : sliderDrawView)
+            {
+                if (registry.all_of<components::NameComponent>(sliderEntity))
+                    if (!registry.get<components::NameComponent>(sliderEntity).isActive)
+                        continue;
+
+                const auto& sliderComp = registry.get<components::UISliderComponent>(sliderEntity);
+                const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
+
+                const auto* canvas = findCanvasForEntity(registry, sliderEntity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(sliderEntity))
+                    canvas = &registry.get<components::UICanvasComponent>(sliderEntity);
+                if (!canvas) continue;
+
+                float sliderVw = static_cast<float>(ctx.viewportWidth);
+                float sliderVh = static_cast<float>(ctx.viewportHeight);
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(sliderVw / canvas->referenceWidth, sliderVh / canvas->referenceHeight);
+
+                PixelRect sliderRect = resolvePixelRect(rectComp, sliderVw, sliderVh, scale);
+
+                // Apply scroll offset if inside a scroll container
+                entt::entity scrollAnc = entt::null;
+                {
+                    entt::entity cur = sliderEntity;
+                    while (registry.all_of<components::ParentComponent>(cur))
+                    {
+                        entt::entity p = registry.get<components::ParentComponent>(cur).parent;
+                        if (p == entt::null || !registry.valid(p)) break;
+                        if (scrollAnc == entt::null && registry.all_of<components::UIScrollComponent>(p))
+                            scrollAnc = p;
+                        if (registry.all_of<components::UICanvasComponent>(p)) break;
+                        cur = p;
+                    }
+                }
+                glm::vec4 scissor{0.0f};
+                if (scrollAnc != entt::null)
+                {
+                    auto scIt = scrollContainers.find(static_cast<uint32_t>(scrollAnc));
+                    if (scIt != scrollContainers.end())
+                    {
+                        sliderRect.x -= scIt->second.scrollOffset.x;
+                        sliderRect.y -= scIt->second.scrollOffset.y;
+                        scissor = scIt->second.scissorRect;
+                    }
+                }
+
+                float normalizedValue = (sliderComp.maxValue > sliderComp.minValue)
+                    ? (sliderComp.value - sliderComp.minValue) / (sliderComp.maxValue - sliderComp.minValue)
+                    : 0.0f;
+                normalizedValue = std::max(0.0f, std::min(1.0f, normalizedValue));
+
+                // Determine fill and handle texture
+                std::string fillTex = sliderComp.fillTexture.empty() ? whiteTex : sliderComp.fillTexture;
+                std::string handleTex = whiteTex;
+                switch (sliderComp.currentState)
+                {
+                case components::UISliderState::Hovered:
+                    handleTex = sliderComp.handleHoveredTexture.empty() ? whiteTex : sliderComp.handleHoveredTexture;
+                    break;
+                case components::UISliderState::Pressed:
+                    handleTex = sliderComp.handlePressedTexture.empty() ? whiteTex : sliderComp.handlePressedTexture;
+                    break;
+                case components::UISliderState::Disabled:
+                    handleTex = sliderComp.handleDisabledTexture.empty() ? whiteTex : sliderComp.handleDisabledTexture;
+                    break;
+                default:
+                    handleTex = sliderComp.handleNormalTexture.empty() ? whiteTex : sliderComp.handleNormalTexture;
+                    break;
+                }
+
+                if (sliderComp.orientation == components::UISliderOrientation::Horizontal)
+                {
+                    // Fill: left edge to value position
+                    float fillW = sliderRect.w * normalizedValue;
+                    if (fillW > 0.0f)
+                    {
+                        render::ui::UIImageRenderData fill;
+                        fill.texturePath = fillTex;
+                        fill.position = glm::vec2(sliderRect.x, sliderRect.y);
+                        fill.size = glm::vec2(fillW, sliderRect.h);
+                        fill.colorTint = sliderComp.fillColor;
+                        fill.scissorRect = scissor;
+                        drawList.push_back(std::move(fill));
+                    }
+
+                    // Handle
+                    float handleW = sliderRect.w * sliderComp.handleSizeRatio;
+                    float handleX = sliderRect.x + normalizedValue * (sliderRect.w - handleW);
+                    render::ui::UIImageRenderData handle;
+                    handle.texturePath = handleTex;
+                    handle.position = glm::vec2(handleX, sliderRect.y);
+                    handle.size = glm::vec2(handleW, sliderRect.h);
+                    handle.colorTint = sliderComp.currentHandleDisplayColor;
+                    handle.scissorRect = scissor;
+                    drawList.push_back(std::move(handle));
+                }
+                else // Vertical
+                {
+                    // Fill: bottom edge up to value position (bottom = high y in screen coords)
+                    float fillH = sliderRect.h * normalizedValue;
+                    if (fillH > 0.0f)
+                    {
+                        render::ui::UIImageRenderData fill;
+                        fill.texturePath = fillTex;
+                        fill.position = glm::vec2(sliderRect.x, sliderRect.y + sliderRect.h - fillH);
+                        fill.size = glm::vec2(sliderRect.w, fillH);
+                        fill.colorTint = sliderComp.fillColor;
+                        fill.scissorRect = scissor;
+                        drawList.push_back(std::move(fill));
+                    }
+
+                    // Handle
+                    float handleH = sliderRect.h * sliderComp.handleSizeRatio;
+                    float handleY = sliderRect.y + (1.0f - normalizedValue) * (sliderRect.h - handleH);
+                    render::ui::UIImageRenderData handle;
+                    handle.texturePath = handleTex;
+                    handle.position = glm::vec2(sliderRect.x, handleY);
+                    handle.size = glm::vec2(sliderRect.w, handleH);
+                    handle.colorTint = sliderComp.currentHandleDisplayColor;
+                    handle.scissorRect = scissor;
+                    drawList.push_back(std::move(handle));
+                }
+            }
         }
 
         // --- Generate scrollbar draw data (rendered on top of content) ---
@@ -4519,6 +4653,445 @@ namespace controllers::offscreen
 
                     break; // Only one tab can be clicked per frame
                 }
+            }
+        }
+    }
+
+    // ========== UI Slider Interaction ==========
+    void FramePreparationSystem::processUISliderInteraction(const FrameContext& ctx)
+    {
+        if (!ctx.playModeActive)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto sliderView = registry.view<components::UISliderComponent, components::UIRectComponent>();
+
+        if (sliderView.size_hint() == 0)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto makeEntityPayload = [&](entt::entity entity) -> std::pair<services::EntityHandle, std::string>
+        {
+            services::EntityHandle handle = services::internal::toHandle(entity);
+            std::string name;
+            if (registry.all_of<components::NameComponent>(entity))
+                name = registry.get<components::NameComponent>(entity).name;
+            return {handle, std::move(name)};
+        };
+
+        // Helper: snap value to step
+        auto snapToStep = [](float value, float minVal, float maxVal, float stepSize) -> float
+        {
+            if (stepSize > 0.0f)
+                value = std::round((value - minVal) / stepSize) * stepSize + minVal;
+            return std::max(minVal, std::min(value, maxVal));
+        };
+
+        // ============ PHASE 1: PROCESS ACTIVE DRAGS ============
+        for (auto sliderEntity : sliderView)
+        {
+            auto& comp = registry.get<components::UISliderComponent>(sliderEntity);
+            if (!comp.isDragging)
+                continue;
+
+            if (ctx.leftMouseDown)
+            {
+                // Continuous drag: compute value from mouse delta
+                const auto* canvas = findCanvasForEntity(registry, sliderEntity);
+                if (!canvas) { comp.isDragging = false; break; }
+
+                float scale = 1.0f;
+                if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+                const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
+                PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+                float previousValue = comp.value;
+                float newValue;
+
+                if (comp.orientation == components::UISliderOrientation::Horizontal)
+                {
+                    float trackWidth = rect.w;
+                    if (trackWidth > 0.0f)
+                    {
+                        float deltaMouseX = ctx.mousePosition.x - comp.dragStartMousePos.x;
+                        newValue = comp.dragStartValue + (deltaMouseX / trackWidth) * (comp.maxValue - comp.minValue);
+                    }
+                    else
+                    {
+                        newValue = comp.value;
+                    }
+                }
+                else
+                {
+                    float trackHeight = rect.h;
+                    if (trackHeight > 0.0f)
+                    {
+                        float deltaMouseY = ctx.mousePosition.y - comp.dragStartMousePos.y;
+                        newValue = comp.dragStartValue - (deltaMouseY / trackHeight) * (comp.maxValue - comp.minValue);
+                    }
+                    else
+                    {
+                        newValue = comp.value;
+                    }
+                }
+
+                newValue = snapToStep(newValue, comp.minValue, comp.maxValue, comp.stepSize);
+                comp.value = newValue;
+
+                if (newValue != previousValue)
+                {
+                    auto [handle, name] = makeEntityPayload(sliderEntity);
+                    events::ui::UISliderValueChangedNotification notif;
+                    notif.entity = handle;
+                    notif.entityName = std::move(name);
+                    notif.newValue = newValue;
+                    notif.previousValue = previousValue;
+                    dispatcher.publish(notif);
+                }
+            }
+            else
+            {
+                // Mouse released: end drag
+                comp.isDragging = false;
+                comp.currentState = components::UISliderState::Normal;
+
+                auto [handle, name] = makeEntityPayload(sliderEntity);
+                events::ui::UISliderDragEndNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                notif.finalValue = comp.value;
+                dispatcher.publish(notif);
+            }
+            break; // only one slider drags at a time
+        }
+
+        // ============ PRE-COMPUTE SCROLL CONTAINERS ============
+        struct ScrollContainerInfo
+        {
+            glm::vec2 scrollOffset{0.0f, 0.0f};
+            glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
+        };
+        std::unordered_map<uint32_t, ScrollContainerInfo> scrollContainers;
+        {
+            auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
+            for (auto scrollEntity : scrollView)
+            {
+                const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
+                if (!scrollCanvas)
+                    continue;
+
+                float sc = 1.0f;
+                if (scrollCanvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                    sc = std::min(vw / scrollCanvas->referenceWidth, vh / scrollCanvas->referenceHeight);
+
+                const auto& scrollRect = registry.get<components::UIRectComponent>(scrollEntity);
+                PixelRect vpRect = resolvePixelRect(scrollRect, vw, vh, sc);
+
+                const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
+
+                float sx = std::max(0.0f, vpRect.x);
+                float sy = std::max(0.0f, vpRect.y);
+                float sw = std::max(0.0f, std::min(vpRect.x + vpRect.w, vw) - sx);
+                float sh = std::max(0.0f, std::min(vpRect.y + vpRect.h, vh) - sy);
+
+                ScrollContainerInfo info;
+                info.scrollOffset = scrollComp.scrollOffset;
+                info.scissorRect = glm::vec4(sx, sy, sw, sh);
+                scrollContainers[static_cast<uint32_t>(scrollEntity)] = info;
+            }
+        }
+
+        auto findScrollInfo = [&](entt::entity entity) -> std::pair<entt::entity, glm::vec4>
+        {
+            entt::entity scrollAncestor = entt::null;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                if (parentEntity == entt::null || !registry.valid(parentEntity))
+                    break;
+                if (scrollAncestor == entt::null
+                    && registry.all_of<components::UIScrollComponent>(parentEntity))
+                    scrollAncestor = parentEntity;
+                if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                    break;
+                current = parentEntity;
+            }
+            glm::vec4 scissor{0.0f, 0.0f, 0.0f, 0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                    scissor = it->second.scissorRect;
+            }
+            return {scrollAncestor, scissor};
+        };
+
+        auto hitTestRect = [&](PixelRect rect, glm::vec4 scissor) -> bool
+        {
+            bool inside = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+            if (inside && scissor.z > 0.0f && scissor.w > 0.0f)
+            {
+                inside = ctx.mousePosition.x >= scissor.x
+                    && ctx.mousePosition.x <= scissor.x + scissor.z
+                    && ctx.mousePosition.y >= scissor.y
+                    && ctx.mousePosition.y <= scissor.y + scissor.w;
+            }
+            return inside;
+        };
+
+        // ============ PHASE 2: HIT TEST + STATE MACHINE ============
+        entt::entity hoveredSlider = entt::null;
+        float smallestArea = std::numeric_limits<float>::max();
+
+        for (auto sliderEntity : sliderView)
+        {
+            auto& comp = registry.get<components::UISliderComponent>(sliderEntity);
+
+            if (!comp.interactable || comp.isDragging)
+                continue;
+
+            if (registry.all_of<components::NameComponent>(sliderEntity))
+                if (!registry.get<components::NameComponent>(sliderEntity).isActive)
+                    continue;
+
+            const auto* canvas = findCanvasForEntity(registry, sliderEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(sliderEntity))
+                canvas = &registry.get<components::UICanvasComponent>(sliderEntity);
+            if (!canvas)
+                continue;
+
+            float scale = 1.0f;
+            if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAncestor, scissor] = findScrollInfo(sliderEntity);
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                }
+            }
+
+            if (hitTestRect(rect, scissor))
+            {
+                float area = rect.w * rect.h;
+                if (area < smallestArea)
+                {
+                    smallestArea = area;
+                    hoveredSlider = sliderEntity;
+                }
+            }
+        }
+
+        // State machine transitions
+        for (auto sliderEntity : sliderView)
+        {
+            auto& comp = registry.get<components::UISliderComponent>(sliderEntity);
+
+            if (comp.isDragging)
+                continue;
+
+            if (registry.all_of<components::NameComponent>(sliderEntity))
+                if (!registry.get<components::NameComponent>(sliderEntity).isActive)
+                    continue;
+
+            auto previousState = comp.currentState;
+            components::UISliderState newState = components::UISliderState::Normal;
+
+            if (!comp.interactable)
+            {
+                newState = components::UISliderState::Disabled;
+            }
+            else if (sliderEntity == hoveredSlider)
+            {
+                if (ctx.leftMousePressed)
+                {
+                    newState = components::UISliderState::Pressed;
+
+                    // Find canvas and compute rect for value calculation
+                    const auto* canvas = findCanvasForEntity(registry, sliderEntity);
+                    if (!canvas && registry.all_of<components::UICanvasComponent>(sliderEntity))
+                        canvas = &registry.get<components::UICanvasComponent>(sliderEntity);
+
+                    if (canvas)
+                    {
+                        float scale = 1.0f;
+                        if (canvas->scaleMode == components::UIScaleMode::ScaleWithScreenSize)
+                            scale = std::min(vw / canvas->referenceWidth, vh / canvas->referenceHeight);
+
+                        const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
+                        PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+                        auto [scrollAncestor, scissor] = findScrollInfo(sliderEntity);
+                        if (scrollAncestor != entt::null)
+                        {
+                            auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                            if (it != scrollContainers.end())
+                            {
+                                rect.x -= it->second.scrollOffset.x;
+                                rect.y -= it->second.scrollOffset.y;
+                            }
+                        }
+
+                        // Compute handle rect to determine if click was on handle or track
+                        float normalizedValue = (comp.maxValue > comp.minValue)
+                            ? (comp.value - comp.minValue) / (comp.maxValue - comp.minValue) : 0.0f;
+
+                        bool clickedOnHandle = false;
+                        if (comp.orientation == components::UISliderOrientation::Horizontal)
+                        {
+                            float handleW = rect.w * comp.handleSizeRatio;
+                            float handleX = rect.x + normalizedValue * (rect.w - handleW);
+                            clickedOnHandle = ctx.mousePosition.x >= handleX && ctx.mousePosition.x <= handleX + handleW
+                                && ctx.mousePosition.y >= rect.y && ctx.mousePosition.y <= rect.y + rect.h;
+                        }
+                        else
+                        {
+                            float handleH = rect.h * comp.handleSizeRatio;
+                            float handleY = rect.y + (1.0f - normalizedValue) * (rect.h - handleH);
+                            clickedOnHandle = ctx.mousePosition.x >= rect.x && ctx.mousePosition.x <= rect.x + rect.w
+                                && ctx.mousePosition.y >= handleY && ctx.mousePosition.y <= handleY + handleH;
+                        }
+
+                        if (clickedOnHandle)
+                        {
+                            // Start drag from current value
+                            comp.isDragging = true;
+                            comp.dragStartMousePos = ctx.mousePosition;
+                            comp.dragStartValue = comp.value;
+                        }
+                        else if (comp.clickTrackToSet)
+                        {
+                            // Jump value to click position, then start drag
+                            float previousValue = comp.value;
+                            float newValue;
+
+                            if (comp.orientation == components::UISliderOrientation::Horizontal)
+                            {
+                                float handleW = rect.w * comp.handleSizeRatio;
+                                float trackUsable = rect.w - handleW;
+                                float clickPos = ctx.mousePosition.x - rect.x - handleW * 0.5f;
+                                newValue = (trackUsable > 0.0f)
+                                    ? comp.minValue + (clickPos / trackUsable) * (comp.maxValue - comp.minValue)
+                                    : comp.minValue;
+                            }
+                            else
+                            {
+                                float handleH = rect.h * comp.handleSizeRatio;
+                                float trackUsable = rect.h - handleH;
+                                float clickPos = ctx.mousePosition.y - rect.y - handleH * 0.5f;
+                                newValue = (trackUsable > 0.0f)
+                                    ? comp.maxValue - (clickPos / trackUsable) * (comp.maxValue - comp.minValue)
+                                    : comp.minValue;
+                            }
+
+                            newValue = snapToStep(newValue, comp.minValue, comp.maxValue, comp.stepSize);
+                            comp.value = newValue;
+                            comp.isDragging = true;
+                            comp.dragStartMousePos = ctx.mousePosition;
+                            comp.dragStartValue = newValue;
+
+                            if (newValue != previousValue)
+                            {
+                                auto [handle, name] = makeEntityPayload(sliderEntity);
+                                events::ui::UISliderValueChangedNotification valNotif;
+                                valNotif.entity = handle;
+                                valNotif.entityName = std::move(name);
+                                valNotif.newValue = newValue;
+                                valNotif.previousValue = previousValue;
+                                dispatcher.publish(valNotif);
+                            }
+                        }
+
+                        if (comp.isDragging)
+                        {
+                            auto [handle, name] = makeEntityPayload(sliderEntity);
+                            events::ui::UISliderDragStartNotification dragNotif;
+                            dragNotif.entity = handle;
+                            dragNotif.entityName = std::move(name);
+                            dispatcher.publish(dragNotif);
+                        }
+                    }
+                }
+                else
+                {
+                    newState = components::UISliderState::Hovered;
+                }
+            }
+
+            // HoverEnter/HoverExit
+            bool wasHovered = previousState == components::UISliderState::Hovered
+                || previousState == components::UISliderState::Pressed;
+            bool isHovered = newState == components::UISliderState::Hovered
+                || newState == components::UISliderState::Pressed;
+
+            if (!wasHovered && isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(sliderEntity);
+                events::ui::UISliderHoverEnterNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+            else if (wasHovered && !isHovered)
+            {
+                auto [handle, name] = makeEntityPayload(sliderEntity);
+                events::ui::UISliderHoverExitNotification notif;
+                notif.entity = handle;
+                notif.entityName = std::move(name);
+                dispatcher.publish(notif);
+            }
+
+            comp.currentState = newState;
+        }
+
+        // ============ PHASE 3: COLOR LERP ============
+        for (auto sliderEntity : sliderView)
+        {
+            auto& comp = registry.get<components::UISliderComponent>(sliderEntity);
+
+            glm::vec4 targetColor;
+            switch (comp.currentState)
+            {
+            case components::UISliderState::Hovered:
+                targetColor = comp.handleHoveredColor;
+                break;
+            case components::UISliderState::Pressed:
+                targetColor = comp.handlePressedColor;
+                break;
+            case components::UISliderState::Disabled:
+                targetColor = comp.handleDisabledColor;
+                break;
+            default:
+                targetColor = comp.handleNormalColor;
+                break;
+            }
+
+            if (comp.isDragging)
+                targetColor = comp.handlePressedColor;
+
+            if (comp.colorTransitionDuration > 0.0f && ctx.deltaTime > 0.0f)
+            {
+                float t = std::min(1.0f, ctx.deltaTime / comp.colorTransitionDuration);
+                comp.currentHandleDisplayColor = glm::mix(comp.currentHandleDisplayColor, targetColor, t);
+            }
+            else
+            {
+                comp.currentHandleDisplayColor = targetColor;
             }
         }
     }

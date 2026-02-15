@@ -140,6 +140,7 @@ namespace core::api
         if (type == "UICheckbox") return services::ComponentTypeId::UICheckbox;
         if (type == "UIDropdown") return services::ComponentTypeId::UIDropdown;
         if (type == "UITabs") return services::ComponentTypeId::UITabs;
+        if (type == "UISlider") return services::ComponentTypeId::UISlider;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -180,6 +181,7 @@ namespace core::api
         case services::ComponentTypeId::UICheckbox: return "UICheckbox";
         case services::ComponentTypeId::UIDropdown: return "UIDropdown";
         case services::ComponentTypeId::UITabs: return "UITabs";
+        case services::ComponentTypeId::UISlider: return "UISlider";
         default: return "Unknown";
         }
     }

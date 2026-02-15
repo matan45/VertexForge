@@ -242,6 +242,12 @@ namespace serialization
                 entity.getComponent<components::UITabsComponent>());
         }
 
+        if (entity.hasComponent<components::UISliderComponent>())
+        {
+            componentsJson["uiSlider"] = serializeUISlider(
+                entity.getComponent<components::UISliderComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -2192,6 +2198,85 @@ namespace serialization
         tabs.previousTabIndex = -1;
     }
 
+    json SceneSerialization::serializeUISlider(const components::UISliderComponent& slider)
+    {
+        json j;
+        j["minValue"] = slider.minValue;
+        j["maxValue"] = slider.maxValue;
+        j["value"] = slider.value;
+        j["stepSize"] = slider.stepSize;
+
+        switch (slider.orientation) {
+            case components::UISliderOrientation::Vertical: j["orientation"] = "Vertical"; break;
+            default: j["orientation"] = "Horizontal"; break;
+        }
+
+        j["clickTrackToSet"] = slider.clickTrackToSet;
+        j["handleSizeRatio"] = slider.handleSizeRatio;
+
+        j["handleNormalColor"] = json::array({slider.handleNormalColor.r, slider.handleNormalColor.g, slider.handleNormalColor.b, slider.handleNormalColor.a});
+        j["handleHoveredColor"] = json::array({slider.handleHoveredColor.r, slider.handleHoveredColor.g, slider.handleHoveredColor.b, slider.handleHoveredColor.a});
+        j["handlePressedColor"] = json::array({slider.handlePressedColor.r, slider.handlePressedColor.g, slider.handlePressedColor.b, slider.handlePressedColor.a});
+        j["handleDisabledColor"] = json::array({slider.handleDisabledColor.r, slider.handleDisabledColor.g, slider.handleDisabledColor.b, slider.handleDisabledColor.a});
+
+        if (!slider.handleNormalTexture.empty()) j["handleNormalTexture"] = slider.handleNormalTexture;
+        if (!slider.handleHoveredTexture.empty()) j["handleHoveredTexture"] = slider.handleHoveredTexture;
+        if (!slider.handlePressedTexture.empty()) j["handlePressedTexture"] = slider.handlePressedTexture;
+        if (!slider.handleDisabledTexture.empty()) j["handleDisabledTexture"] = slider.handleDisabledTexture;
+
+        j["fillColor"] = json::array({slider.fillColor.r, slider.fillColor.g, slider.fillColor.b, slider.fillColor.a});
+        if (!slider.fillTexture.empty()) j["fillTexture"] = slider.fillTexture;
+
+        j["colorTransitionDuration"] = slider.colorTransitionDuration;
+        j["interactable"] = slider.interactable;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUISlider(const json& j, components::UISliderComponent& slider)
+    {
+        slider.minValue = j.value("minValue", 0.0f);
+        slider.maxValue = j.value("maxValue", 1.0f);
+        slider.value = j.value("value", 0.5f);
+        slider.stepSize = j.value("stepSize", 0.0f);
+
+        std::string orientStr = j.value("orientation", std::string("Horizontal"));
+        if (orientStr == "Vertical")
+            slider.orientation = components::UISliderOrientation::Vertical;
+        else
+            slider.orientation = components::UISliderOrientation::Horizontal;
+
+        slider.clickTrackToSet = j.value("clickTrackToSet", true);
+        slider.handleSizeRatio = j.value("handleSizeRatio", 0.08f);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out) {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+                out = glm::vec4(j[key][0].get<float>(), j[key][1].get<float>(),
+                               j[key][2].get<float>(), j[key][3].get<float>());
+        };
+
+        deserializeVec4("handleNormalColor", slider.handleNormalColor);
+        deserializeVec4("handleHoveredColor", slider.handleHoveredColor);
+        deserializeVec4("handlePressedColor", slider.handlePressedColor);
+        deserializeVec4("handleDisabledColor", slider.handleDisabledColor);
+
+        slider.handleNormalTexture = j.value("handleNormalTexture", std::string(""));
+        slider.handleHoveredTexture = j.value("handleHoveredTexture", std::string(""));
+        slider.handlePressedTexture = j.value("handlePressedTexture", std::string(""));
+        slider.handleDisabledTexture = j.value("handleDisabledTexture", std::string(""));
+
+        deserializeVec4("fillColor", slider.fillColor);
+        slider.fillTexture = j.value("fillTexture", std::string(""));
+
+        slider.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+        slider.interactable = j.value("interactable", true);
+
+        // Reset runtime state
+        slider.currentState = components::UISliderState::Normal;
+        slider.currentHandleDisplayColor = slider.handleNormalColor;
+        slider.isDragging = false;
+        slider.dragStartValue = 0.0f;
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2548,6 +2633,12 @@ namespace serialization
             {
                 auto& tabsComp = entity.addOrReplaceComponent<components::UITabsComponent>();
                 deserializeUITabs(componentsJson["uiTabs"], tabsComp);
+            }
+
+            if (componentsJson.contains("uiSlider"))
+            {
+                auto& sliderComp = entity.addOrReplaceComponent<components::UISliderComponent>();
+                deserializeUISlider(componentsJson["uiSlider"], sliderComp);
             }
         }
 

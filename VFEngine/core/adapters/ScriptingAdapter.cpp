@@ -43,6 +43,7 @@ namespace core
             subscribeToUICheckboxEvents();
             subscribeToUIDropdownEvents();
             subscribeToUITabsEvents();
+            subscribeToUISliderEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -70,6 +71,7 @@ namespace core
         unsubscribeFromUICheckboxEvents();
         unsubscribeFromUIDropdownEvents();
         unsubscribeFromUITabsEvents();
+        unsubscribeFromUISliderEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -306,6 +308,10 @@ namespace core
             if (interpreter->classImplementsInterface(className, "IUITabsListener"))
             {
                 interfaces.insert("IUITabsListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUISliderListener"))
+            {
+                interfaces.insert("IUISliderListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -1127,6 +1133,137 @@ namespace core
                         {value::Value(static_cast<int>(tabsEntity.id)),
                          value::Value(entityName),
                          value::Value(static_cast<int64_t>(tabIndex))});
+                }
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    // ============================================
+    // UI Slider event helpers
+    // ============================================
+
+    void ScriptingAdapter::subscribeToUISliderEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        sliderValueChangedToken = dispatcher.subscribe<::events::ui::UISliderValueChangedNotification>(
+            [this](const ::events::ui::UISliderValueChangedNotification& notif)
+            {
+                dispatchUISliderCallback("onSliderValueChanged", notif.entity, notif.entityName,
+                                         notif.newValue, notif.previousValue);
+            });
+
+        sliderDragStartToken = dispatcher.subscribe<::events::ui::UISliderDragStartNotification>(
+            [this](const ::events::ui::UISliderDragStartNotification& notif)
+            {
+                dispatchUISliderCallback("onSliderDragStart", notif.entity, notif.entityName);
+            });
+
+        sliderDragEndToken = dispatcher.subscribe<::events::ui::UISliderDragEndNotification>(
+            [this](const ::events::ui::UISliderDragEndNotification& notif)
+            {
+                dispatchUISliderCallback("onSliderDragEnd", notif.entity, notif.entityName,
+                                         0.0f, 0.0f, notif.finalValue);
+            });
+
+        sliderHoverEnterToken = dispatcher.subscribe<::events::ui::UISliderHoverEnterNotification>(
+            [this](const ::events::ui::UISliderHoverEnterNotification& notif)
+            {
+                dispatchUISliderCallback("onSliderHoverEnter", notif.entity, notif.entityName);
+            });
+
+        sliderHoverExitToken = dispatcher.subscribe<::events::ui::UISliderHoverExitNotification>(
+            [this](const ::events::ui::UISliderHoverExitNotification& notif)
+            {
+                dispatchUISliderCallback("onSliderHoverExit", notif.entity, notif.entityName);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI slider events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUISliderEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (sliderValueChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(sliderValueChangedToken);
+        }
+        if (sliderDragStartToken.isValid())
+        {
+            dispatcher.unsubscribe(sliderDragStartToken);
+        }
+        if (sliderDragEndToken.isValid())
+        {
+            dispatcher.unsubscribe(sliderDragEndToken);
+        }
+        if (sliderHoverEnterToken.isValid())
+        {
+            dispatcher.unsubscribe(sliderHoverEnterToken);
+        }
+        if (sliderHoverExitToken.isValid())
+        {
+            dispatcher.unsubscribe(sliderHoverExitToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI slider events");
+    }
+
+    void ScriptingAdapter::dispatchUISliderCallback(const char* methodName,
+                                                     ::services::EntityHandle sliderEntity,
+                                                     const std::string& entityName,
+                                                     float newValue, float previousValue,
+                                                     float finalValue)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUISliderListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (method == "onSliderValueChanged")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(sliderEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<float>(newValue)),
+                         value::Value(static_cast<float>(previousValue))});
+                }
+                else if (method == "onSliderDragEnd")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(sliderEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<float>(finalValue))});
+                }
+                else
+                {
+                    // onSliderDragStart, onSliderHoverEnter, onSliderHoverExit
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(sliderEntity.id)),
+                         value::Value(entityName)});
                 }
             }
             catch (const std::exception& e)

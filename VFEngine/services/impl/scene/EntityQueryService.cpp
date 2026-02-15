@@ -300,6 +300,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UISlider:
+            {
+                auto view = registry.view<components::UISliderComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -383,6 +392,8 @@ namespace services
             return registry.all_of<components::UIDropdownComponent>(enttEntity);
         case ComponentTypeId::UITabs:
             return registry.all_of<components::UITabsComponent>(enttEntity);
+        case ComponentTypeId::UISlider:
+            return registry.all_of<components::UISliderComponent>(enttEntity);
         default:
             return false;
         }
@@ -453,6 +464,8 @@ namespace services
             types.push_back(ComponentTypeId::UIDropdown);
         if (registry.all_of<components::UITabsComponent>(enttEntity))
             types.push_back(ComponentTypeId::UITabs);
+        if (registry.all_of<components::UISliderComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UISlider);
 
         return types;
     }
