@@ -11,7 +11,8 @@ namespace windows::details {
                   bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                   bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                   bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
-                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown);
+                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
+                  bool hasUITabs);
     };
 
 }

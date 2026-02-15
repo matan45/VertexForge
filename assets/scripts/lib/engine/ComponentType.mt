@@ -49,4 +49,5 @@ public class ComponentType {
     public static final string UI_TEXT_INPUT = "UITextInput";
     public static final string UI_CHECKBOX = "UICheckbox";
     public static final string UI_DROPDOWN = "UIDropdown";
+    public static final string UI_TABS = "UITabs";
 }

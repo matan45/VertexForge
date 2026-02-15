@@ -692,5 +692,73 @@ namespace core::api
 
                 return value::Value();
             });
+
+        // ============================================
+        // UI Tabs Native Functions
+        // ============================================
+
+        // _native_ui_getTabsActiveIndex(entityId) -> int
+        interpreter->registerNativeFunction("_native_ui_getTabsActiveIndex",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getTabsActiveIndex");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUITabsDataQuery query;
+                query.entity = handle;
+                auto data = dispatcher.query(query);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(-1));
+                }
+
+                return value::Value(static_cast<int64_t>(data->activeTabIndex));
+            });
+
+        // _native_ui_setTabsActiveIndex(entityId, index) -> void
+        interpreter->registerNativeFunction("_native_ui_setTabsActiveIndex",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2)
+                {
+                    return value::Value();
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_setTabsActiveIndex");
+                int64_t tabIndex = extractInt64(args[1], "_native_ui_setTabsActiveIndex");
+                auto handle = intToEntity(entityId);
+
+                events::ui::SetUITabsActiveTabCommand cmd;
+                cmd.entity = handle;
+                cmd.tabIndex = static_cast<int>(tabIndex);
+                dispatcher.execute(cmd);
+
+                return value::Value();
+            });
+
+        // _native_ui_getTabsBarPosition(entityId) -> int
+        interpreter->registerNativeFunction("_native_ui_getTabsBarPosition",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                int64_t entityId = extractInt64(args[0], "_native_ui_getTabsBarPosition");
+                auto handle = intToEntity(entityId);
+
+                events::ui::GetUITabsDataQuery query;
+                query.entity = handle;
+                auto data = dispatcher.query(query);
+                if (!data.has_value())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                return value::Value(static_cast<int64_t>(data->tabBarPosition));
+            });
     }
 }

@@ -562,4 +562,71 @@ namespace events::ui {
         std::string_view getName() const override { return "UIDropdownSelectionChanged"; }
     };
 
+    // ============================================
+    // UI Tabs Commands
+    // ============================================
+
+    struct AddUITabsComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddUITabsComponent"; }
+    };
+
+    struct RemoveUITabsComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveUITabsComponent"; }
+    };
+
+    struct SetUITabsDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::UITabsData tabsData;
+
+        std::string_view getName() const override { return "SetUITabsData"; }
+    };
+
+    struct SetUITabsActiveTabCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        int tabIndex;
+
+        std::string_view getName() const override { return "SetUITabsActiveTab"; }
+    };
+
+    // ============================================
+    // UI Tabs Queries
+    // ============================================
+
+    struct HasUITabsComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasUITabsComponent"; }
+    };
+
+    struct GetUITabsDataQuery : IQuery<std::optional<services::UITabsData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUITabsData"; }
+    };
+
+    // ============================================
+    // UI Tabs Notifications
+    // ============================================
+
+    struct UITabSelectedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        int tabIndex;
+
+        std::string_view getName() const override { return "UITabSelected"; }
+    };
+
+    struct UITabChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string entityName;
+        int newTabIndex;
+        int previousTabIndex;
+
+        std::string_view getName() const override { return "UITabChanged"; }
+    };
+
 }

@@ -70,6 +70,10 @@ namespace core
         ::events::SubscriptionToken dropdownClosedToken;
         ::events::SubscriptionToken dropdownSelectionChangedToken;
 
+        // UI Tabs callback subscription tokens
+        ::events::SubscriptionToken tabSelectedToken;
+        ::events::SubscriptionToken tabChangedToken;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -152,5 +156,13 @@ namespace core
                                         ::services::EntityHandle dropdownEntity,
                                         const std::string& entityName,
                                         int previousIndex = -1, int newIndex = -1);
+
+        // UI Tabs callback helpers
+        void subscribeToUITabsEvents();
+        void unsubscribeFromUITabsEvents();
+        void dispatchUITabsCallback(const char* methodName,
+                                    ::services::EntityHandle tabsEntity,
+                                    const std::string& entityName,
+                                    int tabIndex = -1, int previousTabIndex = -1);
     };
 }

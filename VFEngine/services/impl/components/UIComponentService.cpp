@@ -1234,6 +1234,166 @@ namespace services {
         return true;
     }
 
+    // ========== UI Tabs CRUD ==========
+
+    bool UIComponentService::addUITabsComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        if (sceneEntity.hasComponent<components::UITabsComponent>()) {
+            return false;
+        }
+
+        sceneEntity.addComponent<components::UITabsComponent>();
+
+        // Auto-add UIRectComponent if missing
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            sceneEntity.addComponent<components::UIRectComponent>();
+        }
+
+        return true;
+    }
+
+    bool UIComponentService::removeUITabsComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITabsComponent>()) {
+            return false;
+        }
+
+        sceneEntity.removeComponent<components::UITabsComponent>();
+        return true;
+    }
+
+    bool UIComponentService::hasUITabsComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::UITabsComponent>();
+    }
+
+    std::optional<UITabsData> UIComponentService::getUITabsData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITabsComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::UITabsComponent>();
+
+        UITabsData data;
+        data.tabBarPosition = static_cast<uint8_t>(comp.tabBarPosition);
+        data.activeTabIndex = comp.activeTabIndex;
+        data.previousTabIndex = comp.previousTabIndex;
+        return data;
+    }
+
+    bool UIComponentService::setUITabsData(EntityHandle entity, const UITabsData& tabsData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITabsComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UITabsComponent>();
+        comp.tabBarPosition = static_cast<components::TabBarPosition>(tabsData.tabBarPosition);
+        comp.activeTabIndex = tabsData.activeTabIndex;
+        comp.previousTabIndex = tabsData.previousTabIndex;
+        return true;
+    }
+
+    bool UIComponentService::selectTab(EntityHandle entity, int tabIndex) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::UITabsComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::UITabsComponent>();
+
+        // Store previous
+        int previousTabIndex = comp.activeTabIndex;
+        comp.previousTabIndex = previousTabIndex;
+        comp.activeTabIndex = tabIndex;
+
+        // Find tab bar (first child with UILayoutGroupComponent) and panels
+        if (!sceneEntity.hasComponent<components::ChildrenComponent>()) {
+            return false;
+        }
+
+        const auto& children = sceneEntity.getComponent<components::ChildrenComponent>().children;
+        std::vector<entt::entity> panels;
+
+        for (auto childEntity : children) {
+            if (!registry.valid(childEntity)) continue;
+
+            // Skip the tab bar child (first child with UILayoutGroupComponent)
+            if (registry.all_of<components::UILayoutGroupComponent>(childEntity)) {
+                continue;
+            }
+
+            panels.push_back(childEntity);
+        }
+
+        // Toggle panel visibility: only the panel at tabIndex is active
+        for (int i = 0; i < static_cast<int>(panels.size()); ++i) {
+            if (registry.all_of<components::NameComponent>(panels[i])) {
+                auto& nameComp = registry.get<components::NameComponent>(panels[i]);
+                nameComp.isActive = (i == tabIndex);
+            }
+        }
+
+        // Get entity name for notifications
+        std::string entityName;
+        if (sceneEntity.hasComponent<components::NameComponent>()) {
+            entityName = sceneEntity.getComponent<components::NameComponent>().name;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Always publish tab selected
+        events::ui::UITabSelectedNotification selectedNotif;
+        selectedNotif.entity = entity;
+        selectedNotif.entityName = entityName;
+        selectedNotif.tabIndex = tabIndex;
+        dispatcher.publish(selectedNotif);
+
+        // Only publish tab changed if actually changed
+        if (previousTabIndex != tabIndex) {
+            events::ui::UITabChangedNotification changedNotif;
+            changedNotif.entity = entity;
+            changedNotif.entityName = entityName;
+            changedNotif.newTabIndex = tabIndex;
+            changedNotif.previousTabIndex = previousTabIndex;
+            dispatcher.publish(changedNotif);
+        }
+
+        return true;
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
@@ -1535,6 +1695,38 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIDropdownDataQuery>(
             [this](const events::ui::GetUIDropdownDataQuery& query) {
                 return getUIDropdownData(query.entity);
+            });
+
+        // Tabs commands
+        dispatcher.registerCommandHandler<events::ui::AddUITabsComponentCommand>(
+            [this](const events::ui::AddUITabsComponentCommand& cmd) {
+                return addUITabsComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::RemoveUITabsComponentCommand>(
+            [this](const events::ui::RemoveUITabsComponentCommand& cmd) {
+                return removeUITabsComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUITabsDataCommand>(
+            [this](const events::ui::SetUITabsDataCommand& cmd) {
+                return setUITabsData(cmd.entity, cmd.tabsData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUITabsActiveTabCommand>(
+            [this](const events::ui::SetUITabsActiveTabCommand& cmd) {
+                return selectTab(cmd.entity, cmd.tabIndex);
+            });
+
+        // Tabs queries
+        dispatcher.registerQueryHandler<events::ui::HasUITabsComponentQuery>(
+            [this](const events::ui::HasUITabsComponentQuery& query) {
+                return hasUITabsComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUITabsDataQuery>(
+            [this](const events::ui::GetUITabsDataQuery& query) {
+                return getUITabsData(query.entity);
             });
     }
 

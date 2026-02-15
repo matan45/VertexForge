@@ -42,6 +42,7 @@ namespace core
             subscribeToUITextInputEvents();
             subscribeToUICheckboxEvents();
             subscribeToUIDropdownEvents();
+            subscribeToUITabsEvents();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -68,6 +69,7 @@ namespace core
         unsubscribeFromUITextInputEvents();
         unsubscribeFromUICheckboxEvents();
         unsubscribeFromUIDropdownEvents();
+        unsubscribeFromUITabsEvents();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -300,6 +302,10 @@ namespace core
             if (interpreter->classImplementsInterface(className, "IUIDropdownListener"))
             {
                 interfaces.insert("IUIDropdownListener");
+            }
+            if (interpreter->classImplementsInterface(className, "IUITabsListener"))
+            {
+                interfaces.insert("IUITabsListener");
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
@@ -1027,6 +1033,100 @@ namespace core
                     interpreter->callMethod(instance, methodName,
                         {value::Value(static_cast<int>(dropdownEntity.id)),
                          value::Value(entityName)});
+                }
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
+            }
+        }
+    }
+
+    // ============================================
+    // UI Tabs event helpers
+    // ============================================
+
+    void ScriptingAdapter::subscribeToUITabsEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        tabSelectedToken = dispatcher.subscribe<::events::ui::UITabSelectedNotification>(
+            [this](const ::events::ui::UITabSelectedNotification& notif)
+            {
+                dispatchUITabsCallback("onTabSelected", notif.entity, notif.entityName,
+                                       notif.tabIndex);
+            });
+
+        tabChangedToken = dispatcher.subscribe<::events::ui::UITabChangedNotification>(
+            [this](const ::events::ui::UITabChangedNotification& notif)
+            {
+                dispatchUITabsCallback("onTabChanged", notif.entity, notif.entityName,
+                                       notif.newTabIndex, notif.previousTabIndex);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to UI tabs events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromUITabsEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (tabSelectedToken.isValid())
+        {
+            dispatcher.unsubscribe(tabSelectedToken);
+        }
+        if (tabChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(tabChangedToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI tabs events");
+    }
+
+    void ScriptingAdapter::dispatchUITabsCallback(const char* methodName,
+                                                    ::services::EntityHandle tabsEntity,
+                                                    const std::string& entityName,
+                                                    int tabIndex, int previousTabIndex)
+    {
+        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
+        {
+            if (interfaces.find("IUITabsListener") == interfaces.end())
+            {
+                continue;
+            }
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end())
+            {
+                continue;
+            }
+
+            auto entityIt = instanceToEntity.find(instanceId);
+            if (entityIt != instanceToEntity.end())
+            {
+                NativeAPIRegistry::setCurrentEntity(entityIt->second);
+            }
+
+            try
+            {
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                std::string_view method(methodName);
+                if (method == "onTabChanged")
+                {
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(tabsEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<int64_t>(tabIndex)),
+                         value::Value(static_cast<int64_t>(previousTabIndex))});
+                }
+                else
+                {
+                    // onTabSelected
+                    interpreter->callMethod(instance, methodName,
+                        {value::Value(static_cast<int>(tabsEntity.id)),
+                         value::Value(entityName),
+                         value::Value(static_cast<int64_t>(tabIndex))});
                 }
             }
             catch (const std::exception& e)

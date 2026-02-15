@@ -291,6 +291,15 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::UITabs:
+            {
+                auto view = registry.view<components::UITabsComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -372,6 +381,8 @@ namespace services
             return registry.all_of<components::UICheckboxComponent>(enttEntity);
         case ComponentTypeId::UIDropdown:
             return registry.all_of<components::UIDropdownComponent>(enttEntity);
+        case ComponentTypeId::UITabs:
+            return registry.all_of<components::UITabsComponent>(enttEntity);
         default:
             return false;
         }
@@ -440,6 +451,8 @@ namespace services
             types.push_back(ComponentTypeId::UICheckbox);
         if (registry.all_of<components::UIDropdownComponent>(enttEntity))
             types.push_back(ComponentTypeId::UIDropdown);
+        if (registry.all_of<components::UITabsComponent>(enttEntity))
+            types.push_back(ComponentTypeId::UITabs);
 
         return types;
     }
