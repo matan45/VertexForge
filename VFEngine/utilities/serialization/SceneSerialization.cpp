@@ -230,6 +230,12 @@ namespace serialization
                 entity.getComponent<components::UICheckboxComponent>());
         }
 
+        if (entity.hasComponent<components::UIDropdownComponent>())
+        {
+            componentsJson["uiDropdown"] = serializeUIDropdown(
+                entity.getComponent<components::UIDropdownComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -2044,6 +2050,106 @@ namespace serialization
         checkbox.currentDisplayColor = checkbox.isChecked ? checkbox.checkedColor : checkbox.uncheckedColor;
     }
 
+    json SceneSerialization::serializeUIDropdown(const components::UIDropdownComponent& dropdown)
+    {
+        json j;
+
+        // Options array
+        json optionsArr = json::array();
+        for (const auto& opt : dropdown.options)
+        {
+            json optJson;
+            optJson["text"] = opt.text;
+            if (!opt.iconPath.empty())
+            {
+                optJson["iconPath"] = opt.iconPath;
+            }
+            optionsArr.push_back(optJson);
+        }
+        j["options"] = optionsArr;
+
+        j["selectedIndex"] = dropdown.selectedIndex;
+        j["placeholderText"] = dropdown.placeholderText;
+        j["maxVisibleItems"] = dropdown.maxVisibleItems;
+        j["interactable"] = dropdown.interactable;
+
+        // Header state colors
+        j["normalColor"] = json::array({dropdown.normalColor.r, dropdown.normalColor.g,
+                                         dropdown.normalColor.b, dropdown.normalColor.a});
+        j["hoveredColor"] = json::array({dropdown.hoveredColor.r, dropdown.hoveredColor.g,
+                                          dropdown.hoveredColor.b, dropdown.hoveredColor.a});
+        j["openColor"] = json::array({dropdown.openColor.r, dropdown.openColor.g,
+                                       dropdown.openColor.b, dropdown.openColor.a});
+        j["disabledColor"] = json::array({dropdown.disabledColor.r, dropdown.disabledColor.g,
+                                           dropdown.disabledColor.b, dropdown.disabledColor.a});
+
+        // List colors
+        j["listBackgroundColor"] = json::array({dropdown.listBackgroundColor.r, dropdown.listBackgroundColor.g,
+                                                 dropdown.listBackgroundColor.b, dropdown.listBackgroundColor.a});
+        j["itemNormalColor"] = json::array({dropdown.itemNormalColor.r, dropdown.itemNormalColor.g,
+                                             dropdown.itemNormalColor.b, dropdown.itemNormalColor.a});
+        j["itemHoveredColor"] = json::array({dropdown.itemHoveredColor.r, dropdown.itemHoveredColor.g,
+                                              dropdown.itemHoveredColor.b, dropdown.itemHoveredColor.a});
+
+        // Font
+        if (!dropdown.fontPath.empty())
+        {
+            j["fontPath"] = dropdown.fontPath;
+        }
+        j["fontSize"] = dropdown.fontSize;
+
+        j["colorTransitionDuration"] = dropdown.colorTransitionDuration;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIDropdown(const json& j, components::UIDropdownComponent& dropdown)
+    {
+        // Options array
+        if (j.contains("options") && j["options"].is_array())
+        {
+            dropdown.options.clear();
+            for (const auto& optJson : j["options"])
+            {
+                components::DropdownOption opt;
+                opt.text = optJson.value("text", std::string(""));
+                opt.iconPath = optJson.value("iconPath", std::string(""));
+                dropdown.options.push_back(opt);
+            }
+        }
+
+        dropdown.selectedIndex = j.value("selectedIndex", -1);
+        dropdown.placeholderText = j.value("placeholderText", std::string("Select..."));
+        dropdown.maxVisibleItems = j.value("maxVisibleItems", 5);
+        dropdown.interactable = j.value("interactable", true);
+
+        auto deserializeVec4 = [&](const std::string& key, glm::vec4& out)
+        {
+            if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+            {
+                out = glm::vec4(
+                    j[key][0].get<float>(), j[key][1].get<float>(),
+                    j[key][2].get<float>(), j[key][3].get<float>()
+                );
+            }
+        };
+
+        deserializeVec4("normalColor", dropdown.normalColor);
+        deserializeVec4("hoveredColor", dropdown.hoveredColor);
+        deserializeVec4("openColor", dropdown.openColor);
+        deserializeVec4("disabledColor", dropdown.disabledColor);
+        deserializeVec4("listBackgroundColor", dropdown.listBackgroundColor);
+        deserializeVec4("itemNormalColor", dropdown.itemNormalColor);
+        deserializeVec4("itemHoveredColor", dropdown.itemHoveredColor);
+
+        dropdown.fontPath = j.value("fontPath", std::string(""));
+        dropdown.fontSize = j.value("fontSize", 16.0f);
+        dropdown.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
+
+        // Reset runtime state
+        dropdown.currentDisplayColor = dropdown.normalColor;
+    }
+
     std::string SceneSerialization::horizontalAlignmentToString(components::HorizontalAlignment alignment)
     {
         switch (alignment)
@@ -2388,6 +2494,12 @@ namespace serialization
             {
                 auto& checkboxComp = entity.addOrReplaceComponent<components::UICheckboxComponent>();
                 deserializeUICheckbox(componentsJson["uiCheckbox"], checkboxComp);
+            }
+
+            if (componentsJson.contains("uiDropdown"))
+            {
+                auto& dropdownComp = entity.addOrReplaceComponent<components::UIDropdownComponent>();
+                deserializeUIDropdown(componentsJson["uiDropdown"], dropdownComp);
             }
         }
 

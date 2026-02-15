@@ -101,13 +101,14 @@ namespace windows
         bool hasUIButton = uiButtonDrawer.draw(handle);
         bool hasUITextInput = uiTextInputDrawer.draw(handle);
         bool hasUICheckbox = uiCheckboxDrawer.draw(handle);
+        bool hasUIDropdown = uiDropdownDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX, hasBillboard,
                                hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
                                hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
                                hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
-                               hasUICheckbox);
+                               hasUICheckbox, hasUIDropdown);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

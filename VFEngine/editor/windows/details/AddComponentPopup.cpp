@@ -13,7 +13,7 @@ namespace windows::details
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
-                                 bool hasUITextInput, bool hasUICheckbox)
+                                 bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -364,11 +364,25 @@ namespace windows::details
                 }
             }
 
+            if (!hasUIDropdown)
+            {
+                if (ImGui::Selectable("  UI Dropdown"))
+                {
+                    events::ui::AddUIDropdownComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Dropdown / combo box with selectable options");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
-                           hasUIButton && hasUITextInput && hasUICheckbox;
+                           hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown;
             if (allAdded)
             {
                 ImGui::Spacing();

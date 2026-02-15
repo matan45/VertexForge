@@ -1,5 +1,5 @@
 // UI - Static utility class for UI component operations
-// Works with entity IDs (int) to query and control UI button state
+// Works with entity IDs (int) to query and control UI component state
 //
 // Usage examples:
 //   int buttonId = 42;
@@ -8,11 +8,24 @@
 //   int state = UI::getButtonState(buttonId);  // 0=Normal, 1=Hovered, 2=Pressed, 3=Disabled
 //   UI::setButtonInteractable(buttonId, false); // Disable button
 //
+//   int dropdownId = 50;
+//   int selected = UI::getDropdownSelectedIndex(dropdownId);
+//   String value = UI::getDropdownSelectedValue(dropdownId);
+//   UI::setDropdownSelectedIndex(dropdownId, 2);
+//   UI::setDropdownOptions(dropdownId, "Option A|Option B|Option C");
+//   UI::openDropdown(dropdownId);
+//
 // Button State Constants:
 //   BUTTON_NORMAL   = 0
 //   BUTTON_HOVERED  = 1
 //   BUTTON_PRESSED  = 2
 //   BUTTON_DISABLED = 3
+//
+// Dropdown State Constants:
+//   DROPDOWN_NORMAL   = 0
+//   DROPDOWN_HOVERED  = 1
+//   DROPDOWN_OPEN     = 2
+//   DROPDOWN_DISABLED = 3
 
 public class UI {
     // ============================================
@@ -106,5 +119,62 @@ public class UI {
     // Get the label text of a checkbox's child UILabel (useful in onCheckboxToggled callbacks)
     public static function getCheckboxLabelText(int entityId): String {
         return _native_ui_getCheckboxLabelText(entityId);
+    }
+
+    // ============================================
+    // Dropdown State Constants
+    // ============================================
+    public static const int DROPDOWN_NORMAL = 0;
+    public static const int DROPDOWN_HOVERED = 1;
+    public static const int DROPDOWN_OPEN = 2;
+    public static const int DROPDOWN_DISABLED = 3;
+
+    // ============================================
+    // Dropdown Queries
+    // ============================================
+
+    // Get the currently selected index (-1 if none selected)
+    public static function getDropdownSelectedIndex(int entityId): int {
+        return _native_ui_getDropdownSelectedIndex(entityId);
+    }
+
+    // Get the text of the currently selected option (empty string if none)
+    public static function getDropdownSelectedValue(int entityId): String {
+        return _native_ui_getDropdownSelectedValue(entityId);
+    }
+
+    // Get dropdown state as int (DROPDOWN_NORMAL, DROPDOWN_HOVERED, DROPDOWN_OPEN, DROPDOWN_DISABLED)
+    public static function getDropdownState(int entityId): int {
+        return _native_ui_getDropdownState(entityId);
+    }
+
+    // ============================================
+    // Dropdown Control
+    // ============================================
+
+    // Set the selected index of a dropdown
+    public static function setDropdownSelectedIndex(int entityId, int index): void {
+        _native_ui_setDropdownSelectedIndex(entityId, index);
+    }
+
+    // Set whether a dropdown is interactable (enabled/disabled)
+    public static function setDropdownInteractable(int entityId, bool interactable): void {
+        _native_ui_setDropdownInteractable(entityId, interactable);
+    }
+
+    // Set dropdown options using pipe-delimited string (e.g. "Option A|Option B|Option C")
+    // Note: option text cannot contain the '|' character
+    public static function setDropdownOptions(int entityId, String options): void {
+        _native_ui_setDropdownOptions(entityId, options);
+    }
+
+    // Open the dropdown (closes any other open dropdown)
+    public static function openDropdown(int entityId): void {
+        _native_ui_openDropdown(entityId);
+    }
+
+    // Close the dropdown
+    public static function closeDropdown(int entityId): void {
+        _native_ui_closeDropdown(entityId);
     }
 }

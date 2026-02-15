@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
+#include <vector>
 #include <map>
 #include <array>
 #include <cstdint>
@@ -37,6 +38,7 @@ namespace components
     struct UILabelComponent;
     struct UIButtonComponent;
     struct UITextInputComponent;
+    struct UIDropdownComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
@@ -45,7 +47,7 @@ namespace components
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
-                                               UITextInputComponent>;
+                                               UITextInputComponent, UIDropdownComponent>;
 
     struct WorldTransformComponent
     {
@@ -739,5 +741,56 @@ namespace components
         // Runtime state (NOT serialized)
         UICheckboxState currentState = UICheckboxState::Normal;
         glm::vec4 currentDisplayColor{1.0f, 1.0f, 1.0f, 1.0f};
+    };
+
+    enum class UIDropdownState : uint8_t
+    {
+        Normal,
+        Hovered,
+        Open,
+        Disabled
+    };
+
+    struct DropdownOption
+    {
+        std::string text;
+        std::string iconPath; // optional .vfImage path, empty = no icon
+    };
+
+    struct UIDropdownComponent
+    {
+        // Config (serialized)
+        std::vector<DropdownOption> options;
+        int selectedIndex = -1; // -1 = nothing selected
+        std::string placeholderText = "Select...";
+        int maxVisibleItems = 5;
+        bool interactable = true;
+
+        // Header state colors
+        glm::vec4 normalColor{0.25f, 0.25f, 0.25f, 1.0f};
+        glm::vec4 hoveredColor{0.3f, 0.3f, 0.3f, 1.0f};
+        glm::vec4 openColor{0.2f, 0.2f, 0.35f, 1.0f};
+        glm::vec4 disabledColor{0.15f, 0.15f, 0.15f, 0.5f};
+
+        // List colors
+        glm::vec4 listBackgroundColor{0.18f, 0.18f, 0.18f, 1.0f};
+        glm::vec4 itemNormalColor{0.18f, 0.18f, 0.18f, 0.0f};
+        glm::vec4 itemHoveredColor{0.3f, 0.5f, 0.8f, 0.5f};
+
+        // Font settings
+        std::string fontPath;
+        float fontSize = 16.0f;
+
+        float colorTransitionDuration = 0.1f;
+
+        // Runtime state (NOT serialized)
+        UIDropdownState currentState = UIDropdownState::Normal;
+        bool isOpen = false;
+        int hoveredOptionIndex = -1;
+        glm::vec4 currentDisplayColor{0.25f, 0.25f, 0.25f, 1.0f};
+        float listScrollOffset = 0.0f;
+
+        // Global singleton tracker: only one dropdown can be open at a time
+        static inline entt::entity activeDropdownEntity = entt::null;
     };
 }

@@ -165,6 +165,9 @@ namespace serialization
         static json serializeUICheckbox(const components::UICheckboxComponent& checkbox);
         static void deserializeUICheckbox(const json& j, components::UICheckboxComponent& checkbox);
 
+        static json serializeUIDropdown(const components::UIDropdownComponent& dropdown);
+        static void deserializeUIDropdown(const json& j, components::UIDropdownComponent& dropdown);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 
