@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <string>
+#include "JoltConversions.hpp"
 
 namespace core::physics
 {
@@ -151,15 +152,5 @@ namespace core::physics
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);
 
-    private:
-        JPH::Ref<JPH::Shape> createShape(const ColliderCreateInfo& info);
-        JPH::EMotionType getMotionType(BodyType type);
-
-        static JPH::Vec3 toJolt(const glm::vec3& v);
-        static JPH::Quat toJolt(const glm::quat& q);
-        static JPH::RVec3 toJoltR(const glm::vec3& v);
-        static glm::vec3 toGlm(const JPH::Vec3& v);
-        static glm::vec3 toGlmR(const JPH::RVec3& v);
-        static glm::quat toGlm(const JPH::Quat& q);
     };
 }

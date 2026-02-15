@@ -1,18 +1,12 @@
 #include "PhysicsWorld.hpp"
+#include "PhysicsShapeFactory.hpp"
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
-#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
-#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
-#include "PhysicsMeshLoader.hpp"
 #include <Jolt/Physics/Collision/CastResult.h>
 #include "print/Logger.hpp"
 
@@ -201,7 +195,7 @@ namespace core::physics
             return JPH::BodyID();
         }
 
-        JPH::Ref<JPH::Shape> shape = createShape(colliderInfo);
+        JPH::Ref<JPH::Shape> shape = PhysicsShapeFactory::createShape(colliderInfo);
         if (!shape)
         {
             return JPH::BodyID();
@@ -219,7 +213,7 @@ namespace core::physics
                           entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
         }
         JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(clampedLayer);
-        JPH::EMotionType motionType = getMotionType(bodyInfo.type);
+        JPH::EMotionType motionType = PhysicsShapeFactory::getMotionType(bodyInfo.type);
 
         JPH::BodyCreationSettings settings(
             shape,
@@ -597,238 +591,6 @@ namespace core::physics
         {
             contactListener->setOnContactRemoved(std::move(callback));
         }
-    }
-
-    JPH::Ref<JPH::Shape> PhysicsWorld::createShape(const ColliderCreateInfo& info)
-    {
-        constexpr float MIN_DIMENSION = 0.001f;
-
-        switch (info.shape)
-        {
-        case ColliderShape::Box:
-            {
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                if (safeExtents != info.halfExtents)
-                {
-                    loggerWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
-                                  info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
-                                  safeExtents.x, safeExtents.y, safeExtents.z);
-                }
-                return new JPH::BoxShape(toJolt(safeExtents));
-            }
-
-        case ColliderShape::Sphere:
-            {
-                float safeRadius = std::max(info.radius, MIN_DIMENSION);
-                if (safeRadius != info.radius)
-                {
-                    loggerWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
-                }
-                return new JPH::SphereShape(safeRadius);
-            }
-
-        case ColliderShape::Capsule:
-            {
-                float safeRadius = std::max(info.radius, MIN_DIMENSION);
-                // Jolt capsule uses half-height of the cylindrical part (not including hemispheres)
-                // Total height = 2 * halfHeight + 2 * radius, so halfHeight = (height - 2*radius) / 2
-                // Minimum half-height must be >= 0 (can be 0 for a sphere-like shape)
-                float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
-                if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius))
-                {
-                    loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
-                                  info.radius, safeRadius, halfHeight, info.height);
-                }
-                return new JPH::CapsuleShape(halfHeight, safeRadius);
-            }
-
-        case ColliderShape::ConvexMesh:
-            {
-                if (info.meshPath.empty())
-                {
-                    loggerWarning("ConvexMesh collider has no mesh path, using box fallback");
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                auto decomposition = PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
-                if (decomposition && !decomposition->hulls.empty())
-                {
-                    JPH::StaticCompoundShapeSettings compoundSettings;
-
-                    for (const auto& hull : decomposition->hulls)
-                    {
-                        if (hull.vertices.empty())
-                            continue;
-
-                        JPH::Array<JPH::Vec3> hullVerts;
-                        hullVerts.reserve(hull.vertices.size());
-                        for (const auto& v : hull.vertices)
-                        {
-                            hullVerts.push_back(JPH::Vec3(v.x, v.y, v.z));
-                        }
-
-                        JPH::ConvexHullShapeSettings hullSettings(hullVerts.data(), static_cast<int>(hullVerts.size()));
-                        hullSettings.mMaxConvexRadius = 0.05f;
-
-                        auto hullResult = hullSettings.Create();
-                        if (!hullResult.HasError())
-                        {
-                            compoundSettings.AddShape(JPH::Vec3::sZero(), JPH::Quat::sIdentity(), hullResult.Get());
-                        }
-                    }
-
-                    if (compoundSettings.mSubShapes.size() > 0)
-                    {
-                        auto result = compoundSettings.Create();
-                        if (!result.HasError())
-                        {
-                            loggerInfo("Created ConvexMesh compound collider with {} hulls from: {}",
-                                       compoundSettings.mSubShapes.size(), info.meshPath);
-                            return result.Get();
-                        }
-                    }
-                }
-
-                auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
-                if (!meshData || meshData->vertices.empty())
-                {
-                    loggerWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                JPH::Array<JPH::Vec3> joltVertices;
-                joltVertices.reserve(meshData->vertices.size());
-                for (const auto& v : meshData->vertices)
-                {
-                    joltVertices.push_back(JPH::Vec3(v.x, v.y, v.z));
-                }
-
-                JPH::ConvexHullShapeSettings settings(joltVertices.data(), static_cast<int>(joltVertices.size()));
-                settings.mMaxConvexRadius = 0.05f;
-
-                auto result = settings.Create();
-                if (result.HasError())
-                {
-                    loggerWarning("ConvexMesh collider creation failed: {}, using box fallback",
-                                  result.GetError().c_str());
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                loggerInfo("Created ConvexMesh collider with {} vertices from: {}",
-                           meshData->vertices.size(), info.meshPath);
-                return result.Get();
-            }
-
-        case ColliderShape::TriangleMesh:
-            {
-                if (info.meshPath.empty())
-                {
-                    loggerWarning("TriangleMesh collider has no mesh path, using box fallback");
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
-                if (!meshData || meshData->vertices.empty() || meshData->indices.empty())
-                {
-                    loggerWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                JPH::TriangleList triangles;
-                triangles.reserve(meshData->indices.size() / 3);
-
-                for (size_t i = 0; i + 2 < meshData->indices.size(); i += 3)
-                {
-                    const auto& v0 = meshData->vertices[meshData->indices[i]];
-                    const auto& v1 = meshData->vertices[meshData->indices[i + 1]];
-                    const auto& v2 = meshData->vertices[meshData->indices[i + 2]];
-
-                    triangles.push_back(JPH::Triangle(
-                        JPH::Float3(v0.x, v0.y, v0.z),
-                        JPH::Float3(v1.x, v1.y, v1.z),
-                        JPH::Float3(v2.x, v2.y, v2.z)
-                    ));
-                }
-
-                JPH::MeshShapeSettings settings(triangles);
-
-                auto result = settings.Create();
-                if (result.HasError())
-                {
-                    loggerWarning("TriangleMesh collider creation failed: {}, using box fallback",
-                                  result.GetError().c_str());
-                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                    return new JPH::BoxShape(toJolt(safeExtents));
-                }
-
-                loggerInfo("Created TriangleMesh collider with {} triangles from: {}",
-                           triangles.size(), info.meshPath);
-                return result.Get();
-            }
-
-        default:
-            loggerWarning("Unknown collider shape type {}, defaulting to unit box", static_cast<int>(info.shape));
-            return new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
-        }
-    }
-
-    JPH::EMotionType PhysicsWorld::getMotionType(BodyType type)
-    {
-        switch (type)
-        {
-        case BodyType::Static:
-            return JPH::EMotionType::Static;
-        case BodyType::Dynamic:
-            return JPH::EMotionType::Dynamic;
-        case BodyType::Kinematic:
-            return JPH::EMotionType::Kinematic;
-        default:
-            return JPH::EMotionType::Dynamic;
-        }
-    }
-
-    JPH::Vec3 PhysicsWorld::toJolt(const glm::vec3& v)
-    {
-        return JPH::Vec3(v.x, v.y, v.z);
-    }
-
-    JPH::Quat PhysicsWorld::toJolt(const glm::quat& q)
-    {
-        glm::quat normalized = glm::normalize(q);
-        if (glm::any(glm::isnan(normalized)))
-        {
-            return JPH::Quat::sIdentity();
-        }
-        return JPH::Quat(normalized.x, normalized.y, normalized.z, normalized.w);
-    }
-
-    JPH::RVec3 PhysicsWorld::toJoltR(const glm::vec3& v)
-    {
-        return JPH::RVec3(v.x, v.y, v.z);
-    }
-
-    glm::vec3 PhysicsWorld::toGlm(const JPH::Vec3& v)
-    {
-        return glm::vec3(v.GetX(), v.GetY(), v.GetZ());
-    }
-
-    glm::vec3 PhysicsWorld::toGlmR(const JPH::RVec3& v)
-    {
-        return glm::vec3(
-            static_cast<float>(v.GetX()),
-            static_cast<float>(v.GetY()),
-            static_cast<float>(v.GetZ())
-        );
-    }
-
-    glm::quat PhysicsWorld::toGlm(const JPH::Quat& q)
-    {
-        return glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
     }
 
     PhysicsWorld::TileCoordKey PhysicsWorld::makeTileKey(int32_t x, int32_t z)

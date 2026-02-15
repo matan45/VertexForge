@@ -109,6 +109,7 @@
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\PostProcessAdapter.hpp" />
+    <ClInclude Include="adapters\ScriptUIEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\TerrainBrushComputeAdapter.hpp" />
     <ClInclude Include="adapters\TerrainRaycastAdapter.hpp" />
@@ -144,12 +145,12 @@
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
-    <ClInclude Include="handlers\GraphicesHandler.hpp" />
-    <ClInclude Include="handlers\WindowHandler.hpp" />
     <ClInclude Include="physics\FixedTimestep.hpp" />
+    <ClInclude Include="physics\JoltConversions.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
+    <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -163,6 +164,7 @@
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\PostProcessAdapter.cpp" />
+    <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\TerrainBrushComputeAdapter.cpp" />
     <ClCompile Include="adapters\TerrainRaycastAdapter.cpp" />
@@ -196,11 +198,10 @@
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
-    <ClCompile Include="handlers\GraphicesHandler.cpp" />
-    <ClCompile Include="handlers\WindowHandler.cpp" />
     <ClCompile Include="physics\FixedTimestep.cpp" />
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
     <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
+    <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
   </ItemGroup>
   <ItemGroup>

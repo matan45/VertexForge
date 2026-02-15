@@ -5,6 +5,27 @@
 
 namespace core
 {
+    namespace
+    {
+        template<typename Func>
+        void withEntity(services::EntityHandle entity, Func&& func)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (!services::internal::isValidHandle(entity, registry))
+                return;
+            func(services::internal::fromHandle(entity));
+        }
+
+        template<typename T, typename Func>
+        T withEntityOr(services::EntityHandle entity, T defaultVal, Func&& func)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (!services::internal::isValidHandle(entity, registry))
+                return defaultVal;
+            return func(services::internal::fromHandle(entity));
+        }
+    }
+
     AnimatorAdapter::AnimatorAdapter()
         : controller(std::make_unique<controllers::AnimatorSystemController>())
     {
@@ -14,155 +35,89 @@ namespace core
 
     void AnimatorAdapter::setFloat(services::EntityHandle entity, const std::string& paramName, float value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->setFloat(services::internal::fromHandle(entity), paramName, value);
+        withEntity(entity, [&](entt::entity e) { controller->setFloat(e, paramName, value); });
     }
 
     void AnimatorAdapter::setInt(services::EntityHandle entity, const std::string& paramName, int32_t value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->setInt(services::internal::fromHandle(entity), paramName, value);
+        withEntity(entity, [&](entt::entity e) { controller->setInt(e, paramName, value); });
     }
 
     void AnimatorAdapter::setBool(services::EntityHandle entity, const std::string& paramName, bool value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->setBool(services::internal::fromHandle(entity), paramName, value);
+        withEntity(entity, [&](entt::entity e) { controller->setBool(e, paramName, value); });
     }
 
     void AnimatorAdapter::setTrigger(services::EntityHandle entity, const std::string& paramName)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->setTrigger(services::internal::fromHandle(entity), paramName);
+        withEntity(entity, [&](entt::entity e) { controller->setTrigger(e, paramName); });
     }
 
     float AnimatorAdapter::getFloat(services::EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return 0.0f;
-
-        return controller->getFloat(services::internal::fromHandle(entity), paramName);
+        return withEntityOr<float>(entity, 0.0f, [&](entt::entity e) { return controller->getFloat(e, paramName); });
     }
 
     int32_t AnimatorAdapter::getInt(services::EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return 0;
-
-        return controller->getInt(services::internal::fromHandle(entity), paramName);
+        return withEntityOr<int32_t>(entity, 0, [&](entt::entity e) { return controller->getInt(e, paramName); });
     }
 
     bool AnimatorAdapter::getBool(services::EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return false;
-
-        return controller->getBool(services::internal::fromHandle(entity), paramName);
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->getBool(e, paramName); });
     }
 
     void AnimatorAdapter::play(services::EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->play(services::internal::fromHandle(entity));
+        withEntity(entity, [&](entt::entity e) { controller->play(e); });
     }
 
     void AnimatorAdapter::pause(services::EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->pause(services::internal::fromHandle(entity));
+        withEntity(entity, [&](entt::entity e) { controller->pause(e); });
     }
 
     void AnimatorAdapter::stop(services::EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->stop(services::internal::fromHandle(entity));
+        withEntity(entity, [&](entt::entity e) { controller->stop(e); });
     }
 
     void AnimatorAdapter::reset(services::EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return;
-
-        controller->reset(services::internal::fromHandle(entity));
+        withEntity(entity, [&](entt::entity e) { controller->reset(e); });
     }
 
     bool AnimatorAdapter::isPlaying(services::EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return false;
-
-        return controller->isPlaying(services::internal::fromHandle(entity));
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->isPlaying(e); });
     }
 
     bool AnimatorAdapter::isBlending(services::EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return false;
-
-        return controller->isBlending(services::internal::fromHandle(entity));
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->isBlending(e); });
     }
 
     std::string AnimatorAdapter::getCurrentState(services::EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return "";
-
-        return controller->getCurrentState(services::internal::fromHandle(entity));
+        return withEntityOr<std::string>(entity, "", [&](entt::entity e) { return controller->getCurrentState(e); });
     }
 
     float AnimatorAdapter::getNormalizedTime(services::EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return 0.0f;
-
-        return controller->getNormalizedTime(services::internal::fromHandle(entity));
+        return withEntityOr<float>(entity, 0.0f, [&](entt::entity e) { return controller->getNormalizedTime(e); });
     }
 
     bool AnimatorAdapter::hasAnimator(services::EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return false;
-
-        return controller->hasAnimator(services::internal::fromHandle(entity));
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->hasAnimator(e); });
     }
 
     bool AnimatorAdapter::forceTransitionTo(services::EntityHandle entity, const std::string& stateName,
                                             float blendDuration)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!services::internal::isValidHandle(entity, registry))
-            return false;
-
-        return controller->forceTransitionTo(services::internal::fromHandle(entity), stateName, blendDuration);
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) {
+            return controller->forceTransitionTo(e, stateName, blendDuration);
+        });
     }
 }

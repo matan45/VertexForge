@@ -57,72 +57,73 @@ namespace core
             return false;
         }
 
-        physicsWorld->setContactAddedCallback([this](const physics::ContactEvent& event)
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-
-            uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
-            uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
-
-            if (entityIdA == 0 || entityIdB == 0)
-            {
-                return;
-            }
-
-            services::EntityHandle entityA{entityIdA};
-            services::EntityHandle entityB{entityIdB};
-
-            if (event.isSensor)
-            {
-                events::physics::TriggerEnterNotification notification;
-                notification.triggerEntity = entityA;
-                notification.otherEntity = entityB;
-                dispatcher.publish(notification);
-            }
-            else
-            {
-                events::physics::CollisionStartNotification notification;
-                notification.entityA = entityA;
-                notification.entityB = entityB;
-                notification.contactPoint = event.contactPoint;
-                notification.normal = event.normal;
-                notification.penetrationDepth = event.penetrationDepth;
-                dispatcher.publish(notification);
-            }
-        });
-
-        physicsWorld->setContactRemovedCallback([this](const physics::ContactEvent& event)
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-
-            uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
-            uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
-
-            if (entityIdA == 0 || entityIdB == 0)
-            {
-                return;
-            }
-
-            services::EntityHandle entityA{entityIdA};
-            services::EntityHandle entityB{entityIdB};
-
-            if (event.isSensor)
-            {
-                events::physics::TriggerExitNotification notification;
-                notification.triggerEntity = entityA;
-                notification.otherEntity = entityB;
-                dispatcher.publish(notification);
-            }
-            else
-            {
-                events::physics::CollisionEndNotification notification;
-                notification.entityA = entityA;
-                notification.entityB = entityB;
-                dispatcher.publish(notification);
-            }
-        });
+        physicsWorld->setContactAddedCallback([this](const physics::ContactEvent& e) { onContactAdded(e); });
+        physicsWorld->setContactRemovedCallback([this](const physics::ContactEvent& e) { onContactRemoved(e); });
 
         return true;
+    }
+
+    void PhysicsAdapter::onContactAdded(const physics::ContactEvent& event)
+    {
+        uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
+        uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
+
+        if (entityIdA == 0 || entityIdB == 0)
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        services::EntityHandle entityA{entityIdA};
+        services::EntityHandle entityB{entityIdB};
+
+        if (event.isSensor)
+        {
+            events::physics::TriggerEnterNotification notification;
+            notification.triggerEntity = entityA;
+            notification.otherEntity = entityB;
+            dispatcher.publish(notification);
+        }
+        else
+        {
+            events::physics::CollisionStartNotification notification;
+            notification.entityA = entityA;
+            notification.entityB = entityB;
+            notification.contactPoint = event.contactPoint;
+            notification.normal = event.normal;
+            notification.penetrationDepth = event.penetrationDepth;
+            dispatcher.publish(notification);
+        }
+    }
+
+    void PhysicsAdapter::onContactRemoved(const physics::ContactEvent& event)
+    {
+        uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
+        uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
+
+        if (entityIdA == 0 || entityIdB == 0)
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        services::EntityHandle entityA{entityIdA};
+        services::EntityHandle entityB{entityIdB};
+
+        if (event.isSensor)
+        {
+            events::physics::TriggerExitNotification notification;
+            notification.triggerEntity = entityA;
+            notification.otherEntity = entityB;
+            dispatcher.publish(notification);
+        }
+        else
+        {
+            events::physics::CollisionEndNotification notification;
+            notification.entityA = entityA;
+            notification.entityB = entityB;
+            dispatcher.publish(notification);
+        }
     }
 
     void PhysicsAdapter::cleanUp()
