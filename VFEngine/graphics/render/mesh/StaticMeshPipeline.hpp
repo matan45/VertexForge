@@ -24,6 +24,11 @@ namespace resource
     struct MeshesData;
 }
 
+namespace render::mesh
+{
+    struct ExtractedPBRValues;
+}
+
 namespace render
 {
     class DebugRenderer;

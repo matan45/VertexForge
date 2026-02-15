@@ -5,6 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "print/Logger.hpp"
 
 namespace render::mesh
 {

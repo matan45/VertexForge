@@ -4,6 +4,7 @@
 #include "../render/vfx/VFXScenePipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/vfx/GPUVFXBufferManager.hpp"
+#include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "print/Logger.hpp"

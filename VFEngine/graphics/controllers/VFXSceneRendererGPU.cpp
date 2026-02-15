@@ -2,6 +2,7 @@
 #include "../render/vfx/GPUVFXBufferManager.hpp"
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
+#include "../render/vfx/VFXParticleSystem.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
