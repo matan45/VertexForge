@@ -28,7 +28,6 @@ namespace pipeline::stages
 
         // Resize to actual bytes read
         context.header.resize(static_cast<size_t>(bytesRead));
-        file.close();
 
         return context;
     }

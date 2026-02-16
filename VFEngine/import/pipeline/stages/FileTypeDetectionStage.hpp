@@ -1,5 +1,6 @@
 #pragma once
 #include "../Pipeline.hpp"
+#include <span>
 
 namespace pipeline::stages
 {
@@ -10,28 +11,24 @@ namespace pipeline::stages
         std::string getName() const override { return "FileTypeDetection"; }
 
     private:
-        // Image format detection
-        bool isPNG(const std::vector<unsigned char>& header) const;
-        bool isJPG(const std::vector<unsigned char>& header) const;
-        bool isBMP(const std::vector<unsigned char>& header) const;
-        bool isHDR(const std::vector<unsigned char>& header) const;
-        bool isEXR(const std::vector<unsigned char>& header) const;
+        struct SignatureEntry
+        {
+            std::span<const unsigned char> signature;
+            const char* fileType;
+        };
 
-        // Audio format detection
+        static bool matchesSignature(const std::vector<unsigned char>& header,
+                                     std::span<const unsigned char> signature);
+
+        // Complex detection methods that need multi-step logic
+        bool isHDR(const std::vector<unsigned char>& header) const;
         bool isMP3(const std::vector<unsigned char>& header) const;
         bool isWAV(const std::vector<unsigned char>& header) const;
-        bool isOGG(const std::vector<unsigned char>& header) const;
-
-        // Mesh format detection (improved)
-        bool isOBJ(const std::vector<unsigned char>& header) const;
         bool isFBX(const std::vector<unsigned char>& header) const;
         bool isDAE(const std::vector<unsigned char>& header) const;
         bool isGLTF(const std::vector<unsigned char>& header) const;
-        bool isGLB(const std::vector<unsigned char>& header) const;
-
-        // Font format detection
+        bool isOBJ(const std::vector<unsigned char>& header) const;
         bool isTTF(const std::vector<unsigned char>& header) const;
-        bool isOTF(const std::vector<unsigned char>& header) const;
 
         std::string detectFileType(const std::vector<unsigned char>& header) const;
     };

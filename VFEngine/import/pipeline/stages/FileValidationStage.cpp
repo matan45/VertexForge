@@ -39,7 +39,6 @@ namespace pipeline::stages
             return context;
         }
 
-        file.close();
         return context;
     }
 }

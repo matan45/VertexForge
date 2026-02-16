@@ -21,6 +21,9 @@ namespace pipeline::stages
         types::Font fontProcessor;
         types::Animation animationProcessor;
 
+        template<typename CallbackType>
+        CallbackType wrapProgress(ImportContext& context) const;
+
         void processTexture(ImportContext& context);
         void processHDR(ImportContext& context);
         void processAudio(ImportContext& context);
