@@ -724,5 +724,253 @@ namespace core::api
                     }
                 });
             });
+
+        // =============================================
+        // Volumetric Fog
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.enabled = extractBool(args[0]);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getQuality",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.volumetricFog.quality));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setQuality",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t quality = extractInt64(args[0], "PostProcess.volumetricFog.setQuality");
+                    if (quality >= 0 && quality <= 2)
+                    {
+                        s.volumetricFog.quality = static_cast<postprocess::VolumetricQuality>(quality);
+                    }
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getDensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.uniformDensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setDensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.uniformDensity = extractFloat(args[0], "PostProcess.volumetricFog.setDensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorR",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.fogColor[0]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorG",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.fogColor[1]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorB",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.fogColor[2]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setColor",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.fogColor[0] = extractFloat(args[0], "PostProcess.volumetricFog.setColor r");
+                    s.volumetricFog.fogColor[1] = extractFloat(args[1], "PostProcess.volumetricFog.setColor g");
+                    s.volumetricFog.fogColor[2] = extractFloat(args[2], "PostProcess.volumetricFog.setColor b");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogDensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.heightFogDensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogDensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.heightFogDensity = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogDensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogFalloff",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.heightFogFalloff);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogFalloff",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.heightFogFalloff = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogFalloff");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogOffset",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.heightFogOffset);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogOffset",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.heightFogOffset = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogOffset");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getScatteringCoefficient",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.scatteringCoefficient);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setScatteringCoefficient",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.scatteringCoefficient = extractFloat(args[0], "PostProcess.volumetricFog.setScatteringCoefficient");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAbsorptionCoefficient",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.absorptionCoefficient);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAbsorptionCoefficient",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.absorptionCoefficient = extractFloat(args[0], "PostProcess.volumetricFog.setAbsorptionCoefficient");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAnisotropy",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.anisotropy);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAnisotropy",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.anisotropy = extractFloat(args[0], "PostProcess.volumetricFog.setAnisotropy");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getIntensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.intensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.intensity = extractFloat(args[0], "PostProcess.volumetricFog.setIntensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAmbientIntensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.ambientIntensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAmbientIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.ambientIntensity = extractFloat(args[0], "PostProcess.volumetricFog.setAmbientIntensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getMaxDistance",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.maxDistance);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setMaxDistance",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.maxDistance = extractFloat(args[0], "PostProcess.volumetricFog.setMaxDistance");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getTemporalBlendFactor",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.volumetricFog.temporalBlendFactor);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setTemporalBlendFactor",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.volumetricFog.temporalBlendFactor = extractFloat(args[0], "PostProcess.volumetricFog.setTemporalBlendFactor");
+                });
+            });
     }
 }

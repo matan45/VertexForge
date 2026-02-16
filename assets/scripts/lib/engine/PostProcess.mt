@@ -400,4 +400,141 @@ public class PostProcess {
     public static function setDoFSampleCount(int value): void {
         _native_postprocess_dof_setSampleCount(value);
     }
+
+    // ============================================
+    // Volumetric Fog
+    // ============================================
+
+    public static function isVolumetricFogEnabled(): bool {
+        return _native_postprocess_volumetricFog_isEnabled();
+    }
+
+    public static function setVolumetricFogEnabled(bool enabled): void {
+        _native_postprocess_volumetricFog_setEnabled(enabled);
+    }
+
+    // Quality: 0 = Low, 1 = Medium, 2 = High
+    public static function getVolumetricFogQuality(): int {
+        return _native_postprocess_volumetricFog_getQuality();
+    }
+
+    public static function setVolumetricFogQuality(int quality): void {
+        _native_postprocess_volumetricFog_setQuality(quality);
+    }
+
+    // Uniform fog density (0.0 - 1.0)
+    public static function getVolumetricFogDensity(): float {
+        return _native_postprocess_volumetricFog_getDensity();
+    }
+
+    public static function setVolumetricFogDensity(float value): void {
+        _native_postprocess_volumetricFog_setDensity(value);
+    }
+
+    // Fog color (RGB, 0.0 - 1.0 each)
+    public static function getVolumetricFogColorR(): float {
+        return _native_postprocess_volumetricFog_getColorR();
+    }
+
+    public static function getVolumetricFogColorG(): float {
+        return _native_postprocess_volumetricFog_getColorG();
+    }
+
+    public static function getVolumetricFogColorB(): float {
+        return _native_postprocess_volumetricFog_getColorB();
+    }
+
+    public static function setVolumetricFogColor(float r, float g, float b): void {
+        _native_postprocess_volumetricFog_setColor(r, g, b);
+    }
+
+    // Height fog density (0.0 - 1.0)
+    public static function getVolumetricFogHeightDensity(): float {
+        return _native_postprocess_volumetricFog_getHeightFogDensity();
+    }
+
+    public static function setVolumetricFogHeightDensity(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogDensity(value);
+    }
+
+    // Height fog falloff rate (0.0 - 1.0)
+    public static function getVolumetricFogHeightFalloff(): float {
+        return _native_postprocess_volumetricFog_getHeightFogFalloff();
+    }
+
+    public static function setVolumetricFogHeightFalloff(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogFalloff(value);
+    }
+
+    // Height fog offset (world Y position, -100.0 - 500.0)
+    public static function getVolumetricFogHeightOffset(): float {
+        return _native_postprocess_volumetricFog_getHeightFogOffset();
+    }
+
+    public static function setVolumetricFogHeightOffset(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogOffset(value);
+    }
+
+    // Scattering coefficient (0.0 - 5.0)
+    public static function getVolumetricFogScattering(): float {
+        return _native_postprocess_volumetricFog_getScatteringCoefficient();
+    }
+
+    public static function setVolumetricFogScattering(float value): void {
+        _native_postprocess_volumetricFog_setScatteringCoefficient(value);
+    }
+
+    // Absorption coefficient (0.0 - 5.0)
+    public static function getVolumetricFogAbsorption(): float {
+        return _native_postprocess_volumetricFog_getAbsorptionCoefficient();
+    }
+
+    public static function setVolumetricFogAbsorption(float value): void {
+        _native_postprocess_volumetricFog_setAbsorptionCoefficient(value);
+    }
+
+    // Anisotropy: directional scattering bias (-1.0 to 1.0)
+    public static function getVolumetricFogAnisotropy(): float {
+        return _native_postprocess_volumetricFog_getAnisotropy();
+    }
+
+    public static function setVolumetricFogAnisotropy(float value): void {
+        _native_postprocess_volumetricFog_setAnisotropy(value);
+    }
+
+    // Overall fog intensity multiplier (0.0 - 5.0)
+    public static function getVolumetricFogIntensity(): float {
+        return _native_postprocess_volumetricFog_getIntensity();
+    }
+
+    public static function setVolumetricFogIntensity(float value): void {
+        _native_postprocess_volumetricFog_setIntensity(value);
+    }
+
+    // Ambient light contribution in fog (0.0 - 1.0)
+    public static function getVolumetricFogAmbientIntensity(): float {
+        return _native_postprocess_volumetricFog_getAmbientIntensity();
+    }
+
+    public static function setVolumetricFogAmbientIntensity(float value): void {
+        _native_postprocess_volumetricFog_setAmbientIntensity(value);
+    }
+
+    // Maximum fog render distance (10.0 - 5000.0)
+    public static function getVolumetricFogMaxDistance(): float {
+        return _native_postprocess_volumetricFog_getMaxDistance();
+    }
+
+    public static function setVolumetricFogMaxDistance(float value): void {
+        _native_postprocess_volumetricFog_setMaxDistance(value);
+    }
+
+    // Temporal blend factor for smoothing (0.0 - 1.0)
+    public static function getVolumetricFogTemporalBlend(): float {
+        return _native_postprocess_volumetricFog_getTemporalBlendFactor();
+    }
+
+    public static function setVolumetricFogTemporalBlend(float value): void {
+        _native_postprocess_volumetricFog_setTemporalBlendFactor(value);
+    }
 }
