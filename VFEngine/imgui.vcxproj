@@ -103,6 +103,7 @@
     <ClInclude Include="..\dependencies\ImGuizmo\ImCurveEdit.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImGradient.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImGuizmo.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\ImLightRig.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImSequencer.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImZoomSlider.h" />
     <ClInclude Include="..\dependencies\imgui-node-editor\crude_json.h" />
