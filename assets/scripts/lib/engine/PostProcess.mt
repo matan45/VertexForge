@@ -471,4 +471,117 @@ public class PostProcess {
     public static function setVolumetricFogTemporalBlend(float value): void {
         _native_postprocess_volumetricFog_setTemporalBlendFactor(value);
     }
+
+    // ============================================
+    // SSAO (Screen-Space Ambient Occlusion)
+    // ============================================
+
+    public static function isSSAOEnabled(): bool {
+        return _native_postprocess_ssao_isEnabled();
+    }
+
+    public static function setSSAOEnabled(bool enabled): void {
+        _native_postprocess_ssao_setEnabled(enabled);
+    }
+
+    // World-space sample radius (0.1 - 5.0)
+    public static function getSSAORadius(): float {
+        return _native_postprocess_ssao_getRadius();
+    }
+
+    public static function setSSAORadius(float value): void {
+        _native_postprocess_ssao_setRadius(value);
+    }
+
+    // Depth comparison bias (0.001 - 0.1)
+    public static function getSSAOBias(): float {
+        return _native_postprocess_ssao_getBias();
+    }
+
+    public static function setSSAOBias(float value): void {
+        _native_postprocess_ssao_setBias(value);
+    }
+
+    // AO darkening strength (0.1 - 5.0)
+    public static function getSSAOIntensity(): float {
+        return _native_postprocess_ssao_getIntensity();
+    }
+
+    public static function setSSAOIntensity(float value): void {
+        _native_postprocess_ssao_setIntensity(value);
+    }
+
+    // Hemisphere samples (8 - 64)
+    public static function getSSAOKernelSize(): int {
+        return _native_postprocess_ssao_getKernelSize();
+    }
+
+    public static function setSSAOKernelSize(int value): void {
+        _native_postprocess_ssao_setKernelSize(value);
+    }
+
+    // Contrast power curve (0.5 - 5.0)
+    public static function getSSAOPower(): float {
+        return _native_postprocess_ssao_getPower();
+    }
+
+    public static function setSSAOPower(float value): void {
+        _native_postprocess_ssao_setPower(value);
+    }
+
+    // ============================================
+    // Edge Detection
+    // ============================================
+
+    public static function isEdgeDetectionEnabled(): bool {
+        return _native_postprocess_edgeDetection_isEnabled();
+    }
+
+    public static function setEdgeDetectionEnabled(bool enabled): void {
+        _native_postprocess_edgeDetection_setEnabled(enabled);
+    }
+
+    // Edge sensitivity threshold (0.01 - 1.0)
+    public static function getEdgeDetectionThreshold(): float {
+        return _native_postprocess_edgeDetection_getThreshold();
+    }
+
+    public static function setEdgeDetectionThreshold(float value): void {
+        _native_postprocess_edgeDetection_setThreshold(value);
+    }
+
+    // Edge line thickness (0.5 - 3.0)
+    public static function getEdgeDetectionWidth(): float {
+        return _native_postprocess_edgeDetection_getEdgeWidth();
+    }
+
+    public static function setEdgeDetectionWidth(float value): void {
+        _native_postprocess_edgeDetection_setEdgeWidth(value);
+    }
+
+    // Edge color (RGB, 0.0 - 1.0 each)
+    public static function getEdgeDetectionColorR(): float {
+        return _native_postprocess_edgeDetection_getColorR();
+    }
+
+    public static function getEdgeDetectionColorG(): float {
+        return _native_postprocess_edgeDetection_getColorG();
+    }
+
+    public static function getEdgeDetectionColorB(): float {
+        return _native_postprocess_edgeDetection_getColorB();
+    }
+
+    public static function setEdgeDetectionColor(float r, float g, float b): void {
+        _native_postprocess_edgeDetection_setColor(r, g, b);
+    }
+
+    // Edge overlay opacity (0.0 - 1.0)
+    public static function getEdgeDetectionOpacity(): float {
+        return _native_postprocess_edgeDetection_getOpacity();
+    }
+
+    public static function setEdgeDetectionOpacity(float value): void {
+        _native_postprocess_edgeDetection_setOpacity(value);
+    }
 }

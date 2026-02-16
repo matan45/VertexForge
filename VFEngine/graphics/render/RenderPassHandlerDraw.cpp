@@ -634,7 +634,7 @@ namespace render
     void RenderPassHandler::executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane,
-                                           currentCameraPosition, currentView, currentTime);
+                                           currentCameraPosition, currentView, currentProjection, currentTime);
 
         if (gpuDrivenRendererInitialized)
         {

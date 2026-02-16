@@ -203,8 +203,10 @@
     <ClInclude Include="render\postprocess\effects\BloomEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ChromaticAberrationEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FXAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
@@ -363,8 +365,10 @@
     <ClCompile Include="render\postprocess\effects\BloomEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\EdgeDetectionEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FXAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
@@ -449,9 +453,14 @@
     <None Include="..\..\resources\shaders\postprocess\chromatic_aberration.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\edge_detection.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\edge_detection_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />

@@ -19,6 +19,8 @@ namespace windows
         void drawFilmGrainSection();
         void drawDepthOfFieldSection();
         void drawVolumetricFogSection();
+        void drawSSAOSection();
+        void drawEdgeDetectionSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();

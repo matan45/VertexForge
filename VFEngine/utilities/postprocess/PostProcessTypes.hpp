@@ -11,7 +11,9 @@ namespace postprocess
         Vignette,
         ChromaticAberration,
         FilmGrain,
-        DepthOfField
+        DepthOfField,
+        SSAO,
+        EdgeDetection
     };
 
     enum class VolumetricQuality : uint8_t
@@ -124,6 +126,25 @@ namespace postprocess
         float maxDistance = 500.0f;
     };
 
+    struct SSAOSettings
+    {
+        bool enabled = false;
+        float radius = 0.5f;
+        float bias = 0.025f;
+        float intensity = 1.0f;
+        int kernelSize = 32;
+        float power = 2.0f;
+    };
+
+    struct EdgeDetectionSettings
+    {
+        bool enabled = false;
+        float threshold = 0.1f;
+        float edgeWidth = 1.0f;
+        float edgeColor[3] = {0.0f, 0.0f, 0.0f};
+        float opacity = 1.0f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = true;
@@ -136,6 +157,8 @@ namespace postprocess
         FilmGrainSettings filmGrain;
         DepthOfFieldSettings depthOfField;
         VolumetricFogSettings volumetricFog;
+        SSAOSettings ssao;
+        EdgeDetectionSettings edgeDetection;
 
         static PostProcessSettings createDefault()
         {

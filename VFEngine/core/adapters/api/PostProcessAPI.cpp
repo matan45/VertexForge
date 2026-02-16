@@ -852,5 +852,209 @@ namespace core::api
                     s.volumetricFog.temporalBlendFactor = extractFloat(args[0], "PostProcess.volumetricFog.setTemporalBlendFactor");
                 });
             });
+
+        // =============================================
+        // SSAO
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.ssao.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.ssao.enabled = extractBool(args[0]);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getRadius",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.ssao.radius);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setRadius",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.ssao.radius = extractFloat(args[0], "PostProcess.ssao.setRadius");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getBias",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.ssao.bias);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setBias",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.ssao.bias = extractFloat(args[0], "PostProcess.ssao.setBias");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getIntensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.ssao.intensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.ssao.intensity = extractFloat(args[0], "PostProcess.ssao.setIntensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getKernelSize",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.ssao.kernelSize));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setKernelSize",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t size = extractInt64(args[0], "PostProcess.ssao.setKernelSize");
+                    if (size >= 8 && size <= 64)
+                    {
+                        s.ssao.kernelSize = static_cast<int>(size);
+                    }
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getPower",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.ssao.power);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setPower",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.ssao.power = extractFloat(args[0], "PostProcess.ssao.setPower");
+                });
+            });
+
+        // =============================================
+        // Edge Detection
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.edgeDetection.enabled = extractBool(args[0]);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getThreshold",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.threshold);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_setThreshold",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.edgeDetection.threshold = extractFloat(args[0], "PostProcess.edgeDetection.setThreshold");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getEdgeWidth",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.edgeWidth);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_setEdgeWidth",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.edgeDetection.edgeWidth = extractFloat(args[0], "PostProcess.edgeDetection.setEdgeWidth");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getColorR",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.edgeColor[0]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getColorG",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.edgeColor[1]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getColorB",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.edgeColor[2]);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_setColor",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.edgeDetection.edgeColor[0] = extractFloat(args[0], "PostProcess.edgeDetection.setColor r");
+                    s.edgeDetection.edgeColor[1] = extractFloat(args[1], "PostProcess.edgeDetection.setColor g");
+                    s.edgeDetection.edgeColor[2] = extractFloat(args[2], "PostProcess.edgeDetection.setColor b");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_getOpacity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.edgeDetection.opacity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_edgeDetection_setOpacity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.edgeDetection.opacity = extractFloat(args[0], "PostProcess.edgeDetection.setOpacity");
+                });
+            });
     }
 }

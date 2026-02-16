@@ -190,6 +190,29 @@ namespace serialization
             return postprocess::VolumetricQuality::Medium;
         }
 
+        json serializeSSAO(const postprocess::SSAOSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"radius", s.radius},
+                {"bias", s.bias},
+                {"intensity", s.intensity},
+                {"kernelSize", s.kernelSize},
+                {"power", s.power}
+            };
+        }
+
+        json serializeEdgeDetection(const postprocess::EdgeDetectionSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"threshold", s.threshold},
+                {"edgeWidth", s.edgeWidth},
+                {"edgeColor", {s.edgeColor[0], s.edgeColor[1], s.edgeColor[2]}},
+                {"opacity", s.opacity}
+            };
+        }
+
         json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
         {
             return {
@@ -367,6 +390,46 @@ namespace serialization
                 s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
         }
 
+        void deserializeSSAO(const json& j, postprocess::SSAOSettings& s)
+        {
+            if (!j.contains("ssao") || !j["ssao"].is_object())
+                return;
+            const auto& ao = j["ssao"];
+            if (ao.contains("enabled") && ao["enabled"].is_boolean())
+                s.enabled = ao["enabled"].get<bool>();
+            if (ao.contains("radius") && ao["radius"].is_number())
+                s.radius = std::clamp(ao["radius"].get<float>(), 0.1f, 5.0f);
+            if (ao.contains("bias") && ao["bias"].is_number())
+                s.bias = std::clamp(ao["bias"].get<float>(), 0.001f, 0.1f);
+            if (ao.contains("intensity") && ao["intensity"].is_number())
+                s.intensity = std::clamp(ao["intensity"].get<float>(), 0.1f, 5.0f);
+            if (ao.contains("kernelSize") && ao["kernelSize"].is_number_integer())
+                s.kernelSize = std::clamp(ao["kernelSize"].get<int>(), 8, 64);
+            if (ao.contains("power") && ao["power"].is_number())
+                s.power = std::clamp(ao["power"].get<float>(), 0.5f, 5.0f);
+        }
+
+        void deserializeEdgeDetection(const json& j, postprocess::EdgeDetectionSettings& s)
+        {
+            if (!j.contains("edgeDetection") || !j["edgeDetection"].is_object())
+                return;
+            const auto& ed = j["edgeDetection"];
+            if (ed.contains("enabled") && ed["enabled"].is_boolean())
+                s.enabled = ed["enabled"].get<bool>();
+            if (ed.contains("threshold") && ed["threshold"].is_number())
+                s.threshold = std::clamp(ed["threshold"].get<float>(), 0.01f, 1.0f);
+            if (ed.contains("edgeWidth") && ed["edgeWidth"].is_number())
+                s.edgeWidth = std::clamp(ed["edgeWidth"].get<float>(), 0.5f, 3.0f);
+            if (ed.contains("edgeColor") && ed["edgeColor"].is_array() && ed["edgeColor"].size() == 3)
+            {
+                s.edgeColor[0] = std::clamp(ed["edgeColor"][0].get<float>(), 0.0f, 1.0f);
+                s.edgeColor[1] = std::clamp(ed["edgeColor"][1].get<float>(), 0.0f, 1.0f);
+                s.edgeColor[2] = std::clamp(ed["edgeColor"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (ed.contains("opacity") && ed["opacity"].is_number())
+                s.opacity = std::clamp(ed["opacity"].get<float>(), 0.0f, 1.0f);
+        }
+
         // ---- Deserialize render sub-helpers ----
 
         void deserializeShadowSettings(const json& j, types::ShadowSettings& settings)
@@ -508,6 +571,8 @@ namespace serialization
         j["filmGrain"] = serializeFilmGrain(settings.filmGrain);
         j["depthOfField"] = serializeDepthOfField(settings.depthOfField);
         j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
+        j["ssao"] = serializeSSAO(settings.ssao);
+        j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
 
         return j;
     }
@@ -525,5 +590,7 @@ namespace serialization
         deserializeFilmGrain(j, settings.filmGrain);
         deserializeDepthOfField(j, settings.depthOfField);
         deserializeVolumetricFog(j, settings.volumetricFog);
+        deserializeSSAO(j, settings.ssao);
+        deserializeEdgeDetection(j, settings.edgeDetection);
     }
 }

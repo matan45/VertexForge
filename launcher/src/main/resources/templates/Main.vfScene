@@ -122,15 +122,6 @@
         "enabled": false,
         "quality": "medium"
       },
-      "godRays": {
-        "decay": 0.9800000190734863,
-        "density": 1.0,
-        "enabled": false,
-        "intensity": 0.800000011920929,
-        "sampleCount": 64,
-        "threshold": 0.5,
-        "weight": 1.0
-      },
       "toneMapping": {
         "contrast": 1.0,
         "enabled": true,
@@ -143,6 +134,21 @@
         "intensity": 0.30000001192092896,
         "radius": 0.800000011920929,
         "softness": 0.5
+      },
+      "ssao": {
+        "enabled": false,
+        "radius": 0.5,
+        "bias": 0.025,
+        "intensity": 1.0,
+        "kernelSize": 32,
+        "power": 2.0
+      },
+      "edgeDetection": {
+        "enabled": false,
+        "threshold": 0.1,
+        "edgeWidth": 1.0,
+        "edgeColor": [0.0, 0.0, 0.0],
+        "opacity": 1.0
       }
     },
     "shadows": {
