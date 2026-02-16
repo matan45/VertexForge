@@ -91,236 +91,44 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         std::vector<EntityHandle> handles;
 
+#define COLLECT_CASE(TypeId, CompType) \
+        case ComponentTypeId::TypeId: \
+            for (auto e : registry.view<components::CompType>()) \
+                handles.push_back(internal::toHandle(e)); \
+            break
+
         switch (type)
         {
-        case ComponentTypeId::Camera:
-            {
-                auto view = registry.view<components::CameraComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Transform:
-            {
-                auto view = registry.view<components::TransformComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::IBL:
-            {
-                auto view = registry.view<components::IBLComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Mesh:
-            {
-                auto view = registry.view<components::MeshComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::AudioSource2D:
-            {
-                auto view = registry.view<components::AudioSource2DComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::AudioSource3D:
-            {
-                auto view = registry.view<components::AudioSource3DComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Script:
-            {
-                auto view = registry.view<components::ScriptComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Collider:
-            {
-                auto view = registry.view<components::ColliderComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::RigidBody:
-            {
-                auto view = registry.view<components::RigidBodyComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Animator:
-            {
-                auto view = registry.view<components::AnimatorComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::VFX:
-            {
-                auto view = registry.view<components::VFXComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::Text:
-            {
-                auto view = registry.view<components::TextComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UICanvas:
-            {
-                auto view = registry.view<components::UICanvasComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIRect:
-            {
-                auto view = registry.view<components::UIRectComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIImage:
-            {
-                auto view = registry.view<components::UIImageComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIScroll:
-            {
-                auto view = registry.view<components::UIScrollComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UILayoutGroup:
-            {
-                auto view = registry.view<components::UILayoutGroupComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UILabel:
-            {
-                auto view = registry.view<components::UILabelComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIButton:
-            {
-                auto view = registry.view<components::UIButtonComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UITextInput:
-            {
-                auto view = registry.view<components::UITextInputComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UICheckbox:
-            {
-                auto view = registry.view<components::UICheckboxComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIDropdown:
-            {
-                auto view = registry.view<components::UIDropdownComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UITabs:
-            {
-                auto view = registry.view<components::UITabsComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UISlider:
-            {
-                auto view = registry.view<components::UISliderComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
-        case ComponentTypeId::UIProgressBar:
-            {
-                auto view = registry.view<components::UIProgressBarComponent>();
-                for (auto entity : view)
-                {
-                    handles.push_back(internal::toHandle(entity));
-                }
-                break;
-            }
+            COLLECT_CASE(Camera, CameraComponent);
+            COLLECT_CASE(Transform, TransformComponent);
+            COLLECT_CASE(IBL, IBLComponent);
+            COLLECT_CASE(Mesh, MeshComponent);
+            COLLECT_CASE(AudioSource2D, AudioSource2DComponent);
+            COLLECT_CASE(AudioSource3D, AudioSource3DComponent);
+            COLLECT_CASE(Script, ScriptComponent);
+            COLLECT_CASE(Collider, ColliderComponent);
+            COLLECT_CASE(RigidBody, RigidBodyComponent);
+            COLLECT_CASE(Animator, AnimatorComponent);
+            COLLECT_CASE(VFX, VFXComponent);
+            COLLECT_CASE(Text, TextComponent);
+            COLLECT_CASE(UICanvas, UICanvasComponent);
+            COLLECT_CASE(UIRect, UIRectComponent);
+            COLLECT_CASE(UIImage, UIImageComponent);
+            COLLECT_CASE(UIScroll, UIScrollComponent);
+            COLLECT_CASE(UILayoutGroup, UILayoutGroupComponent);
+            COLLECT_CASE(UILabel, UILabelComponent);
+            COLLECT_CASE(UIButton, UIButtonComponent);
+            COLLECT_CASE(UITextInput, UITextInputComponent);
+            COLLECT_CASE(UICheckbox, UICheckboxComponent);
+            COLLECT_CASE(UIDropdown, UIDropdownComponent);
+            COLLECT_CASE(UITabs, UITabsComponent);
+            COLLECT_CASE(UISlider, UISliderComponent);
+            COLLECT_CASE(UIProgressBar, UIProgressBarComponent);
         default:
             break;
         }
+
+#undef COLLECT_CASE
 
         return handles;
     }
@@ -345,69 +153,45 @@ namespace services
 
         auto enttEntity = internal::fromHandle(entity);
 
+#define HAS_CASE(TypeId, CompType) \
+        case ComponentTypeId::TypeId: return registry.all_of<components::CompType>(enttEntity)
+
         switch (type)
         {
-        case ComponentTypeId::Transform:
-            return registry.all_of<components::TransformComponent>(enttEntity);
-        case ComponentTypeId::Camera:
-            return registry.all_of<components::CameraComponent>(enttEntity);
-        case ComponentTypeId::Name:
-            return registry.all_of<components::NameComponent>(enttEntity);
-        case ComponentTypeId::Parent:
-            return registry.all_of<components::ParentComponent>(enttEntity);
-        case ComponentTypeId::Children:
-            return registry.all_of<components::ChildrenComponent>(enttEntity);
-        case ComponentTypeId::WorldTransform:
-            return registry.all_of<components::WorldTransformComponent>(enttEntity);
-        case ComponentTypeId::IBL:
-            return registry.all_of<components::IBLComponent>(enttEntity);
-        case ComponentTypeId::Mesh:
-            return registry.all_of<components::MeshComponent>(enttEntity);
-        case ComponentTypeId::AudioSource2D:
-            return registry.all_of<components::AudioSource2DComponent>(enttEntity);
-        case ComponentTypeId::AudioSource3D:
-            return registry.all_of<components::AudioSource3DComponent>(enttEntity);
-        case ComponentTypeId::Script:
-            return registry.all_of<components::ScriptComponent>(enttEntity);
-        case ComponentTypeId::Collider:
-            return registry.all_of<components::ColliderComponent>(enttEntity);
-        case ComponentTypeId::RigidBody:
-            return registry.all_of<components::RigidBodyComponent>(enttEntity);
-        case ComponentTypeId::Animator:
-            return registry.all_of<components::AnimatorComponent>(enttEntity);
-        case ComponentTypeId::VFX:
-            return registry.all_of<components::VFXComponent>(enttEntity);
-        case ComponentTypeId::Text:
-            return registry.all_of<components::TextComponent>(enttEntity);
-        case ComponentTypeId::UICanvas:
-            return registry.all_of<components::UICanvasComponent>(enttEntity);
-        case ComponentTypeId::UIRect:
-            return registry.all_of<components::UIRectComponent>(enttEntity);
-        case ComponentTypeId::UIImage:
-            return registry.all_of<components::UIImageComponent>(enttEntity);
-        case ComponentTypeId::UIScroll:
-            return registry.all_of<components::UIScrollComponent>(enttEntity);
-        case ComponentTypeId::UILayoutGroup:
-            return registry.all_of<components::UILayoutGroupComponent>(enttEntity);
-        case ComponentTypeId::UILabel:
-            return registry.all_of<components::UILabelComponent>(enttEntity);
-        case ComponentTypeId::UIButton:
-            return registry.all_of<components::UIButtonComponent>(enttEntity);
-        case ComponentTypeId::UITextInput:
-            return registry.all_of<components::UITextInputComponent>(enttEntity);
-        case ComponentTypeId::UICheckbox:
-            return registry.all_of<components::UICheckboxComponent>(enttEntity);
-        case ComponentTypeId::UIDropdown:
-            return registry.all_of<components::UIDropdownComponent>(enttEntity);
-        case ComponentTypeId::UITabs:
-            return registry.all_of<components::UITabsComponent>(enttEntity);
-        case ComponentTypeId::UISlider:
-            return registry.all_of<components::UISliderComponent>(enttEntity);
-        case ComponentTypeId::UIProgressBar:
-            return registry.all_of<components::UIProgressBarComponent>(enttEntity);
+            HAS_CASE(Transform, TransformComponent);
+            HAS_CASE(Camera, CameraComponent);
+            HAS_CASE(Name, NameComponent);
+            HAS_CASE(Parent, ParentComponent);
+            HAS_CASE(Children, ChildrenComponent);
+            HAS_CASE(WorldTransform, WorldTransformComponent);
+            HAS_CASE(IBL, IBLComponent);
+            HAS_CASE(Mesh, MeshComponent);
+            HAS_CASE(AudioSource2D, AudioSource2DComponent);
+            HAS_CASE(AudioSource3D, AudioSource3DComponent);
+            HAS_CASE(Script, ScriptComponent);
+            HAS_CASE(Collider, ColliderComponent);
+            HAS_CASE(RigidBody, RigidBodyComponent);
+            HAS_CASE(Animator, AnimatorComponent);
+            HAS_CASE(VFX, VFXComponent);
+            HAS_CASE(Text, TextComponent);
+            HAS_CASE(UICanvas, UICanvasComponent);
+            HAS_CASE(UIRect, UIRectComponent);
+            HAS_CASE(UIImage, UIImageComponent);
+            HAS_CASE(UIScroll, UIScrollComponent);
+            HAS_CASE(UILayoutGroup, UILayoutGroupComponent);
+            HAS_CASE(UILabel, UILabelComponent);
+            HAS_CASE(UIButton, UIButtonComponent);
+            HAS_CASE(UITextInput, UITextInputComponent);
+            HAS_CASE(UICheckbox, UICheckboxComponent);
+            HAS_CASE(UIDropdown, UIDropdownComponent);
+            HAS_CASE(UITabs, UITabsComponent);
+            HAS_CASE(UISlider, UISliderComponent);
+            HAS_CASE(UIProgressBar, UIProgressBarComponent);
         default:
             return false;
         }
+
+#undef HAS_CASE
     }
 
     std::vector<ComponentTypeId> EntityQueryService::getComponentTypes(EntityHandle entity) const
@@ -421,64 +205,41 @@ namespace services
 
         auto enttEntity = internal::fromHandle(entity);
 
-        if (registry.all_of<components::TransformComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Transform);
-        if (registry.all_of<components::CameraComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Camera);
-        if (registry.all_of<components::NameComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Name);
-        if (registry.all_of<components::ParentComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Parent);
-        if (registry.all_of<components::ChildrenComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Children);
-        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
-            types.push_back(ComponentTypeId::WorldTransform);
-        if (registry.all_of<components::IBLComponent>(enttEntity))
-            types.push_back(ComponentTypeId::IBL);
-        if (registry.all_of<components::MeshComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Mesh);
-        if (registry.all_of<components::AudioSource2DComponent>(enttEntity))
-            types.push_back(ComponentTypeId::AudioSource2D);
-        if (registry.all_of<components::AudioSource3DComponent>(enttEntity))
-            types.push_back(ComponentTypeId::AudioSource3D);
-        if (registry.all_of<components::ScriptComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Script);
-        if (registry.all_of<components::ColliderComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Collider);
-        if (registry.all_of<components::RigidBodyComponent>(enttEntity))
-            types.push_back(ComponentTypeId::RigidBody);
-        if (registry.all_of<components::AnimatorComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Animator);
-        if (registry.all_of<components::VFXComponent>(enttEntity))
-            types.push_back(ComponentTypeId::VFX);
-        if (registry.all_of<components::TextComponent>(enttEntity))
-            types.push_back(ComponentTypeId::Text);
-        if (registry.all_of<components::UICanvasComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UICanvas);
-        if (registry.all_of<components::UIRectComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIRect);
-        if (registry.all_of<components::UIImageComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIImage);
-        if (registry.all_of<components::UIScrollComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIScroll);
-        if (registry.all_of<components::UILayoutGroupComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UILayoutGroup);
-        if (registry.all_of<components::UILabelComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UILabel);
-        if (registry.all_of<components::UIButtonComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIButton);
-        if (registry.all_of<components::UITextInputComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UITextInput);
-        if (registry.all_of<components::UICheckboxComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UICheckbox);
-        if (registry.all_of<components::UIDropdownComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIDropdown);
-        if (registry.all_of<components::UITabsComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UITabs);
-        if (registry.all_of<components::UISliderComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UISlider);
-        if (registry.all_of<components::UIProgressBarComponent>(enttEntity))
-            types.push_back(ComponentTypeId::UIProgressBar);
+#define CHECK_COMP(TypeId, CompType) \
+        if (registry.all_of<components::CompType>(enttEntity)) \
+            types.push_back(ComponentTypeId::TypeId)
+
+        CHECK_COMP(Transform, TransformComponent);
+        CHECK_COMP(Camera, CameraComponent);
+        CHECK_COMP(Name, NameComponent);
+        CHECK_COMP(Parent, ParentComponent);
+        CHECK_COMP(Children, ChildrenComponent);
+        CHECK_COMP(WorldTransform, WorldTransformComponent);
+        CHECK_COMP(IBL, IBLComponent);
+        CHECK_COMP(Mesh, MeshComponent);
+        CHECK_COMP(AudioSource2D, AudioSource2DComponent);
+        CHECK_COMP(AudioSource3D, AudioSource3DComponent);
+        CHECK_COMP(Script, ScriptComponent);
+        CHECK_COMP(Collider, ColliderComponent);
+        CHECK_COMP(RigidBody, RigidBodyComponent);
+        CHECK_COMP(Animator, AnimatorComponent);
+        CHECK_COMP(VFX, VFXComponent);
+        CHECK_COMP(Text, TextComponent);
+        CHECK_COMP(UICanvas, UICanvasComponent);
+        CHECK_COMP(UIRect, UIRectComponent);
+        CHECK_COMP(UIImage, UIImageComponent);
+        CHECK_COMP(UIScroll, UIScrollComponent);
+        CHECK_COMP(UILayoutGroup, UILayoutGroupComponent);
+        CHECK_COMP(UILabel, UILabelComponent);
+        CHECK_COMP(UIButton, UIButtonComponent);
+        CHECK_COMP(UITextInput, UITextInputComponent);
+        CHECK_COMP(UICheckbox, UICheckboxComponent);
+        CHECK_COMP(UIDropdown, UIDropdownComponent);
+        CHECK_COMP(UITabs, UITabsComponent);
+        CHECK_COMP(UISlider, UISliderComponent);
+        CHECK_COMP(UIProgressBar, UIProgressBarComponent);
+
+#undef CHECK_COMP
 
         return types;
     }

@@ -132,6 +132,16 @@
     <ClInclude Include="events\UndoRedoEvents.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\VFXRuntimeEvents.hpp" />
+    <ClInclude Include="events\scene\ComponentMediaEvents.hpp" />
+    <ClInclude Include="events\scene\ComponentPhysicsLightEvents.hpp" />
+    <ClInclude Include="events\scene\EntityTransformEvents.hpp" />
+    <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
+    <ClInclude Include="events\ui\UICanvasRectImageEvents.hpp" />
+    <ClInclude Include="events\ui\UIDropdownTabsEvents.hpp" />
+    <ClInclude Include="events\ui\UIInputCheckboxEvents.hpp" />
+    <ClInclude Include="events\ui\UILabelButtonEvents.hpp" />
+    <ClInclude Include="events\ui\UIScrollLayoutEvents.hpp" />
+    <ClInclude Include="events\ui\UISliderProgressEvents.hpp" />
     <ClInclude Include="impl\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\BrushServiceImpl.hpp" />
     <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
@@ -242,12 +252,20 @@
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
     <ClCompile Include="impl\components\PhysicsComponentService.cpp" />
     <ClCompile Include="impl\components\TextComponentService.cpp" />
+    <ClCompile Include="impl\components\UICanvasRectImageOps.cpp" />
     <ClCompile Include="impl\components\UIComponentService.cpp" />
+    <ClCompile Include="impl\components\UIDropdownTabsOps.cpp" />
+    <ClCompile Include="impl\components\UIInteractiveOps.cpp" />
+    <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
+    <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
     <ClCompile Include="impl\scene\EntityQueryService.cpp" />
     <ClCompile Include="impl\scene\EntityStateService.cpp" />
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
+    <ClCompile Include="impl\scene\TerrainBrushOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainLifecycleOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainPersistenceOps.cpp" />
     <ClCompile Include="impl\scene\TerrainService.cpp" />
     <ClCompile Include="impl\scene\TransformComponentService.cpp" />
   </ItemGroup>

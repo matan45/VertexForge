@@ -39,19 +39,19 @@ namespace services
         }
 
         frameCounter++;
-        prepareGrid();
-        prepareCameras();
-        prepareFrameMeshes();
-        prepareFrameBillboards();
-        prepareFrameText();
-        prepareFrameCameraFrustums();
-        prepareFrameAudioSpheres();
-        prepareFrameLightGizmos();
-        prepareFramePhysicsColliders();
-        prepareFrameClusterDebug();
-        prepareFrameShadowDebug();
-        prepareFrameUICanvasOutlines();
-        prepareFrameUIImages();
+        offScreenProvider->prepareGrid();
+        offScreenProvider->prepareCameras();
+        offScreenProvider->prepareFrameMeshes();
+        offScreenProvider->prepareFrameBillboards();
+        offScreenProvider->prepareFrameText();
+        offScreenProvider->prepareFrameCameraFrustums();
+        offScreenProvider->prepareFrameAudioSpheres();
+        offScreenProvider->prepareFrameLightGizmos();
+        offScreenProvider->prepareFramePhysicsColliders();
+        offScreenProvider->prepareFrameClusterDebug();
+        offScreenProvider->prepareFrameShadowDebug();
+        offScreenProvider->prepareFrameUICanvasOutlines();
+        offScreenProvider->prepareFrameUIImages();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -209,6 +209,35 @@ namespace services
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        registerIBLHandlers(dispatcher);
+        registerTextureHandlers(dispatcher);
+        registerViewportHandlers(dispatcher);
+        registerCullingHandlers(dispatcher);
+        registerTerrainRenderHandlers(dispatcher);
+        registerPostProcessHandlers(dispatcher);
+
+        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification)
+            {
+                if (!notification.meshPath.empty() && !isMeshLoaded(notification.meshPath))
+                {
+                    loadMesh(notification.meshPath);
+                }
+            });
+
+        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification)
+            {
+                if (offScreenProvider)
+                {
+                    bool isPlayMode = notification.currentMode == services::EditorMode::Play;
+                    offScreenProvider->setPlayMode(isPlayMode);
+                }
+            });
+    }
+
+    void EditorRenderServiceImpl::registerIBLHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::render::SetIBLCommand>(
             [this](const events::render::SetIBLCommand& cmd)
             {
@@ -235,7 +264,10 @@ namespace services
             {
                 updateIBLCamera(cmd.viewMatrix, cmd.projectionMatrix);
             });
+    }
 
+    void EditorRenderServiceImpl::registerTextureHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::render::LoadEditorTextureCommand>(
             [this](const events::render::LoadEditorTextureCommand& cmd)
             {
@@ -309,7 +341,10 @@ namespace services
 
                 return result;
             });
+    }
 
+    void EditorRenderServiceImpl::registerViewportHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerQueryHandler<events::render::GetViewportTextureQuery>(
             [this](const events::render::GetViewportTextureQuery&)
             {
@@ -445,6 +480,18 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
             });
 
+        dispatcher.registerCommandHandler<events::render::SetUIViewportOffsetCommand>(
+            [this](const events::render::SetUIViewportOffsetCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setUIViewportOffset(cmd.offset, cmd.panelSize);
+                }
+            });
+    }
+
+    void EditorRenderServiceImpl::registerCullingHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::render::SetFrustumCullingCommand>(
             [this](const events::render::SetFrustumCullingCommand& cmd)
             {
@@ -489,7 +536,10 @@ namespace services
                     offScreenProvider->setMeshletBackfaceCullingEnabled(cmd.enabled);
                 }
             });
+    }
 
+    void EditorRenderServiceImpl::registerTerrainRenderHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::render::SetTerrainFrustumCullingCommand>(
             [this](const events::render::SetTerrainFrustumCullingCommand& cmd)
             {
@@ -552,16 +602,10 @@ namespace services
                     offScreenProvider->setTerrainShadowLOD(cmd.lod);
                 }
             });
+    }
 
-        dispatcher.registerCommandHandler<events::render::SetUIViewportOffsetCommand>(
-            [this](const events::render::SetUIViewportOffsetCommand& cmd)
-            {
-                if (offScreenProvider)
-                {
-                    offScreenProvider->setUIViewportOffset(cmd.offset, cmd.panelSize);
-                }
-            });
-
+    void EditorRenderServiceImpl::registerPostProcessHandlers(events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(
             [this](const events::postprocess::ApplyPostProcessSettingsCommand& cmd)
             {
@@ -593,25 +637,6 @@ namespace services
             {
                 return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
             });
-
-        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
-            [this](const events::scene::MeshDataChangedNotification& notification)
-            {
-                if (!notification.meshPath.empty() && !isMeshLoaded(notification.meshPath))
-                {
-                    loadMesh(notification.meshPath);
-                }
-            });
-
-        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
-            [this](const events::editor::EditorModeChangedNotification& notification)
-            {
-                if (offScreenProvider)
-                {
-                    bool isPlayMode = notification.currentMode == services::EditorMode::Play;
-                    offScreenProvider->setPlayMode(isPlayMode);
-                }
-            });
     }
 
     std::string EditorRenderServiceImpl::loadMesh(const std::string& meshPath)
@@ -637,14 +662,6 @@ namespace services
         return offScreenProvider && offScreenProvider->isMeshLoaded(meshPath);
     }
 
-    void EditorRenderServiceImpl::prepareCameras()
-    {
-        if (offScreenProvider)
-        {
-            offScreenProvider->prepareCameras();
-        }
-    }
-
     std::optional<MeshBoundingBox> EditorRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const
     {
         if (!offScreenProvider)
@@ -662,121 +679,4 @@ namespace services
         return result;
     }
 
-    void EditorRenderServiceImpl::prepareFrameMeshes()
-    {
-        if (offScreenProvider)
-        {
-            offScreenProvider->prepareFrameMeshes();
-        }
-    }
-
-    void EditorRenderServiceImpl::prepareFrameBillboards()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameBillboards();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameText()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameText();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameCameraFrustums()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameCameraFrustums();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameAudioSpheres()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameAudioSpheres();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameLightGizmos()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameLightGizmos();
-    }
-
-    void EditorRenderServiceImpl::prepareGrid()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareGrid();
-    }
-
-    void EditorRenderServiceImpl::prepareFramePhysicsColliders()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFramePhysicsColliders();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameClusterDebug()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameClusterDebug();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameShadowDebug()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameShadowDebug();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameUICanvasOutlines()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameUICanvasOutlines();
-    }
-
-    void EditorRenderServiceImpl::prepareFrameUIImages()
-    {
-        if (!offScreenProvider)
-        {
-            return;
-        }
-
-        offScreenProvider->prepareFrameUIImages();
-    }
 }

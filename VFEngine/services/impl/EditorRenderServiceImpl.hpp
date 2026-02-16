@@ -7,6 +7,11 @@
 #include "../providers/IPostProcessProvider.hpp"
 #include <unordered_map>
 
+namespace events
+{
+    class EventDispatcher;
+}
+
 namespace services
 {
     class EditorRenderServiceImpl : public IEditorRenderService
@@ -56,19 +61,12 @@ namespace services
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
-        
-        void prepareCameras();
-        void prepareFrameMeshes();
-        void prepareFrameBillboards();
-        void prepareFrameText();
-        void prepareFrameCameraFrustums();
-        void prepareFrameAudioSpheres();
-        void prepareFrameLightGizmos();
-        void prepareFramePhysicsColliders();
-        void prepareFrameClusterDebug();
-        void prepareFrameShadowDebug();
-        void prepareFrameUICanvasOutlines();
-        void prepareFrameUIImages();
-        void prepareGrid();
+
+        void registerIBLHandlers(events::EventDispatcher& dispatcher);
+        void registerTextureHandlers(events::EventDispatcher& dispatcher);
+        void registerViewportHandlers(events::EventDispatcher& dispatcher);
+        void registerCullingHandlers(events::EventDispatcher& dispatcher);
+        void registerTerrainRenderHandlers(events::EventDispatcher& dispatcher);
+        void registerPostProcessHandlers(events::EventDispatcher& dispatcher);
     };
 }
