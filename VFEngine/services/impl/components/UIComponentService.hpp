@@ -123,6 +123,13 @@ namespace services {
         std::optional<UIProgressBarData> getUIProgressBarData(EntityHandle entity) const;
         bool setUIProgressBarData(EntityHandle entity, const UIProgressBarData& progressBarData);
         bool setUIProgressBarValue(EntityHandle entity, float value);
+
+    private:
+        void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
+        void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
+        void registerInteractiveHandlers(events::EventDispatcher& dispatcher);
+        void registerDropdownTabsHandlers(events::EventDispatcher& dispatcher);
+        void registerSliderProgressHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

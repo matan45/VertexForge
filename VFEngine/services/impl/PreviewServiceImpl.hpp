@@ -4,6 +4,11 @@
 #include "../events/AnimationPreviewEvents.hpp"
 #include "../events/VFXPreviewEvents.hpp"
 
+namespace events
+{
+    class EventDispatcher;
+}
+
 namespace services
 {
     class IMaterialPreviewProvider;
@@ -91,5 +96,11 @@ namespace services
         void stopVFX(PreviewInstanceId instanceId) override;
 
         [[nodiscard]] ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) override;
+
+    private:
+        void registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher);
+        void registerMeshPreviewHandlers(::events::EventDispatcher& dispatcher);
+        void registerAnimationPreviewHandlers(::events::EventDispatcher& dispatcher);
+        void registerVFXPreviewHandlers(::events::EventDispatcher& dispatcher);
     };
 }

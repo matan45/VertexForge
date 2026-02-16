@@ -39,6 +39,13 @@ namespace services {
         bool setSpotLightData(EntityHandle entity, const SpotLightData& lightData);
 
     private:
+        template<typename ComponentT>
+        bool addLightImpl(EntityHandle entity, uint8_t lightType, components::BillboardIconType iconType);
+        template<typename ComponentT>
+        bool removeLightImpl(EntityHandle entity, uint8_t lightType, components::BillboardIconType iconType);
+        template<typename ComponentT>
+        bool hasLightImpl(EntityHandle entity) const;
+
         void autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType);
         void autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType);
         bool hasAnyLightComponent(EntityHandle entity) const;
