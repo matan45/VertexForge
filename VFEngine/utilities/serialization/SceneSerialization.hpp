@@ -33,10 +33,13 @@ namespace serialization
 
     private:
         static json serializeEntity(scene::Entity& entity);
+        static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
                                       scene::SceneGraphSystem& sceneGraph, bool isRoot,
                                       SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
                                       size_t totalEntities);
+        static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
+        static void deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph);
 
         static size_t countEntities(const json& entityJson);
 

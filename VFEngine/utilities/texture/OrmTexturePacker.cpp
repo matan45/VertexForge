@@ -13,20 +13,17 @@ namespace texture
                                      uint32_t x, uint32_t y,
                                      uint32_t width, [[maybe_unused]] uint32_t channels)
     {
-        // Early return for empty data
         if (mipData.data.empty())
         {
-            return 128; // Default mid-gray
+            return 128;
         }
 
-        // TGAReader always outputs RGBA (4 channels per pixel)
         uint32_t idx = (y * width + x) * 4;
         if (idx >= mipData.data.size())
         {
-            return 128; // Default mid-gray if out of bounds
+            return 128;
         }
 
-        // Use red channel (first channel after B<->R swap in TGAReader)
         return mipData.data[idx];
     }
 
@@ -91,7 +88,7 @@ namespace texture
     }
 
     // ============================================================================
-    // Helper: Pack pixels from source textures into ORM format (RGBA for GPU compatibility)
+    // Helper: Pack pixels from source textures into ORM format (RGBA)
     // ============================================================================
     static void packPixels(
         resource::MipLevelData& ormMip,
@@ -107,7 +104,7 @@ namespace texture
     {
         ormMip.width = width;
         ormMip.height = height;
-        ormMip.data.resize(width * height * 4); // RGBA for GPU compatibility
+        ormMip.data.resize(width * height * 4);
 
         for (uint32_t y = 0; y < height; ++y)
         {
@@ -115,7 +112,6 @@ namespace texture
             {
                 uint32_t outIdx = (y * width + x) * 4;
 
-                // Get values from textures or use defaults
                 uint8_t ao = aoTexture
                                  ? getGrayscaleValue(aoMip, x, y, width, aoTexture->numbersOfChannels)
                                  : OrmTexturePacker::DEFAULT_AO;
@@ -127,12 +123,12 @@ namespace texture
                                        ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
                                        : OrmTexturePacker::DEFAULT_METALLIC;
 
-                // ORM format: R=AO, G=Roughness, B=Metallic, A=255 (unused, full opacity)
-                // Store in BGRA order for .vfImage format (TGAReader swaps B↔R when loading)
-                ormMip.data[outIdx + 0] = metallic;  // B (will become R=AO after load swap)
-                ormMip.data[outIdx + 1] = roughness; // G (unchanged)
-                ormMip.data[outIdx + 2] = ao;        // R (will become B=Metallic after load swap)
-                ormMip.data[outIdx + 3] = 255;       // A (unused)
+                // ORM: R=AO, G=Roughness, B=Metallic, A=255
+                // BGRA order for .vfImage format (TGAReader swaps B<->R when loading)
+                ormMip.data[outIdx + 0] = metallic;
+                ormMip.data[outIdx + 1] = roughness;
+                ormMip.data[outIdx + 2] = ao;
+                ormMip.data[outIdx + 3] = 255;
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -141,6 +137,70 @@ namespace texture
                 progressCallback(0.65f + packProgress * 0.25f);
             }
         }
+    }
+
+    // ============================================================================
+    // Helper: Sample a 2x2 block from source and write averaged pixel to dest
+    // ============================================================================
+    static void sampleBoxFilter(
+        const resource::MipLevelData& srcMip,
+        uint32_t srcWidth, uint32_t srcHeight,
+        uint32_t srcX, uint32_t srcY,
+        std::vector<uint8_t>& dstData,
+        uint32_t dstIdx)
+    {
+        uint32_t samples = 0;
+        uint32_t sumR = 0, sumG = 0, sumB = 0;
+
+        for (uint32_t dy = 0; dy < 2 && (srcY + dy) < srcHeight; ++dy)
+        {
+            for (uint32_t dx = 0; dx < 2 && (srcX + dx) < srcWidth; ++dx)
+            {
+                uint32_t srcIdx = ((srcY + dy) * srcWidth + (srcX + dx)) * 4;
+                sumR += srcMip.data[srcIdx + 0];
+                sumG += srcMip.data[srcIdx + 1];
+                sumB += srcMip.data[srcIdx + 2];
+                ++samples;
+            }
+        }
+
+        if (samples == 0)
+        {
+            return;
+        }
+
+        dstData[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
+        dstData[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
+        dstData[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
+        dstData[dstIdx + 3] = 255;
+    }
+
+    // ============================================================================
+    // Helper: Downsample a single mip level using box filter (RGBA)
+    // ============================================================================
+    static resource::MipLevelData downsampleLevel(
+        const resource::MipLevelData& srcMip,
+        uint32_t srcWidth,
+        uint32_t srcHeight,
+        uint32_t newWidth,
+        uint32_t newHeight)
+    {
+        resource::MipLevelData newMip;
+        newMip.width = newWidth;
+        newMip.height = newHeight;
+        newMip.data.resize(newWidth * newHeight * 4);
+
+        for (uint32_t y = 0; y < newHeight; ++y)
+        {
+            for (uint32_t x = 0; x < newWidth; ++x)
+            {
+                uint32_t dstIdx = (y * newWidth + x) * 4;
+                sampleBoxFilter(srcMip, srcWidth, srcHeight,
+                                x * 2, y * 2, newMip.data, dstIdx);
+            }
+        }
+
+        return newMip;
     }
 
     // ============================================================================
@@ -158,49 +218,7 @@ namespace texture
             uint32_t newWidth = std::max(1u, mipWidth / 2);
             uint32_t newHeight = std::max(1u, mipHeight / 2);
 
-            resource::MipLevelData newMip;
-            newMip.width = newWidth;
-            newMip.height = newHeight;
-            newMip.data.resize(newWidth * newHeight * 4);
-
-            // Box filter: average 2x2 pixels from source
-            for (uint32_t y = 0; y < newHeight; ++y)
-            {
-                for (uint32_t x = 0; x < newWidth; ++x)
-                {
-                    uint32_t srcX = x * 2;
-                    uint32_t srcY = y * 2;
-
-                    // Sample up to 4 pixels (handle edge cases)
-                    uint32_t samples = 0;
-                    uint32_t sumR = 0, sumG = 0, sumB = 0;
-
-                    for (uint32_t dy = 0; dy < 2 && (srcY + dy) < mipHeight; ++dy)
-                    {
-                        for (uint32_t dx = 0; dx < 2 && (srcX + dx) < mipWidth; ++dx)
-                        {
-                            uint32_t srcIdx = ((srcY + dy) * mipWidth + (srcX + dx)) * 4;
-                            sumR += srcMip.data[srcIdx + 0];
-                            sumG += srcMip.data[srcIdx + 1];
-                            sumB += srcMip.data[srcIdx + 2];
-                            ++samples;
-                        }
-                    }
-
-                    // Safety check to prevent division by zero
-                    if (samples == 0)
-                    {
-                        continue;
-                    }
-
-                    uint32_t dstIdx = (y * newWidth + x) * 4;
-                    // Preserve BGRA order from source (sumR=B=Metallic, sumG=G=Roughness, sumB=R=AO)
-                    newMip.data[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
-                    newMip.data[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
-                    newMip.data[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
-                    newMip.data[dstIdx + 3] = 255; // Keep alpha at 255
-                }
-            }
+            auto newMip = downsampleLevel(srcMip, mipWidth, mipHeight, newWidth, newHeight);
 
             mipWidth = newWidth;
             mipHeight = newHeight;
@@ -230,7 +248,6 @@ namespace texture
                 return false;
             }
 
-            // Write header (version 0.0.3 = mip format expected by TextureResource loader)
             resource::FileType fileType = resource::FileType::TEXTURE;
             FileVersion version{0, 0, 3};
 
@@ -244,7 +261,6 @@ namespace texture
             uint32_t mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
             file.write(reinterpret_cast<const char*>(&mipLevels), sizeof(mipLevels));
 
-            // Write mip data
             for (const auto& mip : ormTexture.mipData)
             {
                 file.write(reinterpret_cast<const char*>(&mip.width), sizeof(mip.width));
@@ -263,6 +279,119 @@ namespace texture
     }
 
     // ============================================================================
+    // Helper: Load textures asynchronously and wait for results
+    // ============================================================================
+    static void loadTextures(
+        const OrmPackInput& input,
+        bool hasAo, bool hasRoughness, bool hasMetallic,
+        std::shared_ptr<resource::TextureData>& aoData,
+        std::shared_ptr<resource::TextureData>& roughnessData,
+        std::shared_ptr<resource::TextureData>& metallicData,
+        OrmPackProgressCallback progressCallback)
+    {
+        std::future<std::shared_ptr<resource::TextureData>> aoFuture;
+        std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
+        std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
+
+        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
+        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
+        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
+
+        if (progressCallback) progressCallback(0.1f);
+
+        if (hasAo) aoData = aoFuture.get();
+        if (hasRoughness) roughnessData = roughnessFuture.get();
+        if (hasMetallic) metallicData = metallicFuture.get();
+    }
+
+    // ============================================================================
+    // Helper: Validate loaded texture data
+    // ============================================================================
+    static bool validateLoadedTextures(
+        bool hasAo, bool hasRoughness, bool hasMetallic,
+        const std::shared_ptr<resource::TextureData>& aoData,
+        const std::shared_ptr<resource::TextureData>& roughnessData,
+        const std::shared_ptr<resource::TextureData>& metallicData,
+        const OrmPackInput& input,
+        std::string& errorMessage)
+    {
+        if (hasAo && (!aoData || aoData->textureData().empty()))
+        {
+            errorMessage = "Failed to load AO texture: " + input.aoPath;
+            return false;
+        }
+        if (hasRoughness && (!roughnessData || roughnessData->textureData().empty()))
+        {
+            errorMessage = "Failed to load roughness texture: " + input.roughnessPath;
+            return false;
+        }
+        if (hasMetallic && (!metallicData || metallicData->textureData().empty()))
+        {
+            errorMessage = "Failed to load metallic texture: " + input.metallicPath;
+            return false;
+        }
+        return true;
+    }
+
+    // ============================================================================
+    // Helper: Retrieve mip level 0 references for each channel texture
+    // ============================================================================
+    struct ChannelMipRefs
+    {
+        resource::MipLevelData emptyMip;
+        const resource::MipLevelData* aoMip;
+        const resource::MipLevelData* roughnessMip;
+        const resource::MipLevelData* metallicMip;
+    };
+
+    static ChannelMipRefs getChannelMipRefs(
+        const resource::TextureData* aoTexture,
+        const resource::TextureData* roughnessTexture,
+        const resource::TextureData* metallicTexture)
+    {
+        ChannelMipRefs refs;
+        refs.aoMip = (aoTexture && !aoTexture->mipData.empty())
+                         ? &aoTexture->mipData[0]
+                         : &refs.emptyMip;
+        refs.roughnessMip = (roughnessTexture && !roughnessTexture->mipData.empty())
+                                ? &roughnessTexture->mipData[0]
+                                : &refs.emptyMip;
+        refs.metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
+                               ? &metallicTexture->mipData[0]
+                               : &refs.emptyMip;
+        return refs;
+    }
+
+    // ============================================================================
+    // Helper: Build ORM texture from channel data, generate mipmaps
+    // ============================================================================
+    static resource::TextureData buildOrmTexture(
+        uint32_t width, uint32_t height,
+        const resource::TextureData* aoTexture,
+        const resource::TextureData* roughnessTexture,
+        const resource::TextureData* metallicTexture,
+        const ChannelMipRefs& mipRefs,
+        OrmPackProgressCallback progressCallback)
+    {
+        resource::TextureData ormTexture;
+        ormTexture.width = width;
+        ormTexture.height = height;
+        ormTexture.numbersOfChannels = 4;
+        ormTexture.mipLevels = 1;
+
+        resource::MipLevelData ormMip;
+        packPixels(ormMip, width, height,
+                   aoTexture, roughnessTexture, metallicTexture,
+                   *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip,
+                   progressCallback);
+        ormTexture.mipData.push_back(std::move(ormMip));
+
+        generateMipmaps(ormTexture);
+
+        return ormTexture;
+    }
+
+    // ============================================================================
     // Public: Pack ORM from file paths
     // ============================================================================
     OrmPackResult OrmTexturePacker::packORM(
@@ -277,7 +406,6 @@ namespace texture
             return result;
         }
 
-        // Check if at least one texture is provided
         bool hasAo = !input.aoPath.empty();
         bool hasRoughness = !input.roughnessPath.empty();
         bool hasMetallic = !input.metallicPath.empty();
@@ -290,54 +418,27 @@ namespace texture
 
         if (progressCallback) progressCallback(0.0f);
 
-        // Start all async loads in parallel - maximize I/O parallelism
-        std::future<std::shared_ptr<resource::TextureData>> aoFuture;
-        std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
-        std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
-
-        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
-        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
-        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
-
-        if (progressCallback) progressCallback(0.1f);
-
-        // Now wait for all futures - I/O happens in parallel while we wait
         std::shared_ptr<resource::TextureData> aoData;
         std::shared_ptr<resource::TextureData> roughnessData;
         std::shared_ptr<resource::TextureData> metallicData;
 
-        // Collect results - by the time we call .get(), most/all loads should be complete
-        if (hasAo) aoData = aoFuture.get();
-        if (hasRoughness) roughnessData = roughnessFuture.get();
-        if (hasMetallic) metallicData = metallicFuture.get();
+        loadTextures(input, hasAo, hasRoughness, hasMetallic,
+                     aoData, roughnessData, metallicData, progressCallback);
 
         if (progressCallback) progressCallback(0.5f);
 
-        // Validate loaded textures
-        if (hasAo && (!aoData || aoData->textureData().empty()))
+        if (!validateLoadedTextures(hasAo, hasRoughness, hasMetallic,
+                                    aoData, roughnessData, metallicData,
+                                    input, result.errorMessage))
         {
-            result.errorMessage = "Failed to load AO texture: " + input.aoPath;
-            return result;
-        }
-        if (hasRoughness && (!roughnessData || roughnessData->textureData().empty()))
-        {
-            result.errorMessage = "Failed to load roughness texture: " + input.roughnessPath;
-            return result;
-        }
-        if (hasMetallic && (!metallicData || metallicData->textureData().empty()))
-        {
-            result.errorMessage = "Failed to load metallic texture: " + input.metallicPath;
             return result;
         }
 
         if (progressCallback) progressCallback(0.6f);
 
         return packORMFromData(
-            aoData.get(),
-            roughnessData.get(),
-            metallicData.get(),
-            input.outputPath,
-            progressCallback);
+            aoData.get(), roughnessData.get(), metallicData.get(),
+            input.outputPath, progressCallback);
     }
 
     // ============================================================================
@@ -352,13 +453,11 @@ namespace texture
     {
         OrmPackResult result;
 
-        // Collect provided textures
         std::vector<const resource::TextureData*> providedTextures;
         if (aoTexture) providedTextures.push_back(aoTexture);
         if (roughnessTexture) providedTextures.push_back(roughnessTexture);
         if (metallicTexture) providedTextures.push_back(metallicTexture);
 
-        // Validate dimensions
         uint32_t width, height;
         if (!validateTextureDimensions(providedTextures, width, height, result.errorMessage))
         {
@@ -367,46 +466,21 @@ namespace texture
 
         if (progressCallback) progressCallback(0.65f);
 
-        // Get mip level 0 data from each provided texture
-        resource::MipLevelData emptyMip;
-        const auto& aoMip = (aoTexture && !aoTexture->mipData.empty())
-                                ? aoTexture->mipData[0]
-                                : emptyMip;
-        const auto& roughnessMip = (roughnessTexture && !roughnessTexture->mipData.empty())
-                                       ? roughnessTexture->mipData[0]
-                                       : emptyMip;
-        const auto& metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
-                                      ? metallicTexture->mipData[0]
-                                      : emptyMip;
+        auto mipRefs = getChannelMipRefs(aoTexture, roughnessTexture, metallicTexture);
 
-        // Validate mip data
         if (!validateMipData(aoTexture, roughnessTexture, metallicTexture,
-                             aoMip, roughnessMip, metallicMip, result.errorMessage))
+                             *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip,
+                             result.errorMessage))
         {
             return result;
         }
 
-        // Create output texture (RGBA for GPU compatibility, alpha unused)
-        resource::TextureData ormTexture;
-        ormTexture.width = width;
-        ormTexture.height = height;
-        ormTexture.numbersOfChannels = 4;
-        ormTexture.mipLevels = 1;
-
-        // Pack pixels
-        resource::MipLevelData ormMip;
-        packPixels(ormMip, width, height,
-                   aoTexture, roughnessTexture, metallicTexture,
-                   aoMip, roughnessMip, metallicMip,
-                   progressCallback);
-        ormTexture.mipData.push_back(std::move(ormMip));
-
-        // Generate mipmaps
-        generateMipmaps(ormTexture);
+        auto ormTexture = buildOrmTexture(width, height,
+                                          aoTexture, roughnessTexture, metallicTexture,
+                                          mipRefs, progressCallback);
 
         if (progressCallback) progressCallback(0.9f);
 
-        // Serialize to file
         if (!serializeToFile(ormTexture, outputPath, result.errorMessage))
         {
             return result;
@@ -414,7 +488,6 @@ namespace texture
 
         result.success = true;
         result.outputPath = outputPath;
-
         if (progressCallback) progressCallback(1.0f);
 
         return result;
