@@ -169,6 +169,109 @@ namespace terrain
         }
     }
 
+    void TerrainTileGenerator::appendSkirtMeshlets(TileLODData& lodData,
+                                                      uint32_t mainIndexCount) const
+    {
+        if (lodData.indices.size() <= mainIndexCount || lodData.vertices.empty())
+            return;
+
+        const uint32_t* skirtIndices = lodData.indices.data() + mainIndexCount;
+        size_t skirtIndexCount = lodData.indices.size() - mainIndexCount;
+
+        const size_t maxMeshlets = meshopt_buildMeshletsBound(
+            skirtIndexCount,
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES
+        );
+
+        std::vector<meshopt_Meshlet> meshoptMeshlets(maxMeshlets);
+        std::vector<unsigned int> meshletVertexIndices(maxMeshlets * resource::MAX_MESHLET_VERTICES);
+        std::vector<unsigned char> meshletTriangleIndices(maxMeshlets * resource::MAX_MESHLET_PRIMITIVES * 3);
+
+        size_t meshletCount = meshopt_buildMeshlets(
+            meshoptMeshlets.data(),
+            meshletVertexIndices.data(),
+            meshletTriangleIndices.data(),
+            skirtIndices,
+            skirtIndexCount,
+            reinterpret_cast<const float*>(lodData.vertices.data()),
+            lodData.vertices.size(),
+            sizeof(resource::Vertex),
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES,
+            0.0f
+        );
+
+        if (meshletCount == 0)
+            return;
+
+        const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
+        size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
+        size_t totalTriangleIndices = lastMeshlet.triangle_offset +
+            ((lastMeshlet.triangle_count * 3 + 3) & ~3);
+
+        meshoptMeshlets.resize(meshletCount);
+        meshletVertexIndices.resize(totalVertexIndices);
+        meshletTriangleIndices.resize(totalTriangleIndices);
+
+        // Offsets to append after existing main meshlet data
+        uint32_t existingMeshletVertexCount = static_cast<uint32_t>(lodData.meshletVertices.size());
+        uint32_t existingPrimitiveCount = static_cast<uint32_t>(lodData.meshletPrimitives.size());
+
+        // Append vertex indices
+        for (size_t i = 0; i < totalVertexIndices; ++i)
+        {
+            lodData.meshletVertices.push_back(meshletVertexIndices[i]);
+        }
+
+        // Pack triangle indices, compute bounds, and append meshlets
+        uint32_t primitiveOffset = existingPrimitiveCount;
+        for (size_t i = 0; i < meshletCount; ++i)
+        {
+            const auto& m = meshoptMeshlets[i];
+            resource::Meshlet outMeshlet{};
+
+            for (unsigned int t = 0; t < m.triangle_count; ++t)
+            {
+                size_t triOffset = m.triangle_offset + t * 3;
+                if (triOffset + 2 >= meshletTriangleIndices.size())
+                    break;
+
+                uint32_t packed =
+                    static_cast<uint32_t>(meshletTriangleIndices[triOffset]) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 1]) << 8) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 2]) << 16);
+                lodData.meshletPrimitives.push_back(packed);
+            }
+
+            outMeshlet.descriptor.vertexOffset = m.vertex_offset + existingMeshletVertexCount;
+            outMeshlet.descriptor.primitiveOffset = primitiveOffset;
+            outMeshlet.descriptor.vertexCount = static_cast<uint8_t>(m.vertex_count);
+            outMeshlet.descriptor.primitiveCount = static_cast<uint8_t>(m.triangle_count);
+            outMeshlet.descriptor.padding = 0;
+            primitiveOffset += m.triangle_count;
+
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &meshletVertexIndices[m.vertex_offset],
+                &meshletTriangleIndices[m.triangle_offset],
+                m.triangle_count,
+                reinterpret_cast<const float*>(lodData.vertices.data()),
+                lodData.vertices.size(),
+                sizeof(resource::Vertex)
+            );
+
+            outMeshlet.bounds.boundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
+            );
+            outMeshlet.bounds.cone = glm::vec4(
+                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
+                bounds.cone_cutoff
+            );
+
+            lodData.meshlets.push_back(outMeshlet);
+        }
+    }
+
     void TerrainTileGenerator::overrideBoundaryNormals(
         std::vector<resource::Vertex>& vertices,
         const TerrainTile& tile,

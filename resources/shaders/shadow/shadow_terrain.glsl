@@ -77,20 +77,21 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
 }
 
 // Find best available LOD (for streaming support)
+// Uses mainMeshletCount (.w) to check availability - shadows only render surface meshlets
 uint findBestAvailableLOD(TerrainTileGPUData tile, uint targetLOD) {
     uvec4 data = getTerrainLODMeshletData(tile, targetLOD);
-    if (data.y > 0) return targetLOD;
+    if (data.w > 0) return targetLOD;
 
     // Try coarser LODs first for shadows (prefer lower detail)
     for (uint lod = targetLOD; lod < 4; lod++) {
         uvec4 lodData = getTerrainLODMeshletData(tile, lod);
-        if (lodData.y > 0) return lod;
+        if (lodData.w > 0) return lod;
     }
 
     // Try finer LODs as fallback
     for (uint lod = 0; lod < targetLOD; lod++) {
         uvec4 lodData = getTerrainLODMeshletData(tile, lod);
-        if (lodData.y > 0) return lod;
+        if (lodData.w > 0) return lod;
     }
 
     return targetLOD;
@@ -149,7 +150,7 @@ void main() {
 
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
             meshletOffset = meshletData.x;
-            meshletCount = meshletData.y;
+            meshletCount = meshletData.w; // Use mainMeshletCount (surface only, no skirts) to prevent shadow grid at tile boundaries
             baseVertexOffset = meshletData.z;
         }
     }

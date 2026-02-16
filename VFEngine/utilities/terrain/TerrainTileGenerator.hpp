@@ -50,6 +50,7 @@ namespace terrain
                                      const TileLookup& getTile = nullptr) const;
 
         void generateMeshlets(TileLODData& lodData) const;
+        void appendSkirtMeshlets(TileLODData& lodData, uint32_t mainIndexCount) const;
         void updateMeshletBounds(TileLODData& lodData) const;
 
         void generateSkirts(

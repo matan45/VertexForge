@@ -100,7 +100,7 @@ struct TerrainTileGPUData {
     vec4 boundingSphere;        // xyz = world center, w = radius
     vec4 aabbMin;               // xyz = world AABB min, w = weightMapResolution (33/65/129)
     vec4 aabbMax;               // xyz = world AABB max, w = activeLayerCount (1-16)
-    uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+    uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
     uvec4 lod1MeshletData;      // Same layout
     uvec4 lod2MeshletData;      // Same layout
     uvec4 lod3MeshletData;      // Same layout
