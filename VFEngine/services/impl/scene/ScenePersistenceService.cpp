@@ -125,6 +125,10 @@ namespace services
 
         sceneGraph->setRenderSettings(types::RenderSettings::createDefault());
 
+        events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
+        postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;
+        dispatcher.execute(postProcessCmd);
+
         if (entityStateService)
         {
             entityStateService->clearSelection();

@@ -316,86 +316,6 @@ namespace windows
         }
     }
 
-    void PostProcessConfigWindow::drawGodRaysSection()
-    {
-        if (ImGui::CollapsingHeader("God Rays", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Indent(10.0f);
-
-            if (ImGui::Checkbox("Enable God Rays", &settings.godRays.enabled))
-            {
-                isDirty = true;
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Requires a directional light in the scene.\nThe sun position is derived from the first directional light.");
-            }
-
-            if (settings.godRays.enabled)
-            {
-                ImGui::Spacing();
-
-                if (ImGui::DragFloat("Intensity##godrays", &settings.godRays.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Overall brightness of the god rays effect.");
-                }
-
-                if (ImGui::DragFloat("Decay", &settings.godRays.decay, 0.001f, 0.9f, 1.0f, "%.3f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Exponential falloff per sample step.\nCloser to 1.0 = longer rays.");
-                }
-
-                if (ImGui::DragFloat("Density##godrays", &settings.godRays.density, 0.01f, 0.1f, 2.0f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Controls spacing between sample steps.\nHigher = denser sampling.");
-                }
-
-                if (ImGui::DragFloat("Weight##godrays", &settings.godRays.weight, 0.01f, 0.0f, 2.0f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Per-sample contribution weight.");
-                }
-
-                int samples = settings.godRays.sampleCount;
-                if (ImGui::SliderInt("Samples", &samples, 16, 128))
-                {
-                    settings.godRays.sampleCount = samples;
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Number of ray marching steps.\nMore = higher quality but slower.");
-                }
-
-                if (ImGui::DragFloat("Threshold##godrays", &settings.godRays.threshold, 0.01f, 0.0f, 1.0f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Depth threshold for sky detection.\nPixels with depth >= threshold contribute light.");
-                }
-            }
-
-            ImGui::Unindent(10.0f);
-        }
-    }
-
     void PostProcessConfigWindow::drawDepthOfFieldSection()
     {
         if (ImGui::CollapsingHeader("Depth of Field", ImGuiTreeNodeFlags_DefaultOpen))
@@ -669,7 +589,6 @@ namespace windows
             drawVignetteSection();
             drawChromaticAberrationSection();
             drawFilmGrainSection();
-            drawGodRaysSection();
             drawDepthOfFieldSection();
             drawVolumetricFogSection();
 

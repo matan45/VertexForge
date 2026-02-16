@@ -155,19 +155,6 @@ namespace serialization
             };
         }
 
-        json serializeGodRays(const postprocess::GodRaysSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"intensity", s.intensity},
-                {"decay", s.decay},
-                {"density", s.density},
-                {"weight", s.weight},
-                {"sampleCount", s.sampleCount},
-                {"threshold", s.threshold}
-            };
-        }
-
         json serializeDepthOfField(const postprocess::DepthOfFieldSettings& s)
         {
             return {
@@ -311,27 +298,6 @@ namespace serialization
                 s.intensity = std::clamp(fg["intensity"].get<float>(), 0.0f, 1.0f);
             if (fg.contains("size") && fg["size"].is_number())
                 s.size = std::clamp(fg["size"].get<float>(), 0.1f, 5.0f);
-        }
-
-        void deserializeGodRays(const json& j, postprocess::GodRaysSettings& s)
-        {
-            if (!j.contains("godRays") || !j["godRays"].is_object())
-                return;
-            const auto& gr = j["godRays"];
-            if (gr.contains("enabled") && gr["enabled"].is_boolean())
-                s.enabled = gr["enabled"].get<bool>();
-            if (gr.contains("intensity") && gr["intensity"].is_number())
-                s.intensity = std::clamp(gr["intensity"].get<float>(), 0.0f, 2.0f);
-            if (gr.contains("decay") && gr["decay"].is_number())
-                s.decay = std::clamp(gr["decay"].get<float>(), 0.9f, 1.0f);
-            if (gr.contains("density") && gr["density"].is_number())
-                s.density = std::clamp(gr["density"].get<float>(), 0.1f, 2.0f);
-            if (gr.contains("weight") && gr["weight"].is_number())
-                s.weight = std::clamp(gr["weight"].get<float>(), 0.0f, 2.0f);
-            if (gr.contains("sampleCount") && gr["sampleCount"].is_number_integer())
-                s.sampleCount = std::clamp(gr["sampleCount"].get<int>(), 16, 128);
-            if (gr.contains("threshold") && gr["threshold"].is_number())
-                s.threshold = std::clamp(gr["threshold"].get<float>(), 0.0f, 1.0f);
         }
 
         void deserializeDepthOfField(const json& j, postprocess::DepthOfFieldSettings& s)
@@ -540,7 +506,6 @@ namespace serialization
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
         j["filmGrain"] = serializeFilmGrain(settings.filmGrain);
-        j["godRays"] = serializeGodRays(settings.godRays);
         j["depthOfField"] = serializeDepthOfField(settings.depthOfField);
         j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
 
@@ -558,7 +523,6 @@ namespace serialization
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);
         deserializeFilmGrain(j, settings.filmGrain);
-        deserializeGodRays(j, settings.godRays);
         deserializeDepthOfField(j, settings.depthOfField);
         deserializeVolumetricFog(j, settings.volumetricFog);
     }

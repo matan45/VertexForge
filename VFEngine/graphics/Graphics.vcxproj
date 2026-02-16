@@ -205,7 +205,6 @@
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FXAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
-    <ClInclude Include="render\postprocess\effects\GodRaysEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
@@ -366,7 +365,6 @@
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FXAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
-    <ClCompile Include="render\postprocess\effects\GodRaysEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
@@ -454,8 +452,6 @@
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\god_rays.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\god_rays_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />

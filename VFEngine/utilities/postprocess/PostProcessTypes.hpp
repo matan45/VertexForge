@@ -11,7 +11,6 @@ namespace postprocess
         Vignette,
         ChromaticAberration,
         FilmGrain,
-        GodRays,
         DepthOfField
     };
 
@@ -87,17 +86,6 @@ namespace postprocess
         float size = 1.6f;
     };
 
-    struct GodRaysSettings
-    {
-        bool enabled = false;
-        float intensity = 0.8f;
-        float decay = 0.98f;
-        float density = 1.0f;
-        float weight = 1.0f;
-        int sampleCount = 64;
-        float threshold = 0.5f;
-    };
-
     enum class DoFFocusMode : uint8_t
     {
         Manual = 0,
@@ -146,7 +134,6 @@ namespace postprocess
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;
         FilmGrainSettings filmGrain;
-        GodRaysSettings godRays;
         DepthOfFieldSettings depthOfField;
         VolumetricFogSettings volumetricFog;
 
