@@ -70,6 +70,7 @@ namespace pipeline::stages
         if (isGLTF(header)) return "GLTF";
         if (isOBJ(header)) return "OBJ";
         if (isTTF(header)) return "TTF";
+        if (isTGA(header)) return "TGA";
 
         return "Unknown";
     }
@@ -147,6 +148,30 @@ namespace pipeline::stages
         }
 
         return false;
+    }
+
+    bool FileTypeDetectionStage::isTGA(const std::vector<unsigned char>& header) const
+    {
+        if (header.size() < 18) return false;
+
+        uint8_t colorMapType = header[1];
+        uint8_t imageType = header[2];
+        uint8_t pixelDepth = header[16];
+
+        if (colorMapType > 1) return false;
+
+        if (imageType != 1 && imageType != 2 && imageType != 3 &&
+            imageType != 9 && imageType != 10 && imageType != 11)
+            return false;
+
+        if (pixelDepth != 8 && pixelDepth != 16 && pixelDepth != 24 && pixelDepth != 32)
+            return false;
+
+        uint16_t width = header[12] | (header[13] << 8);
+        uint16_t height = header[14] | (header[15] << 8);
+        if (width == 0 || height == 0) return false;
+
+        return true;
     }
 
     bool FileTypeDetectionStage::isTTF(const std::vector<unsigned char>& header) const

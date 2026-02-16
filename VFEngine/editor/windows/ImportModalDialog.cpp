@@ -13,7 +13,7 @@ namespace windows
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
             {L"Model Files (*.obj;*.fbx;*.dae;*.gltf)", L"*.obj;*.fbx;*.dae;*.gltf"},
-            {L"Image Files (*.png;*.jpg;*.jpeg;*.bmp)", L"*.png;*.jpg;*.jpeg;*.bmp"},
+            {L"Image Files (*.png;*.jpg;*.jpeg;*.bmp;*.tga)", L"*.png;*.jpg;*.jpeg;*.bmp;*.tga"},
             {L"Hdr Files (*.exr;*.hdr)", L"*.exr;*.hdr"},
             {L"Audio Files (*.wav;*.ogg;*.mp3)", L"*.wav;*.ogg;*.mp3"},
             {L"Font Files (*.ttf;*.otf)", L"*.ttf;*.otf"}

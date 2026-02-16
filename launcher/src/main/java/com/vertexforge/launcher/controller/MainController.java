@@ -8,6 +8,7 @@ import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.service.EditorLauncher;
 import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -25,6 +26,7 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import java.nio.file.Path;
@@ -195,21 +197,46 @@ public class MainController implements Initializable {
             return;
         }
 
-        // Launch editor with project
-        EditorLauncher.LaunchResult result = editorLauncher.launch(editorPathOpt.get(), selected.getProjectPath());
+        // Disable UI to prevent double-clicks during launch
+        setLaunchingState(true);
 
-        if (!result.success()) {
-            showErrorDialog("Launch Failed", result.errorMessage());
-            return;
+        // Launch editor asynchronously on a background thread
+        editorLauncher.launchAsync(editorPathOpt.get(), selected.getProjectPath())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    if (!result.success()) {
+                        setLaunchingState(false);
+                        showErrorDialog("Launch Failed", result.errorMessage());
+                        return;
+                    }
+
+                    // Update last opened timestamp
+                    RecentProjects recentProjects = repository.load();
+                    recentProjects.touch(selected.getProjectPath());
+                    repository.save(recentProjects);
+
+                    // Minimize launcher after successful launch
+                    Stage stage = (Stage) projectsTable.getScene().getWindow();
+                    stage.setIconified(true);
+                    setLaunchingState(false);
+                }))
+                .exceptionally(throwable -> {
+                    Platform.runLater(() -> {
+                        setLaunchingState(false);
+                        showErrorDialog("Launch Failed",
+                                "Unexpected error: " + throwable.getMessage());
+                    });
+                    return null;
+                });
+    }
+
+    private void setLaunchingState(boolean launching) {
+        projectsTable.setDisable(launching);
+        if (launching) {
+            openProjectButton.setDisable(true);
+        } else {
+            ProjectViewModel current = projectsTable.getSelectionModel().getSelectedItem();
+            openProjectButton.setDisable(current == null || !current.isValid());
         }
-
-        // Update last opened timestamp
-        RecentProjects recentProjects = repository.load();
-        recentProjects.touch(selected.getProjectPath());
-        repository.save(recentProjects);
-
-        // Close launcher after successful launch
-        projectsTable.getScene().getWindow().hide();
     }
 
     @FXML

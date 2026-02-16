@@ -29,6 +29,7 @@ namespace pipeline::stages
         bool isGLTF(const std::vector<unsigned char>& header) const;
         bool isOBJ(const std::vector<unsigned char>& header) const;
         bool isTTF(const std::vector<unsigned char>& header) const;
+        bool isTGA(const std::vector<unsigned char>& header) const;
 
         std::string detectFileType(const std::vector<unsigned char>& header) const;
     };
