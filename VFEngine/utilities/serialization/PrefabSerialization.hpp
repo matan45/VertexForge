@@ -27,13 +27,22 @@ namespace serialization
 
 	private:
 		static json serializeEntityTree(const scene::Entity& entity);
-		
+		static json serializeEntityTreeComponents(const scene::Entity& entity);
+		static void serializeRenderComponents(const scene::Entity& entity, json& out);
+		static void serializePhysicsAndEffectComponents(const scene::Entity& entity, json& out);
+
 		static scene::Entity deserializeEntityTree(
 			const json& entityJson,
 			scene::Entity& parent,
 			scene::SceneGraphSystem& sceneGraph
 		);
-		
+
 		static void deserializeComponents(const json& componentsJson, scene::Entity& entity);
+		static void deserializeRenderingComponents(const json& componentsJson, scene::Entity& entity);
+		static void deserializeSceneComponents(const json& componentsJson, scene::Entity& entity);
+		static void deserializeMediaComponents(const json& componentsJson, scene::Entity& entity);
+		static void deserializeLightComponents(const json& componentsJson, scene::Entity& entity);
+
+		static std::optional<json> parsePrefabJson(std::string_view filename);
 	};
 }

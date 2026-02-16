@@ -175,494 +175,51 @@ namespace material
         }
     }
 
-    std::optional<MaterialData> MaterialAsset::load(std::string_view path)
+    namespace
     {
-        fs::path filePath(path);
-
-        if (!fs::exists(filePath))
+        json serializeGraph(const MaterialData& material)
         {
-            vfLogError("Material file not found: {}", path);
-            return std::nullopt;
-        }
-
-        std::error_code ec;
-        auto fileSize = fs::file_size(filePath, ec);
-        if (ec)
-        {
-            vfLogError("Cannot read material file size '{}': {}", path, ec.message());
-            return std::nullopt;
-        }
-        constexpr size_t MAX_MATERIAL_FILE_SIZE = 10 * 1024 * 1024; // 10 MB limit
-        if (fileSize > MAX_MATERIAL_FILE_SIZE)
-        {
-            vfLogError("Material file '{}' is too large ({} bytes, max {} bytes)",
-                       path, fileSize, MAX_MATERIAL_FILE_SIZE);
-            return std::nullopt;
-        }
-
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            vfLogError("Failed to open material file: {}", path);
-            return std::nullopt;
-        }
-
-        json j;
-        try
-        {
-            file >> j;
-        }
-        catch (const json::parse_error& e)
-        {
-            vfLogError("Material file '{}' contains invalid JSON at byte {}: {}",
-                       path, e.byte, e.what());
-            return std::nullopt;
-        }
-
-        if (!j.is_object())
-        {
-            vfLogError("Material file '{}' must contain a JSON object at root level", path);
-            return std::nullopt;
-        }
-
-        MaterialData material;
-        int warningCount = 0;
-        constexpr int MAX_WARNINGS = 20;
-
-        auto logWarningLimited = [&](const std::string& msg)
-        {
-            if (warningCount < MAX_WARNINGS)
-            {
-                vfLogWarning("{}", msg);
-                warningCount++;
-                if (warningCount == MAX_WARNINGS)
-                {
-                    vfLogWarning("(suppressing further warnings for this file)");
-                }
-            }
-        };
-
-        try
-        {
-            std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION);
-            bool needsMigration = (fileVersion != MATERIAL_FORMAT_VERSION);
-            if (needsMigration)
-            {
-                logWarningLimited(std::format(
-                    "Material file '{}' has version {} (current is {}). Will migrate on save.",
-                    std::string(path), fileVersion, MATERIAL_FORMAT_VERSION));
-            }
-
-            material.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));
-            material.name = j.value("name", "Unnamed Material");
-
-            if (material.name.empty())
-            {
-                material.name = "Unnamed Material";
-                logWarningLimited("Material has empty name, using default");
-            }
-
-            material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
-
-            if (j.contains("graph"))
-            {
-                if (!j["graph"].is_object())
-                {
-                    logWarningLimited("'graph' field is not an object, skipping graph data");
-                }
-                else
-                {
-                    const auto& graphJson = j["graph"];
-                    std::unordered_map<uint32_t, uint32_t> nodeIdRemap; // oldId -> newId for duplicates
-
-                    if (graphJson.contains("nodes"))
-                    {
-                        if (!graphJson["nodes"].is_array())
-                        {
-                            logWarningLimited("'graph.nodes' is not an array, skipping nodes");
-                        }
-                        else
-                        {
-                            std::unordered_set<uint32_t> nodeIds;
-
-                            for (size_t i = 0; i < graphJson["nodes"].size(); ++i)
-                            {
-                                const auto& nodeJson = graphJson["nodes"][i];
-
-                                if (!nodeJson.is_object())
-                                {
-                                    logWarningLimited(std::format("Node at index {} is not an object, skipping", i));
-                                    continue;
-                                }
-
-                                try
-                                {
-                                    ShaderNode node;
-                                    uint32_t originalId = nodeJson.value("id", 0u);
-                                    node.id = originalId;
-
-                                    if (nodeIds.count(node.id))
-                                    {
-                                        node.id = material.graph.nextNodeId++;
-                                        nodeIdRemap[originalId] = node.id;
-                                        logWarningLimited(std::format(
-                                            "Duplicate node ID {} at index {}, remapped to {}", originalId, i, node.id));
-                                    }
-                                    nodeIds.insert(node.id);
-
-                                    node.type = stringToNodeType(nodeJson.value("type", "ConstantScalar"));
-                                    node.name = nodeJson.value("name", "");
-
-                                    if (nodeJson.contains("position"))
-                                    {
-                                        const auto& posJson = nodeJson["position"];
-                                        if (posJson.is_array() && posJson.size() >= 2 &&
-                                            posJson[0].is_number() && posJson[1].is_number())
-                                        {
-                                            node.position.x = posJson[0].get<float>();
-                                            node.position.y = posJson[1].get<float>();
-                                        }
-                                        else
-                                        {
-                                            logWarningLimited(std::format(
-                                                "Node {} has invalid position format, using default", node.id));
-                                            node.position = glm::vec2(100.0f * i, 100.0f);
-                                        }
-                                    }
-
-                                    if (nodeJson.contains("properties"))
-                                    {
-                                        if (nodeJson["properties"].is_object())
-                                        {
-                                            for (auto& [key, val] : nodeJson["properties"].items())
-                                            {
-                                                std::string context = std::format("node {}.{}", node.id, key);
-                                                node.properties[key] = deserializeProperty(val, context);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            logWarningLimited(std::format(
-                                                "Node {} 'properties' is not an object, skipping properties", node.id));
-                                        }
-                                    }
-
-                                    material.graph.nodes.push_back(std::move(node));
-                                    material.graph.nextNodeId = std::max(material.graph.nextNodeId, node.id + 1);
-                                }
-                                catch (const std::exception& e)
-                                {
-                                    logWarningLimited(std::format(
-                                        "Failed to parse node at index {}: {}", i, e.what()));
-                                }
-                            }
-                        }
-                    }
-
-                    std::unordered_set<uint32_t> validNodeIds;
-                    std::unordered_map<uint32_t, NodeType> nodeTypeMap;
-                    for (const auto& node : material.graph.nodes)
-                    {
-                        validNodeIds.insert(node.id);
-                        nodeTypeMap[node.id] = node.type;
-                    }
-
-                    // Helper: nodes that have NO output pins (only inputs)
-                    auto isNodeTypeWithNoOutputs = [](NodeType type) -> bool
-                    {
-                        return type == NodeType::PBROutput;
-                    };
-
-                    // Helper: nodes that have NO input pins (only outputs)
-                    auto isNodeTypeWithNoInputs = [](NodeType type) -> bool
-                    {
-                        return type == NodeType::VertexUV ||
-                            type == NodeType::VertexNormal ||
-                            type == NodeType::Time;
-                    };
-
-                    // Known output pin names for nodes that only have outputs
-                    auto isOutputOnlyPin = [](NodeType type, const std::string& pin) -> bool
-                    {
-                        if (type == NodeType::TextureSample)
-                        {
-                            return pin == "RGBA" || pin == "RGB" || pin == "R" ||
-                                pin == "G" || pin == "B" || pin == "A";
-                        }
-                        if (type == NodeType::VertexUV)
-                        {
-                            return pin == "UV" || pin == "U" || pin == "V";
-                        }
-                        if (type == NodeType::VertexNormal)
-                        {
-                            return pin == "Normal" || pin == "X" || pin == "Y" || pin == "Z";
-                        }
-                        if (type == NodeType::Time)
-                        {
-                            return pin == "Time";
-                        }
-                        return false;
-                    };
-
-                    // Known input pin names for PBROutput
-                    auto isPBROutputInputPin = [](const std::string& pin) -> bool
-                    {
-                        return pin == "Albedo" || pin == "Metallic" || pin == "Roughness" ||
-                            pin == "Normal" || pin == "AO" || pin == "Emission" ||
-                            pin == "EmissionStrength" || pin == "Opacity";
-                    };
-
-                    auto remapNodeId = [&](uint32_t id) -> uint32_t
-                    {
-                        auto it = nodeIdRemap.find(id);
-                        return (it != nodeIdRemap.end()) ? it->second : id;
-                    };
-
-                    if (graphJson.contains("links"))
-                    {
-                        if (!graphJson["links"].is_array())
-                        {
-                            logWarningLimited("'graph.links' is not an array, skipping links");
-                        }
-                        else
-                        {
-                            for (size_t i = 0; i < graphJson["links"].size(); ++i)
-                            {
-                                const auto& linkJson = graphJson["links"][i];
-
-                                if (!linkJson.is_object())
-                                {
-                                    logWarningLimited(std::format("Link at index {} is not an object, skipping", i));
-                                    continue;
-                                }
-
-                                try
-                                {
-                                    NodeLink link;
-                                    link.id = linkJson.value("id", 0u);
-                                    link.sourceNodeId = remapNodeId(linkJson.value("sourceNode", 0u));
-                                    link.targetNodeId = remapNodeId(linkJson.value("targetNode", 0u));
-                                    link.sourcePin = linkJson.value("sourcePin", "");
-                                    link.targetPin = linkJson.value("targetPin", "");
-
-                                    if (!validNodeIds.count(link.sourceNodeId))
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} references non-existent source node {}, skipping",
-                                            link.id, link.sourceNodeId));
-                                        continue;
-                                    }
-                                    if (!validNodeIds.count(link.targetNodeId))
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} references non-existent target node {}, skipping",
-                                            link.id, link.targetNodeId));
-                                        continue;
-                                    }
-
-                                    if (link.sourcePin.empty() || link.targetPin.empty())
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} has empty pin name(s), skipping", link.id));
-                                        continue;
-                                    }
-
-                                    NodeType sourceType = nodeTypeMap[link.sourceNodeId];
-                                    NodeType targetType = nodeTypeMap[link.targetNodeId];
-
-                                    if (isNodeTypeWithNoOutputs(sourceType))
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} has invalid source: node {} ({}) has no output pins, skipping",
-                                            link.id, link.sourceNodeId, nodeTypeToString(sourceType)));
-                                        continue;
-                                    }
-
-                                    if (isNodeTypeWithNoInputs(targetType))
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} has invalid target: node {} ({}) has no input pins, skipping",
-                                            link.id, link.targetNodeId, nodeTypeToString(targetType)));
-                                        continue;
-                                    }
-
-                                    bool sourceIsActuallyInput = (sourceType == NodeType::PBROutput &&
-                                        isPBROutputInputPin(link.sourcePin));
-                                    bool targetIsActuallyOutput = isOutputOnlyPin(targetType, link.targetPin);
-
-                                    if (sourceIsActuallyInput || targetIsActuallyOutput)
-                                    {
-                                        logWarningLimited(std::format(
-                                            "Link {} appears to have reversed direction (source pin '{}' or target pin '{}' has wrong kind), skipping",
-                                            link.id, link.sourcePin, link.targetPin));
-                                        continue;
-                                    }
-
-                                    material.graph.links.push_back(std::move(link));
-                                    material.graph.nextLinkId = std::max(material.graph.nextLinkId, link.id + 1);
-                                }
-                                catch (const std::exception& e)
-                                {
-                                    logWarningLimited(std::format(
-                                        "Failed to parse link at index {}: {}", i, e.what()));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Ensure PBROutput node exists (required for valid material)
-            bool hasPBROutput = false;
+            json graphJson;
+            json nodesJson = json::array();
             for (const auto& node : material.graph.nodes)
             {
-                if (node.type == NodeType::PBROutput)
-                {
-                    hasPBROutput = true;
-                    break;
-                }
-            }
-            if (!hasPBROutput)
-            {
-                logWarningLimited("Material is missing PBROutput node, adding default");
-                ShaderNode outputNode;
-                outputNode.id = material.graph.nextNodeId++;
-                outputNode.type = NodeType::PBROutput;
-                outputNode.name = "PBR Output";
-                outputNode.position = glm::vec2(300.0f, 200.0f);
-                material.graph.nodes.push_back(std::move(outputNode));
-            }
+                json nodeJson;
+                nodeJson["id"] = node.id;
+                nodeJson["type"] = nodeTypeToString(node.type);
+                nodeJson["name"] = node.name;
+                nodeJson["position"] = json::array({node.position.x, node.position.y});
 
-            if (j.contains("cachedShader"))
-            {
-                if (j["cachedShader"].is_object())
+                if (!node.properties.empty())
                 {
-                    material.cachedVertexShader = j["cachedShader"].value("vertexCode", "");
-                    material.cachedFragmentShader = j["cachedShader"].value("fragmentCode", "");
-                    material.needsRecompile = material.cachedFragmentShader.empty();
-
-                    // Check for outdated shaders - v1.0 used 6 textures, v1.1 uses 16 textures
-                    // Force recompile if shader was compiled with old texture array size
-                    if (!material.needsRecompile && !material.cachedFragmentShader.empty())
+                    json propsJson;
+                    for (const auto& [key, val] : node.properties)
                     {
-                        bool isOutdated = false;
-
-                        // Check for old array declaration (u_Textures[6] means old format)
-                        // Current v1.1 format uses u_Textures[16]
-                        std::string oldDeclPattern = "u_Textures[6]";
-                        if (material.cachedFragmentShader.find(oldDeclPattern) != std::string::npos)
-                        {
-                            isOutdated = true;
-                        }
-
-                        // Also check for any declaration that isn't the current MAX_MATERIAL_TEXTURES
-                        if (!isOutdated)
-                        {
-                            std::string expectedDecl = "u_Textures[" + std::to_string(MAX_MATERIAL_TEXTURES) + "]";
-                            if (material.cachedFragmentShader.find(expectedDecl) == std::string::npos)
-                            {
-                                for (int size = 1; size < MAX_MATERIAL_TEXTURES; ++size)
-                                {
-                                    std::string declPattern = "u_Textures[" + std::to_string(size) + "]";
-                                    if (material.cachedFragmentShader.find(declPattern) != std::string::npos)
-                                    {
-                                        isOutdated = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (isOutdated || needsMigration)
-                        {
-                            logWarningLimited(
-                                "Material has outdated cached shader (texture array size changed), clearing for recompile");
-                            material.needsRecompile = true;
-                            material.cachedVertexShader.clear();
-                            material.cachedFragmentShader.clear();
-                        }
+                        propsJson[key] = MaterialAsset::serializeProperty(val);
                     }
+                    nodeJson["properties"] = propsJson;
                 }
-                else
-                {
-                    logWarningLimited("'cachedShader' field is not an object, ignoring cached shaders");
-                }
-            }
 
-            if (warningCount > 0)
+                nodesJson.push_back(nodeJson);
+            }
+            graphJson["nodes"] = nodesJson;
+
+            json linksJson = json::array();
+            for (const auto& link : material.graph.links)
             {
-                vfLogWarning("Loaded material '{}' with {} warning(s)", material.name, warningCount);
+                json linkJson;
+                linkJson["id"] = link.id;
+                linkJson["sourceNode"] = link.sourceNodeId;
+                linkJson["targetNode"] = link.targetNodeId;
+                linkJson["sourcePin"] = link.sourcePin;
+                linkJson["targetPin"] = link.targetPin;
+                linksJson.push_back(linkJson);
             }
-            return material;
-        }
-        catch (const json::exception& e)
-        {
-            vfLogError("Failed to parse material file '{}': {}", path, e.what());
-            return std::nullopt;
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Unexpected error loading material '{}': {}", path, e.what());
-            return std::nullopt;
-        }
-    }
+            graphJson["links"] = linksJson;
 
-    bool MaterialAsset::save(std::string_view path, const MaterialData& material)
-    {
-        json j;
-
-        j["version"] = MATERIAL_FORMAT_VERSION;
-        j["uuid"] = material.uuid;
-        j["name"] = material.name;
-        j["blendMode"] = blendModeToString(material.blendMode);
-
-        json graphJson;
-        json nodesJson = json::array();
-        for (const auto& node : material.graph.nodes)
-        {
-            json nodeJson;
-            nodeJson["id"] = node.id;
-            nodeJson["type"] = nodeTypeToString(node.type);
-            nodeJson["name"] = node.name;
-            nodeJson["position"] = json::array({node.position.x, node.position.y});
-
-            if (!node.properties.empty())
-            {
-                json propsJson;
-                for (const auto& [key, val] : node.properties)
-                {
-                    propsJson[key] = serializeProperty(val);
-                }
-                nodeJson["properties"] = propsJson;
-            }
-
-            nodesJson.push_back(nodeJson);
-        }
-        graphJson["nodes"] = nodesJson;
-
-        json linksJson = json::array();
-        for (const auto& link : material.graph.links)
-        {
-            json linkJson;
-            linkJson["id"] = link.id;
-            linkJson["sourceNode"] = link.sourceNodeId;
-            linkJson["targetNode"] = link.targetNodeId;
-            linkJson["sourcePin"] = link.sourcePin;
-            linkJson["targetPin"] = link.targetPin;
-            linksJson.push_back(linkJson);
-        }
-        graphJson["links"] = linksJson;
-        j["graph"] = graphJson;
-
-        if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())
-        {
-            json cachedJson;
-            cachedJson["vertexCode"] = material.cachedVertexShader;
-            cachedJson["fragmentCode"] = material.cachedFragmentShader;
-            j["cachedShader"] = cachedJson;
+            return graphJson;
         }
 
-        try
+        bool writeJsonToFile(const json& j, std::string_view path, const std::string& materialName)
         {
             fs::path filePath(path);
             fs::create_directories(filePath.parent_path());
@@ -692,8 +249,32 @@ namespace material
                 return false;
             }
 
-            vfLogInfo("Saved material: {} to {}", material.name, path);
+            vfLogInfo("Saved material: {} to {}", materialName, path);
             return true;
+        }
+    } // anonymous namespace
+
+    bool MaterialAsset::save(std::string_view path, const MaterialData& material)
+    {
+        json j;
+
+        j["version"] = MATERIAL_FORMAT_VERSION;
+        j["uuid"] = material.uuid;
+        j["name"] = material.name;
+        j["blendMode"] = blendModeToString(material.blendMode);
+        j["graph"] = serializeGraph(material);
+
+        if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())
+        {
+            json cachedJson;
+            cachedJson["vertexCode"] = material.cachedVertexShader;
+            cachedJson["fragmentCode"] = material.cachedFragmentShader;
+            j["cachedShader"] = cachedJson;
+        }
+
+        try
+        {
+            return writeJsonToFile(j, path, material.name);
         }
         catch (const std::exception& e)
         {

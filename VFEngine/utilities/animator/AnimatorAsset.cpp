@@ -183,10 +183,9 @@ namespace animator
         return transition;
     }
 
-    std::optional<AnimatorData> AnimatorAsset::load(std::string_view path)
+    std::optional<json> AnimatorAsset::readJsonFromFile(std::string_view path)
     {
         fs::path filePath(path);
-
         if (!fs::exists(filePath))
         {
             vfLogError("Animator file not found: {}", path);
@@ -201,7 +200,7 @@ namespace animator
             return std::nullopt;
         }
 
-        constexpr size_t MAX_ANIMATOR_FILE_SIZE = 10 * 1024 * 1024; // 10 MB limit
+        constexpr size_t MAX_ANIMATOR_FILE_SIZE = 10 * 1024 * 1024;
         if (fileSize > MAX_ANIMATOR_FILE_SIZE)
         {
             vfLogError("Animator file '{}' is too large ({} bytes, max {} bytes)",
@@ -217,10 +216,7 @@ namespace animator
         }
 
         json j;
-        try
-        {
-            file >> j;
-        }
+        try { file >> j; }
         catch (const json::parse_error& e)
         {
             vfLogError("Animator file '{}' contains invalid JSON at byte {}: {}",
@@ -233,8 +229,127 @@ namespace animator
             vfLogError("Animator file '{}' must contain a JSON object at root level", path);
             return std::nullopt;
         }
+        return j;
+    }
 
+    void AnimatorAsset::parseAnimatorParameters(const json& j, AnimatorGraph& graph, const WarningLogger& logWarning)
+    {
+        if (!j.contains("parameters") || !j["parameters"].is_array())
+        {
+            return;
+        }
+
+        for (size_t i = 0; i < j["parameters"].size(); ++i)
+        {
+            const auto& paramJson = j["parameters"][i];
+            if (!paramJson.is_object())
+            {
+                logWarning(std::format("Parameter at index {} is not an object, skipping", i));
+                continue;
+            }
+            graph.parameters.push_back(deserializeParameter(paramJson));
+        }
+    }
+
+    void AnimatorAsset::parseAnimatorStates(const json& j, AnimatorGraph& graph, const WarningLogger& logWarning)
+    {
+        if (!j.contains("states") || !j["states"].is_array())
+        {
+            return;
+        }
+
+        for (size_t i = 0; i < j["states"].size(); ++i)
+        {
+            const auto& stateJson = j["states"][i];
+            if (!stateJson.is_object())
+            {
+                logWarning(std::format("State at index {} is not an object, skipping", i));
+                continue;
+            }
+            AnimatorState state = deserializeState(stateJson);
+            graph.nextStateId = std::max(graph.nextStateId, state.id + 1);
+            graph.states.push_back(std::move(state));
+        }
+    }
+
+    void AnimatorAsset::parseAnimatorTransitions(const json& j, AnimatorGraph& graph, const WarningLogger& logWarning)
+    {
+        if (!j.contains("transitions") || !j["transitions"].is_array())
+        {
+            return;
+        }
+
+        for (size_t i = 0; i < j["transitions"].size(); ++i)
+        {
+            const auto& transJson = j["transitions"][i];
+            if (!transJson.is_object())
+            {
+                logWarning(std::format("Transition at index {} is not an object, skipping", i));
+                continue;
+            }
+            AnimatorTransition transition = deserializeTransition(transJson);
+            graph.nextTransitionId = std::max(graph.nextTransitionId, transition.id + 1);
+            graph.transitions.push_back(std::move(transition));
+        }
+    }
+
+    void AnimatorAsset::parseGraphLayout(const json& j, AnimatorGraph& graph, const WarningLogger& logWarning)
+    {
+        graph.defaultStateId = j.value("defaultState", 1u);
+
+        if (j.contains("anyStatePosition") && j["anyStatePosition"].is_array() && j["anyStatePosition"].size() >= 2)
+        {
+            graph.anyStatePosition.x = j["anyStatePosition"][0].get<float>();
+            graph.anyStatePosition.y = j["anyStatePosition"][1].get<float>();
+        }
+
+        if (j.contains("entryPosition") && j["entryPosition"].is_array() && j["entryPosition"].size() >= 2)
+        {
+            graph.entryPosition.x = j["entryPosition"][0].get<float>();
+            graph.entryPosition.y = j["entryPosition"][1].get<float>();
+        }
+
+        if (!graph.states.empty())
+        {
+            bool defaultExists = graph.findStateById(graph.defaultStateId) != nullptr;
+            if (!defaultExists)
+            {
+                logWarning(std::format("Default state {} not found, using first state",
+                                        graph.defaultStateId));
+                graph.defaultStateId = graph.states[0].id;
+            }
+        }
+    }
+
+    AnimatorData AnimatorAsset::parseAnimatorData(const json& j, const WarningLogger& logWarning)
+    {
         AnimatorData animator;
+        animator.version = j.value("version", ANIMATOR_FORMAT_VERSION);
+        animator.name = j.value("name", "Unnamed Animator");
+
+        if (animator.name.empty())
+        {
+            animator.name = "Unnamed Animator";
+            logWarning("Animator has empty name, using default");
+        }
+
+        parseAnimatorParameters(j, animator.graph, logWarning);
+        parseAnimatorStates(j, animator.graph, logWarning);
+        parseAnimatorTransitions(j, animator.graph, logWarning);
+        parseGraphLayout(j, animator.graph, logWarning);
+
+        return animator;
+    }
+
+    std::optional<AnimatorData> AnimatorAsset::load(std::string_view path)
+    {
+        auto jsonOpt = readJsonFromFile(path);
+        if (!jsonOpt.has_value())
+        {
+            return std::nullopt;
+        }
+
+        const json& j = jsonOpt.value();
         int warningCount = 0;
         constexpr int MAX_WARNINGS = 20;
 
@@ -253,85 +368,7 @@ namespace animator
 
         try
         {
-            animator.version = j.value("version", ANIMATOR_FORMAT_VERSION);
-            animator.name = j.value("name", "Unnamed Animator");
-
-            if (animator.name.empty())
-            {
-                animator.name = "Unnamed Animator";
-                logWarningLimited("Animator has empty name, using default");
-            }
-
-            if (j.contains("parameters") && j["parameters"].is_array())
-            {
-                for (size_t i = 0; i < j["parameters"].size(); ++i)
-                {
-                    const auto& paramJson = j["parameters"][i];
-                    if (!paramJson.is_object())
-                    {
-                        logWarningLimited(std::format("Parameter at index {} is not an object, skipping", i));
-                        continue;
-                    }
-                    animator.graph.parameters.push_back(deserializeParameter(paramJson));
-                }
-            }
-
-            if (j.contains("states") && j["states"].is_array())
-            {
-                for (size_t i = 0; i < j["states"].size(); ++i)
-                {
-                    const auto& stateJson = j["states"][i];
-                    if (!stateJson.is_object())
-                    {
-                        logWarningLimited(std::format("State at index {} is not an object, skipping", i));
-                        continue;
-                    }
-                    AnimatorState state = deserializeState(stateJson);
-                    animator.graph.nextStateId = std::max(animator.graph.nextStateId, state.id + 1);
-                    animator.graph.states.push_back(std::move(state));
-                }
-            }
-
-            if (j.contains("transitions") && j["transitions"].is_array())
-            {
-                for (size_t i = 0; i < j["transitions"].size(); ++i)
-                {
-                    const auto& transJson = j["transitions"][i];
-                    if (!transJson.is_object())
-                    {
-                        logWarningLimited(std::format("Transition at index {} is not an object, skipping", i));
-                        continue;
-                    }
-                    AnimatorTransition transition = deserializeTransition(transJson);
-                    animator.graph.nextTransitionId = std::max(animator.graph.nextTransitionId, transition.id + 1);
-                    animator.graph.transitions.push_back(std::move(transition));
-                }
-            }
-
-            animator.graph.defaultStateId = j.value("defaultState", 1u);
-
-            if (j.contains("anyStatePosition") && j["anyStatePosition"].is_array() && j["anyStatePosition"].size() >= 2)
-            {
-                animator.graph.anyStatePosition.x = j["anyStatePosition"][0].get<float>();
-                animator.graph.anyStatePosition.y = j["anyStatePosition"][1].get<float>();
-            }
-
-            if (j.contains("entryPosition") && j["entryPosition"].is_array() && j["entryPosition"].size() >= 2)
-            {
-                animator.graph.entryPosition.x = j["entryPosition"][0].get<float>();
-                animator.graph.entryPosition.y = j["entryPosition"][1].get<float>();
-            }
-
-            if (!animator.graph.states.empty())
-            {
-                bool defaultExists = animator.graph.findStateById(animator.graph.defaultStateId) != nullptr;
-                if (!defaultExists)
-                {
-                    logWarningLimited(std::format("Default state {} not found, using first state",
-                                                  animator.graph.defaultStateId));
-                    animator.graph.defaultStateId = animator.graph.states[0].id;
-                }
-            }
+            AnimatorData animator = parseAnimatorData(j, logWarningLimited);
 
             if (warningCount > 0)
             {
@@ -356,7 +393,7 @@ namespace animator
         }
     }
 
-    bool AnimatorAsset::save(std::string_view path, const AnimatorData& animator)
+    json AnimatorAsset::buildAnimatorJson(const AnimatorData& animator)
     {
         json j;
 
@@ -386,6 +423,13 @@ namespace animator
             transitionsJson.push_back(serializeTransition(transition));
         }
         j["transitions"] = transitionsJson;
+
+        return j;
+    }
+
+    bool AnimatorAsset::save(std::string_view path, const AnimatorData& animator)
+    {
+        json j = buildAnimatorJson(animator);
 
         try
         {

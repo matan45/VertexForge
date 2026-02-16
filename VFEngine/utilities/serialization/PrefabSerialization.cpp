@@ -8,6 +8,104 @@
 
 namespace serialization
 {
+    void PrefabSerialization::serializeRenderComponents(const scene::Entity& entity, json& out)
+    {
+        if (entity.hasComponent<components::CameraComponent>())
+        {
+            out["camera"] = SceneSerialization::serializeCamera(
+                entity.getComponent<components::CameraComponent>());
+        }
+
+        if (entity.hasComponent<components::IBLComponent>())
+        {
+            out["ibl"] = SceneSerialization::serializeIBL(
+                entity.getComponent<components::IBLComponent>());
+        }
+
+        if (entity.hasComponent<components::MeshComponent>())
+        {
+            out["mesh"] = SceneSerialization::serializeMesh(
+                entity.getComponent<components::MeshComponent>());
+        }
+
+        if (entity.hasComponent<components::MaterialComponent>())
+        {
+            out["material"] = SceneSerialization::serializeMaterial(
+                entity.getComponent<components::MaterialComponent>());
+        }
+
+        if (entity.hasComponent<components::BillboardComponent>())
+        {
+            out["billboard"] = SceneSerialization::serializeBillboard(
+                entity.getComponent<components::BillboardComponent>());
+        }
+
+        if (entity.hasComponent<components::TextComponent>())
+        {
+            out["text"] = SceneSerialization::serializeText(
+                entity.getComponent<components::TextComponent>());
+        }
+    }
+
+    void PrefabSerialization::serializePhysicsAndEffectComponents(const scene::Entity& entity, json& out)
+    {
+        if (entity.hasComponent<components::AudioSource2DComponent>())
+        {
+            out["audioSource2D"] = SceneSerialization::serializeAudioSource2D(
+                entity.getComponent<components::AudioSource2DComponent>());
+        }
+
+        if (entity.hasComponent<components::AudioSource3DComponent>())
+        {
+            out["audioSource3D"] = SceneSerialization::serializeAudioSource3D(
+                entity.getComponent<components::AudioSource3DComponent>());
+        }
+
+        if (entity.hasComponent<components::ColliderComponent>())
+        {
+            out["collider"] = SceneSerialization::serializeCollider(
+                entity.getComponent<components::ColliderComponent>());
+        }
+
+        if (entity.hasComponent<components::RigidBodyComponent>())
+        {
+            out["rigidBody"] = SceneSerialization::serializeRigidBody(
+                entity.getComponent<components::RigidBodyComponent>());
+        }
+
+        if (entity.hasComponent<components::VFXComponent>())
+        {
+            out["vfx"] = SceneSerialization::serializeVFX(
+                entity.getComponent<components::VFXComponent>());
+        }
+
+        if (entity.hasComponent<components::DirectionalLightComponent>())
+        {
+            out["directionalLight"] = SceneSerialization::serializeDirectionalLight(
+                entity.getComponent<components::DirectionalLightComponent>());
+        }
+
+        if (entity.hasComponent<components::PointLightComponent>())
+        {
+            out["pointLight"] = SceneSerialization::serializePointLight(
+                entity.getComponent<components::PointLightComponent>());
+        }
+
+        if (entity.hasComponent<components::SpotLightComponent>())
+        {
+            out["spotLight"] = SceneSerialization::serializeSpotLight(
+                entity.getComponent<components::SpotLightComponent>());
+        }
+    }
+
+    json PrefabSerialization::serializeEntityTreeComponents(const scene::Entity& entity)
+    {
+        json componentsJson = json::object();
+        serializeRenderComponents(entity, componentsJson);
+        serializePhysicsAndEffectComponents(entity, componentsJson);
+        return componentsJson;
+    }
+
     json PrefabSerialization::serializeEntityTree(const scene::Entity& entity)
     {
         json entityJson;
@@ -26,93 +124,7 @@ namespace serialization
                 entity.getComponent<components::TransformComponent>());
         }
 
-        json componentsJson = json::object();
-
-        if (entity.hasComponent<components::CameraComponent>())
-        {
-            componentsJson["camera"] = SceneSerialization::serializeCamera(
-                entity.getComponent<components::CameraComponent>());
-        }
-
-        if (entity.hasComponent<components::IBLComponent>())
-        {
-            componentsJson["ibl"] = SceneSerialization::serializeIBL(
-                entity.getComponent<components::IBLComponent>());
-        }
-
-        if (entity.hasComponent<components::MeshComponent>())
-        {
-            componentsJson["mesh"] = SceneSerialization::serializeMesh(
-                entity.getComponent<components::MeshComponent>());
-        }
-
-        if (entity.hasComponent<components::MaterialComponent>())
-        {
-            componentsJson["material"] = SceneSerialization::serializeMaterial(
-                entity.getComponent<components::MaterialComponent>());
-        }
-
-        if (entity.hasComponent<components::BillboardComponent>())
-        {
-            componentsJson["billboard"] = SceneSerialization::serializeBillboard(
-                entity.getComponent<components::BillboardComponent>());
-        }
-
-        if (entity.hasComponent<components::TextComponent>())
-        {
-            componentsJson["text"] = SceneSerialization::serializeText(
-                entity.getComponent<components::TextComponent>());
-        }
-
-        if (entity.hasComponent<components::AudioSource2DComponent>())
-        {
-            componentsJson["audioSource2D"] = SceneSerialization::serializeAudioSource2D(
-                entity.getComponent<components::AudioSource2DComponent>());
-        }
-
-        if (entity.hasComponent<components::AudioSource3DComponent>())
-        {
-            componentsJson["audioSource3D"] = SceneSerialization::serializeAudioSource3D(
-                entity.getComponent<components::AudioSource3DComponent>());
-        }
-
-        if (entity.hasComponent<components::ColliderComponent>())
-        {
-            componentsJson["collider"] = SceneSerialization::serializeCollider(
-                entity.getComponent<components::ColliderComponent>());
-        }
-
-        if (entity.hasComponent<components::RigidBodyComponent>())
-        {
-            componentsJson["rigidBody"] = SceneSerialization::serializeRigidBody(
-                entity.getComponent<components::RigidBodyComponent>());
-        }
-
-        if (entity.hasComponent<components::VFXComponent>())
-        {
-            componentsJson["vfx"] = SceneSerialization::serializeVFX(
-                entity.getComponent<components::VFXComponent>());
-        }
-
-        if (entity.hasComponent<components::DirectionalLightComponent>())
-        {
-            componentsJson["directionalLight"] = SceneSerialization::serializeDirectionalLight(
-                entity.getComponent<components::DirectionalLightComponent>());
-        }
-
-        if (entity.hasComponent<components::PointLightComponent>())
-        {
-            componentsJson["pointLight"] = SceneSerialization::serializePointLight(
-                entity.getComponent<components::PointLightComponent>());
-        }
-
-        if (entity.hasComponent<components::SpotLightComponent>())
-        {
-            componentsJson["spotLight"] = SceneSerialization::serializeSpotLight(
-                entity.getComponent<components::SpotLightComponent>());
-        }
-
-        entityJson["components"] = componentsJson;
+        entityJson["components"] = serializeEntityTreeComponents(entity);
 
         json childrenJson = json::array();
         for (const auto& child : entity.getChildren())
@@ -124,7 +136,7 @@ namespace serialization
         return entityJson;
     }
 
-    void PrefabSerialization::deserializeComponents(const json& componentsJson, scene::Entity& entity)
+    void PrefabSerialization::deserializeRenderingComponents(const json& componentsJson, scene::Entity& entity)
     {
         if (componentsJson.contains("camera"))
         {
@@ -157,7 +169,10 @@ namespace serialization
             auto& matComp = entity.addOrReplaceComponent<components::MaterialComponent>();
             SceneSerialization::deserializeMaterial(componentsJson["material"], matComp);
         }
+    }
 
+    void PrefabSerialization::deserializeSceneComponents(const json& componentsJson, scene::Entity& entity)
+    {
         if (componentsJson.contains("billboard"))
         {
             auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -170,6 +185,21 @@ namespace serialization
             SceneSerialization::deserializeText(componentsJson["text"], textComp);
         }
 
+        if (componentsJson.contains("collider"))
+        {
+            auto& colliderComp = entity.addOrReplaceComponent<components::ColliderComponent>();
+            SceneSerialization::deserializeCollider(componentsJson["collider"], colliderComp);
+        }
+
+        if (componentsJson.contains("rigidBody"))
+        {
+            auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
+            SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+    }
+
+    void PrefabSerialization::deserializeMediaComponents(const json& componentsJson, scene::Entity& entity)
+    {
         if (componentsJson.contains("audioSource2D"))
         {
             auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
@@ -192,35 +222,24 @@ namespace serialization
             }
         }
 
-        if (componentsJson.contains("collider"))
-        {
-            auto& colliderComp = entity.addOrReplaceComponent<components::ColliderComponent>();
-            SceneSerialization::deserializeCollider(componentsJson["collider"], colliderComp);
-        }
-
-        if (componentsJson.contains("rigidBody"))
-        {
-            auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
-            SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
-        }
-
         if (componentsJson.contains("vfx"))
         {
             auto& vfxComp = entity.addOrReplaceComponent<components::VFXComponent>();
             SceneSerialization::deserializeVFX(componentsJson["vfx"], vfxComp);
-            // Auto-attach billboard if not explicitly serialized
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::Particle;
             }
         }
+    }
 
+    void PrefabSerialization::deserializeLightComponents(const json& componentsJson, scene::Entity& entity)
+    {
         if (componentsJson.contains("directionalLight"))
         {
             auto& lightComp = entity.addOrReplaceComponent<components::DirectionalLightComponent>();
             SceneSerialization::deserializeDirectionalLight(componentsJson["directionalLight"], lightComp);
-            // Auto-attach billboard if not explicitly serialized
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -232,7 +251,6 @@ namespace serialization
         {
             auto& lightComp = entity.addOrReplaceComponent<components::PointLightComponent>();
             SceneSerialization::deserializePointLight(componentsJson["pointLight"], lightComp);
-            // Auto-attach billboard if not explicitly serialized
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -244,13 +262,20 @@ namespace serialization
         {
             auto& lightComp = entity.addOrReplaceComponent<components::SpotLightComponent>();
             SceneSerialization::deserializeSpotLight(componentsJson["spotLight"], lightComp);
-            // Auto-attach billboard if not explicitly serialized
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::SpotLight;
             }
         }
+    }
+
+    void PrefabSerialization::deserializeComponents(const json& componentsJson, scene::Entity& entity)
+    {
+        deserializeRenderingComponents(componentsJson, entity);
+        deserializeSceneComponents(componentsJson, entity);
+        deserializeMediaComponents(componentsJson, entity);
+        deserializeLightComponents(componentsJson, entity);
     }
 
     scene::Entity PrefabSerialization::deserializeEntityTree(
@@ -340,6 +365,46 @@ namespace serialization
         }
     }
 
+    std::optional<json> PrefabSerialization::parsePrefabJson(std::string_view filename)
+    {
+        std::string filePath{filename};
+        std::ifstream file{filePath};
+        if (!file.is_open())
+        {
+            vfLogError("Failed to open prefab file: {}", filename);
+            return std::nullopt;
+        }
+
+        json prefabJson = json::parse(file);
+        file.close();
+
+        if (!prefabJson.is_object())
+        {
+            vfLogError("Invalid prefab file: root is not a JSON object");
+            return std::nullopt;
+        }
+
+        if (!prefabJson.contains("prefab") || !prefabJson["prefab"].is_object())
+        {
+            vfLogError("Invalid prefab file: missing 'prefab' object");
+            return std::nullopt;
+        }
+
+        if (!prefabJson["prefab"].contains("entity") || !prefabJson["prefab"]["entity"].is_object())
+        {
+            vfLogError("Invalid prefab file: missing 'entity' object");
+            return std::nullopt;
+        }
+
+        if (prefabJson.contains("version") && prefabJson["version"].is_string())
+        {
+            std::string version = prefabJson["version"].get<std::string>();
+            vfLogInfo("Loading prefab version: {}", version);
+        }
+
+        return prefabJson;
+    }
+
     std::optional<scene::Entity> PrefabSerialization::loadPrefab(
         std::string_view filename,
         scene::Entity& parent,
@@ -347,43 +412,14 @@ namespace serialization
     {
         try
         {
-            std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            auto prefabJsonOpt = parsePrefabJson(filename);
+            if (!prefabJsonOpt.has_value())
             {
-                vfLogError("Failed to open prefab file: {}", filename);
                 return std::nullopt;
-            }
-
-            json prefabJson = json::parse(file);
-            file.close();
-
-            if (!prefabJson.is_object())
-            {
-                vfLogError("Invalid prefab file: root is not a JSON object");
-                return std::nullopt;
-            }
-
-            if (!prefabJson.contains("prefab") || !prefabJson["prefab"].is_object())
-            {
-                vfLogError("Invalid prefab file: missing 'prefab' object");
-                return std::nullopt;
-            }
-
-            if (!prefabJson["prefab"].contains("entity") || !prefabJson["prefab"]["entity"].is_object())
-            {
-                vfLogError("Invalid prefab file: missing 'entity' object");
-                return std::nullopt;
-            }
-
-            if (prefabJson.contains("version") && prefabJson["version"].is_string())
-            {
-                std::string version = prefabJson["version"].get<std::string>();
-                vfLogInfo("Loading prefab version: {}", version);
             }
 
             scene::Entity rootEntity = deserializeEntityTree(
-                prefabJson["prefab"]["entity"],
+                (*prefabJsonOpt)["prefab"]["entity"],
                 parent,
                 sceneGraph
             );
