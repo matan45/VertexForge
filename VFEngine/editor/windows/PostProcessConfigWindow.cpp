@@ -1,6 +1,7 @@
 #include "PostProcessConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PostProcessEvents.hpp"
+#include "events/SceneEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -26,10 +27,7 @@ namespace windows
     void PostProcessConfigWindow::loadSettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        settings.enabled = dispatcher.query(events::postprocess::GetPostProcessEnabledQuery{});
         settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-
         settingsLoaded = true;
         isDirty = false;
     }
@@ -41,6 +39,12 @@ namespace windows
         events::postprocess::ApplyPostProcessSettingsCommand settingsCmd;
         settingsCmd.settings = settings;
         dispatcher.execute(settingsCmd);
+
+        auto renderSettings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
+        renderSettings.postProcess = settings;
+        events::scene::SetRenderSettingsCommand sceneCmd;
+        sceneCmd.settings = renderSettings;
+        dispatcher.execute(sceneCmd);
 
         isDirty = false;
     }

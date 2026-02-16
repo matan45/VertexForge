@@ -46,7 +46,7 @@ namespace files
 
     bool FileUtils::isTextureFile(std::string_view filePath)
     {
-        return hasExtension(filePath, {".png", ".jpg", ".jpeg", ".bmp"});
+        return hasExtension(filePath, {".png", ".jpg", ".jpeg", ".bmp", ".tga"});
     }
 
     bool FileUtils::isMeshFile(std::string_view filePath)

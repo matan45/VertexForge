@@ -20,7 +20,7 @@ namespace pipeline::stages
     {
         try
         {
-            if (context.fileType == "PNG" || context.fileType == "JPEG" || context.fileType == "BMP")
+            if (context.fileType == "PNG" || context.fileType == "JPEG" || context.fileType == "BMP" || context.fileType == "TGA")
             {
                 processTexture(context);
             }
