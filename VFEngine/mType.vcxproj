@@ -56,8 +56,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;ASMJIT_STATIC;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -73,8 +73,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;ASMJIT_STATIC;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -404,6 +404,21 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitCodeCache.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitEmissionState.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitHelpers.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitProfiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\LoopProfiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\OSRManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\OSRState.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\SlotType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\codegen\OSREntryCodegen.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\guards\DeoptimizationHandler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\ic\InlineCacheTable.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\ic\InlineCacheTypes.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\jit\ic\TypeFeedbackCollector.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\OptimizationPattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\PeepholeOptimizer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\analysis\ControlFlowAnalyzer.hpp" />
@@ -428,6 +443,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ControlFlowExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ExceptionExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\FunctionExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\InlineCacheExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\LambdaExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\LogicalExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectExecutor.hpp" />
@@ -442,6 +458,112 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ErrorLocationHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\a64.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64archtraits_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64assembler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64builder.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64compiler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64emithelper_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64emitter.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64formatter_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64func_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64globals.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64instapi_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64instdb.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64instdb_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64operand.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64rapass_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\armformatter_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\armglobals.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\armutils.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\asmjit-scope-begin.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\asmjit-scope-end.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\asmjit.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\api-build_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\api-config.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\archcommons.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\archtraits.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\assembler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\builder.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\builder_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\codebuffer.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\codeholder.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\codewriter_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\compiler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\compilerdefs.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\constpool.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\cpuinfo.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emithelper_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emitter.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emitterutils_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\environment.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\errorhandler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\fixup.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\formatter.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\formatter_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\func.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\funcargscontext_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\globals.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\inst.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\instdb_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\jitallocator.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\jitruntime.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\logger.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\misc_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\operand.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\osutils.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\osutils_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\raassignment_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\racfgblock_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\racfgbuilder_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\raconstraints_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\radefs_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rainst_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\ralocal_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rapass_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rareg_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rastack_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\string.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\target.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\type.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\virtmem.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\host.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arena.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenabitset_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenahash.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenalist.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenapool.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenastring.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenatree.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenavector.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\span.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\support.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\support_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\ujitbase.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\unicompiler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\unicompiler_utils_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\unicondition.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\uniop.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\vecconsttable.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86archtraits_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86assembler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86builder.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86compiler.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86emithelper_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86emitter.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86formatter_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86func_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86globals.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86instapi_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86instdb.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86instdb_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86opcode_p.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86operand.h" />
+    <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86rapass_p.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\dependencies\mtype\mType\ast\ASTNode.cpp" />
@@ -691,6 +813,21 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCodeCache.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Arithmetic.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Arrays.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_ControlFlow.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Core.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_OSR.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Objects.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitProfiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\LoopProfiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\OSRManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\codegen\OSREntryCodegen.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\guards\DeoptimizationHandler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\ic\InlineCacheTable.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\ic\TypeFeedbackCollector.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\OptimizationPattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\PeepholeOptimizer.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\analysis\ControlFlowAnalyzer.cpp" />
@@ -715,6 +852,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ControlFlowExecutor.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ExceptionExecutor.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\FunctionExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\InlineCacheExecutor.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\LambdaExecutor.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\LogicalExecutor.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectExecutor.cpp" />
@@ -727,6 +865,70 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\stack\StackManager.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64assembler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64builder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64compiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64emithelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64formatter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64func.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64instapi.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64instdb.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64operand.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64rapass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\armformatter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\archtraits.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\assembler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\builder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\codeholder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\codewriter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\compiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\constpool.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\cpuinfo.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emithelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emitter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\emitterutils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\environment.cpp">
+      <ObjectFileName>$(IntDir)\environment1.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\errorhandler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\formatter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\func.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\funcargscontext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\globals.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\inst.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\instdb.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\jitallocator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\jitruntime.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\logger.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\operand.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\osutils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\ralocal.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rapass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\rastack.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\string.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\target.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\type.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\core\virtmem.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arena.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenabitset.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenahash.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenalist.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenatree.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\arenavector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\support\support.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\unicompiler_a64.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\unicompiler_x86.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\ujit\vecconsttable.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86assembler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86builder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86compiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86emithelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86formatter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86func.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86instapi.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86instdb.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86operand.cpp" />
+    <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\x86\x86rapass.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

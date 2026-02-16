@@ -522,10 +522,16 @@ project "mType"
    }
 
    includedirs {
-      "dependencies/mtype/mType"
+      "dependencies/mtype/mType",
+      "dependencies/mtype/vendor/asmjit"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS", "MTYPE_SIMD_ENABLED" }
+   files {
+      "dependencies/mtype/vendor/asmjit/asmjit/**.cpp",
+      "dependencies/mtype/vendor/asmjit/asmjit/**.h"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "MTYPE_SIMD_ENABLED", "ASMJIT_STATIC" }
 
    -- Platform-specific SIMD configurations
    filter "system:windows"
