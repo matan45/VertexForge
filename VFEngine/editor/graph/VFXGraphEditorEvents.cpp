@@ -48,6 +48,18 @@ namespace editor::graph {
         return true;
     }
 
+    void VFXGraphEditor::removeExistingLinks(uint32_t nodeId, const std::string& pin, bool isSource) {
+        currentGraph->links.erase(
+            std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                [nodeId, &pin, isSource](const vfx::VFXNodeLink& existing) {
+                    if (isSource) {
+                        return existing.sourceNodeId == nodeId;
+                    }
+                    return existing.targetNodeId == nodeId && existing.targetPin == pin;
+                }),
+            currentGraph->links.end());
+    }
+
     void VFXGraphEditor::handleCreation() {
         if (ed::BeginCreate()) {
             ed::PinId startPinId, endPinId;
@@ -76,19 +88,8 @@ namespace editor::graph {
                             newLink.sourcePin = "Output";
                             newLink.targetPin = "Shape";
 
-                            currentGraph->links.erase(
-                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                    [emitterNodeId](const vfx::VFXNodeLink& existing) {
-                                        return existing.targetNodeId == emitterNodeId && existing.targetPin == "Shape";
-                                    }),
-                                currentGraph->links.end());
-
-                            currentGraph->links.erase(
-                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                    [shapeNodeId](const vfx::VFXNodeLink& existing) {
-                                        return existing.sourceNodeId == shapeNodeId;
-                                    }),
-                                currentGraph->links.end());
+                            removeExistingLinks(emitterNodeId, "Shape", false);
+                            removeExistingLinks(shapeNodeId, "", true);
                         } else {
                             bool startIsOutput = isOutputPin(startId);
                             uint32_t sourceNodeId = startIsOutput ? getNodeIdFromPinId(startId) : getNodeIdFromPinId(endId);
@@ -99,19 +100,8 @@ namespace editor::graph {
                             newLink.sourcePin = "Output";
                             newLink.targetPin = "Input";
 
-                            currentGraph->links.erase(
-                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                    [targetNodeId](const vfx::VFXNodeLink& existing) {
-                                        return existing.targetNodeId == targetNodeId && existing.targetPin == "Input";
-                                    }),
-                                currentGraph->links.end());
-
-                            currentGraph->links.erase(
-                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                    [sourceNodeId](const vfx::VFXNodeLink& existing) {
-                                        return existing.sourceNodeId == sourceNodeId;
-                                    }),
-                                currentGraph->links.end());
+                            removeExistingLinks(targetNodeId, "Input", false);
+                            removeExistingLinks(sourceNodeId, "", true);
                         }
 
                         currentGraph->links.push_back(newLink);
@@ -400,6 +390,34 @@ namespace editor::graph {
         }
     }
 
+    void VFXGraphEditor::addNode(vfx::VFXNodeType type) {
+        vfx::VFXNode newNode;
+        newNode.id = currentGraph->nextNodeId++;
+        newNode.type = type;
+        newNode.name = getNodeTypeName(type);
+        newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+
+        if (vfx::isModifierNode(type)) {
+            initializeModifierProperties(newNode);
+        } else if (vfx::isForceNode(type)) {
+            initializeForceProperties(newNode);
+        }
+
+        currentGraph->nodes.push_back(std::move(newNode));
+        if (onGraphChanged) onGraphChanged();
+    }
+
+    void VFXGraphEditor::addShapeNode(vfx::ShapeType shapeType, const std::string& name) {
+        vfx::VFXNode newNode;
+        newNode.id = currentGraph->nextNodeId++;
+        newNode.type = vfx::VFXNodeType::Shape;
+        newNode.name = name;
+        newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+        initializeShapeProperties(newNode, shapeType);
+        currentGraph->nodes.push_back(std::move(newNode));
+        if (onGraphChanged) onGraphChanged();
+    }
+
     void VFXGraphEditor::handleContextMenu() {
         if (showContextMenu) {
             ImGui::OpenPopup("VFXContextMenu");
@@ -411,144 +429,27 @@ namespace editor::graph {
             ImGui::Separator();
 
             if (ImGui::BeginMenu("Modifiers")) {
-                if (ImGui::MenuItem("Color Over Lifetime")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::ColorOverLifetime;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ColorOverLifetime);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeModifierProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Size Over Lifetime")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::SizeOverLifetime;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::SizeOverLifetime);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeModifierProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Speed Over Lifetime")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::SpeedOverLifetime;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::SpeedOverLifetime);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeModifierProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Rotation Over Lifetime")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::RotationOverLifetime;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::RotationOverLifetime);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeModifierProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
+                if (ImGui::MenuItem("Color Over Lifetime")) addNode(vfx::VFXNodeType::ColorOverLifetime);
+                if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
+                if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
+                if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Forces")) {
-                if (ImGui::MenuItem("Gravity")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::ForceGravity;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceGravity);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeForceProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Wind")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::ForceWind;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceWind);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeForceProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Turbulence")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::ForceTurbulence;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceTurbulence);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeForceProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Vortex")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::ForceVortex;
-                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceVortex);
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeForceProperties(newNode);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
+                if (ImGui::MenuItem("Gravity")) addNode(vfx::VFXNodeType::ForceGravity);
+                if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
+                if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
+                if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Shapes")) {
-                if (ImGui::MenuItem("Point")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Point";
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Point);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Sphere")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Sphere";
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Sphere);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Cone")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Cone";
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Cone);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Box")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Box";
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Box);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
-                if (ImGui::MenuItem("Torus")) {
-                    vfx::VFXNode newNode;
-                    newNode.id = currentGraph->nextNodeId++;
-                    newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Torus";
-                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Torus);
-                    currentGraph->nodes.push_back(std::move(newNode));
-                    if (onGraphChanged) onGraphChanged();
-                }
+                if (ImGui::MenuItem("Point")) addShapeNode(vfx::ShapeType::Point, "Point");
+                if (ImGui::MenuItem("Sphere")) addShapeNode(vfx::ShapeType::Sphere, "Sphere");
+                if (ImGui::MenuItem("Cone")) addShapeNode(vfx::ShapeType::Cone, "Cone");
+                if (ImGui::MenuItem("Box")) addShapeNode(vfx::ShapeType::Box, "Box");
+                if (ImGui::MenuItem("Torus")) addShapeNode(vfx::ShapeType::Torus, "Torus");
                 ImGui::EndMenu();
             }
 

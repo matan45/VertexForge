@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vfx/VFXTypes.hpp>
+#include <vfx/VFXShapeTypes.hpp>
 #include <imgui_node_editor.h>
 #include <functional>
 #include <string>
@@ -76,6 +77,15 @@ namespace editor::graph {
         uint32_t getNodeIdFromShapePinId(uint32_t pinId) const { return pinId - SHAPE_PIN_OFFSET; }
 
         void drawNode(vfx::VFXNode& node);
+        void drawEmitterNode(vfx::VFXNode& node, ImDrawList* drawList, float pinSize, ImU32 pinColor);
+        void drawOutSystemNode(vfx::VFXNode& node, ImDrawList* drawList, float pinSize, ImU32 pinColor);
+        void drawFlowNode(vfx::VFXNode& node, ImDrawList* drawList, float pinSize, ImU32 pinColor,
+                          const std::string& idPrefix, float labelWidth, float inputWidth);
+        void drawShapeNode(vfx::VFXNode& node, ImDrawList* drawList, float pinSize);
+        void drawNodeProperties(vfx::VFXNode& node, const std::string& idPrefix,
+                                float labelWidth, float inputWidth);
+        void drawInputPin(uint32_t nodeId, ImDrawList* drawList, float pinSize, ImU32 pinColor, const char* label);
+        void drawOutputPin(uint32_t nodeId, ImDrawList* drawList, float pinSize, ImU32 pinColor, const char* label);
         void drawLinks();
         void drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom);
         void drawFlowPinShape(ImDrawList* drawList, ImVec2 center, ImU32 color, bool filled, float size, bool isOutput) const;
@@ -84,6 +94,10 @@ namespace editor::graph {
         void handleCreation();
         void handleDeletion();
         void handleContextMenu();
+
+        void addNode(vfx::VFXNodeType type);
+        void addShapeNode(vfx::ShapeType shapeType, const std::string& name);
+        void removeExistingLinks(uint32_t nodeId, const std::string& pin, bool isSource);
 
         bool canCreateLink(uint32_t startPinId, uint32_t endPinId) const;
         vfx::VFXNode* findNodeByPinId(uint32_t pinId);
