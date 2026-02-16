@@ -89,136 +89,148 @@ namespace types
 	{
 		if (progressCallback) progressCallback(0.0f);
 
-		resource::HDRData hdrData;
-		hdrData.headerFileType = resource::FileType::HDR;
-
-		// File type detection is now handled by the pipeline, determine from extension
 		std::string filePath(file.path);
 		std::string extension = files::FileUtils::getFileExtension(filePath);
+
 		if (extension == ".hdr")
 		{
-			if (file.config.isImageFlipVertically)
-			{
-				stbi_set_flip_vertically_on_load(true);
-			}
-			int width;
-			int height;
-			int channels;
-			float* imageData = stbi_loadf(filePath.c_str(), &width, &height, &channels, 0);
-			if (!imageData)
-			{
-				vfLogError("Failed to load texture: {}", file.path.data());
-				return;
-			}
-			
-			if (progressCallback) progressCallback(0.3f);
-
-			if (file.config.isImageFlipVertically)
-			{
-				stbi_set_flip_vertically_on_load(false);
-			}
-
-			hdrData.width = static_cast<uint32_t>(width);
-			hdrData.height = static_cast<uint32_t>(height);
-			hdrData.numbersOfChannels = 4;  // Always store as RGBA
-
-			hdrData.pixels = convertToRGBA32F(imageData, width, height, channels);
-
-			stbi_image_free(imageData);
-			
-			if (progressCallback) progressCallback(0.5f);
-			
-			if (progressCallback) progressCallback(0.7f);
-
-			saveToFileHDRWithMips(fileName, location, hdrData);
-			
-			if (progressCallback) progressCallback(1.0f);
+			loadHDRFromStbi(file, fileName, location, progressCallback);
 		}
 		else if (extension == ".exr")
 		{
-			EXRVersion exrVersion;
-
-			int ret = ParseEXRVersionFromFile(&exrVersion, filePath.c_str());
-			if (ret != TINYEXR_SUCCESS)
-			{
-				vfLogError("Invalid EXR file: {}", filePath);
-				return;
-			}
-			
-			if (progressCallback) progressCallback(0.1f);
-
-			EXRHeader exrHeader;
-			InitEXRHeader(&exrHeader);
-
-			const char* exrError = nullptr;
-			ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, filePath.c_str(), &exrError);
-			if (ret != TINYEXR_SUCCESS)
-			{
-				vfLogError("Parse EXR err: {}", exrError);
-				FreeEXRErrorMessage(exrError);
-				return;
-			}
-			
-			if (progressCallback) progressCallback(0.2f);
-
-			EXRImage exrImage;
-			InitEXRImage(&exrImage);
-
-			ret = LoadEXRImageFromFile(&exrImage, &exrHeader, filePath.c_str(), &exrError);
-			if (ret != TINYEXR_SUCCESS)
-			{
-				vfLogError("Load EXR err: {}", exrError);
-				FreeEXRHeader(&exrHeader);
-				FreeEXRErrorMessage(exrError);
-				return;
-			}
-			
-			if (progressCallback) progressCallback(0.3f);
-
-			float* out;
-			int width;
-			int height;
-
-			// LoadEXR always returns RGBA (4 channels)
-			int result = LoadEXR(&out, &width, &height, filePath.c_str(), &exrError);
-			if (result != TINYEXR_SUCCESS)
-			{
-				vfLogError("Failed to load EXR image: {}", exrError);
-				FreeEXRErrorMessage(exrError);
-				FreeEXRImage(&exrImage);
-				FreeEXRHeader(&exrHeader);
-				return;
-			}
-			
-			if (progressCallback) progressCallback(0.4f);
-
-			if (file.config.isImageFlipVertically)
-			{
-				flipImageVertically(out, width, height);
-			}
-
-			hdrData.width = static_cast<uint32_t>(width);
-			hdrData.height = static_cast<uint32_t>(height);
-			hdrData.numbersOfChannels = 4;  // Always store as RGBA
-
-			// Copy pixel data before freeing
-			size_t pixelCount = static_cast<size_t>(width) * height * 4;
-			hdrData.pixels.resize(pixelCount);
-			std::memcpy(hdrData.pixels.data(), out, pixelCount * sizeof(float));
-
-			free(out);
-			FreeEXRImage(&exrImage);
-			FreeEXRHeader(&exrHeader);
-			
-			if (progressCallback) progressCallback(0.5f);
-			
-			saveToFileHDRWithMips(fileName, location, hdrData);
-			
-			if (progressCallback) progressCallback(1.0f);
+			loadHDRFromEXR(file, fileName, location, progressCallback);
 		}
-		else {
+		else
+		{
 			vfLogError("Unsupported HDR file extension: {}", extension);
 		}
+	}
+
+	void Texture::loadHDRFromStbi(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, TextureProgressCallback progressCallback) const
+	{
+		if (file.config.isImageFlipVertically)
+		{
+			stbi_set_flip_vertically_on_load(true);
+		}
+
+		int width;
+		int height;
+		int channels;
+		std::string filePath(file.path);
+		float* imageData = stbi_loadf(filePath.c_str(), &width, &height, &channels, 0);
+		if (!imageData)
+		{
+			vfLogError("Failed to load texture: {}", file.path.data());
+			return;
+		}
+
+		if (progressCallback) progressCallback(0.3f);
+
+		if (file.config.isImageFlipVertically)
+		{
+			stbi_set_flip_vertically_on_load(false);
+		}
+
+		resource::HDRData hdrData;
+		hdrData.headerFileType = resource::FileType::HDR;
+		hdrData.width = static_cast<uint32_t>(width);
+		hdrData.height = static_cast<uint32_t>(height);
+		hdrData.numbersOfChannels = 4;
+		hdrData.pixels = convertToRGBA32F(imageData, width, height, channels);
+
+		stbi_image_free(imageData);
+
+		if (progressCallback) progressCallback(0.7f);
+
+		saveToFileHDRWithMips(fileName, location, hdrData);
+
+		if (progressCallback) progressCallback(1.0f);
+	}
+
+	void Texture::loadHDRFromEXR(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, TextureProgressCallback progressCallback) const
+	{
+		std::string filePath(file.path);
+		EXRVersion exrVersion;
+
+		int ret = ParseEXRVersionFromFile(&exrVersion, filePath.c_str());
+		if (ret != TINYEXR_SUCCESS)
+		{
+			vfLogError("Invalid EXR file: {}", filePath);
+			return;
+		}
+
+		if (progressCallback) progressCallback(0.1f);
+
+		EXRHeader exrHeader;
+		InitEXRHeader(&exrHeader);
+
+		const char* exrError = nullptr;
+		ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, filePath.c_str(), &exrError);
+		if (ret != TINYEXR_SUCCESS)
+		{
+			vfLogError("Parse EXR err: {}", exrError);
+			FreeEXRErrorMessage(exrError);
+			return;
+		}
+
+		if (progressCallback) progressCallback(0.2f);
+
+		EXRImage exrImage;
+		InitEXRImage(&exrImage);
+
+		ret = LoadEXRImageFromFile(&exrImage, &exrHeader, filePath.c_str(), &exrError);
+		if (ret != TINYEXR_SUCCESS)
+		{
+			vfLogError("Load EXR err: {}", exrError);
+			FreeEXRHeader(&exrHeader);
+			FreeEXRErrorMessage(exrError);
+			return;
+		}
+
+		if (progressCallback) progressCallback(0.3f);
+
+		float* out;
+		int width;
+		int height;
+
+		int result = LoadEXR(&out, &width, &height, filePath.c_str(), &exrError);
+		if (result != TINYEXR_SUCCESS)
+		{
+			vfLogError("Failed to load EXR image: {}", exrError);
+			FreeEXRErrorMessage(exrError);
+			FreeEXRImage(&exrImage);
+			FreeEXRHeader(&exrHeader);
+			return;
+		}
+
+		if (progressCallback) progressCallback(0.4f);
+
+		if (file.config.isImageFlipVertically)
+		{
+			flipImageVertically(out, width, height);
+		}
+
+		resource::HDRData hdrData;
+		hdrData.headerFileType = resource::FileType::HDR;
+		hdrData.width = static_cast<uint32_t>(width);
+		hdrData.height = static_cast<uint32_t>(height);
+		hdrData.numbersOfChannels = 4;
+
+		size_t pixelCount = static_cast<size_t>(width) * height * 4;
+		hdrData.pixels.resize(pixelCount);
+		std::memcpy(hdrData.pixels.data(), out, pixelCount * sizeof(float));
+
+		free(out);
+		FreeEXRImage(&exrImage);
+		FreeEXRHeader(&exrHeader);
+
+		if (progressCallback) progressCallback(0.5f);
+
+		saveToFileHDRWithMips(fileName, location, hdrData);
+
+		if (progressCallback) progressCallback(1.0f);
 	}
 	
 

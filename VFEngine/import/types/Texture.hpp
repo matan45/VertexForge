@@ -17,13 +17,18 @@ namespace types
                          std::string_view location, TextureProgressCallback progressCallback = nullptr) const;
 
     private:
+        void loadHDRFromStbi(const importConfig::ImportFiles& file, std::string_view fileName,
+                             std::string_view location, TextureProgressCallback progressCallback) const;
+        void loadHDRFromEXR(const importConfig::ImportFiles& file, std::string_view fileName,
+                            std::string_view location, TextureProgressCallback progressCallback) const;
+
         void saveToFileTextureWithMips(std::string_view fileName, std::string_view location,
                                        const resource::TextureData& textureData) const;
         void saveToFileHDRWithMips(std::string_view fileName, std::string_view location,
                                    const resource::HDRData& hdrData) const;
-        
+
         void generateMipmaps(resource::TextureData& textureData) const;
-        
+
         resource::MipLevelData generateMipLevel(const resource::MipLevelData& source) const;
 
         void convertTo4Channels(unsigned char* inputData, int width, int height, int inputChannels,

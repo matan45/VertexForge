@@ -1,11 +1,9 @@
 #include "Audio.hpp"
 #include "print/EditorLogger.hpp"
-#include "../controllers/files/FileUtils.hpp"
 #include "resource/EndianUtils.hpp"
 
 #include <vector>
 #include <fstream>
-#include <bit>  // For std::bit_cast
 #include <filesystem>
 
 #define DR_MP3_IMPLEMENTATION
@@ -21,170 +19,119 @@ namespace types
                                      std::string_view location, std::string_view fileType,
                                      AudioProgressCallback progressCallback) const
     {
+        if (progressCallback) progressCallback(0.0f);
+
+        DecodedAudio decoded;
+
         if (fileType == "OGG")
-        {
-            loadOggFile(file.path, fileName, location, progressCallback);
-        }
+            decoded = decodeOgg(file.path);
         else if (fileType == "WAV")
-        {
-            loadWavFile(file.path, fileName, location, progressCallback);
-        }
+            decoded = decodeWav(file.path);
         else if (fileType == "MP3")
-        {
-            loadMp3File(file.path, fileName, location, progressCallback);
-        }
+            decoded = decodeMp3(file.path);
         else
         {
             vfLogError("Unsupported audio file type: {}", fileType);
+            return;
         }
-    }
 
-    void Audio::loadOggFile(std::string_view path, std::string_view fileName, std::string_view location,
-                            AudioProgressCallback progressCallback) const
-    {
-        // Report 0% - starting load
-        if (progressCallback) progressCallback(0.0f);
+        if (decoded.data.empty())
+            return;
+
+        if (progressCallback) progressCallback(0.7f);
 
         resource::AudioData audioData;
         audioData.headerFileType = resource::FileType::AUDIO;
-        // Open and load Ogg Vorbis file using stb_vorbis
+        audioData.sampleRate = decoded.sampleRate;
+        audioData.channels = decoded.channels;
+        audioData.frames = decoded.frames;
+        audioData.totalDurationInSeconds = decoded.totalDurationInSeconds;
+        audioData.data = std::move(decoded.data);
+
+        saveToFile(location, fileName, audioData);
+
+        if (progressCallback) progressCallback(1.0f);
+    }
+
+    DecodedAudio Audio::decodeOgg(std::string_view path) const
+    {
+        DecodedAudio result;
+
         int error;
         stb_vorbis* vorbis = stb_vorbis_open_filename(path.data(), &error, nullptr);
         if (!vorbis)
         {
             vfLogError("Failed to load Ogg Vorbis file: {}", path);
-            return;
+            return result;
         }
 
-        // Report 20% - file opened
-        if (progressCallback) progressCallback(0.2f);
-
-        // Retrieve file information
         stb_vorbis_info info = stb_vorbis_get_info(vorbis);
-        audioData.sampleRate = info.sample_rate;
-        audioData.channels = info.channels;
+        result.sampleRate = info.sample_rate;
+        result.channels = info.channels;
 
-        // Get the total number of samples
         int frames = stb_vorbis_stream_length_in_samples(vorbis);
         int totalSamples = frames * info.channels;
-        audioData.frames = frames;
-        audioData.totalDurationInSeconds = static_cast<uint32_t>(stb_vorbis_stream_length_in_seconds(vorbis));
+        result.frames = frames;
+        result.totalDurationInSeconds = static_cast<uint32_t>(stb_vorbis_stream_length_in_seconds(vorbis));
 
-        // Report 40% - metadata read
-        if (progressCallback) progressCallback(0.4f);
+        result.data.resize(totalSamples);
+        stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, result.data.data(), totalSamples);
 
-        // Resize the data buffer and read samples
-        audioData.data.resize(totalSamples);
-        stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, audioData.data.data(), totalSamples);
-
-        // Report 70% - audio data decoded
-        if (progressCallback) progressCallback(0.7f);
-
-        saveToFile(location, fileName, audioData);
-
-        // Cleanup
         stb_vorbis_close(vorbis);
-
-        // Report 100% - complete
-        if (progressCallback) progressCallback(1.0f);
+        return result;
     }
 
-    void Audio::loadWavFile(std::string_view path, std::string_view fileName, std::string_view location,
-                            AudioProgressCallback progressCallback) const
+    DecodedAudio Audio::decodeWav(std::string_view path) const
     {
-        // Report 0% - starting load
-        if (progressCallback) progressCallback(0.0f);
+        DecodedAudio result;
 
-        resource::AudioData audioData;
-        audioData.headerFileType = resource::FileType::AUDIO;
-        // Open and load WAV file using dr_wav
         drwav wav;
         if (!drwav_init_file(&wav, path.data(), nullptr))
         {
             vfLogError("Failed to load WAV file: {}", path);
-            return;
+            return result;
         }
 
-        // Report 20% - file opened
-        if (progressCallback) progressCallback(0.2f);
+        result.sampleRate = wav.sampleRate;
+        result.channels = wav.channels;
+        result.frames = static_cast<uint32_t>(wav.totalPCMFrameCount);
+        result.totalDurationInSeconds = static_cast<uint32_t>(wav.totalPCMFrameCount / wav.sampleRate);
 
-        // Set up the AudioData structure
-        audioData.sampleRate = wav.sampleRate;
-        audioData.channels = wav.channels;
-        audioData.frames = static_cast<uint32_t>(wav.totalPCMFrameCount);
-        audioData.totalDurationInSeconds = static_cast<uint32_t>(wav.totalPCMFrameCount / wav.sampleRate);
+        result.data.resize(wav.totalPCMFrameCount * wav.channels);
+        drwav_read_pcm_frames_s16(&wav, wav.totalPCMFrameCount, result.data.data());
 
-        // Report 40% - metadata read
-        if (progressCallback) progressCallback(0.4f);
-
-        // Load WAV data into the vector (16-bit signed samples)
-        audioData.data.resize(wav.totalPCMFrameCount * wav.channels);
-        drwav_read_pcm_frames_s16(&wav, wav.totalPCMFrameCount, audioData.data.data());
-
-        // Report 70% - audio data read
-        if (progressCallback) progressCallback(0.7f);
-
-        saveToFile(location, fileName, audioData);
-
-        // Cleanup
         drwav_uninit(&wav);
-
-        // Report 100% - complete
-        if (progressCallback) progressCallback(1.0f);
+        return result;
     }
 
-    void Audio::loadMp3File(std::string_view path, std::string_view fileName, std::string_view location,
-                            AudioProgressCallback progressCallback) const
+    DecodedAudio Audio::decodeMp3(std::string_view path) const
     {
-        // Report 0% - starting load
-        if (progressCallback) progressCallback(0.0f);
+        DecodedAudio result;
 
-        resource::AudioData audioData;
-        audioData.headerFileType = resource::FileType::AUDIO;
-
-        // Open and load MP3 file using dr_mp3
         drmp3 mp3;
         if (!drmp3_init_file(&mp3, path.data(), nullptr))
         {
             vfLogError("Failed to load MP3 file: {}", path);
-            return;
+            return result;
         }
 
-        // Report 20% - file opened
-        if (progressCallback) progressCallback(0.2f);
+        result.sampleRate = mp3.sampleRate;
+        result.channels = mp3.channels;
 
-        // Set up the AudioData structure
-        audioData.sampleRate = mp3.sampleRate;
-        audioData.channels = mp3.channels;
-
-        // Read the MP3 data into a temporary buffer
         drmp3_uint64 totalFrames = drmp3_get_pcm_frame_count(&mp3);
-        audioData.frames = static_cast<uint32_t>(totalFrames);
-        audioData.totalDurationInSeconds = static_cast<uint32_t>(totalFrames / mp3.sampleRate);
+        result.frames = static_cast<uint32_t>(totalFrames);
+        result.totalDurationInSeconds = static_cast<uint32_t>(totalFrames / mp3.sampleRate);
 
-        // Report 40% - metadata read
-        if (progressCallback) progressCallback(0.4f);
+        result.data.resize(totalFrames * mp3.channels);
+        drmp3_read_pcm_frames_s16(&mp3, totalFrames, result.data.data());
 
-        // Resize the audio data buffer and read into it
-        audioData.data.resize(totalFrames * mp3.channels);
-        drmp3_read_pcm_frames_s16(&mp3, totalFrames, audioData.data.data());
-
-        // Report 70% - audio data decoded
-        if (progressCallback) progressCallback(0.7f);
-
-        saveToFile(location, fileName, audioData);
-
-        // Cleanup
         drmp3_uninit(&mp3);
-
-        // Report 100% - complete
-        if (progressCallback) progressCallback(1.0f);
+        return result;
     }
 
     void Audio::saveToFile(std::string_view location, std::string_view fileName,
                            const resource::AudioData& audioData) const
     {
-        // Open the file in binary mode
         std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
             FileExtension::audio);
         std::ofstream outFile(newFileLocation, std::ios::binary);
@@ -194,20 +141,16 @@ namespace types
             return;
         }
 
-        // Write version
-        // Write header and version (endian-safe)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.headerFileType));
         resource::endian::writeLE<uint32_t>(outFile, Version::major);
         resource::endian::writeLE<uint32_t>(outFile, Version::minor);
         resource::endian::writeLE<uint32_t>(outFile, Version::patch);
 
-        // Write audio metadata (endian-safe)
         resource::endian::writeLE<uint32_t>(outFile, audioData.sampleRate);
         resource::endian::writeLE<uint32_t>(outFile, audioData.channels);
         resource::endian::writeLE<uint32_t>(outFile, audioData.frames);
         resource::endian::writeLE<uint32_t>(outFile, audioData.totalDurationInSeconds);
 
-        // Write audio data size and the raw audio data (endian-safe)
         auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
         resource::endian::writeLE<uint32_t>(outFile, dataSize);
         resource::endian::writeVectorLE<short>(outFile, audioData.data);

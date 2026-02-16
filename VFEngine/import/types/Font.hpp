@@ -60,27 +60,13 @@ namespace types
 
         bool isColorFont(FT_Face face) const;
 
+        void selectFontSize(FT_Face face, const FontImportConfig& config, bool colorFont) const;
+
+        void initFontData(FT_Face face, resource::FontData& fontData,
+                          const FontImportConfig& config, FontImportConfig& effectiveConfig,
+                          std::string_view fileName, bool colorFont) const;
+
         std::vector<resource::CharacterRange> buildCharacterRanges(
             const FontImportConfig& config) const;
-
-        bool generateSDFAtlas(FT_Face face, uint32_t fontSize,
-                              const std::vector<resource::CharacterRange>& ranges,
-                              const FontImportConfig& config,
-                              resource::FontData& fontData) const;
-
-        bool generateColorAtlas(FT_Face face, uint32_t fontSize,
-                                const std::vector<resource::CharacterRange>& ranges,
-                                const FontImportConfig& config,
-                                resource::FontData& fontData) const;
-
-        void extractKerningPairs(FT_Face face, float scale,
-                                 const std::vector<resource::GlyphData>& glyphs,
-                                 std::vector<resource::KerningPair>& kerningPairs) const;
-
-        void saveToFile(std::string_view location, std::string_view fileName,
-                        const resource::FontData& fontData) const;
-
-        uint32_t countTotalGlyphs(const std::vector<resource::CharacterRange>& ranges) const;
-        static uint32_t nextPowerOf2(uint32_t v);
     };
 }
