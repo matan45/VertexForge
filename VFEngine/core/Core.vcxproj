@@ -108,7 +108,10 @@
     <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
+    <ClInclude Include="adapters\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\PostProcessAdapter.hpp" />
+    <ClInclude Include="adapters\ScriptPhysicsEventBridge.hpp" />
+    <ClInclude Include="adapters\ScriptUIEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\TerrainBrushComputeAdapter.hpp" />
     <ClInclude Include="adapters\TerrainRaycastAdapter.hpp" />
@@ -118,13 +121,19 @@
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
+    <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
     <ClInclude Include="adapters\api\LightAPI.hpp" />
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
     <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
+    <ClInclude Include="adapters\api\PhysicsColliderAPI.hpp" />
+    <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
+    <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
+    <ClInclude Include="adapters\api\UIInputAPI.hpp" />
+    <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
@@ -144,12 +153,12 @@
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
-    <ClInclude Include="handlers\GraphicesHandler.hpp" />
-    <ClInclude Include="handlers\WindowHandler.hpp" />
     <ClInclude Include="physics\FixedTimestep.hpp" />
+    <ClInclude Include="physics\JoltConversions.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
+    <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -163,6 +172,8 @@
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\PostProcessAdapter.cpp" />
+    <ClCompile Include="adapters\ScriptPhysicsEventBridge.cpp" />
+    <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\TerrainBrushComputeAdapter.cpp" />
     <ClCompile Include="adapters\TerrainRaycastAdapter.cpp" />
@@ -172,12 +183,18 @@
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
+    <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsColliderAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
+    <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
+    <ClCompile Include="adapters\api\UIInputAPI.cpp" />
+    <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
@@ -196,11 +213,10 @@
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
-    <ClCompile Include="handlers\GraphicesHandler.cpp" />
-    <ClCompile Include="handlers\WindowHandler.cpp" />
     <ClCompile Include="physics\FixedTimestep.cpp" />
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
     <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
+    <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
   </ItemGroup>
   <ItemGroup>

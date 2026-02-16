@@ -37,12 +37,6 @@ namespace types
             return std::sqrt(static_cast<float>(p.dx * p.dx + p.dy * p.dy));
         };
 
-        auto compare = [&](Point& current, int ox, int oy)
-        {
-            Point other{current.dx + ox, current.dy + oy};
-            // Intentionally left empty - we compare against grid neighbors
-        };
-
         // Forward pass: top-left to bottom-right
         for (int y = 0; y < height; y++)
         {

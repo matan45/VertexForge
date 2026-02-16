@@ -31,20 +31,23 @@ namespace services {
         }
     }
 
-    bool LightComponentService::addDirectionalLightComponent(EntityHandle entity) {
+    // ========== Template Helpers ==========
+
+    template<typename ComponentT>
+    bool LightComponentService::addLightImpl(EntityHandle entity, uint8_t lightType, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
-            sceneEntity.addComponent<components::DirectionalLightComponent>();
-            autoAttachBillboard(entity, components::BillboardIconType::DirectionalLight);
+        if (!sceneEntity.hasComponent<ComponentT>()) {
+            sceneEntity.addComponent<ComponentT>();
+            autoAttachBillboard(entity, iconType);
 
             events::lighting::LightComponentChangedNotification notification;
             notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Directional;
+            notification.lightType = static_cast<events::lighting::LightType>(lightType);
             notification.added = true;
             events::EventDispatcher::instance().publish(notification);
 
@@ -53,22 +56,23 @@ namespace services {
         return false;
     }
 
-    bool LightComponentService::removeDirectionalLightComponent(EntityHandle entity) {
+    template<typename ComponentT>
+    bool LightComponentService::removeLightImpl(EntityHandle entity, uint8_t lightType, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
-            sceneEntity.removeComponent<components::DirectionalLightComponent>();
+        if (sceneEntity.hasComponent<ComponentT>()) {
+            sceneEntity.removeComponent<ComponentT>();
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity, components::BillboardIconType::DirectionalLight);
+                autoDetachBillboard(entity, iconType);
             }
 
             events::lighting::LightComponentChangedNotification notification;
             notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Directional;
+            notification.lightType = static_cast<events::lighting::LightType>(lightType);
             notification.added = false;
             events::EventDispatcher::instance().publish(notification);
 
@@ -77,14 +81,33 @@ namespace services {
         return false;
     }
 
-    bool LightComponentService::hasDirectionalLightComponent(EntityHandle entity) const {
+    template<typename ComponentT>
+    bool LightComponentService::hasLightImpl(EntityHandle entity) const {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::DirectionalLightComponent>();
+        return sceneEntity.hasComponent<ComponentT>();
+    }
+
+    // ========== Directional Light ==========
+
+    bool LightComponentService::addDirectionalLightComponent(EntityHandle entity) {
+        return addLightImpl<components::DirectionalLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Directional),
+            components::BillboardIconType::DirectionalLight);
+    }
+
+    bool LightComponentService::removeDirectionalLightComponent(EntityHandle entity) {
+        return removeLightImpl<components::DirectionalLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Directional),
+            components::BillboardIconType::DirectionalLight);
+    }
+
+    bool LightComponentService::hasDirectionalLightComponent(EntityHandle entity) const {
+        return hasLightImpl<components::DirectionalLightComponent>(entity);
     }
 
     std::optional<DirectionalLightData> LightComponentService::getDirectionalLightData(EntityHandle entity) const {
@@ -134,60 +157,22 @@ namespace services {
         return true;
     }
 
+    // ========== Point Light ==========
+
     bool LightComponentService::addPointLightComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::PointLightComponent>()) {
-            sceneEntity.addComponent<components::PointLightComponent>();
-            autoAttachBillboard(entity, components::BillboardIconType::PointLight);
-
-            events::lighting::LightComponentChangedNotification notification;
-            notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Point;
-            notification.added = true;
-            events::EventDispatcher::instance().publish(notification);
-
-            return true;
-        }
-        return false;
+        return addLightImpl<components::PointLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Point),
+            components::BillboardIconType::PointLight);
     }
 
     bool LightComponentService::removePointLightComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::PointLightComponent>()) {
-            sceneEntity.removeComponent<components::PointLightComponent>();
-            if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity, components::BillboardIconType::PointLight);
-            }
-
-            events::lighting::LightComponentChangedNotification notification;
-            notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Point;
-            notification.added = false;
-            events::EventDispatcher::instance().publish(notification);
-
-            return true;
-        }
-        return false;
+        return removeLightImpl<components::PointLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Point),
+            components::BillboardIconType::PointLight);
     }
 
     bool LightComponentService::hasPointLightComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::PointLightComponent>();
+        return hasLightImpl<components::PointLightComponent>(entity);
     }
 
     std::optional<PointLightData> LightComponentService::getPointLightData(EntityHandle entity) const {
@@ -242,60 +227,22 @@ namespace services {
         return true;
     }
 
+    // ========== Spot Light ==========
+
     bool LightComponentService::addSpotLightComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::SpotLightComponent>()) {
-            sceneEntity.addComponent<components::SpotLightComponent>();
-            autoAttachBillboard(entity, components::BillboardIconType::SpotLight);
-
-            events::lighting::LightComponentChangedNotification notification;
-            notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Spot;
-            notification.added = true;
-            events::EventDispatcher::instance().publish(notification);
-
-            return true;
-        }
-        return false;
+        return addLightImpl<components::SpotLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Spot),
+            components::BillboardIconType::SpotLight);
     }
 
     bool LightComponentService::removeSpotLightComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::SpotLightComponent>()) {
-            sceneEntity.removeComponent<components::SpotLightComponent>();
-            if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity, components::BillboardIconType::SpotLight);
-            }
-
-            events::lighting::LightComponentChangedNotification notification;
-            notification.entity = entity;
-            notification.lightType = events::lighting::LightType::Spot;
-            notification.added = false;
-            events::EventDispatcher::instance().publish(notification);
-
-            return true;
-        }
-        return false;
+        return removeLightImpl<components::SpotLightComponent>(
+            entity, static_cast<uint8_t>(events::lighting::LightType::Spot),
+            components::BillboardIconType::SpotLight);
     }
 
     bool LightComponentService::hasSpotLightComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::SpotLightComponent>();
+        return hasLightImpl<components::SpotLightComponent>(entity);
     }
 
     std::optional<SpotLightData> LightComponentService::getSpotLightData(EntityHandle entity) const {
@@ -357,6 +304,8 @@ namespace services {
         return true;
     }
 
+    // ========== Shared Helpers ==========
+
     bool LightComponentService::hasAnyLightComponent(EntityHandle entity) const {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
@@ -398,6 +347,8 @@ namespace services {
             }
         }
     }
+
+    // ========== Event Handler Registration ==========
 
     void LightComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
         dispatcher.registerCommandHandler<events::scene::AddDirectionalLightComponentCommand>(

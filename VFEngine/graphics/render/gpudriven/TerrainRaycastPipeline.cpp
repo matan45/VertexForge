@@ -2,40 +2,12 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/MappedMemoryGuard.hpp"
 #include "print/Logger.hpp"
 
 #include <cstring>
 
-namespace
-{
-    class MappedMemoryGuard
-    {
-    public:
-        MappedMemoryGuard(vk::Device device, vk::DeviceMemory memory, vk::DeviceSize offset, vk::DeviceSize size)
-            : device(device), memory(memory)
-        {
-            mappedData = device.mapMemory(memory, offset, size);
-        }
-
-        ~MappedMemoryGuard()
-        {
-            if (mappedData)
-            {
-                device.unmapMemory(memory);
-            }
-        }
-
-        MappedMemoryGuard(const MappedMemoryGuard&) = delete;
-        MappedMemoryGuard& operator=(const MappedMemoryGuard&) = delete;
-
-        void* data() const { return mappedData; }
-
-    private:
-        vk::Device device;
-        vk::DeviceMemory memory;
-        void* mappedData = nullptr;
-    };
-}
+using render::MappedMemoryGuard;
 
 namespace render::gpudriven
 {

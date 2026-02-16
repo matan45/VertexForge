@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include <memory>
 #include <vector>
@@ -7,8 +8,6 @@
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -30,12 +29,9 @@ namespace render::mesh
         4, 5,  5, 6,  6, 7,  7, 4,  // Front face edges
         0, 4,  1, 5,  2, 6,  3, 7   // Connecting edges
     }};
-    class AABBDebugRenderer
+    class AABBDebugRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -45,8 +41,6 @@ namespace render::mesh
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexBufferMemory;
-
-        bool initialized = false;
 
     public:
         explicit AABBDebugRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -62,8 +56,6 @@ namespace render::mesh
                     const glm::mat4& view,
                     const glm::mat4& projection,
                     const std::function<const MeshGPUData*(const std::string&)>& getMeshFunc) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

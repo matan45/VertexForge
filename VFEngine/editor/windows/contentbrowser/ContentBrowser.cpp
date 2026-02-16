@@ -169,104 +169,117 @@ namespace windows
                 ImGui::End();
             }
 
-            ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
-            ImVec2 contentSize = ImGui::GetWindowSize();
-            ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
-
             for (auto& asset : assets)
             {
                 asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
             }
 
             AssetClickResult clickResult = gridRenderer->draw(assets, searchQuery);
-
-            if (clickResult.wasClicked)
-            {
-                selectedFile = clickResult.clickedPath;
-                selectedType = clickResult.clickedType;
-
-                int clickedIndex = -1;
-                for (size_t i = 0; i < assets.size(); ++i)
-                {
-                    if (assets[i].path == StringUtil::wstringToUtf8(clickResult.clickedPath.wstring()))
-                    {
-                        clickedIndex = static_cast<int>(i);
-                        break;
-                    }
-                }
-
-                if (clickedIndex >= 0)
-                {
-                    bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
-                    bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
-                    selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
-
-                    // Update isSelected flag on all assets to reflect current selection
-                    for (auto& asset : assets)
-                    {
-                        asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
-                    }
-                }
-
-                if (clickResult.wasDoubleClicked)
-                {
-                    if (selectedType == AssetType::Script)
-                    {
-                        std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-                        std::string args = "\"" + filePath + "\"";
-                        ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
-                    }
-                    else if (selectedType == AssetType::Terrain)
-                    {
-                        events::terrain::BeginTerrainLoadCommand cmd;
-                        cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
-                    else if (selectedType == AssetType::Scene)
-                    {
-                        events::scene::LoadSceneCommand cmd;
-                        cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
-                    else
-                    {
-                        showFileWindow = true;
-                    }
-                }
-            }
-
-            if (!clickResult.pendingNavigation.empty())
-            {
-                navigateTo(clickResult.pendingNavigation);
-            }
+            handleAssetClick(clickResult);
 
             ImGui::Columns(1);
 
-            if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
-            {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
-                {
-                    services::EntityHandle entity = *(services::EntityHandle*)payload->Data;
-                    modals->triggerSavePrefabModal(entity);
-                }
-
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
-                {
-                    bool isValid = DragDropManager::instance().isValidDropTarget(currentPath.string());
-                    if (isValid)
-                    {
-                        auto result = DragDropManager::instance().acceptDrop(currentPath.string());
-                        if (result.success)
-                        {
-                            loadDirectory(currentPath);
-                        }
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
+            handleDragDrop();
         }
 
         ImGui::End();
+    }
+
+    void ContentBrowser::handleAssetClick(const AssetClickResult& clickResult)
+    {
+        if (!clickResult.wasClicked && clickResult.pendingNavigation.empty())
+        {
+            return;
+        }
+
+        if (clickResult.wasClicked)
+        {
+            selectedFile = clickResult.clickedPath;
+            selectedType = clickResult.clickedType;
+
+            int clickedIndex = -1;
+            for (size_t i = 0; i < assets.size(); ++i)
+            {
+                if (assets[i].path == StringUtil::wstringToUtf8(clickResult.clickedPath.wstring()))
+                {
+                    clickedIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (clickedIndex >= 0)
+            {
+                bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
+                bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
+                selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+
+                for (auto& asset : assets)
+                {
+                    asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
+                }
+            }
+
+            if (clickResult.wasDoubleClicked)
+            {
+                if (selectedType == AssetType::Script)
+                {
+                    std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+                    std::string args = "\"" + filePath + "\"";
+                    ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
+                }
+                else if (selectedType == AssetType::Terrain)
+                {
+                    events::terrain::BeginTerrainLoadCommand cmd;
+                    cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+                else if (selectedType == AssetType::Scene)
+                {
+                    events::scene::LoadSceneCommand cmd;
+                    cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+                else
+                {
+                    showFileWindow = true;
+                }
+            }
+        }
+
+        if (!clickResult.pendingNavigation.empty())
+        {
+            navigateTo(clickResult.pendingNavigation);
+        }
+    }
+
+    void ContentBrowser::handleDragDrop()
+    {
+        ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
+        ImVec2 contentSize = ImGui::GetWindowSize();
+        ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
+
+        if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
+            {
+                services::EntityHandle entity = *(services::EntityHandle*)payload->Data;
+                modals->triggerSavePrefabModal(entity);
+            }
+
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
+            {
+                bool isValid = DragDropManager::instance().isValidDropTarget(currentPath.string());
+                if (isValid)
+                {
+                    auto result = DragDropManager::instance().acceptDrop(currentPath.string());
+                    if (result.success)
+                    {
+                        loadDirectory(currentPath);
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
     }
 
     void ContentBrowser::drawToolbar()
@@ -290,9 +303,38 @@ namespace windows
 
         ImGui::SameLine();
 
-        float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f; // Reserve space for search
+        float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f;
         if (availableWidth < 200.0f) availableWidth = 200.0f;
 
+        drawPathBar(availableWidth);
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_FILE_IMPORT " Import"))
+        {
+            events::EventDispatcher::instance().publish(events::application::OpenImportDialogNotification{});
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Import assets");
+        }
+
+        ImGui::SameLine();
+
+        ImGui::Text("Search:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150.0f);
+        char searchBuffer[256];
+        std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer) - 1);
+        searchBuffer[sizeof(searchBuffer) - 1] = '\0';
+        if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
+        {
+            searchQuery = std::string(searchBuffer);
+        }
+    }
+
+    void ContentBrowser::drawPathBar(float availableWidth)
+    {
         if (!isEditingPath)
         {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
@@ -347,30 +389,50 @@ namespace windows
                 isEditingPath = false;
             }
         }
+    }
 
-        ImGui::SameLine();
+    AssetType ContentBrowser::detectAssetType(const fs::directory_entry& entry)
+    {
+        using enum windows::AssetType;
 
-        if (ImGui::Button(ICON_FA_FILE_IMPORT " Import"))
+        std::error_code statusEc;
+        if (entry.is_directory(statusEc) || statusEc)
         {
-            events::EventDispatcher::instance().publish(events::application::OpenImportDialogNotification{});
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Import assets");
+            return Other;
         }
 
-        ImGui::SameLine();
+        std::string extension = entry.path().extension().string();
 
-        ImGui::Text("Search:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(150.0f);
-        char searchBuffer[256];
-        std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer) - 1);
-        searchBuffer[sizeof(searchBuffer) - 1] = '\0';
-        if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
+        if (extension == ".vfMat") return Material;
+        if (extension == ".vfFont") return Font;
+        if (extension == ".vfproj") return Project;
+        if (extension == ".vfMatInstance") return MaterialInstance;
+        if (extension == ".vfAnimator") return Animator;
+        if (extension == ".vfVFX") return VFX;
+        if (extension == ".vfPrefab") return Prefab;
+        if (extension == ".vfTerrainMat") return TerrainMaterial;
+        if (extension == ".vfTerrain") return Terrain;
+        if (extension == ".mt") return Script;
+
+        bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
+            extension == ".vfMesh" || extension == ".vfAudio" ||
+            extension == ".vfAnim" || extension == ".vfScene");
+
+        if (!isVfAsset)
         {
-            searchQuery = std::string(searchBuffer);
+            return Other;
         }
+
+        resource::FileType fileType = resource::ResourceManager::readHeaderFile(entry);
+
+        if (fileType == resource::FileType::TEXTURE) return Texture;
+        if (fileType == resource::FileType::SCENE) return Scene;
+        if (fileType == resource::FileType::HDR) return HDR;
+        if (fileType == resource::FileType::MESH) return Model;
+        if (fileType == resource::FileType::AUDIO) return Audio;
+        if (fileType == resource::FileType::ANIMATION) return Animation;
+
+        return Other;
     }
 
     void ContentBrowser::loadDirectory(const fs::path& path)
@@ -395,115 +457,14 @@ namespace windows
                     continue;
                 }
 
-                using enum windows::AssetType;
                 Asset asset;
                 asset.path = StringUtil::wstringToUtf8(entry.path().wstring());
                 asset.name = StringUtil::wstringToUtf8(entry.path().filename().wstring());
-
-                std::error_code statusEc;
-                bool isDir = entry.is_directory(statusEc);
-                if (statusEc)
-                {
-                    continue;
-                }
-
-                if (isDir)
-                {
-                    asset.type = Other;
-                }
-                else
-                {
-                    std::string extension = entry.path().extension().string();
-                    if (extension == ".vfMat")
-                    {
-                        asset.type = Material;
-                    }
-                    else if (extension == ".vfFont")
-                    {
-                        asset.type = Font;
-                    }
-                    else if (extension == ".vfproj")
-                    {
-                        asset.type = Project;
-                    }
-                    else if (extension == ".vfMatInstance")
-                    {
-                        asset.type = MaterialInstance;
-                    }
-                    else if (extension == ".vfAnimator")
-                    {
-                        asset.type = Animator;
-                    }
-                    else if (extension == ".vfVFX")
-                    {
-                        asset.type = VFX;
-                    }
-                    else if (extension == ".vfPrefab")
-                    {
-                        asset.type = Prefab;
-                    }
-                    else if (extension == ".vfTerrainMat")
-                    {
-                        asset.type = TerrainMaterial;
-                    }
-                    else if (extension == ".vfTerrain")
-                    {
-                        asset.type = Terrain;
-                    }
-                    else if (extension == ".mt")
-                    {
-                        asset.type = Script;
-                    }
-                    else
-                    {
-                        bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
-                            extension == ".vfMesh" || extension == ".vfAudio" ||
-                            extension == ".vfAnim" || extension == ".vfScene");
-
-                        if (isVfAsset)
-                        {
-                            resource::FileType ext = resource::ResourceManager::readHeaderFile(entry);
-
-                            if (ext == resource::FileType::TEXTURE)
-                            {
-                                asset.type = Texture;
-                            }
-                            else if (ext == resource::FileType::SCENE)
-                            {
-                                asset.type = Scene;
-                            }
-                            else if (ext == resource::FileType::HDR)
-                            {
-                                asset.type = HDR;
-                            }
-                            else if (ext == resource::FileType::MESH)
-                            {
-                                asset.type = Model;
-                            }
-                            else if (ext == resource::FileType::AUDIO)
-                            {
-                                asset.type = Audio;
-                            }
-                            else if (ext == resource::FileType::ANIMATION)
-                            {
-                                asset.type = Animation;
-                            }
-                            else
-                            {
-                                asset.type = Other;
-                            }
-                        }
-                        else
-                        {
-                            asset.type = Other;
-                        }
-                    }
-                }
+                asset.type = detectAssetType(entry);
                 assets.push_back(asset);
             }
             catch (const std::exception&)
             {
-                // Skip entries that cause exceptions
                 continue;
             }
         }
@@ -665,52 +626,41 @@ namespace windows
         }
     }
 
+    std::vector<ClipboardItem> ContentBrowser::buildClipboardItems() const
+    {
+        std::vector<ClipboardItem> items;
+        for (const auto& path : getSelectedPaths())
+        {
+            ClipboardItem item;
+            item.path = path;
+            item.isDirectory = fs::is_directory(path);
+            for (const auto& asset : assets)
+            {
+                if (asset.path == path)
+                {
+                    item.assetType = asset.type;
+                    break;
+                }
+            }
+            items.push_back(item);
+        }
+        return items;
+    }
+
     void ContentBrowser::performCut()
     {
-        auto paths = getSelectedPaths();
-        if (!paths.empty())
+        auto items = buildClipboardItems();
+        if (!items.empty())
         {
-            std::vector<ClipboardItem> items;
-            for (const auto& path : paths)
-            {
-                ClipboardItem item;
-                item.path = path;
-                item.isDirectory = fs::is_directory(path);
-                for (const auto& asset : assets)
-                {
-                    if (asset.path == path)
-                    {
-                        item.assetType = asset.type;
-                        break;
-                    }
-                }
-                items.push_back(item);
-            }
             ClipboardManager::instance().cut(items);
         }
     }
 
     void ContentBrowser::performCopy()
     {
-        auto paths = getSelectedPaths();
-        if (!paths.empty())
+        auto items = buildClipboardItems();
+        if (!items.empty())
         {
-            std::vector<ClipboardItem> items;
-            for (const auto& path : paths)
-            {
-                ClipboardItem item;
-                item.path = path;
-                item.isDirectory = fs::is_directory(path);
-                for (const auto& asset : assets)
-                {
-                    if (asset.path == path)
-                    {
-                        item.assetType = asset.type;
-                        break;
-                    }
-                }
-                items.push_back(item);
-            }
             ClipboardManager::instance().copy(items);
         }
     }

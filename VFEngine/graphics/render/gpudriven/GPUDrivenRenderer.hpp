@@ -280,5 +280,10 @@ namespace render::gpudriven
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
+
+        void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
+        void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
+        void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
     };
 }

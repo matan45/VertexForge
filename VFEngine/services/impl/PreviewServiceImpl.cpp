@@ -22,6 +22,14 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
+        registerMaterialPreviewHandlers(dispatcher);
+        registerMeshPreviewHandlers(dispatcher);
+        registerAnimationPreviewHandlers(dispatcher);
+        registerVFXPreviewHandlers(dispatcher);
+    }
+
+    void PreviewServiceImpl::registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::preview::InitMaterialPreviewCommand>(
             [this](const events::preview::InitMaterialPreviewCommand& cmd)
             {
@@ -57,7 +65,10 @@ namespace services
             {
                 return getMaterialShaderError(query.instanceId);
             });
+    }
 
+    void PreviewServiceImpl::registerMeshPreviewHandlers(::events::EventDispatcher& dispatcher)
+    {
         dispatcher.registerCommandHandler<events::preview::InitMeshPreviewCommand>(
             [this](const events::preview::InitMeshPreviewCommand& cmd)
             {
@@ -123,169 +134,178 @@ namespace services
             {
                 return getMeshLoadingProgress(query.instanceId);
             });
+    }
 
-        if (animationProvider)
+    void PreviewServiceImpl::registerAnimationPreviewHandlers(::events::EventDispatcher& dispatcher)
+    {
+        if (!animationProvider)
         {
-            dispatcher.registerCommandHandler<events::animpreview::InitAnimationPreviewCommand>(
-                [this](const events::animpreview::InitAnimationPreviewCommand& cmd)
-                {
-                    initAnimationPreview(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::CleanUpAnimationPreviewCommand>(
-                [this](const events::animpreview::CleanUpAnimationPreviewCommand& cmd)
-                {
-                    cleanUpAnimationPreview(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewMeshCommand>(
-                [this](const events::animpreview::LoadAnimationPreviewMeshCommand& cmd) -> bool
-                {
-                    return loadAnimationPreviewMesh(cmd.instanceId, cmd.meshPath);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewAnimationCommand>(
-                [this](const events::animpreview::LoadAnimationPreviewAnimationCommand& cmd) -> bool
-                {
-                    return loadAnimationPreviewAnimation(cmd.instanceId, cmd.animationPath);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::PlayAnimationCommand>(
-                [this](const events::animpreview::PlayAnimationCommand& cmd)
-                {
-                    playAnimation(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::PauseAnimationCommand>(
-                [this](const events::animpreview::PauseAnimationCommand& cmd)
-                {
-                    pauseAnimation(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::StopAnimationCommand>(
-                [this](const events::animpreview::StopAnimationCommand& cmd)
-                {
-                    stopAnimation(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::SetAnimationPlaybackTimeCommand>(
-                [this](const events::animpreview::SetAnimationPlaybackTimeCommand& cmd)
-                {
-                    setAnimationPlaybackTime(cmd.instanceId, cmd.timeSeconds);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::SetAnimationLoopingCommand>(
-                [this](const events::animpreview::SetAnimationLoopingCommand& cmd)
-                {
-                    setAnimationLooping(cmd.instanceId, cmd.looping);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::SetAnimationPlaybackSpeedCommand>(
-                [this](const events::animpreview::SetAnimationPlaybackSpeedCommand& cmd)
-                {
-                    setAnimationPlaybackSpeed(cmd.instanceId, cmd.speed);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::UpdateAnimationPreviewCommand>(
-                [this](const events::animpreview::UpdateAnimationPreviewCommand& cmd)
-                {
-                    updateAnimationPreview(cmd.instanceId, cmd.deltaTime);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::SetAnimationPreviewParamsCommand>(
-                [this](const events::animpreview::SetAnimationPreviewParamsCommand& cmd)
-                {
-                    setAnimationPreviewParams(cmd.instanceId, cmd.params);
-                });
-
-            dispatcher.registerCommandHandler<events::animpreview::UpdateAnimationCameraCommand>(
-                [this](const events::animpreview::UpdateAnimationCameraCommand& cmd)
-                {
-                    updateAnimationCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos);
-                });
-
-            dispatcher.registerQueryHandler<events::animpreview::IsAnimationPlayingQuery>(
-                [this](const events::animpreview::IsAnimationPlayingQuery& query)
-                {
-                    return isAnimationPlaying(query.instanceId);
-                });
-
-            dispatcher.registerQueryHandler<events::animpreview::GetAnimationPlaybackTimeQuery>(
-                [this](const events::animpreview::GetAnimationPlaybackTimeQuery& query)
-                {
-                    return getAnimationPlaybackTime(query.instanceId);
-                });
-
-            dispatcher.registerQueryHandler<events::animpreview::RenderAnimationPreviewQuery>(
-                [this](const events::animpreview::RenderAnimationPreviewQuery& query)
-                {
-                    return renderAnimationPreview(query.instanceId);
-                });
-
-            dispatcher.registerQueryHandler<events::animpreview::GetAnimationPreviewEvaluatedBonesQuery>(
-                [this](const events::animpreview::GetAnimationPreviewEvaluatedBonesQuery& query)
-                {
-                    return getAnimationPreviewEvaluatedBones(query.instanceId);
-                });
+            return;
         }
 
-        // VFX Preview event handlers
-        if (vfxProvider)
+        dispatcher.registerCommandHandler<events::animpreview::InitAnimationPreviewCommand>(
+            [this](const events::animpreview::InitAnimationPreviewCommand& cmd)
+            {
+                initAnimationPreview(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::CleanUpAnimationPreviewCommand>(
+            [this](const events::animpreview::CleanUpAnimationPreviewCommand& cmd)
+            {
+                cleanUpAnimationPreview(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewMeshCommand>(
+            [this](const events::animpreview::LoadAnimationPreviewMeshCommand& cmd) -> bool
+            {
+                return loadAnimationPreviewMesh(cmd.instanceId, cmd.meshPath);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewAnimationCommand>(
+            [this](const events::animpreview::LoadAnimationPreviewAnimationCommand& cmd) -> bool
+            {
+                return loadAnimationPreviewAnimation(cmd.instanceId, cmd.animationPath);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::PlayAnimationCommand>(
+            [this](const events::animpreview::PlayAnimationCommand& cmd)
+            {
+                playAnimation(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::PauseAnimationCommand>(
+            [this](const events::animpreview::PauseAnimationCommand& cmd)
+            {
+                pauseAnimation(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::StopAnimationCommand>(
+            [this](const events::animpreview::StopAnimationCommand& cmd)
+            {
+                stopAnimation(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::SetAnimationPlaybackTimeCommand>(
+            [this](const events::animpreview::SetAnimationPlaybackTimeCommand& cmd)
+            {
+                setAnimationPlaybackTime(cmd.instanceId, cmd.timeSeconds);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::SetAnimationLoopingCommand>(
+            [this](const events::animpreview::SetAnimationLoopingCommand& cmd)
+            {
+                setAnimationLooping(cmd.instanceId, cmd.looping);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::SetAnimationPlaybackSpeedCommand>(
+            [this](const events::animpreview::SetAnimationPlaybackSpeedCommand& cmd)
+            {
+                setAnimationPlaybackSpeed(cmd.instanceId, cmd.speed);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::UpdateAnimationPreviewCommand>(
+            [this](const events::animpreview::UpdateAnimationPreviewCommand& cmd)
+            {
+                updateAnimationPreview(cmd.instanceId, cmd.deltaTime);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::SetAnimationPreviewParamsCommand>(
+            [this](const events::animpreview::SetAnimationPreviewParamsCommand& cmd)
+            {
+                setAnimationPreviewParams(cmd.instanceId, cmd.params);
+            });
+
+        dispatcher.registerCommandHandler<events::animpreview::UpdateAnimationCameraCommand>(
+            [this](const events::animpreview::UpdateAnimationCameraCommand& cmd)
+            {
+                updateAnimationCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos);
+            });
+
+        dispatcher.registerQueryHandler<events::animpreview::IsAnimationPlayingQuery>(
+            [this](const events::animpreview::IsAnimationPlayingQuery& query)
+            {
+                return isAnimationPlaying(query.instanceId);
+            });
+
+        dispatcher.registerQueryHandler<events::animpreview::GetAnimationPlaybackTimeQuery>(
+            [this](const events::animpreview::GetAnimationPlaybackTimeQuery& query)
+            {
+                return getAnimationPlaybackTime(query.instanceId);
+            });
+
+        dispatcher.registerQueryHandler<events::animpreview::RenderAnimationPreviewQuery>(
+            [this](const events::animpreview::RenderAnimationPreviewQuery& query)
+            {
+                return renderAnimationPreview(query.instanceId);
+            });
+
+        dispatcher.registerQueryHandler<events::animpreview::GetAnimationPreviewEvaluatedBonesQuery>(
+            [this](const events::animpreview::GetAnimationPreviewEvaluatedBonesQuery& query)
+            {
+                return getAnimationPreviewEvaluatedBones(query.instanceId);
+            });
+    }
+
+    void PreviewServiceImpl::registerVFXPreviewHandlers(::events::EventDispatcher& dispatcher)
+    {
+        if (!vfxProvider)
         {
-            dispatcher.registerCommandHandler<events::vfxpreview::InitVFXPreviewCommand>(
-                [this](const events::vfxpreview::InitVFXPreviewCommand& cmd)
-                {
-                    initVFXPreview(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::CleanUpVFXPreviewCommand>(
-                [this](const events::vfxpreview::CleanUpVFXPreviewCommand& cmd)
-                {
-                    cleanUpVFXPreview(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::SetVFXParamsCommand>(
-                [this](const events::vfxpreview::SetVFXParamsCommand& cmd)
-                {
-                    setVFXParams(cmd.instanceId, cmd.params);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXCameraCommand>(
-                [this](const events::vfxpreview::UpdateVFXCameraCommand& cmd)
-                {
-                    updateVFXCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos, cmd.time);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXSimulationCommand>(
-                [this](const events::vfxpreview::UpdateVFXSimulationCommand& cmd)
-                {
-                    updateVFXSimulation(cmd.instanceId, cmd.deltaTime);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::PlayVFXCommand>(
-                [this](const events::vfxpreview::PlayVFXCommand& cmd)
-                {
-                    playVFX(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::PauseVFXCommand>(
-                [this](const events::vfxpreview::PauseVFXCommand& cmd)
-                {
-                    pauseVFX(cmd.instanceId);
-                });
-
-            dispatcher.registerCommandHandler<events::vfxpreview::StopVFXCommand>(
-                [this](const events::vfxpreview::StopVFXCommand& cmd)
-                {
-                    stopVFX(cmd.instanceId);
-                });
-
-            dispatcher.registerQueryHandler<events::vfxpreview::RenderVFXPreviewQuery>(
-                [this](const events::vfxpreview::RenderVFXPreviewQuery& query)
-                {
-                    return renderVFXPreview(query.instanceId);
-                });
+            return;
         }
+
+        dispatcher.registerCommandHandler<events::vfxpreview::InitVFXPreviewCommand>(
+            [this](const events::vfxpreview::InitVFXPreviewCommand& cmd)
+            {
+                initVFXPreview(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::CleanUpVFXPreviewCommand>(
+            [this](const events::vfxpreview::CleanUpVFXPreviewCommand& cmd)
+            {
+                cleanUpVFXPreview(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::SetVFXParamsCommand>(
+            [this](const events::vfxpreview::SetVFXParamsCommand& cmd)
+            {
+                setVFXParams(cmd.instanceId, cmd.params);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXCameraCommand>(
+            [this](const events::vfxpreview::UpdateVFXCameraCommand& cmd)
+            {
+                updateVFXCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos, cmd.time);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXSimulationCommand>(
+            [this](const events::vfxpreview::UpdateVFXSimulationCommand& cmd)
+            {
+                updateVFXSimulation(cmd.instanceId, cmd.deltaTime);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::PlayVFXCommand>(
+            [this](const events::vfxpreview::PlayVFXCommand& cmd)
+            {
+                playVFX(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::PauseVFXCommand>(
+            [this](const events::vfxpreview::PauseVFXCommand& cmd)
+            {
+                pauseVFX(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::StopVFXCommand>(
+            [this](const events::vfxpreview::StopVFXCommand& cmd)
+            {
+                stopVFX(cmd.instanceId);
+            });
+
+        dispatcher.registerQueryHandler<events::vfxpreview::RenderVFXPreviewQuery>(
+            [this](const events::vfxpreview::RenderVFXPreviewQuery& query)
+            {
+                return renderVFXPreview(query.instanceId);
+            });
     }
 
     void PreviewServiceImpl::initMaterialPreview(PreviewInstanceId instanceId)

@@ -3,6 +3,19 @@
 
 namespace pipeline::stages
 {
+    template<typename CallbackType>
+    CallbackType FileProcessingStage::wrapProgress(ImportContext& context) const
+    {
+        if (!context.progressCallback)
+            return nullptr;
+
+        return [&context](float progress)
+        {
+            context.progressCallback(context.fileName, context.fileIndex + 1,
+                                     context.totalFiles, progress);
+        };
+    }
+
     std::optional<ImportContext> FileProcessingStage::process(ImportContext context)
     {
         try
@@ -47,66 +60,29 @@ namespace pipeline::stages
 
     void FileProcessingStage::processTexture(ImportContext& context)
     {
-        // Create a texture progress callback that wraps the import progress callback
-        types::TextureProgressCallback textureProgress = nullptr;
-        if (context.progressCallback)
-        {
-            textureProgress = [&context](float progress)
-            {
-                // Report texture progress through the import progress callback
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
-            };
-        }
-
-        textureProcessor.loadTextureFile(context.file, context.fileName, context.location, textureProgress);
+        textureProcessor.loadTextureFile(context.file, context.fileName, context.location,
+                                         wrapProgress<types::TextureProgressCallback>(context));
     }
 
     void FileProcessingStage::processHDR(ImportContext& context)
     {
-        // Create a texture progress callback that wraps the import progress callback
-        types::TextureProgressCallback textureProgress = nullptr;
-        if (context.progressCallback)
-        {
-            textureProgress = [&context](float progress)
-            {
-                // Report HDR progress through the import progress callback
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
-            };
-        }
-
-        textureProcessor.loadHDRFile(context.file, context.fileName, context.location, textureProgress);
+        textureProcessor.loadHDRFile(context.file, context.fileName, context.location,
+                                     wrapProgress<types::TextureProgressCallback>(context));
     }
 
     void FileProcessingStage::processAudio(ImportContext& context)
     {
-        // Create an audio progress callback that wraps the import progress callback
-        types::AudioProgressCallback audioProgress = nullptr;
-        if (context.progressCallback)
-        {
-            audioProgress = [&context](float progress)
-            {
-                // Report audio progress through the import progress callback
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
-            };
-        }
-
         audioProcessor.loadFromFileWithType(context.file, context.fileName, context.location,
-                                            context.fileType, audioProgress);
+                                            context.fileType, wrapProgress<types::AudioProgressCallback>(context));
     }
 
     void FileProcessingStage::processMesh(ImportContext& context)
     {
-        // Create a mesh progress callback that wraps the import progress callback
-        // Mesh processing gets 0-70%, animation extraction gets 70-100%
         types::MeshProgressCallback meshProgress = nullptr;
         if (context.progressCallback)
         {
             meshProgress = [&context](float progress)
             {
-                // Report mesh progress through the import progress callback (0-70%)
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, progress * 0.7f);
             };
@@ -114,13 +90,11 @@ namespace pipeline::stages
 
         meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
 
-        // Extract animations from the same file (if any)
         types::AnimationProgressCallback animProgress = nullptr;
         if (context.progressCallback)
         {
             animProgress = [&context](float progress)
             {
-                // Report animation progress through the import progress callback (70-100%)
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, 0.7f + progress * 0.3f);
             };
@@ -131,18 +105,9 @@ namespace pipeline::stages
 
     void FileProcessingStage::processFont(ImportContext& context)
     {
-        types::FontProgressCallback fontProgress = nullptr;
-        if (context.progressCallback)
-        {
-            fontProgress = [&context](float progress)
-            {
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
-            };
-        }
-
         types::FontImportConfig config;
-        if (!fontProcessor.loadFromFile(context.file, context.fileName, context.location, config, fontProgress))
+        if (!fontProcessor.loadFromFile(context.file, context.fileName, context.location, config,
+                                        wrapProgress<types::FontProgressCallback>(context)))
         {
             throw std::runtime_error("Failed to import font: " + std::string(context.fileName));
         }

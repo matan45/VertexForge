@@ -9,7 +9,7 @@
 namespace render::mesh
 {
     AudioSphereDebugRenderer::AudioSphereDebugRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -25,50 +25,15 @@ namespace render::mesh
 
     void AudioSphereDebugRenderer::recreate(vk::RenderPass renderPass)
     {
-        if (wireframePipeline)
-        {
-            device.getLogicalDevice().destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
         createPipeline(renderPass);
     }
 
     void AudioSphereDebugRenderer::cleanUp()
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (wireframePipeline)
-        {
-            dev.destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            dev.destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
-        if (vertexBuffer)
-        {
-            dev.destroyBuffer(vertexBuffer);
-            dev.freeMemory(vertexBufferMemory);
-            vertexBuffer = nullptr;
-            vertexBufferMemory = nullptr;
-        }
-        if (indexBuffer)
-        {
-            dev.destroyBuffer(indexBuffer);
-            dev.freeMemory(indexBufferMemory);
-            indexBuffer = nullptr;
-            indexBufferMemory = nullptr;
-        }
-
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
+        destroyBufferPair(vertexBuffer, vertexBufferMemory);
+        destroyBufferPair(indexBuffer, indexBufferMemory);
         initialized = false;
     }
 

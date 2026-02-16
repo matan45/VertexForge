@@ -40,40 +40,10 @@ std::string StringUtil::WideStringToString(PWSTR wideStr)
     return strTo;
 }
 
-std::wstring StringUtil::utf8ToWstring(const std::string& utf8Str)
-{
-    if (utf8Str.empty()) {
-        return std::wstring();
-    }
-    // Note: -1 means null-terminated input, and wideSize includes the null terminator
-    int wideSize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, nullptr, 0);
-    if (wideSize <= 1) {
-        return std::wstring();
-    }
-    // Allocate size - 1 to exclude the null terminator from std::wstring
-    std::wstring wideString(wideSize - 1, 0);
-    MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, &wideString[0], wideSize);
-    return wideString;
-}
-
 std::string StringUtil::toLower(const std::string& str)
 {
     std::string lowerStr = str;
     std::ranges::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
                            [](unsigned char c) { return std::tolower(c); });
     return lowerStr;
-}
-
-// Function to find the first non-whitespace character in a vector
-size_t StringUtil::findFirstNotOf(const std::vector<unsigned char>& data, const std::string& chars)
-{
-    for (size_t i = 0; i < data.size(); ++i)
-    {
-        // Check if the character is not in the specified set
-        if (chars.find(static_cast<char>(data[i])) == std::string::npos)
-        {
-            return i;
-        }
-    }
-    return std::string::npos; // Return npos if all characters are in the specified set
 }

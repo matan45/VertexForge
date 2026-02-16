@@ -4,6 +4,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <string_view>
 #include <optional>
+#include <functional>
 
 namespace animator
 {
@@ -17,6 +18,9 @@ namespace animator
         static AnimatorData createDefault(const std::string& name = "New Animator");
 
     private:
+        using WarningLogger = std::function<void(const std::string&)>;
+
+        // Serialization helpers
         static nlohmann::json serializeParameter(const AnimatorParameter& param);
         static AnimatorParameter deserializeParameter(const nlohmann::json& j);
 
@@ -31,5 +35,16 @@ namespace animator
 
         static nlohmann::json serializeParameterValue(const AnimatorParameterValue& val, AnimatorParameterType type);
         static AnimatorParameterValue deserializeParameterValue(const nlohmann::json& j, AnimatorParameterType type);
+
+        // Load helpers
+        static std::optional<nlohmann::json> readJsonFromFile(std::string_view path);
+        static AnimatorData parseAnimatorData(const nlohmann::json& j, const WarningLogger& logWarning);
+        static void parseAnimatorParameters(const nlohmann::json& j, AnimatorGraph& graph, const WarningLogger& logWarning);
+        static void parseAnimatorStates(const nlohmann::json& j, AnimatorGraph& graph, const WarningLogger& logWarning);
+        static void parseAnimatorTransitions(const nlohmann::json& j, AnimatorGraph& graph, const WarningLogger& logWarning);
+        static void parseGraphLayout(const nlohmann::json& j, AnimatorGraph& graph, const WarningLogger& logWarning);
+
+        // Save helpers
+        static nlohmann::json buildAnimatorJson(const AnimatorData& animator);
     };
 }

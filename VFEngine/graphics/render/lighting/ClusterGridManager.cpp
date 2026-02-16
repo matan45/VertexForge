@@ -374,72 +374,56 @@ namespace render::lighting
     void ClusterGridManager::updateParamsBuffer()
     {
         if (!paramsMapped)
-        {
             return;
-        }
 
         const float zNear = cachedCameraParams.nearPlane;
         const float zFar = cachedCameraParams.farPlane;
         const float logFarNear = std::log(zFar / zNear);
-
         float screenWidth = static_cast<float>(cachedCameraParams.screenWidth);
         float screenHeight = static_cast<float>(cachedCameraParams.screenHeight);
         float tileSizeX = screenWidth / static_cast<float>(config.tilesX);
         float tileSizeY = screenHeight / static_cast<float>(config.tilesY);
 
-        cpuParams.gridDimensions = glm::uvec4(
-            config.tilesX,
-            config.tilesY,
-            config.slicesZ,
-            config.getTotalClusters()
-        );
-
-        cpuParams.screenParams = glm::vec4(
-            screenWidth,
-            screenHeight,
-            tileSizeX,
-            tileSizeY
-        );
-
-        cpuParams.depthParams = glm::vec4(
-            zNear,
-            zFar,
-            logFarNear,
-            1.0f / logFarNear
-        );
-
+        cpuParams.gridDimensions = glm::uvec4(config.tilesX, config.tilesY,
+                                               config.slicesZ, config.getTotalClusters());
+        cpuParams.screenParams = glm::vec4(screenWidth, screenHeight, tileSizeX, tileSizeY);
+        cpuParams.depthParams = glm::vec4(zNear, zFar, logFarNear, 1.0f / logFarNear);
         cpuParams.invProjection = cachedCameraParams.invProjection;
 
         // Scale and bias for computing cluster index from screen position and depth
-        // tileX = floor(screenX / tileSizeX)
-        // tileY = floor(screenY / tileSizeY)
-        // sliceZ = floor(log(linearDepth/zNear) / log(zFar/zNear) * slicesZ)
-        cpuParams.clusterScale = glm::vec4(
-            1.0f / tileSizeX,
-            1.0f / tileSizeY,
-            static_cast<float>(config.slicesZ) / logFarNear,
-            0.0f
-        );
-
-        cpuParams.clusterBias = glm::vec4(
-            0.0f,
-            0.0f,
-            -static_cast<float>(config.slicesZ) * std::log(zNear) / logFarNear,
-            0.0f
-        );
+        cpuParams.clusterScale = glm::vec4(1.0f / tileSizeX, 1.0f / tileSizeY,
+                                            static_cast<float>(config.slicesZ) / logFarNear, 0.0f);
+        cpuParams.clusterBias = glm::vec4(0.0f, 0.0f,
+                                           -static_cast<float>(config.slicesZ) * std::log(zNear) / logFarNear, 0.0f);
 
         std::memcpy(paramsMapped, &cpuParams, sizeof(GPUClusterGridParams));
     }
 
+    static vk::BufferMemoryBarrier makeClusterBufferBarrier(
+        vk::AccessFlags srcAccess, vk::AccessFlags dstAccess, vk::Buffer buffer)
+    {
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = srcAccess;
+        barrier.dstAccessMask = dstAccess;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = buffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+        return barrier;
+    }
+
+    static constexpr vk::PipelineStageFlags CLUSTER_SHADER_STAGES =
+        vk::PipelineStageFlagBits::eFragmentShader |
+        vk::PipelineStageFlagBits::eComputeShader |
+        vk::PipelineStageFlagBits::eMeshShaderEXT;
+
     void ClusterGridManager::uploadToGPU(vk::CommandBuffer cmd)
     {
         if (!initialized || !needsUpload)
-        {
             return;
-        }
 
         uint32_t totalClusters = config.getTotalClusters();
-
         if (cpuClusterAABBs.size() != totalClusters)
         {
             loggerError("ClusterGridManager: AABB count mismatch ({} vs expected {})",
@@ -450,26 +434,10 @@ namespace render::lighting
         size_t copySize = totalClusters * sizeof(GPUClusterAABB);
         std::memcpy(clusterAABBStagingMapped, cpuClusterAABBs.data(), copySize);
 
-        // Barrier: Wait for previous frame's shader reads to complete before writing
-        vk::BufferMemoryBarrier preTransferBarrier{};
-        preTransferBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
-        preTransferBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-        preTransferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        preTransferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        preTransferBarrier.buffer = clusterAABBBuffer;
-        preTransferBarrier.offset = 0;
-        preTransferBarrier.size = VK_WHOLE_SIZE;
-
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eFragmentShader |
-            vk::PipelineStageFlagBits::eComputeShader |
-            vk::PipelineStageFlagBits::eMeshShaderEXT,
-            vk::PipelineStageFlagBits::eTransfer,
-            {},
-            {},
-            preTransferBarrier,
-            {}
-        );
+        auto preBarrier = makeClusterBufferBarrier(
+            vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferWrite, clusterAABBBuffer);
+        cmd.pipelineBarrier(CLUSTER_SHADER_STAGES, vk::PipelineStageFlagBits::eTransfer,
+                            {}, {}, preBarrier, {});
 
         vk::BufferCopy region{};
         region.srcOffset = 0;
@@ -477,26 +445,10 @@ namespace render::lighting
         region.size = copySize;
         cmd.copyBuffer(clusterAABBStagingBuffer, clusterAABBBuffer, region);
 
-        // Barrier: Ensure transfers complete before shader reads
-        vk::BufferMemoryBarrier postTransferBarrier{};
-        postTransferBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        postTransferBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        postTransferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        postTransferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        postTransferBarrier.buffer = clusterAABBBuffer;
-        postTransferBarrier.offset = 0;
-        postTransferBarrier.size = VK_WHOLE_SIZE;
-
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eFragmentShader |
-            vk::PipelineStageFlagBits::eComputeShader |
-            vk::PipelineStageFlagBits::eMeshShaderEXT,
-            {},
-            {},
-            postTransferBarrier,
-            {}
-        );
+        auto postBarrier = makeClusterBufferBarrier(
+            vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead, clusterAABBBuffer);
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, CLUSTER_SHADER_STAGES,
+                            {}, {}, postBarrier, {});
 
         needsUpload = false;
     }
@@ -579,6 +531,63 @@ namespace render::lighting
         return tNear <= tFar && tFar >= 0.0f && tNear <= range;
     }
 
+    static bool spotLightIntersectsCluster(
+        const glm::vec3& lightPos, const glm::vec3& lightDir,
+        float range, float outerAngleCos, float outerAngleSin,
+        const glm::vec3& aabbMin, const glm::vec3& aabbMax)
+    {
+        glm::vec3 aabbCenter = (aabbMin + aabbMax) * 0.5f;
+
+        // Test 1: AABB center inside cone
+        if (pointInCone(aabbCenter, lightPos, lightDir, range, outerAngleCos))
+            return true;
+
+        // Test 2: Any AABB corner inside cone
+        glm::vec3 corners[8] = {
+            {aabbMin.x, aabbMin.y, aabbMin.z}, {aabbMax.x, aabbMin.y, aabbMin.z},
+            {aabbMin.x, aabbMax.y, aabbMin.z}, {aabbMax.x, aabbMax.y, aabbMin.z},
+            {aabbMin.x, aabbMin.y, aabbMax.z}, {aabbMax.x, aabbMin.y, aabbMax.z},
+            {aabbMin.x, aabbMax.y, aabbMax.z}, {aabbMax.x, aabbMax.y, aabbMax.z}
+        };
+
+        for (const auto& corner : corners)
+        {
+            if (pointInCone(corner, lightPos, lightDir, range, outerAngleCos))
+                return true;
+        }
+
+        // Test 3: Cone axis passes through AABB
+        if (coneAxisIntersectsAABB(lightPos, lightDir, range, aabbMin, aabbMax))
+            return true;
+
+        // Test 4: Closest point on AABB to cone axis projection
+        glm::vec3 toCenter = aabbCenter - lightPos;
+        float projLen = glm::dot(toCenter, lightDir);
+        if (projLen > 0.0f && projLen <= range)
+        {
+            glm::vec3 projPoint = lightPos + lightDir * projLen;
+            glm::vec3 closestOnAABB = closestPointOnAABB(projPoint, aabbMin, aabbMax);
+            float coneRadiusAtDepth = projLen * outerAngleSin / outerAngleCos;
+            if (glm::length(closestOnAABB - projPoint) <= coneRadiusAtDepth)
+                return true;
+        }
+
+        // Test 5: Edge midpoints inside cone
+        constexpr int edgeIndices[12][2] = {
+            {0,1}, {2,3}, {4,5}, {6,7},
+            {0,2}, {1,3}, {4,6}, {5,7},
+            {0,4}, {1,5}, {2,6}, {3,7}
+        };
+        for (const auto& edge : edgeIndices)
+        {
+            glm::vec3 edgeMid = (corners[edge[0]] + corners[edge[1]]) * 0.5f;
+            if (pointInCone(edgeMid, lightPos, lightDir, range, outerAngleCos))
+                return true;
+        }
+
+        return false;
+    }
+
     std::vector<uint32_t> ClusterGridManager::getClusterIndicesForSpotLight(
         const glm::vec3& lightPosViewSpace,
         const glm::vec3& lightDirViewSpace,
@@ -588,13 +597,9 @@ namespace render::lighting
         std::vector<uint32_t> result;
 
         if (!initialized || cpuClusterAABBs.empty())
-        {
             return result;
-        }
 
         result.reserve(32);
-
-        // Compute sin of outer angle for distance-to-cone-surface calculations
         float outerAngleSin = std::sqrt(1.0f - outerAngleCos * outerAngleCos);
 
         for (uint32_t i = 0; i < cpuClusterAABBs.size(); ++i)
@@ -603,96 +608,12 @@ namespace render::lighting
             glm::vec3 aabbMin = glm::vec3(aabb.minPoint);
             glm::vec3 aabbMax = glm::vec3(aabb.maxPoint);
 
-            // Quick bounding sphere rejection test
             if (!sphereIntersectsAABB(lightPosViewSpace, range, aabbMin, aabbMax))
-            {
                 continue;
-            }
 
-            // Test 1: Check if AABB center is inside cone
-            glm::vec3 aabbCenter = (aabbMin + aabbMax) * 0.5f;
-            if (pointInCone(aabbCenter, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
-            {
-                result.push_back(i);
-                continue;
-            }
-
-            // Test 2: Check if any AABB corner is inside cone
-            glm::vec3 corners[8] = {
-                {aabbMin.x, aabbMin.y, aabbMin.z},
-                {aabbMax.x, aabbMin.y, aabbMin.z},
-                {aabbMin.x, aabbMax.y, aabbMin.z},
-                {aabbMax.x, aabbMax.y, aabbMin.z},
-                {aabbMin.x, aabbMin.y, aabbMax.z},
-                {aabbMax.x, aabbMin.y, aabbMax.z},
-                {aabbMin.x, aabbMax.y, aabbMax.z},
-                {aabbMax.x, aabbMax.y, aabbMax.z}
-            };
-
-            bool intersects = false;
-            for (const auto& corner : corners)
-            {
-                if (pointInCone(corner, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
-                {
-                    intersects = true;
-                    break;
-                }
-            }
-
-            if (intersects)
-            {
-                result.push_back(i);
-                continue;
-            }
-
-            // Test 3: Check if cone axis passes through AABB
-            if (coneAxisIntersectsAABB(lightPosViewSpace, lightDirViewSpace, range, aabbMin, aabbMax))
-            {
-                result.push_back(i);
-                continue;
-            }
-
-            // Test 4: Check closest point on AABB to cone axis
-            // Project AABB center onto cone axis, then find closest point on AABB to that projection
-            glm::vec3 toCenter = aabbCenter - lightPosViewSpace;
-            float projLen = glm::dot(toCenter, lightDirViewSpace);
-
-            if (projLen > 0.0f && projLen <= range)
-            {
-                glm::vec3 projPoint = lightPosViewSpace + lightDirViewSpace * projLen;
-                glm::vec3 closestOnAABB = closestPointOnAABB(projPoint, aabbMin, aabbMax);
-
-                // Check if closest point is within the cone at that depth
-                // Cone radius at depth d = d * tan(angle) = d * sin/cos
-                float coneRadiusAtDepth = projLen * outerAngleSin / outerAngleCos;
-                float distToAxis = glm::length(closestOnAABB - projPoint);
-
-                if (distToAxis <= coneRadiusAtDepth)
-                {
-                    result.push_back(i);
-                    continue;
-                }
-            }
-
-            // Test 5: Check AABB edges against cone surface (simplified - check edge midpoints)
-            // This catches cases where an edge passes through the cone without endpoints inside
-            constexpr int edgeIndices[12][2] = {
-                {0,1}, {2,3}, {4,5}, {6,7},  // X-aligned edges
-                {0,2}, {1,3}, {4,6}, {5,7},  // Y-aligned edges
-                {0,4}, {1,5}, {2,6}, {3,7}   // Z-aligned edges
-            };
-
-            for (const auto& edge : edgeIndices)
-            {
-                glm::vec3 edgeMid = (corners[edge[0]] + corners[edge[1]]) * 0.5f;
-                if (pointInCone(edgeMid, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
-                {
-                    intersects = true;
-                    break;
-                }
-            }
-
-            if (intersects)
+            if (spotLightIntersectsCluster(lightPosViewSpace, lightDirViewSpace,
+                                           range, outerAngleCos, outerAngleSin,
+                                           aabbMin, aabbMax))
             {
                 result.push_back(i);
             }

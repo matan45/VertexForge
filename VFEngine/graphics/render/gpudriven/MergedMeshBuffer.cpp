@@ -17,6 +17,64 @@ static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for 
 
 namespace render::gpudriven
 {
+    namespace
+    {
+        void resolveTextureIndices(GPUObjectData& obj, const std::string& materialPath,
+                                   const TextureIndexResolver& textureResolver)
+        {
+            if (textureResolver && !materialPath.empty())
+            {
+                obj.textureIndices0 = glm::uvec4(
+                    textureResolver(materialPath, TextureSlotType::Albedo),
+                    textureResolver(materialPath, TextureSlotType::Normal),
+                    textureResolver(materialPath, TextureSlotType::ORM),
+                    textureResolver(materialPath, TextureSlotType::Metallic)
+                );
+                obj.textureIndices1 = glm::uvec4(
+                    textureResolver(materialPath, TextureSlotType::Roughness),
+                    textureResolver(materialPath, TextureSlotType::AO),
+                    textureResolver(materialPath, TextureSlotType::Emission),
+                    textureResolver(materialPath, TextureSlotType::Height)
+                );
+            }
+            else
+            {
+                obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
+                obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
+            }
+        }
+
+        void logFirstVertexBoneData(const std::string& meshPath, const resource::Vertex* vertexData)
+        {
+            static std::unordered_set<std::string> loggedMeshes;
+            if (loggedMeshes.find(meshPath) == loggedMeshes.end())
+            {
+                const auto& v = vertexData[0];
+                loggerInfo("MergedMeshBuffer: First vertex bone data for {}: indices=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
+                    meshPath,
+                    v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
+                    v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
+                loggedMeshes.insert(meshPath);
+            }
+        }
+
+        void computeSubmeshBounds(SubmeshLocation& loc, const resource::Vertex* vertexData, uint32_t vertexCount)
+        {
+            glm::vec3 minBounds(std::numeric_limits<float>::max());
+            glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
+
+            for (uint32_t i = 0; i < vertexCount; ++i)
+            {
+                const auto& v = vertexData[i];
+                minBounds = glm::min(minBounds, v.position);
+                maxBounds = glm::max(maxBounds, v.position);
+            }
+
+            loc.aabbMin = minBounds;
+            loc.aabbMax = maxBounds;
+            loc.calculateBoundingSphere();
+        }
+    }
     MergedMeshBuffer::MergedMeshBuffer(core::Device& device)
         : device(device)
     {
@@ -377,16 +435,7 @@ namespace render::gpudriven
 
         if (vertexData && vertexCount > 0)
         {
-            static std::unordered_set<std::string> loggedMeshes;
-            if (loggedMeshes.find(meshPath) == loggedMeshes.end())
-            {
-                const auto& v = vertexData[0];
-                loggerInfo("MergedMeshBuffer: First vertex bone data for {}: indices=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
-                    meshPath,
-                    v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
-                    v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
-                loggedMeshes.insert(meshPath);
-            }
+            logFirstVertexBoneData(meshPath, vertexData);
             uploadVertexDataAt(lodInfo.vertexOffset, vertexData, vertexCount);
         }
 
@@ -397,24 +446,10 @@ namespace render::gpudriven
 
         loc->lodStates[lodLevel] = LODStreamState::Uploading;
 
-       
+
         bool boundsNotComputed = (loc->aabbMin == glm::vec3(0.0f) && loc->aabbMax == glm::vec3(0.0f));
         if (vertexData && vertexCount > 0 && boundsNotComputed)
-        {
-            glm::vec3 minBounds(std::numeric_limits<float>::max());
-            glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
-
-            for (uint32_t i = 0; i < vertexCount; ++i)
-            {
-                const auto& v = vertexData[i];
-                minBounds = glm::min(minBounds, v.position);
-                maxBounds = glm::max(maxBounds, v.position);
-            }
-
-            loc->aabbMin = minBounds;
-            loc->aabbMax = maxBounds;
-            loc->calculateBoundingSphere();
-        }
+            computeSubmeshBounds(*loc, vertexData, vertexCount);
 
         return true;
     }
@@ -460,27 +495,17 @@ namespace render::gpudriven
         }
     }
 
-    void MergedMeshBuffer::populateObjectData(GPUObjectData& obj,
-                                              const mesh::MeshRenderData& meshRender,
-                                              const SubmeshLocation& submeshLoc,
-                                              const TextureIndexResolver& textureResolver,
-                                              const ShaderGroupResolver& shaderGroupResolver,
-                                              const BoneOffsetResolver& boneOffsetResolver,
-                                              float time)
+    void MergedMeshBuffer::populateLODData(GPUObjectData& obj,
+                                           const mesh::MeshRenderData& meshRender,
+                                           const SubmeshLocation& submeshLoc,
+                                           const BoneOffsetResolver& boneOffsetResolver)
     {
-        obj.modelMatrix = meshRender.modelMatrix;
-        obj.aabbMin = glm::vec4(submeshLoc.aabbMin, 0.0f);
-        obj.aabbMax = glm::vec4(submeshLoc.aabbMax, 0.0f);
-
         for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
         {
-            glm::uvec4& lodData = (i == 0)
-                                      ? obj.lod0Data
-                                      : (i == 1)
-                                      ? obj.lod1Data
-                                      : (i == 2)
-                                      ? obj.lod2Data
-                                      : obj.lod3Data;
+            glm::uvec4& lodData = (i == 0) ? obj.lod0Data
+                                  : (i == 1) ? obj.lod1Data
+                                  : (i == 2) ? obj.lod2Data
+                                  : obj.lod3Data;
             lodData = glm::uvec4(
                 submeshLoc.lods[i].vertexOffset,
                 submeshLoc.lods[i].indexOffset,
@@ -492,43 +517,38 @@ namespace render::gpudriven
         obj.meshletLod0 = glm::uvec4(
             submeshLoc.meshletLods[0].meshletOffset,
             submeshLoc.meshletLods[0].meshletCount,
-            submeshLoc.meshletLods[0].baseVertexOffset,
-            0
-        );
+            submeshLoc.meshletLods[0].baseVertexOffset, 0);
         obj.meshletLod1 = glm::uvec4(
             submeshLoc.meshletLods[1].meshletOffset,
             submeshLoc.meshletLods[1].meshletCount,
-            submeshLoc.meshletLods[1].baseVertexOffset,
-            0
-        );
+            submeshLoc.meshletLods[1].baseVertexOffset, 0);
         obj.meshletLod2 = glm::uvec4(
             submeshLoc.meshletLods[2].meshletOffset,
             submeshLoc.meshletLods[2].meshletCount,
-            submeshLoc.meshletLods[2].baseVertexOffset,
-            0
-        );
+            submeshLoc.meshletLods[2].baseVertexOffset, 0);
 
         uint32_t boneOffset = INVALID_BONE_OFFSET;
         if (boneOffsetResolver && meshRender.entity != entt::null)
-        {
             boneOffset = boneOffsetResolver(meshRender.entity);
-        }
 
         obj.meshletLod3 = glm::uvec4(
             submeshLoc.meshletLods[3].meshletOffset,
             submeshLoc.meshletLods[3].meshletCount,
             submeshLoc.meshletLods[3].baseVertexOffset,
-            boneOffset
-        );
+            boneOffset);
 
         float bias = meshRender.lodBias;
         obj.lodThresholds = glm::vec4(
             LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
             LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
             LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
-            bias
-        );
+            bias);
+    }
 
+    std::string MergedMeshBuffer::resolveMaterialProperties(GPUObjectData& obj,
+                                                             const mesh::MeshRenderData& meshRender,
+                                                             const SubmeshLocation& submeshLoc)
+    {
         const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         std::string materialPath;
 
@@ -561,69 +581,69 @@ namespace render::gpudriven
                                            meshRender.emission);
         }
 
+        return materialPath;
+    }
+
+    void MergedMeshBuffer::applyDynamicEmission(GPUObjectData& obj, const std::string& materialPath, float time)
+    {
+        std::string effectiveMaterialPath = materialPath;
+        if (material::isInstanceFile(materialPath))
+        {
+            auto cacheIt = instanceToParentCache.find(materialPath);
+            if (cacheIt != instanceToParentCache.end())
+            {
+                effectiveMaterialPath = cacheIt->second;
+            }
+            else
+            {
+                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                if (instanceData && !instanceData->parentMaterialPath.empty())
+                {
+                    effectiveMaterialPath = instanceData->parentMaterialPath;
+                    instanceToParentCache[materialPath] = effectiveMaterialPath;
+                }
+            }
+        }
+
+        auto matData = resource::ResourceManager::loadMaterial(effectiveMaterialPath);
+        if (matData)
+        {
+            const auto* outputNode = matData->graph.findOutputNode();
+            if (outputNode)
+            {
+                float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
+                    matData->graph, outputNode->id, time);
+                if (dynamicEmission != 0.0f)
+                    obj.materialParams.w = dynamicEmission;
+            }
+        }
+    }
+
+    void MergedMeshBuffer::populateObjectData(GPUObjectData& obj,
+                                              const mesh::MeshRenderData& meshRender,
+                                              const SubmeshLocation& submeshLoc,
+                                              const TextureIndexResolver& textureResolver,
+                                              const ShaderGroupResolver& shaderGroupResolver,
+                                              const BoneOffsetResolver& boneOffsetResolver,
+                                              float time)
+    {
+        obj.modelMatrix = meshRender.modelMatrix;
+        obj.aabbMin = glm::vec4(submeshLoc.aabbMin, 0.0f);
+        obj.aabbMax = glm::vec4(submeshLoc.aabbMax, 0.0f);
+
+        populateLODData(obj, meshRender, submeshLoc, boneOffsetResolver);
+
+        std::string materialPath = resolveMaterialProperties(obj, meshRender, submeshLoc);
+
         if (!materialPath.empty() && time > 0.0f)
-        {
-            std::string effectiveMaterialPath = materialPath;
-            if (material::isInstanceFile(materialPath))
-            {
-                auto cacheIt = instanceToParentCache.find(materialPath);
-                if (cacheIt != instanceToParentCache.end())
-                {
-                    effectiveMaterialPath = cacheIt->second;
-                }
-                else
-                {
-                    auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                    if (instanceData && !instanceData->parentMaterialPath.empty())
-                    {
-                        effectiveMaterialPath = instanceData->parentMaterialPath;
-                        instanceToParentCache[materialPath] = effectiveMaterialPath;
-                    }
-                }
-            }
+            applyDynamicEmission(obj, materialPath, time);
 
-            auto matData = resource::ResourceManager::loadMaterial(effectiveMaterialPath);
-            if (matData)
-            {
-                const auto* outputNode = matData->graph.findOutputNode();
-                if (outputNode)
-                {
-                    float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
-                        matData->graph, outputNode->id, time);
-                    if (dynamicEmission != 0.0f)
-                    {
-                        obj.materialParams.w = dynamicEmission;
-                    }
-                }
-            }
-        }
+        resolveTextureIndices(obj, materialPath, textureResolver);
 
-        if (textureResolver && !materialPath.empty())
-        {
-            obj.textureIndices0 = glm::uvec4(
-                textureResolver(materialPath, TextureSlotType::Albedo),
-                textureResolver(materialPath, TextureSlotType::Normal),
-                textureResolver(materialPath, TextureSlotType::ORM),
-                textureResolver(materialPath, TextureSlotType::Metallic)
-            );
-            obj.textureIndices1 = glm::uvec4(
-                textureResolver(materialPath, TextureSlotType::Roughness),
-                textureResolver(materialPath, TextureSlotType::AO),
-                textureResolver(materialPath, TextureSlotType::Emission),
-                textureResolver(materialPath, TextureSlotType::Height)
-            );
-        }
-        else
-        {
-            obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
-            obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
-        }
-
+        const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         obj.flags = 0;
         if (subMat && subMat->blendMode == 1)
-        {
             obj.flags |= ObjectFlags::AlphaMask;
-        }
 
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
@@ -636,10 +656,8 @@ namespace render::gpudriven
         }
 
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
-
         obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
-                                   ? shaderGroupResolver(materialPath)
-                                   : 0;
+                                   ? shaderGroupResolver(materialPath) : 0;
     }
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,

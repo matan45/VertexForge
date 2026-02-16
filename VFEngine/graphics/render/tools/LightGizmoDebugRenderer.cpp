@@ -9,7 +9,7 @@
 namespace render::mesh
 {
     LightGizmoDebugRenderer::LightGizmoDebugRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -27,80 +27,19 @@ namespace render::mesh
 
     void LightGizmoDebugRenderer::recreate(vk::RenderPass renderPass)
     {
-        if (wireframePipeline)
-        {
-            device.getLogicalDevice().destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
         createPipeline(renderPass);
     }
 
     void LightGizmoDebugRenderer::cleanUp()
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (wireframePipeline)
-        {
-            dev.destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            dev.destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
-        if (sphereVertexBuffer)
-        {
-            dev.destroyBuffer(sphereVertexBuffer);
-            dev.freeMemory(sphereVertexBufferMemory);
-            sphereVertexBuffer = nullptr;
-            sphereVertexBufferMemory = nullptr;
-        }
-        if (sphereIndexBuffer)
-        {
-            dev.destroyBuffer(sphereIndexBuffer);
-            dev.freeMemory(sphereIndexBufferMemory);
-            sphereIndexBuffer = nullptr;
-            sphereIndexBufferMemory = nullptr;
-        }
-
-        if (coneVertexBuffer)
-        {
-            dev.destroyBuffer(coneVertexBuffer);
-            dev.freeMemory(coneVertexBufferMemory);
-            coneVertexBuffer = nullptr;
-            coneVertexBufferMemory = nullptr;
-        }
-        if (coneIndexBuffer)
-        {
-            dev.destroyBuffer(coneIndexBuffer);
-            dev.freeMemory(coneIndexBufferMemory);
-            coneIndexBuffer = nullptr;
-            coneIndexBufferMemory = nullptr;
-        }
-
-        if (arrowVertexBuffer)
-        {
-            dev.destroyBuffer(arrowVertexBuffer);
-            dev.freeMemory(arrowVertexBufferMemory);
-            arrowVertexBuffer = nullptr;
-            arrowVertexBufferMemory = nullptr;
-        }
-        if (arrowIndexBuffer)
-        {
-            dev.destroyBuffer(arrowIndexBuffer);
-            dev.freeMemory(arrowIndexBufferMemory);
-            arrowIndexBuffer = nullptr;
-            arrowIndexBufferMemory = nullptr;
-        }
-
+        destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
+        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferMemory);
+        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferMemory);
+        destroyBufferPair(coneVertexBuffer, coneVertexBufferMemory);
+        destroyBufferPair(coneIndexBuffer, coneIndexBufferMemory);
+        destroyBufferPair(arrowVertexBuffer, arrowVertexBufferMemory);
+        destroyBufferPair(arrowIndexBuffer, arrowIndexBufferMemory);
         initialized = false;
     }
 

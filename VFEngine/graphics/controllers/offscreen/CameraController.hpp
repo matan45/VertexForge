@@ -12,6 +12,15 @@ namespace controllers::offscreen
 {
     class CameraController
     {
+    private:
+        render::RenderPassHandler& renderHandler;
+
+        glm::mat4 currentViewProj{1.0f};
+        glm::mat4 currentViewMatrix{1.0f};
+        float currentNearPlane = 0.1f;
+        bool occlusionCullingEnabled = true;
+        bool occlusionCullingReady = false;
+        math::Frustum currentFrustum;
     public:
         explicit CameraController(render::RenderPassHandler& renderHandler);
 
@@ -32,15 +41,5 @@ namespace controllers::offscreen
         const glm::mat4& getCurrentViewProj() const { return currentViewProj; }
         const glm::mat4& getCurrentViewMatrix() const { return currentViewMatrix; }
         float getCurrentNearPlane() const { return currentNearPlane; }
-
-    private:
-        render::RenderPassHandler& renderHandler;
-
-        glm::mat4 currentViewProj{1.0f};
-        glm::mat4 currentViewMatrix{1.0f};
-        float currentNearPlane = 0.1f;
-        bool occlusionCullingEnabled = true;
-        bool occlusionCullingReady = false;
-        math::Frustum currentFrustum;
     };
 }

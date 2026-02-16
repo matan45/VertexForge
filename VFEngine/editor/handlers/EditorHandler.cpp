@@ -159,6 +159,16 @@ namespace handlers
 
     void EditorHandler::initializeServices()
     {
+        createCoreServices();
+        createMediaServices();
+        createPhysicsServices();
+        createVFXServices();
+        createTerrainServices();
+        registerAllEventHandlers();
+    }
+
+    void EditorHandler::createCoreServices()
+    {
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
             bootstrap->getAnimatorProvider()
@@ -177,20 +187,33 @@ namespace handlers
             bootstrap->getVFXPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
+        undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
+        fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
+        projectService = std::make_shared<services::ProjectServiceImpl>();
+    }
+
+    void EditorHandler::createMediaServices()
+    {
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
         scriptingService = std::make_shared<services::ScriptingServiceImpl>(
             bootstrap->getScriptingProvider(),
             bootstrap->getSceneGraphSystem()
         );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
+    }
 
+    void EditorHandler::createPhysicsServices()
+    {
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
         }
+    }
 
+    void EditorHandler::createVFXServices()
+    {
         if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
         {
             vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
@@ -199,13 +222,10 @@ namespace handlers
             vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
             vfxPlayModeHandler->subscribeToEvents();
         }
+    }
 
-        undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
-
-        fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
-
-        projectService = std::make_shared<services::ProjectServiceImpl>();
-
+    void EditorHandler::createTerrainServices()
+    {
         auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
         terrainService = terrainServiceImpl;
 
@@ -221,6 +241,16 @@ namespace handlers
             terrainServiceImpl->setPhysicsProvider(physicsProvider);
         }
 
+        sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
+        brushService = std::make_shared<services::BrushServiceImpl>();
+        paintModeService = std::make_shared<services::PaintModeServiceImpl>();
+        paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
+        terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
+            bootstrap->getTerrainRaycastProvider());
+    }
+
+    void EditorHandler::registerAllEventHandlers()
+    {
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
@@ -234,21 +264,10 @@ namespace handlers
         physicsService->registerEventHandlers();
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();
-
-        sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
         sculptModeService->registerEventHandlers();
-
-        brushService = std::make_shared<services::BrushServiceImpl>();
         brushService->registerEventHandlers();
-
-        paintModeService = std::make_shared<services::PaintModeServiceImpl>();
         paintModeService->registerEventHandlers();
-
-        paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
         paintBrushService->registerEventHandlers();
-
-        terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
-            bootstrap->getTerrainRaycastProvider());
         terrainRaycastService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;

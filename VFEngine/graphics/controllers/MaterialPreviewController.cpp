@@ -25,85 +25,45 @@ namespace controllers
 
         switch (node->type)
         {
-        case material::NodeType::ConstantScalar:
-            {
-                auto it = node->properties.find("value");
-                if (it != node->properties.end() && std::holds_alternative<float>(it->second))
-                {
-                    return std::get<float>(it->second);
-                }
-                return 0.0f;
-            }
-
+        case material::NodeType::ConstantScalar: {
+            auto it = node->properties.find("value");
+            if (it != node->properties.end() && std::holds_alternative<float>(it->second))
+                return std::get<float>(it->second);
+            return 0.0f;
+        }
         case material::NodeType::Time:
-            {
-                return time;
-            }
+            return time;
 
         case material::NodeType::Sin:
-            {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
-                if (inputVal) return std::sin(*inputVal);
-                return 0.0f;
-            }
-
         case material::NodeType::Cos:
-            {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
-                if (inputVal) return std::cos(*inputVal);
-                return 0.0f;
-            }
-
-        case material::NodeType::Multiply:
-            {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
-                return (a.value_or(1.0f)) * (b.value_or(1.0f));
-            }
-
-        case material::NodeType::Add:
-            {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
-                return (a.value_or(0.0f)) + (b.value_or(0.0f));
-            }
-
-        case material::NodeType::Subtract:
-            {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
-                return (a.value_or(0.0f)) - (b.value_or(0.0f));
-            }
-
-        case material::NodeType::Clamp:
-            {
-                auto val = getInputFloat(graph, nodeId, "Value", time);
-                auto minVal = getInputFloat(graph, nodeId, "Min", time);
-                auto maxVal = getInputFloat(graph, nodeId, "Max", time);
-                float v = val.value_or(0.0f);
-                float mn = minVal.value_or(0.0f);
-                float mx = maxVal.value_or(1.0f);
-                return std::clamp(v, mn, mx);
-            }
-
         case material::NodeType::Saturate:
-            {
-                auto val = getInputFloat(graph, nodeId, "Value", time);
-                return std::clamp(val.value_or(0.0f), 0.0f, 1.0f);
-            }
-
         case material::NodeType::Abs:
-            {
-                auto val = getInputFloat(graph, nodeId, "Value", time);
-                return std::abs(val.value_or(0.0f));
-            }
-
-        case material::NodeType::OneMinus:
-            {
-                auto val = getInputFloat(graph, nodeId, "Value", time);
-                return 1.0f - val.value_or(0.0f);
-            }
-
+        case material::NodeType::OneMinus: {
+            float v = getInputFloat(graph, nodeId, "Value", time).value_or(0.0f);
+            if (node->type == material::NodeType::Sin) return std::sin(v);
+            if (node->type == material::NodeType::Cos) return std::cos(v);
+            if (node->type == material::NodeType::Saturate) return std::clamp(v, 0.0f, 1.0f);
+            if (node->type == material::NodeType::Abs) return std::abs(v);
+            return 1.0f - v;
+        }
+        case material::NodeType::Multiply:
+        case material::NodeType::Add:
+        case material::NodeType::Subtract: {
+            auto a = getInputFloat(graph, nodeId, "A", time);
+            auto b = getInputFloat(graph, nodeId, "B", time);
+            bool isMul = (node->type == material::NodeType::Multiply);
+            float av = a.value_or(isMul ? 1.0f : 0.0f);
+            float bv = b.value_or(isMul ? 1.0f : 0.0f);
+            if (isMul) return av * bv;
+            if (node->type == material::NodeType::Add) return av + bv;
+            return av - bv;
+        }
+        case material::NodeType::Clamp: {
+            float v = getInputFloat(graph, nodeId, "Value", time).value_or(0.0f);
+            float mn = getInputFloat(graph, nodeId, "Min", time).value_or(0.0f);
+            float mx = getInputFloat(graph, nodeId, "Max", time).value_or(1.0f);
+            return std::clamp(v, mn, mx);
+        }
         default:
             break;
         }
@@ -164,43 +124,16 @@ namespace controllers
         cleanUp();
     }
 
-    static void createDefaultTextureImpl(core::Device& device, PreviewTextureGPU& defaultTexture)
+    static void uploadStagingToImage(core::Device& device, vk::Buffer stagingBuffer,
+                                      vk::Image image, uint32_t width, uint32_t height)
     {
-        const uint32_t width = 1;
-        const uint32_t height = 1;
-        const uint32_t imageSize = width * height * 4;
-        std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingBufferMemory;
-
-        core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        bufferInfo.size = imageSize;
-        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
-
-        void* data;
-        static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
-        memcpy(data, whitePixel.data(), imageSize);
-        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-
-        core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageInfo.width = width;
-        imageInfo.height = height;
-        imageInfo.format = vk::Format::eR8G8B8A8Srgb;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
-
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
 
         auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-        core::ImageUtilities::transitionImageLayout(cmdA.get(), defaultTexture.image, vk::ImageLayout::eUndefined,
+        core::ImageUtilities::transitionImageLayout(cmdA.get(), image, vk::ImageLayout::eUndefined,
                                                     vk::ImageLayout::eTransferDstOptimal,
                                                     vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
@@ -213,141 +146,107 @@ namespace controllers
         region.imageSubresource.baseArrayLayer = 0;
         region.imageSubresource.layerCount = 1;
         region.imageExtent = vk::Extent3D(width, height, 1);
-        cmdCopy.get().copyBufferToImage(stagingBuffer, defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
-                                        region);
+        cmdCopy.get().copyBufferToImage(stagingBuffer, image, vk::ImageLayout::eTransferDstOptimal, region);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
 
         auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-        core::ImageUtilities::transitionImageLayout(cmdB.get(), defaultTexture.image,
-                                                    vk::ImageLayout::eTransferDstOptimal,
+        core::ImageUtilities::transitionImageLayout(cmdB.get(), image, vk::ImageLayout::eTransferDstOptimal,
                                                     vk::ImageLayout::eShaderReadOnlyOptimal,
                                                     vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
+    }
 
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingBufferMemory);
-
+    static void createSamplerAndView(core::Device& device, PreviewTextureGPU& tex,
+                                      bool enableAnisotropy)
+    {
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
         samplerInfo.minFilter = vk::Filter::eLinear;
         samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.anisotropyEnable = enableAnisotropy ? VK_TRUE : VK_FALSE;
         samplerInfo.maxAnisotropy = 1.0f;
         samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+        tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), defaultTexture.image);
+        core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), tex.image);
         viewRequest.format = vk::Format::eR8G8B8A8Srgb;
-        core::ImageUtilities::createImageView(viewRequest, defaultTexture.imageView);
+        core::ImageUtilities::createImageView(viewRequest, tex.imageView);
+    }
 
-        defaultTexture.valid = true;
+    static PreviewTextureGPU uploadPixelsToGPU(core::Device& device, const void* pixels,
+                                                uint32_t width, uint32_t height,
+                                                bool enableAnisotropy = false)
+    {
+        PreviewTextureGPU tex{};
+        vk::DeviceSize imageSize = width * height * 4;
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingBufferMemory;
+        core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        bufferInfo.size = imageSize;
+        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
+        memcpy(data, pixels, imageSize);
+        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+
+        core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageInfo.width = width;
+        imageInfo.height = height;
+        imageInfo.format = vk::Format::eR8G8B8A8Srgb;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
+
+        uploadStagingToImage(device, stagingBuffer, tex.image, width, height);
+
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+        createSamplerAndView(device, tex, enableAnisotropy);
+        tex.valid = true;
+        return tex;
+    }
+
+    static void createDefaultTextureImpl(core::Device& device, PreviewTextureGPU& defaultTexture)
+    {
+        std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
+        defaultTexture = uploadPixelsToGPU(device, whitePixel.data(), 1, 1);
         loggerInfo("Created default white texture for material preview");
     }
 
     static PreviewTextureGPU loadTextureFromFileImpl(core::Device& device, const std::string& path)
     {
-        PreviewTextureGPU tex{};
-
         if (path.empty())
-        {
-            return tex;
-        }
+            return {};
 
         try
         {
             auto textureData = resource::ResourceManager::loadTextureAsync(path);
             auto texturePtr = textureData.get();
-
             if (!texturePtr || texturePtr->textureData().empty())
             {
                 loggerWarning("Failed to load texture: {}", path);
-                return tex;
+                return {};
             }
 
-            vk::DeviceSize imageSize = texturePtr->width * texturePtr->height * 4 * sizeof(unsigned char);
-
-            vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingBufferMemory;
-
-            core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-            bufferInfo.size = imageSize;
-            bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
-
-            void* data;
-            static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
-            memcpy(data, texturePtr->textureData().data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-
-            core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-            imageInfo.width = texturePtr->width;
-            imageInfo.height = texturePtr->height;
-            imageInfo.format = vk::Format::eR8G8B8A8Srgb;
-            imageInfo.tiling = vk::ImageTiling::eOptimal;
-            imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-            imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
-
-            vk::CommandPoolCreateInfo poolInfo{};
-            poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-            poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-            auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
-
-            auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-            core::ImageUtilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
-                                                        vk::ImageLayout::eTransferDstOptimal,
-                                                        vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
-
-            auto cmdCopy = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-            vk::BufferImageCopy region{};
-            region.bufferOffset = 0;
-            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
-            region.imageExtent = vk::Extent3D(texturePtr->width, texturePtr->height, 1);
-            cmdCopy.get().copyBufferToImage(stagingBuffer, tex.image, vk::ImageLayout::eTransferDstOptimal, region);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
-
-            auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-            core::ImageUtilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
-                                                        vk::ImageLayout::eShaderReadOnlyOptimal,
-                                                        vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
-
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingBufferMemory);
-
-            vk::SamplerCreateInfo samplerInfo{};
-            samplerInfo.magFilter = vk::Filter::eLinear;
-            samplerInfo.minFilter = vk::Filter::eLinear;
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-            samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-            samplerInfo.anisotropyEnable = VK_TRUE;
-            samplerInfo.maxAnisotropy = 1.0f;
-            samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-            tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
-
-            core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), tex.image);
-            viewRequest.format = vk::Format::eR8G8B8A8Srgb;
-            core::ImageUtilities::createImageView(viewRequest, tex.imageView);
-
-            tex.valid = true;
+            auto tex = uploadPixelsToGPU(device, texturePtr->textureData().data(),
+                                          texturePtr->width, texturePtr->height, true);
             loggerInfo("Loaded texture for preview: {}", path);
+            return tex;
         }
         catch (const std::exception& e)
         {
             loggerError("Exception loading texture {}: {}", path, e.what());
+            return {};
         }
-
-        return tex;
     }
 
     static void destroyTextureImpl(core::Device& device, PreviewTextureGPU& tex)
@@ -462,11 +361,27 @@ namespace controllers
             "", "", "", "", "", "", "", "" // 8-15: Reserved
         };
 
-        // Clear previous slot assignments and assign textures to fixed slots
-        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
+        loadAndAssignTextures(texturePaths);
+
+        bool hasAnyTexture = false;
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES && !hasAnyTexture; ++i)
         {
-            textureManager->textureSlots[i].clear();
+            hasAnyTexture = !textureManager->textureSlots[i].empty();
         }
+        bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate || hasAnyTexture)
+            && textureManager->defaultTexture.valid;
+
+        if (shouldUpdateBindings)
+        {
+            pendingDescriptorUpdate = true;
+        }
+    }
+
+    void MaterialPreviewController::loadAndAssignTextures(
+        const std::array<std::string, TextureManagerImpl::MAX_TEXTURES>& texturePaths)
+    {
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
+            textureManager->textureSlots[i].clear();
 
         for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
         {
@@ -486,22 +401,8 @@ namespace controllers
                         vfLogWarning("Failed to load texture for slot {}: {}", i, path);
                     }
                 }
-                // Always assign to fixed slot regardless of cache status
                 textureManager->textureSlots[i] = path;
             }
-        }
-
-        bool hasAnyTexture = false;
-        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES && !hasAnyTexture; ++i)
-        {
-            hasAnyTexture = !textureManager->textureSlots[i].empty();
-        }
-        bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate || hasAnyTexture)
-            && textureManager->defaultTexture.valid;
-
-        if (shouldUpdateBindings)
-        {
-            pendingDescriptorUpdate = true;
         }
     }
 

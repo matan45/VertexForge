@@ -96,6 +96,11 @@ namespace services
         void releaseTileRAMData(terrain::TerrainTile& tile);
 
     private:
+        void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
+        void registerBrushHandlers(::events::EventDispatcher& dispatcher);
+        void registerTerrainDataHandlers(::events::EventDispatcher& dispatcher);
+        void registerAsyncLoadHandlers(::events::EventDispatcher& dispatcher);
+
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
@@ -104,5 +109,10 @@ namespace services
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path);
+
+        void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                      const std::vector<terrain::TileCoord>& modifiedTiles);
+        void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
+        uint16_t getOverlayMask() const;
     };
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../lighting/ClusterGridTypes.hpp"
 #include <memory>
@@ -7,8 +8,6 @@
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -35,12 +34,9 @@ namespace render::mesh
         glm::mat4 invViewMatrix;
     };
 
-    class ClusterDebugRenderer
+    class ClusterDebugRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -61,7 +57,6 @@ namespace render::mesh
         void* instanceBufferMapped = nullptr;
         static constexpr uint32_t MAX_INSTANCES = lighting::ClusterConstants::MAX_CLUSTERS;
 
-        bool initialized = false;
         bool visible = false;
 
     public:
@@ -80,7 +75,6 @@ namespace render::mesh
 
         void setVisible(bool show) { visible = show; }
         [[nodiscard]] bool isVisible() const { return visible; }
-        [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

@@ -1,14 +1,12 @@
 #pragma once
 
+#include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 
 namespace core
 {
-    class Device;
-    class SwapChain;
     class Shader;
 }
 
@@ -28,12 +26,9 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    class AudioSphereDebugRenderer
+    class AudioSphereDebugRenderer : public DebugRendererBase
     {
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-
         std::shared_ptr<core::Shader> wireframeShader;
 
         vk::Pipeline wireframePipeline;
@@ -45,7 +40,6 @@ namespace render::mesh
         vk::DeviceMemory indexBufferMemory;
 
         uint32_t indexCount = 0;
-        bool initialized = false;
 
         static constexpr int SPHERE_SEGMENTS = 32;
 
@@ -62,8 +56,6 @@ namespace render::mesh
                     const std::vector<AudioSphereRenderData>& audioSourceDrawList,
                     const glm::mat4& view,
                     const glm::mat4& projection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

@@ -11,7 +11,7 @@
 namespace render::mesh
 {
     UICanvasImageRenderer::UICanvasImageRenderer(core::Device& device, core::SwapChain& swapChain)
-        : device{device}, swapChain{swapChain}
+        : DebugRendererBase{device, swapChain}
     {
     }
 
@@ -29,37 +29,17 @@ namespace render::mesh
 
     void UICanvasImageRenderer::recreate(vk::RenderPass renderPass)
     {
-        if (graphicsPipeline)
-        {
-            device.getLogicalDevice().destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-        if (pipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
-            pipelineLayout = nullptr;
-        }
-
+        destroyPipelineAndLayout(graphicsPipeline, pipelineLayout);
         createPipeline(renderPass);
     }
 
     void UICanvasImageRenderer::cleanUp()
     {
-        auto& dev = device.getLogicalDevice();
-
-        if (graphicsPipeline)
-        {
-            dev.destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-        if (pipelineLayout)
-        {
-            dev.destroyPipelineLayout(pipelineLayout);
-            pipelineLayout = nullptr;
-        }
+        destroyPipelineAndLayout(graphicsPipeline, pipelineLayout);
 
         textureCache.clear();
 
+        auto& dev = device.getLogicalDevice();
         if (descriptorPool)
         {
             dev.destroyDescriptorPool(descriptorPool);
@@ -71,21 +51,8 @@ namespace render::mesh
             descriptorSetLayout = nullptr;
         }
 
-        if (vertexBuffer)
-        {
-            dev.destroyBuffer(vertexBuffer);
-            dev.freeMemory(vertexBufferMemory);
-            vertexBuffer = nullptr;
-            vertexBufferMemory = nullptr;
-        }
-        if (indexBuffer)
-        {
-            dev.destroyBuffer(indexBuffer);
-            dev.freeMemory(indexBufferMemory);
-            indexBuffer = nullptr;
-            indexBufferMemory = nullptr;
-        }
-
+        destroyBufferPair(vertexBuffer, vertexBufferMemory);
+        destroyBufferPair(indexBuffer, indexBufferMemory);
         initialized = false;
     }
 

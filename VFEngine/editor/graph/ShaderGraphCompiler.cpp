@@ -15,6 +15,20 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::s_fragmentFooter;
     bool ShaderGraphCompiler::s_templatesLoaded = false;
 
+    std::string ShaderGraphCompiler::generateLayerSampling(int layerIndex, const std::string& layerName) {
+        std::string code;
+        code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+            "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", layerIndex);
+        code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", layerIndex);
+        code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", layerIndex);
+        code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+            "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", layerIndex);
+        code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", layerIndex);
+        code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+            "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", layerIndex);
+        return code;
+    }
+
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
@@ -46,28 +60,14 @@ namespace editor::graph {
         code += "vec3 ls_Normal = vec3(0.0);\n";
         code += "float ls_TotalW = 0.0;\n";
 
-        // Pass 1: Linear layers
         for (const auto& layer : baseLayers) {
-            int i = layer.index;
-
             if (!layer.enabled) {
-                code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
+                code += "// Layer " + std::to_string(layer.index) + " (" + layer.name + ") - disabled\n";
                 continue;
             }
 
-            code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: " + layer.blendMode + "\n";
-
-            code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
-                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
-
-            code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
-            code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
-            code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
-            code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
-            code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
-
+            code += "{ // Layer " + std::to_string(layer.index) + " (" + layer.name + ") - blend: " + layer.blendMode + "\n";
+            code += generateLayerSampling(layer.index, layer.name);
             code += "    ls_Albedo += layerAlbedo * w;\n";
             code += "    ls_Normal += layerNormal * w;\n";
             code += "    ls_TotalW += w;\n";
@@ -78,29 +78,14 @@ namespace editor::graph {
         code += "ls_Albedo *= ls_InvW;\n";
         code += "ls_Normal = normalize(ls_Normal);\n";
 
-        // Pass 2: Overlay layers
         for (const auto& layer : overlayLayers) {
-            int i = layer.index;
-
             if (!layer.enabled) {
-                code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
+                code += "// Layer " + std::to_string(layer.index) + " (" + layer.name + ") - disabled\n";
                 continue;
             }
 
-            code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: Overlay\n";
-
-            code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
-                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
-
-            code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
-            code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
-            code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
-            code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
-            code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
-
-            // Photoshop-style overlay
+            code += "{ // Layer " + std::to_string(layer.index) + " (" + layer.name + ") - blend: Overlay\n";
+            code += generateLayerSampling(layer.index, layer.name);
             code += "    vec3 ovBase = ls_Albedo;\n";
             code += "    vec3 ovBlend = layerAlbedo;\n";
             code += "    vec3 ovResult = mix(\n";

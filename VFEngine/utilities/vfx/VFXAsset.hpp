@@ -4,6 +4,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <string_view>
 #include <optional>
+#include <functional>
 
 namespace vfx
 {
@@ -28,5 +29,11 @@ namespace vfx
 
         static nlohmann::json serializeLink(const VFXNodeLink& link);
         static VFXNodeLink deserializeLink(const nlohmann::json& j);
+
+        using WarningLogger = std::function<void(const std::string&)>;
+        static void parseVFXNodes(const nlohmann::json& graphJson, VFXGraph& graph,
+                                  const WarningLogger& logWarning);
+        static void parseVFXLinks(const nlohmann::json& graphJson, VFXGraph& graph,
+                                  const WarningLogger& logWarning);
     };
 }

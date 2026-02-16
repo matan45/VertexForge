@@ -1,21 +1,16 @@
 #include "Mesh.hpp"
+#include "MeshLODGenerator.hpp"
+#include "MeshSerializer.hpp"
 #include "print/EditorLogger.hpp"
 #include "resource/EndianUtils.hpp"
 
 #include <vector>
 #include <fstream>
 #include <filesystem>
-#include <algorithm>
-#include <cfloat>
 #include <unordered_set>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <meshoptimizer.h>
-
-#define ENABLE_VHACD_IMPLEMENTATION 1
-#include <VHACD.h>
-#include "VHACDCallback.hpp"
 
 namespace
 {
@@ -38,56 +33,9 @@ namespace
         }
     }
 
-    /**
-     * Apply V-HACD preset values if not using Custom preset.
-     * Preset values are tuned for different speed/quality tradeoffs.
-     */
-    importConfig::MeshImportConfig applyVHACDPreset(const importConfig::MeshImportConfig& config)
+    void collectBoneData(const aiScene* scene, types::ExtractedSkeleton& result,
+                         std::vector<std::string>& boneNamesInOrder)
     {
-        if (config.vhacdPreset == importConfig::VHACDPreset::Custom)
-        {
-            return config;
-        }
-
-        importConfig::MeshImportConfig result = config;
-
-        switch (config.vhacdPreset)
-        {
-            case importConfig::VHACDPreset::Fast:
-                result.vhacdResolution = 50000;
-                result.maxConvexHulls = 8;
-                result.maxVerticesPerHull = 32;
-                result.minVolumePercentError = 5.0f;
-                result.maxRecursionDepth = 8;
-                break;
-            case importConfig::VHACDPreset::Balanced:
-                result.vhacdResolution = 100000;
-                result.maxConvexHulls = 16;
-                result.maxVerticesPerHull = 64;
-                result.minVolumePercentError = 1.0f;
-                result.maxRecursionDepth = 10;
-                break;
-            case importConfig::VHACDPreset::Quality:
-                result.vhacdResolution = 200000;
-                result.maxConvexHulls = 32;
-                result.maxVerticesPerHull = 128;
-                result.minVolumePercentError = 0.5f;
-                result.maxRecursionDepth = 12;
-                break;
-            default:
-                break;
-        }
-        return result;
-    }
-}
-
-namespace types
-{
-    ExtractedSkeleton Mesh::extractSkeleton(const aiScene* scene) const
-    {
-        ExtractedSkeleton result;
-
-        std::vector<std::string> boneNamesInOrder;
         std::unordered_set<std::string> boneNamesSet;
 
         for (uint32_t m = 0; m < scene->mNumMeshes; ++m)
@@ -114,14 +62,15 @@ namespace types
             }
         }
 
-        if (!result.hasSkinning)
-            return result;
-
         for (size_t i = 0; i < boneNamesInOrder.size(); ++i)
         {
             result.boneNameToIndex[boneNamesInOrder[i]] = static_cast<uint32_t>(i);
         }
+    }
 
+    void buildBoneHierarchy(const aiScene* scene, types::ExtractedSkeleton& result,
+                            const std::vector<std::string>& boneNamesInOrder)
+    {
         std::unordered_map<std::string, const aiNode*> nodeMap;
         buildNodeMap(scene->mRootNode, nodeMap);
 
@@ -185,37 +134,10 @@ namespace types
 
             result.bones.push_back(bone);
         }
-
-        vfLogInfo("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
-        return result;
     }
 
-    void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                            std::string_view location, MeshProgressCallback progressCallback) const
+    void extractVertices(const aiMesh* assimpMesh, types::LODMeshData& result)
     {
-        if (progressCallback) progressCallback(0.0f);
-
-        Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(file.path.data(),
-                                                 aiProcess_Triangulate | aiProcess_FlipUVs |
-                                                 aiProcess_CalcTangentSpace);
-
-        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-        {
-            vfLogError("Failed to load Mesh file: {}", importer.GetErrorString());
-            return;
-        }
-
-        if (progressCallback) progressCallback(0.2f);
-
-        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
-
-        if (progressCallback) progressCallback(1.0f);
-    }
-
-    LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const
-    {
-        LODMeshData result;
         result.vertices.reserve(assimpMesh->mNumVertices);
 
         for (unsigned int v = 0; v < assimpMesh->mNumVertices; ++v)
@@ -257,59 +179,63 @@ namespace types
 
             result.vertices.push_back(vertex);
         }
+    }
 
-        if (assimpMesh->HasBones() && skeleton.hasSkinning)
+    void assignBoneWeights(const aiMesh* assimpMesh, const types::ExtractedSkeleton& skeleton,
+                           types::LODMeshData& result, uint32_t maxBonesPerVertex)
+    {
+        std::vector<uint32_t> vertexBoneCount(assimpMesh->mNumVertices, 0);
+
+        for (unsigned int b = 0; b < assimpMesh->mNumBones; ++b)
         {
-            std::vector<uint32_t> vertexBoneCount(assimpMesh->mNumVertices, 0);
+            const aiBone* bone = assimpMesh->mBones[b];
+            std::string boneName = bone->mName.C_Str();
 
-            for (unsigned int b = 0; b < assimpMesh->mNumBones; ++b)
+            auto it = skeleton.boneNameToIndex.find(boneName);
+            if (it == skeleton.boneNameToIndex.end())
             {
-                const aiBone* bone = assimpMesh->mBones[b];
-                std::string boneName = bone->mName.C_Str();
+                vfLogWarning("Bone '{}' not found in skeleton", boneName);
+                continue;
+            }
 
-                auto it = skeleton.boneNameToIndex.find(boneName);
-                if (it == skeleton.boneNameToIndex.end())
-                {
-                    vfLogWarning("Bone '{}' not found in skeleton", boneName);
+            int32_t boneIndex = static_cast<int32_t>(it->second);
+
+            for (unsigned int w = 0; w < bone->mNumWeights; ++w)
+            {
+                uint32_t vertexId = bone->mWeights[w].mVertexId;
+                float weight = bone->mWeights[w].mWeight;
+
+                if (vertexId >= result.vertices.size())
                     continue;
-                }
 
-                int32_t boneIndex = static_cast<int32_t>(it->second);
-
-                for (unsigned int w = 0; w < bone->mNumWeights; ++w)
+                uint32_t& boneSlot = vertexBoneCount[vertexId];
+                if (boneSlot < maxBonesPerVertex)
                 {
-                    uint32_t vertexId = bone->mWeights[w].mVertexId;
-                    float weight = bone->mWeights[w].mWeight;
-
-                    if (vertexId >= result.vertices.size())
-                        continue;
-
-                    uint32_t& boneSlot = vertexBoneCount[vertexId];
-                    if (boneSlot < MAX_BONES_PER_VERTEX)
-                    {
-                        result.vertices[vertexId].boneIndices[boneSlot] = boneIndex;
-                        result.vertices[vertexId].boneWeights[boneSlot] = weight;
-                        ++boneSlot;
-                    }
+                    result.vertices[vertexId].boneIndices[boneSlot] = boneIndex;
+                    result.vertices[vertexId].boneWeights[boneSlot] = weight;
+                    ++boneSlot;
                 }
             }
-
-            size_t verticesWithBones = 0;
-            for (auto& vertex : result.vertices)
-            {
-                float totalWeight = vertex.boneWeights.x + vertex.boneWeights.y +
-                    vertex.boneWeights.z + vertex.boneWeights.w;
-                if (totalWeight > 0.0f)
-                {
-                    vertex.boneWeights /= totalWeight;
-                    ++verticesWithBones;
-                }
-            }
-
-            vfLogInfo("Mesh has {} vertices with bone weights out of {} total",
-                      verticesWithBones, result.vertices.size());
         }
 
+        size_t verticesWithBones = 0;
+        for (auto& vertex : result.vertices)
+        {
+            float totalWeight = vertex.boneWeights.x + vertex.boneWeights.y +
+                vertex.boneWeights.z + vertex.boneWeights.w;
+            if (totalWeight > 0.0f)
+            {
+                vertex.boneWeights /= totalWeight;
+                ++verticesWithBones;
+            }
+        }
+
+        vfLogInfo("Mesh has {} vertices with bone weights out of {} total",
+                  verticesWithBones, result.vertices.size());
+    }
+
+    void extractIndices(const aiMesh* assimpMesh, types::LODMeshData& result)
+    {
         uint32_t totalIndices = 0;
         for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f)
         {
@@ -325,323 +251,91 @@ namespace types
                 result.indices.push_back(face.mIndices[k]);
             }
         }
-
-        return result;
     }
 
-    LODMeshData Mesh::simplifyMesh(const LODMeshData& source, float targetRatio) const
+    void writeFileHeader(std::ofstream& outFile, uint32_t numMeshes)
     {
-        if (source.indices.empty() || source.vertices.empty())
+        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 7);
+        resource::endian::writeLE<uint32_t>(outFile, numMeshes);
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+    }
+
+    void writeSubmeshHeader(std::ofstream& outFile, const aiMesh* assimpMesh)
+    {
+        std::string meshName = assimpMesh->mName.C_Str();
+
+        vfLogInfo("Processing submesh '{}' ({} vertices, {} triangles)...",
+                  meshName, assimpMesh->mNumVertices, assimpMesh->mNumFaces);
+
+        uint32_t nameLength = static_cast<uint32_t>(meshName.length());
+        resource::endian::writeLE<uint32_t>(outFile, nameLength);
+        if (nameLength > 0)
         {
-            return source;
+            outFile.write(meshName.data(), nameLength);
         }
 
-        if (targetRatio >= 1.0f)
+        resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
+    }
+}
+
+namespace types
+{
+    void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
+                            std::string_view location, MeshProgressCallback progressCallback) const
+    {
+        if (progressCallback) progressCallback(0.0f);
+
+        Assimp::Importer importer;
+        const aiScene* scene = importer.ReadFile(file.path.data(),
+                                                 aiProcess_Triangulate | aiProcess_FlipUVs |
+                                                 aiProcess_CalcTangentSpace);
+
+        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
-            return source;
+            vfLogError("Failed to load Mesh file: {}", importer.GetErrorString());
+            return;
         }
 
-        size_t targetIndexCount = static_cast<size_t>(source.indices.size() * targetRatio);
-        targetIndexCount = std::max(targetIndexCount, static_cast<size_t>(3));
-        targetIndexCount = (targetIndexCount / 3) * 3;
+        if (progressCallback) progressCallback(0.2f);
 
+        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
+
+        if (progressCallback) progressCallback(1.0f);
+    }
+
+    LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const
+    {
         LODMeshData result;
-        result.indices.resize(source.indices.size());
 
-        size_t actualIndexCount = meshopt_simplifySloppy(
-            result.indices.data(),
-            source.indices.data(),
-            source.indices.size(),
-            reinterpret_cast<const float*>(source.vertices.data()),
-            source.vertices.size(),
-            sizeof(resource::Vertex),
-            targetIndexCount,
-            FLT_MAX,
-            nullptr
-        );
+        extractVertices(assimpMesh, result);
 
-        result.indices.resize(actualIndexCount);
-
-        if (actualIndexCount == source.indices.size())
+        if (assimpMesh->HasBones() && skeleton.hasSkinning)
         {
-            vfLogWarning("  Simplification failed for ratio {:.1f}%, keeping original", targetRatio * 100.0f);
-            return source;
+            assignBoneWeights(assimpMesh, skeleton, result, MAX_BONES_PER_VERTEX);
         }
 
-        meshopt_optimizeVertexCache(
-            result.indices.data(),
-            result.indices.data(),
-            result.indices.size(),
-            source.vertices.size()
-        );
-
-        std::vector<unsigned int> remap(source.vertices.size(), ~0u);
-        size_t uniqueVertexCount = 0;
-
-        for (size_t i = 0; i < result.indices.size(); ++i)
-        {
-            uint32_t idx = result.indices[i];
-            if (remap[idx] == ~0u)
-            {
-                remap[idx] = static_cast<unsigned int>(uniqueVertexCount++);
-            }
-        }
-
-        result.vertices.resize(uniqueVertexCount);
-        for (size_t i = 0; i < source.vertices.size(); ++i)
-        {
-            if (remap[i] != ~0u)
-            {
-                result.vertices[remap[i]] = source.vertices[i];
-            }
-        }
-
-        for (size_t i = 0; i < result.indices.size(); ++i)
-        {
-            result.indices[i] = remap[result.indices[i]];
-        }
+        extractIndices(assimpMesh, result);
 
         return result;
     }
 
-    std::array<LODMeshData, resource::LOD_LEVEL_COUNT> Mesh::generateLODLevels(const LODMeshData& lod0) const
+    ExtractedSkeleton Mesh::extractSkeleton(const aiScene* scene) const
     {
-        std::array<LODMeshData, resource::LOD_LEVEL_COUNT> lodLevels;
+        ExtractedSkeleton result;
+        std::vector<std::string> boneNamesInOrder;
 
-        lodLevels[0] = lod0;
+        collectBoneData(scene, result, boneNamesInOrder);
 
-        for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level)
-        {
-            lodLevels[level] = simplifyMesh(lod0, lodRatios[level]);
-
-            vfLogInfo("  LOD{}: {} vertices, {} triangles ({}%)",
-                      level,
-                      lodLevels[level].vertices.size(),
-                      lodLevels[level].indices.size() / 3,
-                      static_cast<int>(lodRatios[level] * 100));
-        }
-
-        return lodLevels;
-    }
-
-    MeshletBuildResult Mesh::buildMeshletsForLOD(const LODMeshData& lodMesh) const
-    {
-        MeshletBuildResult result;
-
-        if (lodMesh.indices.empty() || lodMesh.vertices.empty())
-        {
+        if (!result.hasSkinning)
             return result;
-        }
 
-        const size_t maxMeshlets = meshopt_buildMeshletsBound(
-            lodMesh.indices.size(),
-            resource::MAX_MESHLET_VERTICES,
-            resource::MAX_MESHLET_PRIMITIVES
-        );
+        buildBoneHierarchy(scene, result, boneNamesInOrder);
 
-        std::vector<meshopt_Meshlet> meshoptMeshlets(maxMeshlets);
-        std::vector<unsigned int> meshletVertexIndices(maxMeshlets * resource::MAX_MESHLET_VERTICES);
-        std::vector<unsigned char> meshletTriangleIndices(maxMeshlets * resource::MAX_MESHLET_PRIMITIVES * 3);
-
-        size_t meshletCount = meshopt_buildMeshlets(
-            meshoptMeshlets.data(),
-            meshletVertexIndices.data(),
-            meshletTriangleIndices.data(),
-            lodMesh.indices.data(),
-            lodMesh.indices.size(),
-            reinterpret_cast<const float*>(lodMesh.vertices.data()),
-            lodMesh.vertices.size(),
-            sizeof(resource::Vertex),
-            resource::MAX_MESHLET_VERTICES,
-            resource::MAX_MESHLET_PRIMITIVES,
-            0.0f
-        );
-
-        if (meshletCount == 0)
-        {
-            return result;
-        }
-
-        const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
-        size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
-        size_t totalTriangleIndices = lastMeshlet.triangle_offset + ((lastMeshlet.triangle_count * 3 + 3) & ~3);
-
-        meshoptMeshlets.resize(meshletCount);
-        meshletVertexIndices.resize(totalVertexIndices);
-        meshletTriangleIndices.resize(totalTriangleIndices);
-
-        result.meshlets.resize(meshletCount);
-        result.meshletVertices.resize(totalVertexIndices);
-        result.meshletPrimitives.reserve((totalTriangleIndices + 3) / 4);
-
-        for (size_t i = 0; i < totalVertexIndices; ++i)
-        {
-            result.meshletVertices[i] = meshletVertexIndices[i];
-        }
-
-        for (size_t i = 0; i < meshletCount; ++i)
-        {
-            const auto& m = meshoptMeshlets[i];
-
-            if (m.vertex_count > 255 || m.triangle_count > 255)
-            {
-                vfLogError("Meshlet {} has invalid counts: vertices={}, triangles={} (max 255)",
-                           i, m.vertex_count, m.triangle_count);
-                return result;
-            }
-
-            for (unsigned int t = 0; t < m.triangle_count; ++t)
-            {
-                size_t triOffset = m.triangle_offset + t * 3;
-
-                unsigned char idx0 = meshletTriangleIndices[triOffset + 0];
-                unsigned char idx1 = meshletTriangleIndices[triOffset + 1];
-                unsigned char idx2 = meshletTriangleIndices[triOffset + 2];
-
-                if (idx0 >= m.vertex_count || idx1 >= m.vertex_count || idx2 >= m.vertex_count)
-                {
-                    vfLogError("Meshlet {} triangle {} has out-of-bounds index: [{},{},{}] >= vertex_count {}",
-                               i, t, idx0, idx1, idx2, m.vertex_count);
-                    return result;
-                }
-
-                uint32_t packed =
-                    static_cast<uint32_t>(idx0) |
-                    (static_cast<uint32_t>(idx1) << 8) |
-                    (static_cast<uint32_t>(idx2) << 16);
-                result.meshletPrimitives.push_back(packed);
-            }
-        }
-
-        uint32_t primitiveOffset = 0;
-        for (size_t i = 0; i < meshletCount; ++i)
-        {
-            const auto& m = meshoptMeshlets[i];
-            auto& outMeshlet = result.meshlets[i];
-
-            outMeshlet.descriptor.vertexOffset = m.vertex_offset;
-            outMeshlet.descriptor.primitiveOffset = primitiveOffset;
-            outMeshlet.descriptor.vertexCount = static_cast<uint8_t>(m.vertex_count);
-            outMeshlet.descriptor.primitiveCount = static_cast<uint8_t>(m.triangle_count);
-            outMeshlet.descriptor.padding = 0;
-
-            primitiveOffset += m.triangle_count;
-
-            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                &meshletVertexIndices[m.vertex_offset],
-                &meshletTriangleIndices[m.triangle_offset],
-                m.triangle_count,
-                reinterpret_cast<const float*>(lodMesh.vertices.data()),
-                lodMesh.vertices.size(),
-                sizeof(resource::Vertex)
-            );
-
-            outMeshlet.bounds.boundingSphere = glm::vec4(
-                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
-            );
-
-            outMeshlet.bounds.cone = glm::vec4(
-                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
-                bounds.cone_cutoff
-            );
-        }
-
-        vfLogInfo("    Generated {} meshlets ({} vertex indices, {} primitives)",
-                  meshletCount, totalVertexIndices, result.meshletPrimitives.size());
-
+        vfLogInfo("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
         return result;
-    }
-
-    void Mesh::writeMeshletData(std::ofstream& outFile,
-                                const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const
-    {
-        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-        {
-            const auto& result = meshletResults[lod];
-            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshlets.size()));
-            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshletVertices.size()));
-            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshletPrimitives.size()));
-        }
-
-        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-        {
-            for (const auto& meshlet : meshletResults[lod].meshlets)
-            {
-                resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.vertexOffset);
-                resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.primitiveOffset);
-                resource::endian::writeLE<uint8_t>(outFile, meshlet.descriptor.vertexCount);
-                resource::endian::writeLE<uint8_t>(outFile, meshlet.descriptor.primitiveCount);
-                resource::endian::writeLE<uint16_t>(outFile, 0); // padding
-
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.x);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.y);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.z);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.w);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.cone.x);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.cone.y);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.cone.z);
-                resource::endian::writeLE<float>(outFile, meshlet.bounds.cone.w);
-            }
-        }
-
-        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-        {
-            for (uint32_t idx : meshletResults[lod].meshletVertices)
-            {
-                resource::endian::writeLE<uint32_t>(outFile, idx);
-            }
-        }
-
-        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-        {
-            for (uint32_t packed : meshletResults[lod].meshletPrimitives)
-            {
-                resource::endian::writeLE<uint32_t>(outFile, packed);
-            }
-        }
-    }
-
-    void Mesh::writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const
-    {
-        constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);
-
-        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.vertices.size()));
-
-        for (size_t v = 0; v < lodMesh.vertices.size(); v += verticesPerChunk)
-        {
-            size_t chunkEnd = std::min(v + verticesPerChunk, lodMesh.vertices.size());
-
-            for (size_t j = v; j < chunkEnd; ++j)
-            {
-                const auto& vertex = lodMesh.vertices[j];
-                resource::endian::writeLE<float>(outFile, vertex.position.x);
-                resource::endian::writeLE<float>(outFile, vertex.position.y);
-                resource::endian::writeLE<float>(outFile, vertex.position.z);
-                resource::endian::writeLE<float>(outFile, vertex.normal.x);
-                resource::endian::writeLE<float>(outFile, vertex.normal.y);
-                resource::endian::writeLE<float>(outFile, vertex.normal.z);
-                resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
-                resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
-                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.x);
-                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.y);
-                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.z);
-                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.w);
-                resource::endian::writeLE<float>(outFile, vertex.boneWeights.x);
-                resource::endian::writeLE<float>(outFile, vertex.boneWeights.y);
-                resource::endian::writeLE<float>(outFile, vertex.boneWeights.z);
-                resource::endian::writeLE<float>(outFile, vertex.boneWeights.w);
-            }
-        }
-
-        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.indices.size()));
-
-        constexpr size_t indicesPerChunk = chunkSize / sizeof(uint32_t);
-        for (size_t i = 0; i < lodMesh.indices.size(); i += indicesPerChunk)
-        {
-            size_t chunkEnd = std::min(i + indicesPerChunk, lodMesh.indices.size());
-            std::vector<uint32_t> indexChunk(lodMesh.indices.begin() + i, lodMesh.indices.begin() + chunkEnd);
-            resource::endian::writeVectorLE<uint32_t>(outFile, indexChunk);
-        }
     }
 
     void Mesh::saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
@@ -660,55 +354,32 @@ namespace types
 
         ExtractedSkeleton skeleton = extractSkeleton(scene);
 
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(outFile, 0);
-        resource::endian::writeLE<uint32_t>(outFile, 0);
-        resource::endian::writeLE<uint32_t>(outFile, 7);
-        resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
-
-        resource::endian::writeLE<uint32_t>(outFile, 0);
+        writeFileHeader(outFile, scene->mNumMeshes);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
 
+        MeshLODGenerator lodGen;
+        MeshSerializer serializer;
+
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i)
         {
-            const aiMesh* assimpMesh = scene->mMeshes[i];
-            std::string meshName = assimpMesh->mName.C_Str();
+            writeSubmeshHeader(outFile, scene->mMeshes[i]);
 
-            vfLogInfo("Processing submesh '{}' ({} vertices, {} triangles)...",
-                      meshName,
-                      assimpMesh->mNumVertices,
-                      assimpMesh->mNumFaces);
-
-            uint32_t nameLength = static_cast<uint32_t>(meshName.length());
-            resource::endian::writeLE<uint32_t>(outFile, nameLength);
-            if (nameLength > 0)
-            {
-                outFile.write(meshName.data(), nameLength);
-            }
-
-            resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
-
-            LODMeshData lod0 = convertAssimpMesh(assimpMesh, skeleton);
-            auto lodLevels = generateLODLevels(lod0);
+            LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[i], skeleton);
+            auto lodLevels = lodGen.generateLODLevels(lod0);
 
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-            {
-                writeLODLevel(outFile, lodLevels[lod]);
-            }
+                serializer.writeLODLevel(outFile, lodLevels[lod]);
 
             vfLogInfo("  Generating meshlets...");
             std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-            {
-                meshletResults[lod] = buildMeshletsForLOD(lodLevels[lod]);
-            }
+                meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
 
-            writeMeshletData(outFile, meshletResults);
+            serializer.writeMeshletData(outFile, meshletResults);
 
-            resource::ConvexDecompositionData convexData = generateConvexDecomposition(
-                lod0, config.meshConfig);
-            writeConvexDecompositionData(outFile, convexData);
+            resource::ConvexDecompositionData convexData = lodGen.generateConvexDecomposition(lod0, config.meshConfig);
+            serializer.writeConvexDecompositionData(outFile, convexData);
 
             if (progressCallback)
             {
@@ -717,266 +388,9 @@ namespace types
             }
         }
 
-        writeSkeletonData(outFile, skeleton);
+        MeshSerializer{}.writeSkeletonData(outFile, skeleton);
 
         outFile.close();
         vfLogInfo("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
-    }
-
-    resource::ConvexDecompositionData Mesh::generateConvexDecomposition(
-        const LODMeshData& meshData,
-        const importConfig::MeshImportConfig& config,
-        ConvexProgressCallback progressCallback,
-        std::atomic<bool>* cancelFlag) const
-    {
-        resource::ConvexDecompositionData result;
-
-        if (!config.generateConvexDecomposition || meshData.vertices.empty() || meshData.indices.empty())
-        {
-            return result;
-        }
-
-        // Apply preset if not using Custom
-        auto effectiveConfig = applyVHACDPreset(config);
-
-        vfLogInfo("  Running V-HACD convex decomposition (preset: {}, resolution: {})...",
-                  static_cast<int>(config.vhacdPreset), effectiveConfig.vhacdResolution);
-
-        std::vector<double> points;
-        points.reserve(meshData.vertices.size() * 3);
-        for (const auto& v : meshData.vertices)
-        {
-            points.push_back(static_cast<double>(v.position.x));
-            points.push_back(static_cast<double>(v.position.y));
-            points.push_back(static_cast<double>(v.position.z));
-        }
-
-        // Set up progress callback
-        VHACDCallback callback([&](float progress, std::string_view stage, std::string_view /*operation*/) {
-            if (progressCallback)
-            {
-                progressCallback(progress, stage);
-            }
-        });
-
-        VHACD::IVHACD::Parameters params;
-        params.m_maxConvexHulls = effectiveConfig.maxConvexHulls;
-        params.m_resolution = effectiveConfig.vhacdResolution;
-        params.m_maxNumVerticesPerCH = effectiveConfig.maxVerticesPerHull;
-        params.m_minimumVolumePercentErrorAllowed = static_cast<double>(effectiveConfig.minVolumePercentError);
-        params.m_maxRecursionDepth = effectiveConfig.maxRecursionDepth;
-        params.m_shrinkWrap = effectiveConfig.shrinkWrap;
-        params.m_asyncACD = false; // Synchronous - we're already in background thread
-        params.m_callback = &callback;
-
-        VHACD::IVHACD* vhacd = VHACD::CreateVHACD();
-
-        bool success = vhacd->Compute(
-            points.data(),
-            static_cast<uint32_t>(meshData.vertices.size()),
-            meshData.indices.data(),
-            static_cast<uint32_t>(meshData.indices.size() / 3),
-            params
-        );
-
-        // Check if cancelled
-        if (cancelFlag && cancelFlag->load())
-        {
-            vfLogInfo("  V-HACD decomposition cancelled");
-            vhacd->Release();
-            return result;
-        }
-
-        if (success)
-        {
-            uint32_t numHulls = vhacd->GetNConvexHulls();
-            vfLogInfo("  V-HACD generated {} convex hulls", numHulls);
-
-            result.hasDecomposition = true;
-            result.params.maxConvexHulls = effectiveConfig.maxConvexHulls;
-            result.params.resolution = effectiveConfig.vhacdResolution;
-            result.params.maxVerticesPerHull = effectiveConfig.maxVerticesPerHull;
-            result.params.minVolumePercentError = effectiveConfig.minVolumePercentError;
-            result.params.maxRecursionDepth = effectiveConfig.maxRecursionDepth;
-
-            constexpr uint32_t joltMaxVertices = 256;
-            const uint32_t effectiveMaxVertices = std::min(effectiveConfig.maxVerticesPerHull, joltMaxVertices);
-
-            uint32_t skippedHulls = 0;
-
-            for (uint32_t i = 0; i < numHulls; ++i)
-            {
-                VHACD::IVHACD::ConvexHull hull;
-                vhacd->GetConvexHull(i, hull);
-
-                if (hull.m_points.size() > effectiveMaxVertices)
-                {
-                    vfLogWarning("  Hull {} has {} vertices (exceeds limit of {}), skipping",
-                                 i, hull.m_points.size(), effectiveMaxVertices);
-                    ++skippedHulls;
-                    continue;
-                }
-
-                if (hull.m_points.empty())
-                {
-                    ++skippedHulls;
-                    continue;
-                }
-
-                result.hulls.emplace_back();
-                auto& outHull = result.hulls.back();
-                outHull.vertices.reserve(hull.m_points.size());
-
-                for (const auto& p : hull.m_points)
-                {
-                    outHull.vertices.emplace_back(
-                        static_cast<float>(p.mX),
-                        static_cast<float>(p.mY),
-                        static_cast<float>(p.mZ)
-                    );
-                }
-
-                outHull.indices.reserve(hull.m_triangles.size() * 3);
-                for (const auto& tri : hull.m_triangles)
-                {
-                    outHull.indices.push_back(tri.mI0);
-                    outHull.indices.push_back(tri.mI1);
-                    outHull.indices.push_back(tri.mI2);
-                }
-
-                outHull.center = glm::vec3(
-                    static_cast<float>(hull.m_center.GetX()),
-                    static_cast<float>(hull.m_center.GetY()),
-                    static_cast<float>(hull.m_center.GetZ())
-                );
-                outHull.volume = static_cast<float>(hull.m_volume);
-            }
-
-            if (skippedHulls > 0)
-            {
-                vfLogWarning("  Skipped {} hulls due to vertex count limits", skippedHulls);
-            }
-
-            if (result.hulls.empty())
-            {
-                vfLogWarning("  All hulls were skipped, decomposition invalid");
-                result.hasDecomposition = false;
-            }
-            else
-            {
-                vfLogInfo("  Final hull count: {}, total vertices: {}",
-                          result.hulls.size(), result.getTotalVertexCount());
-            }
-        }
-        else
-        {
-            vfLogWarning("  V-HACD decomposition failed");
-        }
-
-        vhacd->Release();
-        return result;
-    }
-
-    void Mesh::writeConvexDecompositionData(std::ofstream& outFile,
-                                            const resource::ConvexDecompositionData& decomposition) const
-    {
-        resource::endian::writeLE<uint8_t>(outFile, decomposition.hasDecomposition ? 1 : 0);
-
-        if (!decomposition.hasDecomposition)
-        {
-            return;
-        }
-
-        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxConvexHulls);
-        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.resolution);
-        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxVerticesPerHull);
-        resource::endian::writeLE<float>(outFile, decomposition.params.minVolumePercentError);
-        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxRecursionDepth);
-
-        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(decomposition.hulls.size()));
-
-        for (const auto& hull : decomposition.hulls)
-        {
-            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.vertices.size()));
-            for (const auto& v : hull.vertices)
-            {
-                resource::endian::writeLE<float>(outFile, v.x);
-                resource::endian::writeLE<float>(outFile, v.y);
-                resource::endian::writeLE<float>(outFile, v.z);
-            }
-
-            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.indices.size()));
-            for (uint32_t idx : hull.indices)
-            {
-                resource::endian::writeLE<uint32_t>(outFile, idx);
-            }
-
-            resource::endian::writeLE<float>(outFile, hull.center.x);
-            resource::endian::writeLE<float>(outFile, hull.center.y);
-            resource::endian::writeLE<float>(outFile, hull.center.z);
-            resource::endian::writeLE<float>(outFile, hull.volume);
-        }
-    }
-
-    void Mesh::writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const
-    {
-        resource::endian::writeLE<uint8_t>(outFile, skeleton.hasSkinning ? 1 : 0);
-
-        if (!skeleton.hasSkinning)
-        {
-            return;
-        }
-
-        uint32_t boneCount = static_cast<uint32_t>(skeleton.bones.size());
-        resource::endian::writeLE<uint32_t>(outFile, boneCount);
-
-        for (const auto& bone : skeleton.bones)
-        {
-            uint32_t nameLength = static_cast<uint32_t>(bone.name.length());
-            resource::endian::writeLE<uint32_t>(outFile, nameLength);
-            if (nameLength > 0)
-            {
-                outFile.write(bone.name.data(), nameLength);
-            }
-
-            resource::endian::writeLE<int32_t>(outFile, bone.parentIndex);
-
-            for (int col = 0; col < 4; ++col)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    resource::endian::writeLE<float>(outFile, bone.offsetMatrix[col][row]);
-                }
-            }
-
-            for (int col = 0; col < 4; ++col)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    resource::endian::writeLE<float>(outFile, bone.preTransform[col][row]);
-                }
-            }
-        }
-
-        for (const auto& matrix : skeleton.inverseBindPoses)
-        {
-            for (int col = 0; col < 4; ++col)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    resource::endian::writeLE<float>(outFile, matrix[col][row]);
-                }
-            }
-        }
-
-        for (int col = 0; col < 4; ++col)
-        {
-            for (int row = 0; row < 4; ++row)
-            {
-                resource::endian::writeLE<float>(outFile, skeleton.globalInverseTransform[col][row]);
-            }
-        }
-
-        vfLogInfo("Written full skeleton data: {} bones with hierarchy", boneCount);
     }
 }

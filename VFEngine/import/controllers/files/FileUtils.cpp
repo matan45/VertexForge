@@ -1,11 +1,26 @@
-﻿#include "FileUtils.hpp"
+#include "FileUtils.hpp"
 #include "string/StringUtil.hpp"
 #include <filesystem>
+#include <initializer_list>
 
 namespace fs = std::filesystem;
 
 namespace files
 {
+    namespace
+    {
+        bool hasExtension(std::string_view filePath, std::initializer_list<const char*> extensions)
+        {
+            std::string ext = FileUtils::getFileExtension(filePath);
+            for (const char* e : extensions)
+            {
+                if (ext == e)
+                    return true;
+            }
+            return false;
+        }
+    }
+
     std::string FileUtils::getFileExtension(std::string_view filePath, bool lowerCase)
     {
         fs::path fsPath(filePath.data());
@@ -21,32 +36,26 @@ namespace files
     std::string FileUtils::getFileName(std::string_view filePath)
     {
         fs::path fsPath(filePath.data());
-        // Get the file name
         return fsPath.stem().string();
     }
 
-    // UI helper methods - simple extension-based checking
     bool FileUtils::isHDRFile(std::string_view filePath)
     {
-        std::string extension = getFileExtension(filePath);
-        return extension == ".hdr" || extension == ".exr";
+        return hasExtension(filePath, {".hdr", ".exr"});
     }
 
     bool FileUtils::isTextureFile(std::string_view filePath)
     {
-        std::string extension = getFileExtension(filePath);
-        return extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".bmp";
+        return hasExtension(filePath, {".png", ".jpg", ".jpeg", ".bmp"});
     }
 
     bool FileUtils::isMeshFile(std::string_view filePath)
     {
-        std::string extension = getFileExtension(filePath);
-        return extension == ".obj" || extension == ".fbx" || extension == ".dae" || extension == ".gltf" || extension == ".glb";
+        return hasExtension(filePath, {".obj", ".fbx", ".dae", ".gltf", ".glb"});
     }
 
     bool FileUtils::isAudioFile(std::string_view filePath)
     {
-        std::string extension = getFileExtension(filePath);
-        return extension == ".mp3" || extension == ".wav" || extension == ".ogg";
+        return hasExtension(filePath, {".mp3", ".wav", ".ogg"});
     }
 }

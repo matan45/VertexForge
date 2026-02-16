@@ -1,0 +1,161 @@
+#pragma once
+#include <glm/glm.hpp>
+#include <string>
+#include <vector>
+#include <cstdint>
+#include <algorithm>
+#include "../../services/data/ScriptTypes.hpp"
+
+namespace components
+{
+    enum class BillboardSizeMode : uint8_t
+    {
+        ScreenSpace,
+        WorldSpace
+    };
+
+    enum class BillboardIconType : uint8_t
+    {
+        DirectionalLight = 0,
+        PointLight,
+        SpotLight,
+        Camera,
+        Audio2D,
+        Audio3D,
+        Particle,
+        Billboard,
+        Text,
+        Custom
+    };
+
+    struct BillboardComponent
+    {
+        BillboardIconType iconType = BillboardIconType::Custom;
+        uint32_t atlasIndex = 0;
+
+        BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
+        glm::vec2 size{64.0f, 64.0f};
+
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+
+        bool editorOnly = true;
+        bool selectable = true;
+
+        std::string texturePath; // Path to .vfImage file (empty = use atlas icon)
+
+        uint32_t getEffectiveAtlasIndex() const
+        {
+            if (iconType == BillboardIconType::Custom)
+            {
+                return atlasIndex;
+            }
+
+            switch (iconType)
+            {
+            case BillboardIconType::DirectionalLight: return 0;
+            case BillboardIconType::PointLight: return 1;
+            case BillboardIconType::SpotLight: return 2;
+            case BillboardIconType::Camera: return 3;
+            case BillboardIconType::Audio2D: return 4;
+            case BillboardIconType::Audio3D: return 5;
+            case BillboardIconType::Particle: return 6;
+            case BillboardIconType::Billboard: return 7;
+            case BillboardIconType::Text: return 8;
+            default: return atlasIndex;
+            }
+        }
+    };
+
+    struct AudioSource2DComponent
+    {
+        std::string audioFilePath;
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
+
+        uint64_t activeHandle = 0;
+        bool isPlaying = false;
+    };
+
+    struct AudioSource3DComponent
+    {
+        std::string audioFilePath;
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
+        float minDistance = 1.0f;
+        float maxDistance = 100.0f;
+        bool showDebugSpheres = false;
+
+        uint64_t activeHandle = 0;
+        bool isPlaying = false;
+    };
+
+    struct ScriptEntry
+    {
+        std::string scriptPath;
+        bool enabled = true;
+
+        bool started = false;
+        uint64_t instanceId = 0;
+
+        services::ScriptPlaybackState playbackState = services::ScriptPlaybackState::Stopped;
+    };
+
+    struct ScriptComponent
+    {
+        std::vector<ScriptEntry> scripts;
+
+        ScriptEntry* findByPath(const std::string& path)
+        {
+            for (auto& entry : scripts)
+            {
+                if (entry.scriptPath == path) return &entry;
+            }
+            return nullptr;
+        }
+
+        const ScriptEntry* findByPath(const std::string& path) const
+        {
+            for (const auto& entry : scripts)
+            {
+                if (entry.scriptPath == path) return &entry;
+            }
+            return nullptr;
+        }
+
+        bool hasScript(const std::string& path) const
+        {
+            return findByPath(path) != nullptr;
+        }
+
+        bool removeByPath(const std::string& path)
+        {
+            auto it = std::remove_if(scripts.begin(), scripts.end(),
+                                     [&path](const ScriptEntry& e) { return e.scriptPath == path; });
+            if (it != scripts.end())
+            {
+                scripts.erase(it, scripts.end());
+                return true;
+            }
+            return false;
+        }
+    };
+
+    struct AnimatorComponent
+    {
+        void* stateMachine = nullptr;
+        std::string animatorPath;
+        bool isInitialized = false;
+    };
+
+    struct VFXComponent
+    {
+        std::string vfxPath;
+        bool autoPlay = true;
+        bool loop = true;
+
+        uint32_t runtimeInstanceId = 0;
+        bool isPlaying = false;
+    };
+}
