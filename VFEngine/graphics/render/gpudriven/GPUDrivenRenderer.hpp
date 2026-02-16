@@ -80,7 +80,7 @@ namespace render::gpudriven
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
-        postprocess::VolumetricFogSettings cachedVolumetricSettings;
+        ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
         std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
         std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
@@ -235,11 +235,11 @@ namespace render::gpudriven
 
         void readBackLightOcclusionResults();
 
-        void initVolumetricFog(postprocess::VolumetricQuality quality);
+        void initVolumetricFog(::postprocess::VolumetricQuality quality);
         void setVolumetricFogEnabled(bool enabled);
         bool isVolumetricFogEnabled() const;
         volumetric::VolumetricPipeline* getVolumetricPipeline() const { return volumetricPipeline.get(); }
-        void updateVolumetricSettings(const postprocess::VolumetricFogSettings& settings);
+        void updateVolumetricSettings(const ::postprocess::VolumetricFogSettings& settings);
 
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition,

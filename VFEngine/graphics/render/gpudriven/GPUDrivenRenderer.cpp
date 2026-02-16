@@ -481,7 +481,7 @@ namespace render::gpudriven
         return lightsAfterHiZCull;
     }
 
-    void GPUDrivenRenderer::initVolumetricFog(postprocess::VolumetricQuality quality)
+    void GPUDrivenRenderer::initVolumetricFog(::postprocess::VolumetricQuality quality)
     {
         if (!initialized || !clusterGridManager || !lightBufferManager || !lightCullingPipeline)
         {
@@ -518,7 +518,7 @@ namespace render::gpudriven
         return volumetricPipeline && volumetricPipeline->isEnabled();
     }
 
-    void GPUDrivenRenderer::updateVolumetricSettings(const postprocess::VolumetricFogSettings& settings)
+    void GPUDrivenRenderer::updateVolumetricSettings(const ::postprocess::VolumetricFogSettings& settings)
     {
         cachedVolumetricSettings = settings;
     }

@@ -100,8 +100,8 @@ namespace render::volumetric
 
     void VolumetricPipeline::update(
         const glm::mat4& viewProj, const glm::mat4& invViewProj,
-        const glm::vec3& cameraPos, float near, float far,
-        const postprocess::VolumetricFogSettings& settings)
+        const glm::vec3& cameraPos, float nearPlane, float farPlane,
+        const ::postprocess::VolumetricFogSettings& settings)
     {
         if (!initialized || !gridManager)
             return;
@@ -110,7 +110,7 @@ namespace render::volumetric
 
         GPUVolumetricParams params{};
         params.gridDimensions = glm::uvec4(dims.width, dims.height, dims.depth, 0);
-        params.depthParams = glm::vec4(near, far, glm::log(far / near), 1.0f / glm::log(far / near));
+        params.depthParams = glm::vec4(nearPlane, farPlane, glm::log(farPlane / nearPlane), 1.0f / glm::log(farPlane / nearPlane));
         params.invViewProjection = invViewProj;
         params.prevViewProjection = prevViewProjection;
         params.fogParams = glm::vec4(

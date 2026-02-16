@@ -50,8 +50,8 @@ namespace render::volumetric
                       vk::DescriptorSetLayout lightCullingLayout);
 
         void update(const glm::mat4& viewProj, const glm::mat4& invViewProj,
-                    const glm::vec3& cameraPos, float near, float far,
-                    const postprocess::VolumetricFogSettings& settings);
+                    const glm::vec3& cameraPos, float nearPlane, float farPlane,
+                    const ::postprocess::VolumetricFogSettings& settings);
 
         void dispatch(vk::CommandBuffer cmd,
                       vk::DescriptorSet clusterGridDescSet,
