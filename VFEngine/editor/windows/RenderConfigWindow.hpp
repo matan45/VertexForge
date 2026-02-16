@@ -13,6 +13,12 @@ namespace windows
 
         void drawCullingSection();
         void drawShadowSection();
+        void drawShadowQualitySettings();
+        void drawShadowCSMSettings();
+        void drawShadowBiasSettings();
+        void drawShadowFilterSettings();
+        void drawShadowDebugSection();
+        void drawShadowStatistics();
         void drawTerrainSection();
         void loadFromScene();
         void saveToScene();

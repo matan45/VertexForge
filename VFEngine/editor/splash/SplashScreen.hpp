@@ -45,8 +45,13 @@ namespace editor
         SplashScreen& operator=(const SplashScreen&) = delete;
 
         void windowThread();
+        bool registerWindowClass(const wchar_t* className);
+        bool createSplashWindow(const wchar_t* className);
         static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void render(HDC hdc);
+        void renderBackground(HDC hdc);
+        void renderStatusText(HDC hdc);
+        void renderLoadingIndicator(HDC hdc);
         void loadSplashImage();
     };
 }

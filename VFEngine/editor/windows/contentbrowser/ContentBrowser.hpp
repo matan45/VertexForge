@@ -16,6 +16,8 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
+    struct ClipboardItem;
+
     class ContentBrowser : public controllers::imguiHandler::ImguiWindow
     {
     private:
@@ -57,7 +59,10 @@ namespace windows
         void navigateTo(const fs::path& path);
 
         void drawToolbar();
+        void drawPathBar(float availableWidth);
         void drawContentPanel();
+        void handleAssetClick(const AssetClickResult& clickResult);
+        void handleDragDrop();
 
         // Keyboard shortcut handling
         void handleKeyboardShortcuts();
@@ -69,8 +74,12 @@ namespace windows
         void updateCutState();
 
         // Clipboard operations
+        std::vector<ClipboardItem> buildClipboardItems() const;
         void performCut();
         void performCopy();
         bool performPaste();
+
+        // Asset type detection
+        static AssetType detectAssetType(const fs::directory_entry& entry);
     };
 }

@@ -83,6 +83,12 @@ namespace handlers {
 
 	private:
 		void initializeServices();
+		void createCoreServices();
+		void createMediaServices();
+		void createPhysicsServices();
+		void createVFXServices();
+		void createTerrainServices();
+		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();
 	};
