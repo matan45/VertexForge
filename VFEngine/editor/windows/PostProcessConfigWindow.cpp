@@ -491,6 +491,158 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawVolumetricFogSection()
+    {
+        if (ImGui::CollapsingHeader("Volumetric Fog", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable Volumetric Fog", &settings.volumetricFog.enabled))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Froxel-based volumetric fog with light scattering.\nRequires GPU-driven rendering to be active.");
+            }
+
+            if (settings.volumetricFog.enabled)
+            {
+                ImGui::Spacing();
+
+                const char* qualityItems[] = {"Low (80x45x64)", "Medium (160x90x128)", "High (240x135x128)"};
+                int currentQuality = static_cast<int>(settings.volumetricFog.quality);
+                if (ImGui::Combo("Quality##vfog", &currentQuality, qualityItems, 3))
+                {
+                    settings.volumetricFog.quality = static_cast<postprocess::VolumetricQuality>(currentQuality);
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Resolution of the 3D froxel grid.\nHigher = better quality but more GPU cost.");
+                }
+
+                ImGui::Spacing();
+                ImGui::Text("Fog Density");
+                ImGui::Separator();
+
+                if (ImGui::DragFloat("Uniform Density", &settings.volumetricFog.uniformDensity, 0.001f, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Constant fog density across the entire volume.");
+                }
+
+                if (ImGui::ColorEdit3("Fog Color", settings.volumetricFog.fogColor))
+                {
+                    isDirty = true;
+                }
+
+                ImGui::Spacing();
+                ImGui::Text("Height Fog");
+                ImGui::Separator();
+
+                if (ImGui::DragFloat("Height Density", &settings.volumetricFog.heightFogDensity, 0.001f, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Density of exponential height-based fog.\n0 = no height fog.");
+                }
+
+                if (ImGui::DragFloat("Height Falloff", &settings.volumetricFog.heightFogFalloff, 0.01f, 0.0f, 5.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("How quickly height fog diminishes with altitude.\nHigher = fog concentrated closer to ground.");
+                }
+
+                if (ImGui::DragFloat("Height Offset", &settings.volumetricFog.heightFogOffset, 0.1f, -100.0f, 100.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Vertical offset for the height fog base level.");
+                }
+
+                ImGui::Spacing();
+                ImGui::Text("Scattering");
+                ImGui::Separator();
+
+                if (ImGui::DragFloat("Scattering Coeff", &settings.volumetricFog.scatteringCoefficient, 0.01f, 0.0f, 5.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("How much light is scattered by the fog.\nHigher = brighter fog around light sources.");
+                }
+
+                if (ImGui::DragFloat("Absorption Coeff", &settings.volumetricFog.absorptionCoefficient, 0.01f, 0.0f, 5.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("How much light is absorbed by the fog.\nHigher = darker, more opaque fog.");
+                }
+
+                if (ImGui::SliderFloat("Anisotropy", &settings.volumetricFog.anisotropy, -1.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Henyey-Greenstein phase function parameter.\n0 = isotropic, >0 = forward scattering (halos around lights),\n<0 = back scattering.");
+                }
+
+                ImGui::Spacing();
+                ImGui::Text("General");
+                ImGui::Separator();
+
+                if (ImGui::DragFloat("Intensity##vfog", &settings.volumetricFog.intensity, 0.01f, 0.0f, 5.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+
+                if (ImGui::DragFloat("Ambient Intensity", &settings.volumetricFog.ambientIntensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Amount of ambient light contribution to the fog.\nPrevents fog from being completely black in shadows.");
+                }
+
+                if (ImGui::SliderFloat("Temporal Blend", &settings.volumetricFog.temporalBlendFactor, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Temporal reprojection blend factor.\nHigher = smoother but more ghosting.\n0.9 is a good default.");
+                }
+
+                if (ImGui::DragFloat("Max Distance", &settings.volumetricFog.maxDistance, 1.0f, 10.0f, 5000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum distance for volumetric fog evaluation.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::draw()
     {
         if (!visible)
@@ -519,6 +671,7 @@ namespace windows
             drawFilmGrainSection();
             drawGodRaysSection();
             drawDepthOfFieldSection();
+            drawVolumetricFogSection();
 
             ImGui::Spacing();
             ImGui::Separator();

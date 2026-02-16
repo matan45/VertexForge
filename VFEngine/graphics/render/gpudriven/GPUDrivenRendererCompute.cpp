@@ -282,6 +282,21 @@ namespace render::gpudriven
             );
         }
 
+        if (volumetricPipeline && volumetricPipeline->isEnabled())
+        {
+            const auto& camData = cameraBuffer->getData();
+            glm::mat4 viewProj = camData.projection * camData.view;
+            glm::mat4 invViewProj = glm::inverse(viewProj);
+            volumetricPipeline->update(viewProj, invViewProj,
+                                       glm::vec3(camData.cameraPosition),
+                                       cachedCameraNear, cachedCameraFar,
+                                       cachedVolumetricSettings);
+            volumetricPipeline->dispatch(cmd,
+                                         clusterGridManager->getDescriptorSet(),
+                                         lightBufferManager->getDescriptorSet(),
+                                         lightCullingPipeline->getDescriptorSet());
+        }
+
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
 

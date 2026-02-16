@@ -19,6 +19,7 @@ namespace windows
         void drawFilmGrainSection();
         void drawGodRaysSection();
         void drawDepthOfFieldSection();
+        void drawVolumetricFogSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();

@@ -34,6 +34,12 @@ namespace render::postprocess
     class PostProcessPipeline;
 }
 
+namespace render::volumetric
+{
+    class VolumetricFogComposite;
+    class VolumetricPipeline;
+}
+
 namespace render
 {
     class ClearColor;
@@ -96,6 +102,7 @@ namespace render
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
         std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
         std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
+        std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
 
         core::OffscreenResources& offscreenResources;
 
@@ -250,6 +257,9 @@ namespace render
         void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
+
+        void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
+        volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
 
         void cleanUp() const;
 

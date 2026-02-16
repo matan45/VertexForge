@@ -13,6 +13,7 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
+#include "volumetric/VolumetricFogComposite.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
 
@@ -423,6 +424,13 @@ namespace render
         drawSceneMeshes(commandBuffer, imageIndex);
         drawOverlays(commandBuffer, imageIndex);
         executeOcclusionPasses(commandBuffer);
+
+        if (volumetricFogComposite && volumetricFogComposite->isInitialized())
+        {
+            volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
+            volumetricFogComposite->execute(commandBuffer, imageIndex);
+        }
+
         executePostProcess(commandBuffer, imageIndex);
         drawUIOverlays(commandBuffer, imageIndex);
     }

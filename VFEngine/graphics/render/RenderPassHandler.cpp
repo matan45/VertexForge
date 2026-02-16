@@ -18,6 +18,8 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
+#include "volumetric/VolumetricFogComposite.hpp"
+#include "volumetric/VolumetricPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
@@ -207,6 +209,20 @@ namespace render
 
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
+    }
+
+    void RenderPassHandler::initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline)
+    {
+        if (volumetricFogComposite && volumetricFogComposite->isInitialized())
+            return;
+
+        if (!volumetricFogComposite)
+        {
+            volumetricFogComposite = std::make_unique<volumetric::VolumetricFogComposite>(
+                device, swapChain, offscreenResources);
+        }
+
+        volumetricFogComposite->init(volPipeline);
     }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
@@ -606,6 +622,11 @@ namespace render
             terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
         }
 
+        if (volumetricFogComposite && volumetricFogComposite->isInitialized())
+        {
+            volumetricFogComposite->recreate();
+        }
+
         if (postProcessPipeline && postProcessPipeline->isInitialized())
         {
             postProcessPipeline->recreate();
@@ -664,6 +685,11 @@ namespace render
         }
 
         cleanUpPipelines();
+
+        if (volumetricFogComposite)
+        {
+            volumetricFogComposite->cleanup();
+        }
 
         if (postProcessPipeline)
         {

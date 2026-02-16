@@ -15,6 +15,13 @@ namespace postprocess
         DepthOfField
     };
 
+    enum class VolumetricQuality : uint8_t
+    {
+        Low = 0,
+        Medium,
+        High
+    };
+
     enum class ToneMappingMode : uint8_t
     {
         ACES = 0,
@@ -111,6 +118,24 @@ namespace postprocess
         int sampleCount = 32;
     };
 
+    struct VolumetricFogSettings
+    {
+        bool enabled = false;
+        VolumetricQuality quality = VolumetricQuality::Medium;
+        float uniformDensity = 0.02f;
+        float fogColor[3] = {0.8f, 0.85f, 0.9f};
+        float heightFogDensity = 0.05f;
+        float heightFogFalloff = 0.1f;
+        float heightFogOffset = 0.0f;
+        float scatteringCoefficient = 0.5f;
+        float absorptionCoefficient = 0.1f;
+        float anisotropy = 0.7f;
+        float temporalBlendFactor = 0.9f;
+        float intensity = 1.0f;
+        float ambientIntensity = 0.15f;
+        float maxDistance = 500.0f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = true;
@@ -123,6 +148,7 @@ namespace postprocess
         FilmGrainSettings filmGrain;
         GodRaysSettings godRays;
         DepthOfFieldSettings depthOfField;
+        VolumetricFogSettings volumetricFog;
 
         static PostProcessSettings createDefault()
         {

@@ -18,6 +18,7 @@
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
+#include "../volumetric/VolumetricPipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
@@ -78,6 +79,8 @@ namespace render::gpudriven
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
+        std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
+        postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
         std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
         std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
@@ -231,6 +234,12 @@ namespace render::gpudriven
         uint32_t getLightsAfterHiZCull() const;
 
         void readBackLightOcclusionResults();
+
+        void initVolumetricFog(postprocess::VolumetricQuality quality);
+        void setVolumetricFogEnabled(bool enabled);
+        bool isVolumetricFogEnabled() const;
+        volumetric::VolumetricPipeline* getVolumetricPipeline() const { return volumetricPipeline.get(); }
+        void updateVolumetricSettings(const postprocess::VolumetricFogSettings& settings);
 
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition,

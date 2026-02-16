@@ -184,6 +184,45 @@ namespace serialization
             };
         }
 
+        std::string volumetricQualityToStr(postprocess::VolumetricQuality quality)
+        {
+            switch (quality)
+            {
+            case postprocess::VolumetricQuality::Low: return "low";
+            case postprocess::VolumetricQuality::Medium: return "medium";
+            case postprocess::VolumetricQuality::High: return "high";
+            default: return "medium";
+            }
+        }
+
+        postprocess::VolumetricQuality strToVolumetricQuality(const std::string& str)
+        {
+            if (str == "low") return postprocess::VolumetricQuality::Low;
+            if (str == "medium") return postprocess::VolumetricQuality::Medium;
+            if (str == "high") return postprocess::VolumetricQuality::High;
+            return postprocess::VolumetricQuality::Medium;
+        }
+
+        json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"quality", volumetricQualityToStr(s.quality)},
+                {"uniformDensity", s.uniformDensity},
+                {"fogColor", {s.fogColor[0], s.fogColor[1], s.fogColor[2]}},
+                {"heightFogDensity", s.heightFogDensity},
+                {"heightFogFalloff", s.heightFogFalloff},
+                {"heightFogOffset", s.heightFogOffset},
+                {"scatteringCoefficient", s.scatteringCoefficient},
+                {"absorptionCoefficient", s.absorptionCoefficient},
+                {"anisotropy", s.anisotropy},
+                {"temporalBlendFactor", s.temporalBlendFactor},
+                {"intensity", s.intensity},
+                {"ambientIntensity", s.ambientIntensity},
+                {"maxDistance", s.maxDistance}
+            };
+        }
+
         // ---- Deserialize post-process helpers ----
 
         void deserializeToneMapping(const json& j, postprocess::ToneMappingSettings& s)
@@ -321,6 +360,45 @@ namespace serialization
                 s.maxBlurRadius = std::clamp(df["maxBlurRadius"].get<float>(), 0.0f, 20.0f);
             if (df.contains("sampleCount") && df["sampleCount"].is_number_integer())
                 s.sampleCount = std::clamp(df["sampleCount"].get<int>(), 4, 32);
+        }
+
+        void deserializeVolumetricFog(const json& j, postprocess::VolumetricFogSettings& s)
+        {
+            if (!j.contains("volumetricFog") || !j["volumetricFog"].is_object())
+                return;
+            const auto& vf = j["volumetricFog"];
+            if (vf.contains("enabled") && vf["enabled"].is_boolean())
+                s.enabled = vf["enabled"].get<bool>();
+            if (vf.contains("quality") && vf["quality"].is_string())
+                s.quality = strToVolumetricQuality(vf["quality"].get<std::string>());
+            if (vf.contains("uniformDensity") && vf["uniformDensity"].is_number())
+                s.uniformDensity = std::clamp(vf["uniformDensity"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("fogColor") && vf["fogColor"].is_array() && vf["fogColor"].size() == 3)
+            {
+                s.fogColor[0] = std::clamp(vf["fogColor"][0].get<float>(), 0.0f, 1.0f);
+                s.fogColor[1] = std::clamp(vf["fogColor"][1].get<float>(), 0.0f, 1.0f);
+                s.fogColor[2] = std::clamp(vf["fogColor"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (vf.contains("heightFogDensity") && vf["heightFogDensity"].is_number())
+                s.heightFogDensity = std::clamp(vf["heightFogDensity"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("heightFogFalloff") && vf["heightFogFalloff"].is_number())
+                s.heightFogFalloff = std::clamp(vf["heightFogFalloff"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("heightFogOffset") && vf["heightFogOffset"].is_number())
+                s.heightFogOffset = std::clamp(vf["heightFogOffset"].get<float>(), -100.0f, 100.0f);
+            if (vf.contains("scatteringCoefficient") && vf["scatteringCoefficient"].is_number())
+                s.scatteringCoefficient = std::clamp(vf["scatteringCoefficient"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("absorptionCoefficient") && vf["absorptionCoefficient"].is_number())
+                s.absorptionCoefficient = std::clamp(vf["absorptionCoefficient"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("anisotropy") && vf["anisotropy"].is_number())
+                s.anisotropy = std::clamp(vf["anisotropy"].get<float>(), -1.0f, 1.0f);
+            if (vf.contains("temporalBlendFactor") && vf["temporalBlendFactor"].is_number())
+                s.temporalBlendFactor = std::clamp(vf["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("intensity") && vf["intensity"].is_number())
+                s.intensity = std::clamp(vf["intensity"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("ambientIntensity") && vf["ambientIntensity"].is_number())
+                s.ambientIntensity = std::clamp(vf["ambientIntensity"].get<float>(), 0.0f, 2.0f);
+            if (vf.contains("maxDistance") && vf["maxDistance"].is_number())
+                s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
         }
 
         // ---- Deserialize render sub-helpers ----
@@ -464,6 +542,7 @@ namespace serialization
         j["filmGrain"] = serializeFilmGrain(settings.filmGrain);
         j["godRays"] = serializeGodRays(settings.godRays);
         j["depthOfField"] = serializeDepthOfField(settings.depthOfField);
+        j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
 
         return j;
     }
@@ -481,5 +560,6 @@ namespace serialization
         deserializeFilmGrain(j, settings.filmGrain);
         deserializeGodRays(j, settings.godRays);
         deserializeDepthOfField(j, settings.depthOfField);
+        deserializeVolumetricFog(j, settings.volumetricFog);
     }
 }
