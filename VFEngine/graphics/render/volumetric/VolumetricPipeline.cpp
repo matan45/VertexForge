@@ -23,7 +23,9 @@ namespace render::volumetric
         VolumetricQuality quality,
         vk::DescriptorSetLayout clusterGridLayout,
         vk::DescriptorSetLayout lightBufferLayout,
-        vk::DescriptorSetLayout lightCullingLayout)
+        vk::DescriptorSetLayout lightCullingLayout,
+        vk::DescriptorSetLayout shadowDataLayout,
+        vk::DescriptorSetLayout shadowTextureLayout)
     {
         if (initialized)
         {
@@ -40,7 +42,8 @@ namespace render::volumetric
 
         // Create compute passes
         lightInjection = std::make_unique<VolumetricLightInjection>(device);
-        lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout);
+        lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout,
+                             shadowDataLayout, shadowTextureLayout);
 
         temporalFilter = std::make_unique<VolumetricTemporalFilter>(device);
         temporalFilter->init(dims, gridDescLayout);
@@ -92,10 +95,13 @@ namespace render::volumetric
         VolumetricQuality quality,
         vk::DescriptorSetLayout clusterGridLayout,
         vk::DescriptorSetLayout lightBufferLayout,
-        vk::DescriptorSetLayout lightCullingLayout)
+        vk::DescriptorSetLayout lightCullingLayout,
+        vk::DescriptorSetLayout shadowDataLayout,
+        vk::DescriptorSetLayout shadowTextureLayout)
     {
         cleanup();
-        init(quality, clusterGridLayout, lightBufferLayout, lightCullingLayout);
+        init(quality, clusterGridLayout, lightBufferLayout, lightCullingLayout,
+             shadowDataLayout, shadowTextureLayout);
     }
 
     void VolumetricPipeline::update(
@@ -147,60 +153,36 @@ namespace render::volumetric
         vk::CommandBuffer cmd,
         vk::DescriptorSet clusterGridDescSet,
         vk::DescriptorSet lightBufferDescSet,
-        vk::DescriptorSet lightCullingDescSet)
+        vk::DescriptorSet lightCullingDescSet,
+        vk::DescriptorSet shadowDataDescSet,
+        vk::DescriptorSet shadowTextureDescSet)
     {
         if (!initialized || !enabled)
             return;
 
         auto gridDescSet = gridManager->getDescriptorSet();
 
-        // Transition all volumetric images to eGeneral for compute access
+        // Ensure previous frame's fragment reads (composite) are complete before compute writes
+        // Images are already in eGeneral from initialization
         {
-            std::array<vk::ImageMemoryBarrier, 4> imageBarriers{};
-
-            // Scattering image
-            imageBarriers[0].srcAccessMask = {};
-            imageBarriers[0].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-            imageBarriers[0].oldLayout = vk::ImageLayout::eUndefined;
-            imageBarriers[0].newLayout = vk::ImageLayout::eGeneral;
-            imageBarriers[0].image = gridManager->getScatteringImage();
-            imageBarriers[0].subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-
-            // Current history (write target)
-            imageBarriers[1].srcAccessMask = {};
-            imageBarriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-            imageBarriers[1].oldLayout = vk::ImageLayout::eUndefined;
-            imageBarriers[1].newLayout = vk::ImageLayout::eGeneral;
-            imageBarriers[1].image = gridManager->getCurrentHistoryImage();
-            imageBarriers[1].subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-
-            // Previous history (read source)
-            imageBarriers[2].srcAccessMask = {};
-            imageBarriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            imageBarriers[2].oldLayout = vk::ImageLayout::eUndefined;
-            imageBarriers[2].newLayout = vk::ImageLayout::eGeneral;
-            imageBarriers[2].image = gridManager->getPreviousHistoryImage();
-            imageBarriers[2].subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-
-            // Integrated output
-            imageBarriers[3].srcAccessMask = {};
-            imageBarriers[3].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-            imageBarriers[3].oldLayout = vk::ImageLayout::eUndefined;
-            imageBarriers[3].newLayout = vk::ImageLayout::eGeneral;
-            imageBarriers[3].image = gridManager->getIntegratedImage();
-            imageBarriers[3].subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            vk::MemoryBarrier memBarrier{
+                vk::AccessFlagBits::eShaderRead,
+                vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead
+            };
 
             cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eTopOfPipe,
+                vk::PipelineStageFlagBits::eFragmentShader,
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::DependencyFlags{},
-                {}, {},
-                imageBarriers);
+                1, &memBarrier,
+                0, nullptr,
+                0, nullptr);
         }
 
-        // Pass 1: Light Injection
+        // Pass 1: Light Injection (with shadow sampling)
         lightInjection->dispatch(cmd, gridDescSet, clusterGridDescSet,
-                                 lightBufferDescSet, lightCullingDescSet, frameIndex);
+                                 lightBufferDescSet, lightCullingDescSet,
+                                 shadowDataDescSet, shadowTextureDescSet, frameIndex);
 
         // Barrier: injection write -> temporal read
         {

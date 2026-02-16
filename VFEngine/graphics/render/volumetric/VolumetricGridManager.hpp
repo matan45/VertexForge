@@ -43,7 +43,7 @@ namespace render::volumetric
         // Descriptor resources
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet descriptorSet;
+        vk::DescriptorSet descriptorSets[2]; // double-buffered for history ping-pong
 
         bool initialized = false;
 
@@ -52,6 +52,7 @@ namespace render::volumetric
         void destroy3DImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
 
         void createImages();
+        void transitionImagesToGeneral();
         void destroyImages();
         void createSampler();
         void createParamsBuffer();
@@ -85,7 +86,7 @@ namespace render::volumetric
         [[nodiscard]] vk::Sampler getSampler() const { return trilinearSampler; }
 
         [[nodiscard]] vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
-        [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
+        [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSets[currentHistoryIndex]; }
 
         [[nodiscard]] const VolumetricGridDimensions& getDimensions() const { return dims; }
         [[nodiscard]] bool isInitialized() const { return initialized; }

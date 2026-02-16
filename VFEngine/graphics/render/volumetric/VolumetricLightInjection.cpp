@@ -21,7 +21,9 @@ namespace render::volumetric
         vk::DescriptorSetLayout volumetricGridDescLayout,
         vk::DescriptorSetLayout clusterGridDescLayout,
         vk::DescriptorSetLayout lightBufferDescLayout,
-        vk::DescriptorSetLayout lightCullingDescLayout)
+        vk::DescriptorSetLayout lightCullingDescLayout,
+        vk::DescriptorSetLayout shadowDataDescLayout,
+        vk::DescriptorSetLayout shadowTextureDescLayout)
     {
         if (initialized)
         {
@@ -34,6 +36,8 @@ namespace render::volumetric
         clusterGridLayout = clusterGridDescLayout;
         lightBufferLayout = lightBufferDescLayout;
         lightCullingLayout = lightCullingDescLayout;
+        shadowDataLayout = shadowDataDescLayout;
+        shadowTextureLayout = shadowTextureDescLayout;
 
         createPipelineLayout();
         createComputePipeline();
@@ -79,11 +83,13 @@ namespace render::volumetric
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(uint32_t); // frameIndex
 
-        std::array<vk::DescriptorSetLayout, 4> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 6> setLayouts = {
             volumetricGridLayout,   // Set 0: Volumetric grid params + scattering volume
             clusterGridLayout,       // Set 1: Cluster grid data
             lightBufferLayout,       // Set 2: Light buffers
-            lightCullingLayout       // Set 3: Light culling output
+            lightCullingLayout,      // Set 3: Light culling output
+            shadowDataLayout,        // Set 4: Shadow data buffer
+            shadowTextureLayout      // Set 5: Shadow textures (atlas, cascades, cubes)
         };
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
@@ -127,6 +133,8 @@ namespace render::volumetric
         vk::DescriptorSet clusterGridDescSet,
         vk::DescriptorSet lightBufferDescSet,
         vk::DescriptorSet lightCullingDescSet,
+        vk::DescriptorSet shadowDataDescSet,
+        vk::DescriptorSet shadowTextureDescSet,
         uint32_t frameIndex)
     {
         if (!initialized || !computePipeline)
@@ -134,17 +142,36 @@ namespace render::volumetric
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
-        std::array<vk::DescriptorSet, 4> descSets = {
-            volumetricGridDescSet,
-            clusterGridDescSet,
-            lightBufferDescSet,
-            lightCullingDescSet
-        };
-
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
-            static_cast<uint32_t>(descSets.size()), descSets.data(),
-            0, nullptr);
+        // Bind core sets (0-3) always; bind shadow sets (4-5) only when available
+        bool hasShadows = shadowDataDescSet && shadowTextureDescSet;
+        if (hasShadows)
+        {
+            std::array<vk::DescriptorSet, 6> descSets = {
+                volumetricGridDescSet,
+                clusterGridDescSet,
+                lightBufferDescSet,
+                lightCullingDescSet,
+                shadowDataDescSet,
+                shadowTextureDescSet
+            };
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
+                static_cast<uint32_t>(descSets.size()), descSets.data(),
+                0, nullptr);
+        }
+        else
+        {
+            std::array<vk::DescriptorSet, 4> descSets = {
+                volumetricGridDescSet,
+                clusterGridDescSet,
+                lightBufferDescSet,
+                lightCullingDescSet
+            };
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
+                static_cast<uint32_t>(descSets.size()), descSets.data(),
+                0, nullptr);
+        }
 
         cmd.pushConstants(
             pipelineLayout,

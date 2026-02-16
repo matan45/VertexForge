@@ -502,7 +502,9 @@ namespace render::gpudriven
             volQuality,
             clusterGridManager->getDescriptorSetLayout(),
             lightBufferManager->getDescriptorSetLayout(),
-            lightCullingPipeline->getDescriptorSetLayout());
+            lightCullingPipeline->getDescriptorSetLayout(),
+            shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
+            shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
 
         loggerInfo("GPUDrivenRenderer: Volumetric fog initialized");
     }

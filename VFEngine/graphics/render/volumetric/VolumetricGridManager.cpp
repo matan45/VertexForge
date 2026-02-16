@@ -3,6 +3,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include <cstring>
 #include <array>
 
@@ -25,6 +26,7 @@ namespace render::volumetric
 
         createSampler();
         createImages();
+        transitionImagesToGeneral();
         createParamsBuffer();
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -45,7 +47,8 @@ namespace render::volumetric
         {
             dev.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
-            descriptorSet = nullptr;
+            descriptorSets[0] = nullptr;
+            descriptorSets[1] = nullptr;
         }
 
         if (descriptorSetLayout)
@@ -84,7 +87,6 @@ namespace render::volumetric
     void VolumetricGridManager::swapHistory()
     {
         currentHistoryIndex = 1 - currentHistoryIndex;
-        writeDescriptors();
     }
 
     void VolumetricGridManager::updateParams(const GPUVolumetricParams& params)
@@ -167,6 +169,58 @@ namespace render::volumetric
         // Integrated output: written by ray march, read by composite fragment shader
         create3DImage(integratedImage, integratedMemory, integratedView,
                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    }
+
+    void VolumetricGridManager::transitionImagesToGeneral()
+    {
+        auto& dev = device.getLogicalDevice();
+        auto cmd = core::Utilities::beginSingleTimeCommands(dev, device.getStagingCommandPool());
+
+        // Collect all images that need transitioning: scattering + 2 history + integrated
+        std::array<vk::ImageMemoryBarrier, 4> barriers{};
+
+        vk::ImageSubresourceRange subRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        barriers[0].oldLayout = vk::ImageLayout::eUndefined;
+        barriers[0].newLayout = vk::ImageLayout::eGeneral;
+        barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[0].image = scatteringImage;
+        barriers[0].subresourceRange = subRange;
+        barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        barriers[1].oldLayout = vk::ImageLayout::eUndefined;
+        barriers[1].newLayout = vk::ImageLayout::eGeneral;
+        barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[1].image = historyImages[0];
+        barriers[1].subresourceRange = subRange;
+        barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        barriers[2].oldLayout = vk::ImageLayout::eUndefined;
+        barriers[2].newLayout = vk::ImageLayout::eGeneral;
+        barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[2].image = historyImages[1];
+        barriers[2].subresourceRange = subRange;
+        barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        barriers[3].oldLayout = vk::ImageLayout::eUndefined;
+        barriers[3].newLayout = vk::ImageLayout::eGeneral;
+        barriers[3].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[3].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[3].image = integratedImage;
+        barriers[3].subresourceRange = subRange;
+        barriers[3].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        cmd->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags{},
+            {}, {},
+            barriers);
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
     }
 
     void VolumetricGridManager::destroyImages()
@@ -255,17 +309,17 @@ namespace render::volumetric
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = 1;
+        poolSizes[0].descriptorCount = 2; // 1 per set x 2 sets
 
         poolSizes[1].type = vk::DescriptorType::eStorageImage;
-        poolSizes[1].descriptorCount = 3; // scattering + history write + integrated
+        poolSizes[1].descriptorCount = 6; // (scattering + history write + integrated) x 2 sets
 
         poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[2].descriptorCount = 1; // history read
+        poolSizes[2].descriptorCount = 2; // history read x 2 sets
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        poolInfo.maxSets = 1;
+        poolInfo.maxSets = 2;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
 
@@ -274,77 +328,83 @@ namespace render::volumetric
 
     void VolumetricGridManager::allocateDescriptorSet()
     {
+        std::array<vk::DescriptorSetLayout, 2> layouts = {descriptorSetLayout, descriptorSetLayout};
+
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &descriptorSetLayout;
+        allocInfo.descriptorSetCount = 2;
+        allocInfo.pSetLayouts = layouts.data();
 
-        descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        auto sets = device.getLogicalDevice().allocateDescriptorSets(allocInfo);
+        descriptorSets[0] = sets[0];
+        descriptorSets[1] = sets[1];
     }
 
     void VolumetricGridManager::writeDescriptors()
     {
         auto& dev = device.getLogicalDevice();
 
-        // Binding 0: Params UBO
+        // Shared descriptors (same for both sets)
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = paramsBuffer;
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(GPUVolumetricParams);
 
-        // Binding 1: Scattering volume (storage image)
         vk::DescriptorImageInfo scatteringInfo{};
         scatteringInfo.imageView = scatteringView;
         scatteringInfo.imageLayout = vk::ImageLayout::eGeneral;
 
-        // Binding 2: History read (previous frame)
-        vk::DescriptorImageInfo historyReadInfo{};
-        historyReadInfo.imageView = historyViews[1 - currentHistoryIndex]; // previous
-        historyReadInfo.imageLayout = vk::ImageLayout::eGeneral;
-        historyReadInfo.sampler = trilinearSampler;
-
-        // Binding 3: History write (current frame)
-        vk::DescriptorImageInfo historyWriteInfo{};
-        historyWriteInfo.imageView = historyViews[currentHistoryIndex]; // current
-        historyWriteInfo.imageLayout = vk::ImageLayout::eGeneral;
-
-        // Binding 4: Integrated output
         vk::DescriptorImageInfo integratedInfo{};
         integratedInfo.imageView = integratedView;
         integratedInfo.imageLayout = vk::ImageLayout::eGeneral;
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        // Write both descriptor sets, each with its own history read/write config
+        // descriptorSets[i] is used when currentHistoryIndex == i:
+        //   historyRead = historyViews[1-i] (previous), historyWrite = historyViews[i] (current)
+        for (uint32_t i = 0; i < 2; ++i)
+        {
+            vk::DescriptorImageInfo historyReadInfo{};
+            historyReadInfo.imageView = historyViews[1 - i];
+            historyReadInfo.imageLayout = vk::ImageLayout::eGeneral;
+            historyReadInfo.sampler = trilinearSampler;
 
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
-        writes[0].descriptorCount = 1;
-        writes[0].pBufferInfo = &bufferInfo;
+            vk::DescriptorImageInfo historyWriteInfo{};
+            historyWriteInfo.imageView = historyViews[i];
+            historyWriteInfo.imageLayout = vk::ImageLayout::eGeneral;
 
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].descriptorType = vk::DescriptorType::eStorageImage;
-        writes[1].descriptorCount = 1;
-        writes[1].pImageInfo = &scatteringInfo;
+            std::array<vk::WriteDescriptorSet, 5> writes{};
 
-        writes[2].dstSet = descriptorSet;
-        writes[2].dstBinding = 2;
-        writes[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[2].descriptorCount = 1;
-        writes[2].pImageInfo = &historyReadInfo;
+            writes[0].dstSet = descriptorSets[i];
+            writes[0].dstBinding = 0;
+            writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+            writes[0].descriptorCount = 1;
+            writes[0].pBufferInfo = &bufferInfo;
 
-        writes[3].dstSet = descriptorSet;
-        writes[3].dstBinding = 3;
-        writes[3].descriptorType = vk::DescriptorType::eStorageImage;
-        writes[3].descriptorCount = 1;
-        writes[3].pImageInfo = &historyWriteInfo;
+            writes[1].dstSet = descriptorSets[i];
+            writes[1].dstBinding = 1;
+            writes[1].descriptorType = vk::DescriptorType::eStorageImage;
+            writes[1].descriptorCount = 1;
+            writes[1].pImageInfo = &scatteringInfo;
 
-        writes[4].dstSet = descriptorSet;
-        writes[4].dstBinding = 4;
-        writes[4].descriptorType = vk::DescriptorType::eStorageImage;
-        writes[4].descriptorCount = 1;
-        writes[4].pImageInfo = &integratedInfo;
+            writes[2].dstSet = descriptorSets[i];
+            writes[2].dstBinding = 2;
+            writes[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[2].descriptorCount = 1;
+            writes[2].pImageInfo = &historyReadInfo;
 
-        dev.updateDescriptorSets(writes, nullptr);
+            writes[3].dstSet = descriptorSets[i];
+            writes[3].dstBinding = 3;
+            writes[3].descriptorType = vk::DescriptorType::eStorageImage;
+            writes[3].descriptorCount = 1;
+            writes[3].pImageInfo = &historyWriteInfo;
+
+            writes[4].dstSet = descriptorSets[i];
+            writes[4].dstBinding = 4;
+            writes[4].descriptorType = vk::DescriptorType::eStorageImage;
+            writes[4].descriptorCount = 1;
+            writes[4].pImageInfo = &integratedInfo;
+
+            dev.updateDescriptorSets(writes, nullptr);
+        }
     }
 }

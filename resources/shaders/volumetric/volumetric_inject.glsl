@@ -1,5 +1,6 @@
 #type COMPUTE
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 // Volumetric Light Injection Compute Shader
 // Injects light contributions into the froxel scattering volume
@@ -113,6 +114,28 @@ layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer
     uint lightIndexList[];
 };
 
+// Set 4: Shadow Data
+struct ShadowData {
+    mat4 viewProjection;
+    vec4 atlasViewport;
+    vec4 biasParams;    // x = depthBias, y = slopeBias, z = normalBias, w = texelSize
+    vec4 rangeParams;   // x = near, y = far, z = cascadeCount, w = cascadeIndex
+    vec4 pcfParams;     // x = kernelRadius, y = softness, z = filterEnabled, w = cubeMapIndex
+};
+
+layout(std430, set = 4, binding = 0) readonly buffer ShadowDataBuffer {
+    ShadowData shadowData[];
+};
+
+// Set 5: Shadow Textures
+layout(set = 5, binding = 0) uniform sampler2DShadow shadowAtlas;
+layout(set = 5, binding = 1) uniform sampler2DArrayShadow shadowCascades;
+layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[];
+
+// Shadow constants (must match ShadowTypes.hpp)
+const int MAX_SHADOW_VIEWS = 272;
+const int MAX_POINT_SHADOW_CUBES = 32;
+
 // Constants
 const float VOL_PI = 3.14159265359;
 const float LIGHT_INTENSITY_SCALE = 100.0;
@@ -189,6 +212,57 @@ uint froxelToClusterIndex(ivec3 froxelCoord, uvec3 volDims) {
            slice * clusterParams.gridDimensions.x * clusterParams.gridDimensions.y;
 }
 
+// Shadow sampling for cascade shadows (simplified for volumetric - no PCF needed)
+float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    ShadowData sd = shadowData[shadowIndex];
+
+    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+    if (lightSpacePos.w <= 0.0) return 1.0;
+
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
+    texCoords = clamp(texCoords, 0.0, 1.0);
+    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
+    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
+
+    // Single-tap shadow for volumetric (PCF not needed per-froxel)
+    return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+}
+
+// Directional shadow with cascade selection
+float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
+    cascadeCount = clamp(cascadeCount, 1, 4);
+
+    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
+        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (cascadeCount <= 0) return 1.0;
+    }
+
+    int cascadeIdx = 0;
+    for (int i = 0; i < cascadeCount; ++i) {
+        if (viewZ < shadowData[baseShadowIndex + i].rangeParams.y) {
+            cascadeIdx = i;
+            break;
+        }
+        cascadeIdx = i;
+    }
+
+    int shadowIndex = baseShadowIndex + cascadeIdx;
+    float shadow = sampleCascadeShadowSimple(shadowIndex, worldPos);
+
+    // Fade shadow at max cascade distance
+    float maxDistance = shadowData[baseShadowIndex + cascadeCount - 1].rangeParams.y;
+    float fadeStart = maxDistance * 0.85;
+    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
+
+    return mix(1.0, shadow, fadeFactor);
+}
+
 // Point light attenuation
 float smoothDistanceAttenuation(float distance, float range) {
     float distRatio = distance / range;
@@ -247,7 +321,10 @@ void main() {
     float ambientIntensity = ambientParams.x;
     inScattered += fogColor.rgb * fogColor.a * ambientIntensity;
 
-    // Directional lights
+    // Compute view-space Z for cascade selection
+    float viewZ = distFromCamera;
+
+    // Directional lights (with shadow sampling)
     for (uint i = 0; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
         vec3 L = -normalize(light.direction);
@@ -255,7 +332,15 @@ void main() {
         float phase = henyeyGreenstein(dot(viewDir, L), anisotropy);
         vec3 lightContrib = light.color * light.intensity * phase;
 
-        inScattered += lightContrib;
+        // Shadow attenuation
+        float shadowFactor = 1.0;
+        if (light.shadowIndex >= 0) {
+            shadowFactor = sampleDirectionalShadowVolumetric(light.shadowIndex, worldPos, viewZ);
+            // Mix with shadow intensity to allow partial shadow strength
+            shadowFactor = mix(1.0, shadowFactor, 1.0 - lightCounts.shadowIntensity);
+        }
+
+        inScattered += lightContrib * shadowFactor;
     }
 
     // Clustered point and spot lights

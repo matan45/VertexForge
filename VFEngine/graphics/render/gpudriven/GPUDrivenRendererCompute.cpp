@@ -282,6 +282,14 @@ namespace render::gpudriven
             );
         }
 
+        cullPipeline->dispatch(cmd, stats.totalObjects);
+        batchManager->insertBarriersAfterCompute(cmd);
+
+        recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
+
+        // Volumetric fog runs AFTER shadow passes so that:
+        // 1. Shadow texture descriptor set is finalized (no updates after binding)
+        // 2. Shadow maps are rendered and available for sampling
         if (volumetricPipeline && volumetricPipeline->isEnabled())
         {
             const auto& camData = cameraBuffer->getData();
@@ -294,13 +302,10 @@ namespace render::gpudriven
             volumetricPipeline->dispatch(cmd,
                                          clusterGridManager->getDescriptorSet(),
                                          lightBufferManager->getDescriptorSet(),
-                                         lightCullingPipeline->getDescriptorSet());
+                                         lightCullingPipeline->getDescriptorSet(),
+                                         shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
+                                         shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{});
         }
-
-        cullPipeline->dispatch(cmd, stats.totalObjects);
-        batchManager->insertBarriersAfterCompute(cmd);
-
-        recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
     }
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)

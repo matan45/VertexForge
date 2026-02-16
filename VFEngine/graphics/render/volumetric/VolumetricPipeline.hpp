@@ -42,12 +42,16 @@ namespace render::volumetric
         void init(VolumetricQuality quality,
                   vk::DescriptorSetLayout clusterGridLayout,
                   vk::DescriptorSetLayout lightBufferLayout,
-                  vk::DescriptorSetLayout lightCullingLayout);
+                  vk::DescriptorSetLayout lightCullingLayout,
+                  vk::DescriptorSetLayout shadowDataLayout,
+                  vk::DescriptorSetLayout shadowTextureLayout);
         void cleanup();
         void recreate(VolumetricQuality quality,
                       vk::DescriptorSetLayout clusterGridLayout,
                       vk::DescriptorSetLayout lightBufferLayout,
-                      vk::DescriptorSetLayout lightCullingLayout);
+                      vk::DescriptorSetLayout lightCullingLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout);
 
         void update(const glm::mat4& viewProj, const glm::mat4& invViewProj,
                     const glm::vec3& cameraPos, float nearPlane, float farPlane,
@@ -56,7 +60,9 @@ namespace render::volumetric
         void dispatch(vk::CommandBuffer cmd,
                       vk::DescriptorSet clusterGridDescSet,
                       vk::DescriptorSet lightBufferDescSet,
-                      vk::DescriptorSet lightCullingDescSet);
+                      vk::DescriptorSet lightCullingDescSet,
+                      vk::DescriptorSet shadowDataDescSet,
+                      vk::DescriptorSet shadowTextureDescSet);
 
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }

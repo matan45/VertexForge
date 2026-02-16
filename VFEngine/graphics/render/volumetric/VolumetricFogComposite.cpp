@@ -352,7 +352,6 @@ namespace render::volumetric
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
         descriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
-
         vk::DescriptorImageInfo depthImageInfo{};
         depthImageInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthImageInfo.imageView = depthOnlyImageView;
