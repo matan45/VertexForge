@@ -37,7 +37,7 @@ namespace scene {
 		// Add a component to the entity
 		template<typename T, typename... Args>
 		T& addComponent(Args&&... args) {
-			if (!isValid()) {
+			if (!isAlive()) {
 				vfLogError("Trying to add a component to an invalid entity.");
 			}
 			T& component = EntityRegistry::getRegistry().emplace<T>(entityHandle, std::forward<Args>(args)...);
@@ -47,7 +47,7 @@ namespace scene {
 		// Add or replace a component
 		template<typename T, typename... Args>
 		T& addOrReplaceComponent(Args&&... args) {
-			if (!isValid()) {
+			if (!isAlive()) {
 				vfLogError("Trying to add or replace a component in an invalid entity.");
 			}
 			T& component = EntityRegistry::getRegistry().emplace_or_replace<T>(entityHandle, std::forward<Args>(args)...);
@@ -75,21 +75,30 @@ namespace scene {
 		// Check if the entity has a specific component
 		template<typename T>
 		bool hasComponent() const {
+			if (!isAlive()) {
+				return false;
+			}
 			return EntityRegistry::getRegistry().all_of<T>(entityHandle);
 		}
 
 		// Remove a component
 		template<typename T>
 		void removeComponent() {
-			if (!isValid()) {
+			if (!isAlive()) {
 				vfLogError("Trying to remove a component from an invalid entity.");
+				return;
 			}
 			EntityRegistry::getRegistry().remove<T>(entityHandle);
 		}
 
-		// Check if the entity is valid (i.e., not null)
+		// Check if the entity handle is non-null (does NOT check registry liveness)
 		bool isValid() const {
 			return entityHandle != entt::null;
+		}
+
+		// Check if the entity is alive in the registry (safe to access components)
+		bool isAlive() const {
+			return entityHandle != entt::null && EntityRegistry::getRegistry().valid(entityHandle);
 		}
 
 		// Get the entity handle
@@ -150,7 +159,7 @@ namespace scene {
 				auto& childrenComponent = addOrReplaceComponent<components::ChildrenComponent>();
 				childrenComponent.children.push_back(child.getHandle());
 			}
-			
+
 			child.addOrReplaceComponent<components::ParentComponent>().parent = this->entityHandle;
 		}
 
@@ -171,31 +180,36 @@ namespace scene {
 			}
 		}
 
-		// Get parent entity
+		// Get parent entity (returns invalid entity if parent was destroyed)
 		Entity getParent() {
 			if (hasComponent<components::ParentComponent>()) {
 				entt::entity parentHandle = getComponent<components::ParentComponent>().parent;
-				return Entity(parentHandle);
+				if (EntityRegistry::getRegistry().valid(parentHandle)) {
+					return Entity(parentHandle);
+				}
 			}
 			return Entity(); // Return an invalid entity if no parent exists
 		}
 
-		// Get children entities
+		// Get children entities (filters out destroyed entities)
 		std::vector<Entity> getChildren() const {
 			std::vector<Entity> childEntities;
 
 			if (hasComponent<components::ChildrenComponent>()) {
+				auto& registry = EntityRegistry::getRegistry();
 				const auto& childrenHandles = getComponent<components::ChildrenComponent>().children;
 				for (const auto& childHandle : childrenHandles) {
-					childEntities.emplace_back(childHandle);
+					if (registry.valid(childHandle)) {
+						childEntities.emplace_back(childHandle);
+					}
 				}
 			}
 
 			return childEntities;
 		}
-		
+
 		void removeAllOptionalComponents() {
-			if (!isValid()) {
+			if (!isAlive()) {
 				vfLogError("Trying to remove components from an invalid entity.");
 				return;
 			}
@@ -217,5 +231,4 @@ namespace scene {
 		}
 	};
 }
-
 

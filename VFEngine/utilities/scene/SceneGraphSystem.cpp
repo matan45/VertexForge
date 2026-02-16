@@ -7,8 +7,8 @@ namespace scene {
 
 	entt::entity SceneGraphSystem::addChild(Entity& parent,Entity& child) const
 	{
-		if (!parent.isValid() || !child.isValid()) {
-			vfLogError("Invalid parent or child entity.");
+		if (!parent.isAlive() || !child.isAlive()) {
+			vfLogError("addChild: parent or child entity is not alive.");
 			return entt::null;
 		}
 
@@ -20,23 +20,22 @@ namespace scene {
 
 	void SceneGraphSystem::removeEntity(Entity& entity)
 	{
-		if (!entity.isValid() || entity == root) {
+		if (!entity.isAlive() || entity == root) {
 			vfLogError("Cannot remove the root entity or an invalid entity.");
 			return;
 		}
-		if (!entity.isValid()) {
-			vfLogError("Invalid entity.");
-			return;
-		}
 
-		// Recursively remove children
-		for (auto& child : entity.getChildren()) {
-			removeEntity(child);
+		// Recursively remove children (copy list since it's modified during iteration)
+		auto children = entity.getChildren();
+		for (auto& child : children) {
+			if (child.isAlive()) {
+				removeEntity(child);
+			}
 		}
 
 		// Remove from parent's children list
 		Entity parent = entity.getParent();
-		if (parent.isValid()) {
+		if (parent.isAlive()) {
 			parent.removeChildren(entity);
 		}
 
@@ -56,7 +55,7 @@ namespace scene {
 		for (auto& child : children) {
 			removeEntity(child);
 		}
-		
+
 		root.removeAllOptionalComponents();
 
 		vfLogInfo("Scene cleared successfully.");
@@ -97,6 +96,9 @@ namespace scene {
 
 	void SceneGraphSystem::updateWorldTransforms()
 	{
+		if (!root.isAlive()) {
+			return;
+		}
 		glm::mat4 identityMatrix(1.0f); // Start with an identity matrix for the root
 		updateChildWorldTransforms(root, identityMatrix); // Begin updating from the root entity
 	}
@@ -121,16 +123,22 @@ namespace scene {
 
 	void SceneGraphSystem::markTransformDirtyRecursive(Entity& entity) const
 	{
+		if (!entity.isAlive()) return;
 		if (entity.hasComponent<components::TransformComponent>()) {
 			entity.getComponent<components::TransformComponent>().isDirty = true;
 		}
 		for (auto& child : entity.getChildren()) {
-			markTransformDirtyRecursive(child);
+			if (child.isAlive()) {
+				markTransformDirtyRecursive(child);
+			}
 		}
 	}
 
 	void SceneGraphSystem::updateChildWorldTransforms(Entity& entity, const glm::mat4& parentWorldTransform)
 	{
+		if (!entity.isAlive()) {
+			return;
+		}
 		if (!entity.hasComponent<components::TransformComponent>()) {
 			return;
 		}
@@ -160,7 +168,9 @@ namespace scene {
 
 		// Always recursively update children with the correct world matrix
 		for (auto& child : entity.getChildren()) {
-			updateChildWorldTransforms(child, worldMatrix);
+			if (child.isAlive()) {
+				updateChildWorldTransforms(child, worldMatrix);
+			}
 		}
 	}
 

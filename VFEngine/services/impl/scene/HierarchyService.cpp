@@ -60,8 +60,18 @@ namespace services
 
         if (parent.has_value() && parent->isValid())
         {
-            scene::Entity parentEntity(internal::fromHandle(*parent));
-            sceneGraph->addChild(parentEntity, newEntity);
+            auto parentEntt = internal::fromHandle(*parent);
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.valid(parentEntt))
+            {
+                scene::Entity parentEntity(parentEntt);
+                sceneGraph->addChild(parentEntity, newEntity);
+            }
+            else
+            {
+                // Parent was destroyed, fall back to root
+                sceneGraph->addChild(sceneGraph->GetRoot(), newEntity);
+            }
         }
         else
         {
@@ -105,6 +115,22 @@ namespace services
                     cmd.entity = handle;
                     cmd.scriptPath = entry.scriptPath;
                     dispatcher.execute(cmd);
+                }
+            }
+        }
+
+        // Clear global selection if the deleted entity (or any descendant) is currently selected
+        auto currentSelection = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+        if (currentSelection.has_value())
+        {
+            for (const auto& handle : entitiesToDelete)
+            {
+                if (handle.id == currentSelection->id)
+                {
+                    events::scene::SelectEntityCommand clearCmd;
+                    clearCmd.entity = std::nullopt;
+                    dispatcher.execute(clearCmd);
+                    break;
                 }
             }
         }
@@ -317,7 +343,7 @@ namespace services
                 auto& newAnim = newEntity.addComponent<components::AnimatorComponent>();
                 newAnim.animatorPath = origAnim.animatorPath;
             }
-                
+
             if (orig.hasComponent<components::BillboardComponent>())
             {
                 auto& origBillboard = orig.getComponent<components::BillboardComponent>();
