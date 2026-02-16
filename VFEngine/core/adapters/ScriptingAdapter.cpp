@@ -4,19 +4,35 @@
 #include <project/ProjectConfigParser.hpp>
 
 #include "ScriptingAdapter.hpp"
+#include "ScriptUIEventBridge.hpp"
+#include "ScriptPhysicsEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <filesystem>
 #include <fstream>
 #include <regex>
+#include <array>
 
 #include "print/EditorLogger.hpp"
-#include "events/PhysicsEvents.hpp"
-#include "events/UIEvents.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/Components.hpp"
 
 namespace core
 {
+    namespace
+    {
+        void callScriptMethod(::services::ScriptInterpreter* interpreter,
+                              std::unordered_map<uint64_t, std::any>& instanceToObject,
+                              std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
+                              uint64_t instanceId, const char* methodName,
+                              const std::vector<value::Value>& args)
+        {
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end()) return;
+
+            NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            auto& instance = std::any_cast<value::Value&>(objIt->second);
+            interpreter->callMethod(instance, methodName, args);
+        }
+    }
+
     ScriptingAdapter::ScriptingAdapter() = default;
 
     ScriptingAdapter::~ScriptingAdapter()
@@ -26,10 +42,7 @@ namespace core
 
     bool ScriptingAdapter::init()
     {
-        if (initialized)
-        {
-            return true;
-        }
+        if (initialized) return true;
 
         try
         {
@@ -37,14 +50,15 @@ namespace core
 
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             apiRegistry->registerEngineAPIs();
-            subscribeToPhysicsEvents();
-            subscribeToUIButtonEvents();
-            subscribeToUITextInputEvents();
-            subscribeToUICheckboxEvents();
-            subscribeToUIDropdownEvents();
-            subscribeToUITabsEvents();
-            subscribeToUISliderEvents();
-            subscribeToUIProgressBarEvents();
+
+            uiEventBridge = std::make_unique<ScriptUIEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
+            physicsEventBridge = std::make_unique<ScriptPhysicsEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
+            physicsEventBridge->subscribeAll();
+            uiEventBridge->subscribeAll();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -61,19 +75,10 @@ namespace core
 
     void ScriptingAdapter::cleanUp()
     {
-        if (!initialized)
-        {
-            return;
-        }
+        if (!initialized) return;
 
-        unsubscribeFromPhysicsEvents();
-        unsubscribeFromUIButtonEvents();
-        unsubscribeFromUITextInputEvents();
-        unsubscribeFromUICheckboxEvents();
-        unsubscribeFromUIDropdownEvents();
-        unsubscribeFromUITabsEvents();
-        unsubscribeFromUISliderEvents();
-        unsubscribeFromUIProgressBarEvents();
+        if (physicsEventBridge) physicsEventBridge->unsubscribeAll();
+        if (uiEventBridge) uiEventBridge->unsubscribeAll();
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -139,9 +144,7 @@ namespace core
                 compiled = false;
                 vfLogError("[ScriptingAdapter] Build failed with {} errors", result.errors.size());
                 for (const auto& error : result.errors)
-                {
                     vfLogError("[Script] {}", error);
-                }
             }
 
             return result;
@@ -281,46 +284,21 @@ namespace core
             instanceToEntity[instanceId] = entity;
             instanceToObject[instanceId] = std::any(instance);
 
-            // Cache implemented interfaces for collision/trigger callbacks
+            // Cache implemented interfaces for collision/trigger/UI callbacks
+            static constexpr std::array<const char*, 9> kCheckedInterfaces = {
+                "ICollisionListener", "ITriggerListener",
+                "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
+                "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
+                "IUIProgressBarListener"
+            };
+
             std::unordered_set<std::string> interfaces;
-            if (interpreter->classImplementsInterface(className, "ICollisionListener"))
+            for (const auto* iface : kCheckedInterfaces)
             {
-                interfaces.insert("ICollisionListener");
-            }
-            if (interpreter->classImplementsInterface(className, "ITriggerListener"))
-            {
-                interfaces.insert("ITriggerListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUIButtonListener"))
-            {
-                interfaces.insert("IUIButtonListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUITextInputListener"))
-            {
-                interfaces.insert("IUITextInputListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUICheckboxListener"))
-            {
-                interfaces.insert("IUICheckboxListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUIDropdownListener"))
-            {
-                interfaces.insert("IUIDropdownListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUITabsListener"))
-            {
-                interfaces.insert("IUITabsListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUISliderListener"))
-            {
-                interfaces.insert("IUISliderListener");
-            }
-            if (interpreter->classImplementsInterface(className, "IUIProgressBarListener"))
-            {
-                interfaces.insert("IUIProgressBarListener");
+                if (interpreter->classImplementsInterface(className, iface))
+                    interfaces.insert(iface);
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
-
             instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
 
             services::ScriptInstanceInfo info;
@@ -380,13 +358,7 @@ namespace core
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onStart", {});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onStart", {});
         }
         catch (const std::exception& e)
         {
@@ -398,27 +370,16 @@ namespace core
 
     void ScriptingAdapter::callOnUpdate(uint64_t instanceId, float deltaTime)
     {
-        if (!isScriptLoaded(instanceId))
-        {
-            return;
-        }
+        if (!isScriptLoaded(instanceId)) return;
 
         auto stateIt = instanceToPlaybackState.find(instanceId);
         if (stateIt == instanceToPlaybackState.end() ||
             stateIt->second != services::ScriptPlaybackState::Playing)
-        {
             return;
-        }
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onUpdate", {value::Value(deltaTime)});
         }
         catch (const std::exception& e)
         {
@@ -430,20 +391,11 @@ namespace core
 
     void ScriptingAdapter::callOnDestroy(uint64_t instanceId)
     {
-        if (!isScriptLoaded(instanceId))
-        {
-            return;
-        }
+        if (!isScriptLoaded(instanceId)) return;
 
         try
         {
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onDestroy", {});
-            }
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onDestroy", {});
         }
         catch (const std::exception& e)
         {
@@ -463,9 +415,7 @@ namespace core
 
         auto& state = instanceToPlaybackState[instanceId];
         if (state == services::ScriptPlaybackState::Stopped)
-        {
             callOnStart(instanceId);
-        }
         state = services::ScriptPlaybackState::Playing;
         vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
     }
@@ -495,10 +445,7 @@ namespace core
     std::string ScriptingAdapter::extractClassName(const std::string& scriptPath)
     {
         std::ifstream file(scriptPath);
-        if (!file.is_open())
-        {
-            return "";
-        }
+        if (!file.is_open()) return "";
 
         std::string content((std::istreambuf_iterator<char>(file)),
                             std::istreambuf_iterator<char>());
@@ -508,866 +455,13 @@ namespace core
         std::smatch match;
 
         if (std::regex_search(content, match, scriptAnnotationPattern))
-        {
             return match[1].str();
-        }
 
         // Fallback for backwards compatibility
         std::regex anyClassPattern(R"(\bclass\s+(\w+)\b)");
         if (std::regex_search(content, match, anyClassPattern))
-        {
             return match[1].str();
-        }
 
         return "";
-    }
-
-    void ScriptingAdapter::subscribeToPhysicsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        collisionStartToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
-            [this](const ::events::physics::CollisionStartNotification& notif)
-            {
-                dispatchCollisionCallback("onCollisionEnter", notif.entityA, notif.entityB);
-                dispatchCollisionCallback("onCollisionEnter", notif.entityB, notif.entityA);
-            });
-
-        collisionEndToken = dispatcher.subscribe<::events::physics::CollisionEndNotification>(
-            [this](const ::events::physics::CollisionEndNotification& notif)
-            {
-                dispatchCollisionCallback("onCollisionExit", notif.entityA, notif.entityB);
-                dispatchCollisionCallback("onCollisionExit", notif.entityB, notif.entityA);
-            });
-
-        triggerEnterToken = dispatcher.subscribe<::events::physics::TriggerEnterNotification>(
-            [this](const ::events::physics::TriggerEnterNotification& notif)
-            {
-                dispatchCollisionCallback("onTriggerEnter", notif.triggerEntity, notif.otherEntity);
-            });
-
-        triggerExitToken = dispatcher.subscribe<::events::physics::TriggerExitNotification>(
-            [this](const ::events::physics::TriggerExitNotification& notif)
-            {
-                dispatchCollisionCallback("onTriggerExit", notif.triggerEntity, notif.otherEntity);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to physics collision events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromPhysicsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (collisionStartToken.isValid())
-        {
-            dispatcher.unsubscribe(collisionStartToken);
-        }
-        if (collisionEndToken.isValid())
-        {
-            dispatcher.unsubscribe(collisionEndToken);
-        }
-        if (triggerEnterToken.isValid())
-        {
-            dispatcher.unsubscribe(triggerEnterToken);
-        }
-        if (triggerExitToken.isValid())
-        {
-            dispatcher.unsubscribe(triggerExitToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from physics collision events");
-    }
-
-    void ScriptingAdapter::dispatchCollisionCallback(const char* methodName,
-                                                     ::services::EntityHandle self, ::services::EntityHandle other)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!registry.valid(static_cast<entt::entity>(self.id)))
-        {
-            return;
-        }
-
-        auto* scriptComp = registry.try_get<components::ScriptComponent>(
-            static_cast<entt::entity>(self.id));
-
-        if (!scriptComp)
-        {
-            return;
-        }
-
-        std::string requiredInterface;
-        std::string methodStr(methodName);
-        if (methodStr == "onCollisionEnter" || methodStr == "onCollisionExit")
-        {
-            requiredInterface = "ICollisionListener";
-        }
-        else if (methodStr == "onTriggerEnter" || methodStr == "onTriggerExit")
-        {
-            requiredInterface = "ITriggerListener";
-        }
-        else
-        {
-            return;
-        }
-
-        for (const auto& [instanceId, entityHandle] : instanceToEntity)
-        {
-            if (entityHandle.id == self.id)
-            {
-                auto interfaceIt = instanceToInterfaces.find(instanceId);
-                if (interfaceIt == instanceToInterfaces.end() ||
-                    interfaceIt->second.find(requiredInterface) == interfaceIt->second.end())
-                {
-                    continue;
-                }
-
-                auto objIt = instanceToObject.find(instanceId);
-                if (objIt != instanceToObject.end())
-                {
-                    try
-                    {
-                        NativeAPIRegistry::setCurrentEntity(self);
-                        auto& instance = std::any_cast<value::Value&>(objIt->second);
-                        interpreter->callMethod(instance, methodName,
-                                                {value::Value(static_cast<int>(other.id))});
-                    }
-                    catch (const std::exception& e)
-                    {
-                        vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-                    }
-                }
-            }
-        }
-    }
-
-    void ScriptingAdapter::subscribeToUIButtonEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        buttonClickedToken = dispatcher.subscribe<::events::ui::UIButtonClickedNotification>(
-            [this](const ::events::ui::UIButtonClickedNotification& notif)
-            {
-                dispatchUIButtonCallback("onButtonClicked", notif.entity, notif.entityName);
-            });
-
-        buttonPressedToken = dispatcher.subscribe<::events::ui::UIButtonPressedNotification>(
-            [this](const ::events::ui::UIButtonPressedNotification& notif)
-            {
-                dispatchUIButtonCallback("onButtonPressed", notif.entity, notif.entityName);
-            });
-
-        buttonReleasedToken = dispatcher.subscribe<::events::ui::UIButtonReleasedNotification>(
-            [this](const ::events::ui::UIButtonReleasedNotification& notif)
-            {
-                dispatchUIButtonCallback("onButtonReleased", notif.entity, notif.entityName);
-            });
-
-        buttonHoverEnterToken = dispatcher.subscribe<::events::ui::UIButtonHoverEnterNotification>(
-            [this](const ::events::ui::UIButtonHoverEnterNotification& notif)
-            {
-                dispatchUIButtonCallback("onButtonHoverEnter", notif.entity, notif.entityName);
-            });
-
-        buttonHoverExitToken = dispatcher.subscribe<::events::ui::UIButtonHoverExitNotification>(
-            [this](const ::events::ui::UIButtonHoverExitNotification& notif)
-            {
-                dispatchUIButtonCallback("onButtonHoverExit", notif.entity, notif.entityName);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI button events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUIButtonEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (buttonClickedToken.isValid())
-        {
-            dispatcher.unsubscribe(buttonClickedToken);
-        }
-        if (buttonPressedToken.isValid())
-        {
-            dispatcher.unsubscribe(buttonPressedToken);
-        }
-        if (buttonReleasedToken.isValid())
-        {
-            dispatcher.unsubscribe(buttonReleasedToken);
-        }
-        if (buttonHoverEnterToken.isValid())
-        {
-            dispatcher.unsubscribe(buttonHoverEnterToken);
-        }
-        if (buttonHoverExitToken.isValid())
-        {
-            dispatcher.unsubscribe(buttonHoverExitToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI button events");
-    }
-
-    void ScriptingAdapter::dispatchUIButtonCallback(const char* methodName,
-                                                     ::services::EntityHandle buttonEntity,
-                                                     const std::string& entityName)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUIButtonListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, methodName,
-                    {value::Value(static_cast<int>(buttonEntity.id)),
-                     value::Value(entityName)});
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    // ============================================
-    // UI TextInput event helpers
-    // ============================================
-
-    void ScriptingAdapter::subscribeToUITextInputEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        textInputSubmitToken = dispatcher.subscribe<::events::ui::UITextInputSubmitNotification>(
-            [this](const ::events::ui::UITextInputSubmitNotification& notif)
-            {
-                dispatchUITextInputCallback("onTextInputSubmit", notif.entity, notif.entityName, notif.text);
-            });
-
-        textInputChangedToken = dispatcher.subscribe<::events::ui::UITextInputChangedNotification>(
-            [this](const ::events::ui::UITextInputChangedNotification& notif)
-            {
-                dispatchUITextInputCallback("onTextInputChanged", notif.entity, notif.entityName, notif.text);
-            });
-
-        textInputFocusedToken = dispatcher.subscribe<::events::ui::UITextInputFocusedNotification>(
-            [this](const ::events::ui::UITextInputFocusedNotification& notif)
-            {
-                dispatchUITextInputCallback("onTextInputFocused", notif.entity, notif.entityName);
-            });
-
-        textInputUnfocusedToken = dispatcher.subscribe<::events::ui::UITextInputUnfocusedNotification>(
-            [this](const ::events::ui::UITextInputUnfocusedNotification& notif)
-            {
-                dispatchUITextInputCallback("onTextInputUnfocused", notif.entity, notif.entityName);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI text input events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUITextInputEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (textInputSubmitToken.isValid())
-        {
-            dispatcher.unsubscribe(textInputSubmitToken);
-        }
-        if (textInputChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(textInputChangedToken);
-        }
-        if (textInputFocusedToken.isValid())
-        {
-            dispatcher.unsubscribe(textInputFocusedToken);
-        }
-        if (textInputUnfocusedToken.isValid())
-        {
-            dispatcher.unsubscribe(textInputUnfocusedToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI text input events");
-    }
-
-    void ScriptingAdapter::dispatchUITextInputCallback(const char* methodName,
-                                                        ::services::EntityHandle entity,
-                                                        const std::string& entityName,
-                                                        const std::string& text)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUITextInputListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (text.empty() &&
-                    (method == "onTextInputFocused" ||
-                     method == "onTextInputUnfocused"))
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(entity.id)),
-                         value::Value(entityName)});
-                }
-                else
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(entity.id)),
-                         value::Value(entityName),
-                         value::Value(text)});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    // ============================================
-    // UI Checkbox event helpers
-    // ============================================
-
-    void ScriptingAdapter::subscribeToUICheckboxEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        checkboxToggledToken = dispatcher.subscribe<::events::ui::UICheckboxToggledNotification>(
-            [this](const ::events::ui::UICheckboxToggledNotification& notif)
-            {
-                dispatchUICheckboxCallback("onCheckboxToggled", notif.entity, notif.entityName,
-                                           notif.newCheckedState, notif.previousCheckedState);
-            });
-
-        checkboxHoverEnterToken = dispatcher.subscribe<::events::ui::UICheckboxHoverEnterNotification>(
-            [this](const ::events::ui::UICheckboxHoverEnterNotification& notif)
-            {
-                dispatchUICheckboxCallback("onCheckboxHoverEnter", notif.entity, notif.entityName);
-            });
-
-        checkboxHoverExitToken = dispatcher.subscribe<::events::ui::UICheckboxHoverExitNotification>(
-            [this](const ::events::ui::UICheckboxHoverExitNotification& notif)
-            {
-                dispatchUICheckboxCallback("onCheckboxHoverExit", notif.entity, notif.entityName);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI checkbox events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUICheckboxEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (checkboxToggledToken.isValid())
-        {
-            dispatcher.unsubscribe(checkboxToggledToken);
-        }
-        if (checkboxHoverEnterToken.isValid())
-        {
-            dispatcher.unsubscribe(checkboxHoverEnterToken);
-        }
-        if (checkboxHoverExitToken.isValid())
-        {
-            dispatcher.unsubscribe(checkboxHoverExitToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI checkbox events");
-    }
-
-    void ScriptingAdapter::dispatchUICheckboxCallback(const char* methodName,
-                                                       ::services::EntityHandle checkboxEntity,
-                                                       const std::string& entityName,
-                                                       bool newState, bool previousState)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUICheckboxListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (method == "onCheckboxToggled")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(checkboxEntity.id)),
-                         value::Value(entityName),
-                         value::Value(newState),
-                         value::Value(previousState)});
-                }
-                else
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(checkboxEntity.id)),
-                         value::Value(entityName)});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    void ScriptingAdapter::subscribeToUIDropdownEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        dropdownOpenedToken = dispatcher.subscribe<::events::ui::UIDropdownOpenedNotification>(
-            [this](const ::events::ui::UIDropdownOpenedNotification& notif)
-            {
-                dispatchUIDropdownCallback("onDropdownOpened", notif.entity, notif.entityName);
-            });
-
-        dropdownClosedToken = dispatcher.subscribe<::events::ui::UIDropdownClosedNotification>(
-            [this](const ::events::ui::UIDropdownClosedNotification& notif)
-            {
-                dispatchUIDropdownCallback("onDropdownClosed", notif.entity, notif.entityName);
-            });
-
-        dropdownSelectionChangedToken = dispatcher.subscribe<::events::ui::UIDropdownSelectionChangedNotification>(
-            [this](const ::events::ui::UIDropdownSelectionChangedNotification& notif)
-            {
-                dispatchUIDropdownCallback("onDropdownSelectionChanged", notif.entity, notif.entityName,
-                                           notif.previousIndex, notif.newIndex);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI dropdown events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUIDropdownEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (dropdownOpenedToken.isValid())
-        {
-            dispatcher.unsubscribe(dropdownOpenedToken);
-        }
-        if (dropdownClosedToken.isValid())
-        {
-            dispatcher.unsubscribe(dropdownClosedToken);
-        }
-        if (dropdownSelectionChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(dropdownSelectionChangedToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI dropdown events");
-    }
-
-    void ScriptingAdapter::dispatchUIDropdownCallback(const char* methodName,
-                                                       ::services::EntityHandle dropdownEntity,
-                                                       const std::string& entityName,
-                                                       int previousIndex, int newIndex)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUIDropdownListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (method == "onDropdownSelectionChanged")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(dropdownEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<int64_t>(previousIndex)),
-                         value::Value(static_cast<int64_t>(newIndex))});
-                }
-                else
-                {
-                    // onDropdownOpened, onDropdownClosed
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(dropdownEntity.id)),
-                         value::Value(entityName)});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    // ============================================
-    // UI Tabs event helpers
-    // ============================================
-
-    void ScriptingAdapter::subscribeToUITabsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        tabSelectedToken = dispatcher.subscribe<::events::ui::UITabSelectedNotification>(
-            [this](const ::events::ui::UITabSelectedNotification& notif)
-            {
-                dispatchUITabsCallback("onTabSelected", notif.entity, notif.entityName,
-                                       notif.tabIndex);
-            });
-
-        tabChangedToken = dispatcher.subscribe<::events::ui::UITabChangedNotification>(
-            [this](const ::events::ui::UITabChangedNotification& notif)
-            {
-                dispatchUITabsCallback("onTabChanged", notif.entity, notif.entityName,
-                                       notif.newTabIndex, notif.previousTabIndex);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI tabs events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUITabsEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (tabSelectedToken.isValid())
-        {
-            dispatcher.unsubscribe(tabSelectedToken);
-        }
-        if (tabChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(tabChangedToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI tabs events");
-    }
-
-    void ScriptingAdapter::dispatchUITabsCallback(const char* methodName,
-                                                    ::services::EntityHandle tabsEntity,
-                                                    const std::string& entityName,
-                                                    int tabIndex, int previousTabIndex)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUITabsListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (method == "onTabChanged")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(tabsEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<int64_t>(tabIndex)),
-                         value::Value(static_cast<int64_t>(previousTabIndex))});
-                }
-                else
-                {
-                    // onTabSelected
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(tabsEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<int64_t>(tabIndex))});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    // ============================================
-    // UI Slider event helpers
-    // ============================================
-
-    void ScriptingAdapter::subscribeToUISliderEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        sliderValueChangedToken = dispatcher.subscribe<::events::ui::UISliderValueChangedNotification>(
-            [this](const ::events::ui::UISliderValueChangedNotification& notif)
-            {
-                dispatchUISliderCallback("onSliderValueChanged", notif.entity, notif.entityName,
-                                         notif.newValue, notif.previousValue);
-            });
-
-        sliderDragStartToken = dispatcher.subscribe<::events::ui::UISliderDragStartNotification>(
-            [this](const ::events::ui::UISliderDragStartNotification& notif)
-            {
-                dispatchUISliderCallback("onSliderDragStart", notif.entity, notif.entityName);
-            });
-
-        sliderDragEndToken = dispatcher.subscribe<::events::ui::UISliderDragEndNotification>(
-            [this](const ::events::ui::UISliderDragEndNotification& notif)
-            {
-                dispatchUISliderCallback("onSliderDragEnd", notif.entity, notif.entityName,
-                                         0.0f, 0.0f, notif.finalValue);
-            });
-
-        sliderHoverEnterToken = dispatcher.subscribe<::events::ui::UISliderHoverEnterNotification>(
-            [this](const ::events::ui::UISliderHoverEnterNotification& notif)
-            {
-                dispatchUISliderCallback("onSliderHoverEnter", notif.entity, notif.entityName);
-            });
-
-        sliderHoverExitToken = dispatcher.subscribe<::events::ui::UISliderHoverExitNotification>(
-            [this](const ::events::ui::UISliderHoverExitNotification& notif)
-            {
-                dispatchUISliderCallback("onSliderHoverExit", notif.entity, notif.entityName);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI slider events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUISliderEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (sliderValueChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(sliderValueChangedToken);
-        }
-        if (sliderDragStartToken.isValid())
-        {
-            dispatcher.unsubscribe(sliderDragStartToken);
-        }
-        if (sliderDragEndToken.isValid())
-        {
-            dispatcher.unsubscribe(sliderDragEndToken);
-        }
-        if (sliderHoverEnterToken.isValid())
-        {
-            dispatcher.unsubscribe(sliderHoverEnterToken);
-        }
-        if (sliderHoverExitToken.isValid())
-        {
-            dispatcher.unsubscribe(sliderHoverExitToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI slider events");
-    }
-
-    void ScriptingAdapter::dispatchUISliderCallback(const char* methodName,
-                                                     ::services::EntityHandle sliderEntity,
-                                                     const std::string& entityName,
-                                                     float newValue, float previousValue,
-                                                     float finalValue)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUISliderListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (method == "onSliderValueChanged")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(sliderEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<float>(newValue)),
-                         value::Value(static_cast<float>(previousValue))});
-                }
-                else if (method == "onSliderDragEnd")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(sliderEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<float>(finalValue))});
-                }
-                else
-                {
-                    // onSliderDragStart, onSliderHoverEnter, onSliderHoverExit
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(sliderEntity.id)),
-                         value::Value(entityName)});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
-    }
-
-    // ============================================
-    // UI ProgressBar event helpers
-    // ============================================
-
-    void ScriptingAdapter::subscribeToUIProgressBarEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        progressBarValueChangedToken = dispatcher.subscribe<::events::ui::UIProgressBarValueChangedNotification>(
-            [this](const ::events::ui::UIProgressBarValueChangedNotification& notif)
-            {
-                dispatchUIProgressBarCallback("onProgressBarValueChanged", notif.entity, notif.entityName,
-                                              notif.newValue, notif.previousValue);
-            });
-
-        progressBarCompletedToken = dispatcher.subscribe<::events::ui::UIProgressBarCompletedNotification>(
-            [this](const ::events::ui::UIProgressBarCompletedNotification& notif)
-            {
-                dispatchUIProgressBarCallback("onProgressBarCompleted", notif.entity, notif.entityName);
-            });
-
-        vfLogInfo("[ScriptingAdapter] Subscribed to UI progress bar events");
-    }
-
-    void ScriptingAdapter::unsubscribeFromUIProgressBarEvents()
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        if (progressBarValueChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(progressBarValueChangedToken);
-        }
-        if (progressBarCompletedToken.isValid())
-        {
-            dispatcher.unsubscribe(progressBarCompletedToken);
-        }
-
-        vfLogInfo("[ScriptingAdapter] Unsubscribed from UI progress bar events");
-    }
-
-    void ScriptingAdapter::dispatchUIProgressBarCallback(const char* methodName,
-                                                          ::services::EntityHandle progressBarEntity,
-                                                          const std::string& entityName,
-                                                          float newValue, float previousValue)
-    {
-        for (const auto& [instanceId, interfaces] : instanceToInterfaces)
-        {
-            if (interfaces.find("IUIProgressBarListener") == interfaces.end())
-            {
-                continue;
-            }
-
-            auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end())
-            {
-                continue;
-            }
-
-            auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
-
-            try
-            {
-                auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                std::string_view method(methodName);
-                if (method == "onProgressBarValueChanged")
-                {
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(progressBarEntity.id)),
-                         value::Value(entityName),
-                         value::Value(static_cast<float>(newValue)),
-                         value::Value(static_cast<float>(previousValue))});
-                }
-                else
-                {
-                    // onProgressBarCompleted
-                    interpreter->callMethod(instance, methodName,
-                        {value::Value(static_cast<int>(progressBarEntity.id)),
-                         value::Value(entityName)});
-                }
-            }
-            catch (const std::exception& e)
-            {
-                vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
-            }
-        }
     }
 }

@@ -1,6 +1,5 @@
 #pragma once
 #include "../../services/providers/IScriptingProvider.hpp"
-#include "../../services/events/EventDispatcher.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>
@@ -15,75 +14,30 @@ namespace services
 
 namespace core
 {
+    class ScriptUIEventBridge;
+    class ScriptPhysicsEventBridge;
+
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
     private:
         std::unique_ptr<::services::ScriptInterpreter> interpreter;
         std::unique_ptr<NativeAPIRegistry> apiRegistry;
+        std::unique_ptr<ScriptUIEventBridge> uiEventBridge;
+        std::unique_ptr<ScriptPhysicsEventBridge> physicsEventBridge;
 
-        // Script instance tracking
-        std::unordered_map<uint64_t, std::string> instanceToClassName; // instanceId -> class name
-        std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity; // instanceId -> entity
-        std::unordered_map<uint64_t, std::any> instanceToObject; // instanceId -> script object instance (type-erased)
-        std::unordered_map<std::string, std::string> pathToClassName; // scriptPath -> class name
-
-        // Interface implementation cache (for collision/trigger callbacks)
-        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces; // instanceId -> implemented interfaces
-
+        std::unordered_map<uint64_t, std::string> instanceToClassName;
+        std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;
+        std::unordered_map<uint64_t, std::any> instanceToObject;
+        std::unordered_map<std::string, std::string> pathToClassName;
+        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces;
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
 
-        // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
-
 
         uint64_t nextInstanceId = 1;
         std::string scriptLibraryPath;
         bool initialized = false;
         bool compiled = false;
-
-        // Physics collision callback subscription tokens
-        ::events::SubscriptionToken collisionStartToken;
-        ::events::SubscriptionToken collisionEndToken;
-        ::events::SubscriptionToken triggerEnterToken;
-        ::events::SubscriptionToken triggerExitToken;
-
-        // UI Button callback subscription tokens
-        ::events::SubscriptionToken buttonClickedToken;
-        ::events::SubscriptionToken buttonPressedToken;
-        ::events::SubscriptionToken buttonReleasedToken;
-        ::events::SubscriptionToken buttonHoverEnterToken;
-        ::events::SubscriptionToken buttonHoverExitToken;
-
-        // UI TextInput callback subscription tokens
-        ::events::SubscriptionToken textInputSubmitToken;
-        ::events::SubscriptionToken textInputChangedToken;
-        ::events::SubscriptionToken textInputFocusedToken;
-        ::events::SubscriptionToken textInputUnfocusedToken;
-
-        // UI Checkbox callback subscription tokens
-        ::events::SubscriptionToken checkboxToggledToken;
-        ::events::SubscriptionToken checkboxHoverEnterToken;
-        ::events::SubscriptionToken checkboxHoverExitToken;
-
-        // UI Dropdown callback subscription tokens
-        ::events::SubscriptionToken dropdownOpenedToken;
-        ::events::SubscriptionToken dropdownClosedToken;
-        ::events::SubscriptionToken dropdownSelectionChangedToken;
-
-        // UI Tabs callback subscription tokens
-        ::events::SubscriptionToken tabSelectedToken;
-        ::events::SubscriptionToken tabChangedToken;
-
-        // UI Slider callback subscription tokens
-        ::events::SubscriptionToken sliderValueChangedToken;
-        ::events::SubscriptionToken sliderDragStartToken;
-        ::events::SubscriptionToken sliderDragEndToken;
-        ::events::SubscriptionToken sliderHoverEnterToken;
-        ::events::SubscriptionToken sliderHoverExitToken;
-
-        // UI ProgressBar callback subscription tokens
-        ::events::SubscriptionToken progressBarValueChangedToken;
-        ::events::SubscriptionToken progressBarCompletedToken;
 
     public:
         explicit ScriptingAdapter();
@@ -128,69 +82,6 @@ namespace core
                       const std::string& file = "", int line = 0);
 
         std::string extractClassName(const std::string& scriptPath);
-
         std::string getLibraryPath(const std::string& manifestPath) const;
-
-        // Physics collision callback helpers
-        void subscribeToPhysicsEvents();
-        void unsubscribeFromPhysicsEvents();
-        void dispatchCollisionCallback(const char* methodName,
-                                       ::services::EntityHandle self, ::services::EntityHandle other);
-
-        // UI Button callback helpers
-        void subscribeToUIButtonEvents();
-        void unsubscribeFromUIButtonEvents();
-        void dispatchUIButtonCallback(const char* methodName,
-                                      ::services::EntityHandle buttonEntity,
-                                      const std::string& entityName);
-
-        // UI TextInput callback helpers
-        void subscribeToUITextInputEvents();
-        void unsubscribeFromUITextInputEvents();
-        void dispatchUITextInputCallback(const char* methodName,
-                                         ::services::EntityHandle entity,
-                                         const std::string& entityName,
-                                         const std::string& text = "");
-
-        // UI Checkbox callback helpers
-        void subscribeToUICheckboxEvents();
-        void unsubscribeFromUICheckboxEvents();
-        void dispatchUICheckboxCallback(const char* methodName,
-                                        ::services::EntityHandle checkboxEntity,
-                                        const std::string& entityName,
-                                        bool newState = false, bool previousState = false);
-
-        // UI Dropdown callback helpers
-        void subscribeToUIDropdownEvents();
-        void unsubscribeFromUIDropdownEvents();
-        void dispatchUIDropdownCallback(const char* methodName,
-                                        ::services::EntityHandle dropdownEntity,
-                                        const std::string& entityName,
-                                        int previousIndex = -1, int newIndex = -1);
-
-        // UI Tabs callback helpers
-        void subscribeToUITabsEvents();
-        void unsubscribeFromUITabsEvents();
-        void dispatchUITabsCallback(const char* methodName,
-                                    ::services::EntityHandle tabsEntity,
-                                    const std::string& entityName,
-                                    int tabIndex = -1, int previousTabIndex = -1);
-
-        // UI Slider callback helpers
-        void subscribeToUISliderEvents();
-        void unsubscribeFromUISliderEvents();
-        void dispatchUISliderCallback(const char* methodName,
-                                      ::services::EntityHandle sliderEntity,
-                                      const std::string& entityName,
-                                      float newValue = 0.0f, float previousValue = 0.0f,
-                                      float finalValue = 0.0f);
-
-        // UI ProgressBar callback helpers
-        void subscribeToUIProgressBarEvents();
-        void unsubscribeFromUIProgressBarEvents();
-        void dispatchUIProgressBarCallback(const char* methodName,
-                                           ::services::EntityHandle progressBarEntity,
-                                           const std::string& entityName,
-                                           float newValue = 0.0f, float previousValue = 0.0f);
     };
 }
