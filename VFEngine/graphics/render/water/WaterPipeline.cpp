@@ -139,6 +139,7 @@ namespace render::water
             waterShader.reset();
         }
 
+        lastDescriptorTileCount = 0;
         initialized = false;
     }
 
@@ -457,6 +458,9 @@ namespace render::water
         if (!tileSSBO || tileCount == 0)
             return;
 
+        if (tileCount == lastDescriptorTileCount)
+            return;
+
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = tileSSBO;
         bufferInfo.offset = 0;
@@ -471,6 +475,7 @@ namespace render::water
         write.pBufferInfo = &bufferInfo;
 
         device.getLogicalDevice().updateDescriptorSets(write, nullptr);
+        lastDescriptorTileCount = tileCount;
     }
 
     void WaterPipeline::render(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,

@@ -117,6 +117,7 @@ namespace core
         if (physicsWorld)
             physicsWorld->cleanUp();
         fixedTimestep->reset();
+        waterSensorEntities.clear();
     }
 
     bool PhysicsAdapter::isInitialized() const
@@ -406,15 +407,17 @@ namespace core
         collider.collisionLayer = 3; // SENSOR layer
 
         addCollider(entity, collider);
+        waterSensorEntities.insert(entity.id);
     }
 
     void PhysicsAdapter::removeWaterSensorBody(services::EntityHandle entity)
     {
         removeCollider(entity);
+        waterSensorEntities.erase(entity.id);
     }
 
     bool PhysicsAdapter::hasWaterSensorBody(services::EntityHandle entity) const
     {
-        return hasRigidBody(entity);
+        return waterSensorEntities.contains(entity.id);
     }
 }

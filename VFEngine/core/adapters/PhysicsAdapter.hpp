@@ -5,6 +5,7 @@
 #include "../physics/FixedTimestep.hpp"
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 
 namespace core
 {
@@ -77,6 +78,8 @@ namespace core
         bool hasWaterSensorBody(services::EntityHandle entity) const override;
 
     private:
+        std::unordered_set<uint64_t> waterSensorEntities;
+
         void onContactAdded(const physics::ContactEvent& event);
         void onContactRemoved(const physics::ContactEvent& event);
     };

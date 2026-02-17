@@ -46,6 +46,7 @@ namespace render::water
         vk::DescriptorSetLayout cachedIBLLayout;
 
         bool initialized = false;
+        uint32_t lastDescriptorTileCount = 0;
 
     public:
         WaterPipeline(core::Device& device, core::SwapChain& swapChain);

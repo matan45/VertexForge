@@ -70,6 +70,16 @@ namespace events::water
         std::string_view getName() const override { return "HasWaterTileComponent"; }
     };
 
+    struct GetWaterEntityQuery : IQuery<services::EntityHandle> {
+        std::string_view getName() const override { return "GetWaterEntity"; }
+    };
+
+    struct GetWaterGlobalSettingsQuery : IQuery<services::WaterGlobalSettingsData> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetWaterGlobalSettings"; }
+    };
+
     struct RebuildWaterFromComponentsCommand : ICommand<void> {
         std::string_view getName() const override { return "RebuildWaterFromComponents"; }
     };

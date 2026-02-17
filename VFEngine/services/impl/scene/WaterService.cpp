@@ -11,7 +11,6 @@
 #include "../../events/WaterEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
-#include "../../events/TerrainEvents.hpp"
 #include "../../providers/IPhysicsProvider.hpp"
 #include "print/EditorLogger.hpp"
 
@@ -47,16 +46,6 @@ namespace services
         if (triggerExitSubscription && triggerExitSubscription->isValid())
         {
             dispatcher.unsubscribe(*triggerExitSubscription);
-        }
-
-        if (terrainCreatedSubscription && terrainCreatedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*terrainCreatedSubscription);
-        }
-
-        if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*terrainDeletedSubscription);
         }
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())
@@ -141,19 +130,6 @@ namespace services
         triggerExitSubscription = std::make_unique<events::SubscriptionToken>(exitToken);
 
         // Terrain lifecycle coupling — auto-create/delete water with terrain
-        auto terrainCreatedToken = dispatcher.subscribe<events::terrain::TerrainCreatedNotification>(
-            [this](const events::terrain::TerrainCreatedNotification& notification)
-            {
-                onTerrainCreated(notification.config, notification.terrainEntity);
-            });
-        terrainCreatedSubscription = std::make_unique<events::SubscriptionToken>(terrainCreatedToken);
-
-        auto terrainDeletedToken = dispatcher.subscribe<events::terrain::TerrainDeletedNotification>(
-            [this](const events::terrain::TerrainDeletedNotification& notification)
-            {
-                onTerrainDeleted(notification.terrainEntity);
-            });
-        terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainDeletedToken);
     }
 
     void WaterService::registerWaterCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -226,6 +202,35 @@ namespace services
             {
                 return hasWaterTileComponent(query.entity);
             });
+
+        dispatcher.registerQueryHandler<events::water::GetWaterEntityQuery>(
+            [this](const events::water::GetWaterEntityQuery&)
+            {
+                if (waterGrids.empty())
+                    return EntityHandle{};
+                return EntityHandle{waterGrids.begin()->first};
+            });
+
+        dispatcher.registerQueryHandler<events::water::GetWaterGlobalSettingsQuery>(
+            [this](const events::water::GetWaterGlobalSettingsQuery&)
+            {
+                auto settings = getWaterGlobalSettings();
+                WaterGlobalSettingsData data;
+                data.density = settings.density;
+                data.drag = settings.drag;
+                data.buoyancyStrength = settings.buoyancyStrength;
+                data.waveSpeed = settings.waveSpeed;
+                data.waveAmplitude = settings.waveAmplitude;
+                data.waveFrequency = settings.waveFrequency;
+                data.shallowColor = settings.shallowColor;
+                data.deepColor = settings.deepColor;
+                data.maxVisibleDepth = settings.maxVisibleDepth;
+                data.fresnelPower = settings.fresnelPower;
+                data.dudvTiling = settings.dudvTiling;
+                data.dudvStrength = settings.dudvStrength;
+                data.waveDirectionDegrees = settings.waveDirectionDegrees;
+                return data;
+            });
     }
 
     EntityHandle WaterService::createWater(const WaterCreationData& config)
@@ -274,6 +279,8 @@ namespace services
         notification.waterEntity = parentHandle;
         notification.config = config;
         events::EventDispatcher::instance().publish(notification);
+
+        globalSettingsDirty = true;
 
         vfLogInfo("Created water with {} tiles", config.tilesX * config.tilesZ);
 
@@ -330,6 +337,7 @@ namespace services
             return false;
 
         waterGrids.erase(waterEntity.id);
+        globalSettingsDirty = true;
 
         scene::Entity waterEnt(entity);
         sceneGraph->removeEntity(waterEnt);
@@ -437,6 +445,9 @@ namespace services
 
     float WaterService::getWaterHeightAt(const glm::vec2& worldXZ) const
     {
+        if (waterGrids.empty())
+            return 0.0f;
+
         float maxHeight = -std::numeric_limits<float>::max();
         for (const auto& [entityId, grid] : waterGrids)
         {
@@ -460,12 +471,13 @@ namespace services
 
         tile->updateHeight(height, gridIt->second->getConfig().worldTileSize);
 
-        // Update ECS component for this tile entity
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::WaterTileComponent>();
-        for (auto entity : view)
+        // Update ECS component for this tile entity (scoped to children of waterEntity)
+        scene::Entity parent(internal::fromHandle(waterEntity));
+        for (auto& child : parent.getChildren())
         {
-            auto& comp = view.get<components::WaterTileComponent>(entity);
+            if (!child.hasComponent<components::WaterTileComponent>())
+                continue;
+            auto& comp = child.getComponent<components::WaterTileComponent>();
             if (comp.tileX == tileX && comp.tileZ == tileZ)
             {
                 comp.waterHeight = height;
@@ -476,30 +488,34 @@ namespace services
 
     water::WaterGlobalSettings WaterService::getWaterGlobalSettings() const
     {
-        water::WaterGlobalSettings settings;
+        if (!globalSettingsDirty)
+            return cachedGlobalSettings;
+
+        cachedGlobalSettings = water::WaterGlobalSettings{};
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::WaterComponent>();
         for (auto entity : view)
         {
             const auto& comp = view.get<components::WaterComponent>(entity);
-            settings.density = comp.globalDensity;
-            settings.drag = comp.globalDrag;
-            settings.buoyancyStrength = comp.globalBuoyancyStrength;
-            settings.waveSpeed = comp.waveSpeed;
-            settings.waveAmplitude = comp.waveAmplitude;
-            settings.waveFrequency = comp.waveFrequency;
-            settings.shallowColor = comp.shallowColor;
-            settings.deepColor = comp.deepColor;
-            settings.maxVisibleDepth = comp.maxVisibleDepth;
-            settings.fresnelPower = comp.fresnelPower;
-            settings.dudvTiling = comp.dudvTiling;
-            settings.dudvStrength = comp.dudvStrength;
-            settings.waveDirectionDegrees = comp.waveDirectionDegrees;
+            cachedGlobalSettings.density = comp.globalDensity;
+            cachedGlobalSettings.drag = comp.globalDrag;
+            cachedGlobalSettings.buoyancyStrength = comp.globalBuoyancyStrength;
+            cachedGlobalSettings.waveSpeed = comp.waveSpeed;
+            cachedGlobalSettings.waveAmplitude = comp.waveAmplitude;
+            cachedGlobalSettings.waveFrequency = comp.waveFrequency;
+            cachedGlobalSettings.shallowColor = comp.shallowColor;
+            cachedGlobalSettings.deepColor = comp.deepColor;
+            cachedGlobalSettings.maxVisibleDepth = comp.maxVisibleDepth;
+            cachedGlobalSettings.fresnelPower = comp.fresnelPower;
+            cachedGlobalSettings.dudvTiling = comp.dudvTiling;
+            cachedGlobalSettings.dudvStrength = comp.dudvStrength;
+            cachedGlobalSettings.waveDirectionDegrees = comp.waveDirectionDegrees;
             break;
         }
 
-        return settings;
+        globalSettingsDirty = false;
+        return cachedGlobalSettings;
     }
 
     water::WaterTileConfig WaterService::getWaterTileConfig() const
@@ -537,6 +553,8 @@ namespace services
         comp.dudvTiling = settings.dudvTiling;
         comp.dudvStrength = settings.dudvStrength;
         comp.waveDirectionDegrees = settings.waveDirectionDegrees;
+
+        globalSettingsDirty = true;
     }
 
     void WaterService::onEntityDeleted(EntityHandle entity)
@@ -560,37 +578,13 @@ namespace services
     void WaterService::onSceneCleared()
     {
         entitiesInWater.clear();
+        globalSettingsDirty = true;
 
         if (waterGrids.empty())
             return;
 
         waterGrids.clear();
         vfLogInfo("WaterService: Cleared all water on scene clear");
-    }
-
-    void WaterService::onTerrainCreated(const TerrainCreationData& config,
-                                        EntityHandle /*terrainEntity*/)
-    {
-        // Don't auto-create if water already exists
-        if (!waterGrids.empty())
-            return;
-
-        WaterCreationData waterConfig;
-        waterConfig.tilesX = config.tilesX;
-        waterConfig.tilesZ = config.tilesZ;
-        waterConfig.worldTileSize = config.worldTileSize;
-        waterConfig.waterHeight = 0.0f;
-        waterConfig.waveIntensity = 1.0f;
-        waterConfig.physicsEnabled = true;
-
-        createWater(waterConfig);
-        vfLogInfo("WaterService: Auto-created water matching terrain grid ({}x{})",
-                  config.tilesX, config.tilesZ);
-    }
-
-    void WaterService::onTerrainDeleted(EntityHandle /*terrainEntity*/)
-    {
-        // Water is independent — don't auto-delete when terrain is removed
     }
 
     void WaterService::updateBuoyancy(float deltaTime)
@@ -691,6 +685,7 @@ namespace services
     {
         waterGrids.clear();
         entitiesInWater.clear();
+        globalSettingsDirty = true;
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto waterView = registry.view<components::WaterComponent>();

@@ -1,8 +1,6 @@
 #include "WaterEditorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/WaterEvents.hpp"
-#include "components/Components.hpp"
-#include "scene/EntityRegistry.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
 
@@ -19,31 +17,20 @@ namespace windows
         hasWater = false;
         waterEntity = {};
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::WaterComponent>();
-        for (auto entity : view)
-        {
-            waterEntity.id = static_cast<uint64_t>(entity);
-            hasWater = true;
+        auto& dispatcher = events::EventDispatcher::instance();
 
-            // Load global settings from current water
-            auto& comp = view.get<components::WaterComponent>(entity);
-            globalSettings.density = comp.globalDensity;
-            globalSettings.drag = comp.globalDrag;
-            globalSettings.buoyancyStrength = comp.globalBuoyancyStrength;
-            globalSettings.waveSpeed = comp.waveSpeed;
-            globalSettings.waveAmplitude = comp.waveAmplitude;
-            globalSettings.waveFrequency = comp.waveFrequency;
-            globalSettings.shallowColor = comp.shallowColor;
-            globalSettings.deepColor = comp.deepColor;
-            globalSettings.maxVisibleDepth = comp.maxVisibleDepth;
-            globalSettings.fresnelPower = comp.fresnelPower;
-            globalSettings.dudvTiling = comp.dudvTiling;
-            globalSettings.dudvStrength = comp.dudvStrength;
-            globalSettings.waveDirectionDegrees = comp.waveDirectionDegrees;
-            settingsDirty = false;
-            break;
-        }
+        events::water::GetWaterEntityQuery entityQuery;
+        waterEntity = dispatcher.query(entityQuery);
+
+        if (!waterEntity.isValid())
+            return;
+
+        hasWater = true;
+
+        events::water::GetWaterGlobalSettingsQuery settingsQuery;
+        settingsQuery.entity = waterEntity;
+        globalSettings = dispatcher.query(settingsQuery);
+        settingsDirty = false;
     }
 
     void WaterEditorWindow::draw()
