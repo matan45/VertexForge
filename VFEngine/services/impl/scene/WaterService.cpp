@@ -30,6 +30,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::water::DeleteWaterCommand>();
         dispatcher.unregisterCommandHandler<events::water::SetWaterTileHeightCommand>();
         dispatcher.unregisterCommandHandler<events::water::SetWaterGlobalSettingsCommand>();
+        dispatcher.unregisterCommandHandler<events::water::RebuildWaterFromComponentsCommand>();
+        dispatcher.unregisterCommandHandler<events::water::RemapWaterEntitiesCommand>();
 
         dispatcher.unregisterQueryHandler<events::water::GetWaterDataQuery>();
         dispatcher.unregisterQueryHandler<events::water::IsPositionInWaterQuery>();
@@ -179,6 +181,18 @@ namespace services
             {
                 setWaterGlobalSettings(cmd.waterEntity, cmd.settings);
             });
+
+        dispatcher.registerCommandHandler<events::water::RebuildWaterFromComponentsCommand>(
+            [this](const events::water::RebuildWaterFromComponentsCommand&)
+            {
+                rebuildWaterFromComponents();
+            });
+
+        dispatcher.registerCommandHandler<events::water::RemapWaterEntitiesCommand>(
+            [this](const events::water::RemapWaterEntitiesCommand&)
+            {
+                remapWaterEntities();
+            });
     }
 
     void WaterService::registerWaterQueryHandlers(::events::EventDispatcher& dispatcher)
@@ -233,9 +247,10 @@ namespace services
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
 
         auto& waterComp = parentEntity.addComponent<components::WaterComponent>();
+        waterComp.worldTileSize = config.worldTileSize;
         waterComp.globalDensity = 1000.0f;
         waterComp.globalDrag = 0.5f;
-        waterComp.globalBuoyancyStrength = 1.0f;
+        waterComp.globalBuoyancyStrength = 2.0f;
         waterComp.defaultWaterHeight = config.waterHeight;
         waterComp.defaultWaveIntensity = config.waveIntensity;
         waterComp.shallowColor = config.shallowColor;
@@ -573,22 +588,7 @@ namespace services
 
     void WaterService::onTerrainDeleted(EntityHandle /*terrainEntity*/)
     {
-        if (waterGrids.empty())
-            return;
-
-        // Collect all water entity IDs then delete
-        std::vector<EntityHandle> toDelete;
-        for (const auto& [entityId, grid] : waterGrids)
-        {
-            toDelete.push_back(EntityHandle{entityId});
-        }
-
-        for (const auto& handle : toDelete)
-        {
-            deleteWater(handle);
-        }
-
-        vfLogInfo("WaterService: Auto-deleted water on terrain deletion");
+        // Water is independent — don't auto-delete when terrain is removed
     }
 
     void WaterService::updateBuoyancy(float deltaTime)
@@ -683,5 +683,120 @@ namespace services
     void WaterService::clearBuoyancyTracking()
     {
         entitiesInWater.clear();
+    }
+
+    void WaterService::rebuildWaterFromComponents()
+    {
+        waterGrids.clear();
+        entitiesInWater.clear();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto waterView = registry.view<components::WaterComponent>();
+
+        for (auto entity : waterView)
+        {
+            const auto& waterComp = registry.get<components::WaterComponent>(entity);
+            EntityHandle waterHandle = internal::toHandle(entity);
+
+            water::WaterTileConfig tileConfig;
+            tileConfig.worldTileSize = waterComp.worldTileSize;
+
+            auto grid = std::make_unique<water::WaterGrid>(tileConfig, waterComp.defaultWaterHeight);
+            grid->createGrid(waterComp.gridMinX, waterComp.gridMinZ,
+                             waterComp.gridMaxX, waterComp.gridMaxZ);
+
+            // Update tiles from WaterTileComponent children
+            scene::Entity waterEntity(entity);
+            for (auto& child : waterEntity.getChildren())
+            {
+                if (!child.hasComponent<components::WaterTileComponent>())
+                    continue;
+
+                const auto& tileComp = child.getComponent<components::WaterTileComponent>();
+                water::WaterTile* tile = grid->getTile(water::TileCoord(tileComp.tileX, tileComp.tileZ));
+                if (tile)
+                {
+                    tile->updateHeight(tileComp.waterHeight, tileConfig.worldTileSize);
+                    tile->waveIntensity = tileComp.waveIntensity;
+                    tile->physicsEnabled = tileComp.physicsEnabled;
+                    tile->isVisible = tileComp.isVisible;
+                }
+
+                // Create physics sensor body
+                if (physicsProvider && tileComp.physicsEnabled)
+                {
+                    EntityHandle tileHandle = internal::toHandle(child.getHandle());
+                    glm::vec3 halfExtents(tileConfig.worldTileSize * 0.5f, 0.5f,
+                                          tileConfig.worldTileSize * 0.5f);
+                    auto& transform = child.getComponent<components::TransformComponent>();
+                    glm::vec3 position = transform.position + halfExtents;
+                    physicsProvider->addWaterSensorBody(tileHandle, position, halfExtents);
+                }
+            }
+
+            waterGrids[waterHandle.id] = std::move(grid);
+        }
+
+        if (!waterGrids.empty())
+        {
+            vfLogInfo("WaterService: Rebuilt {} water grid(s) from components", waterGrids.size());
+        }
+    }
+
+    void WaterService::remapWaterEntities()
+    {
+        if (waterGrids.empty())
+            return;
+
+        // Extract grids — old sensor bodies were already destroyed during snapshot restore
+        std::vector<std::unique_ptr<water::WaterGrid>> grids;
+        for (auto& [id, grid] : waterGrids)
+        {
+            grids.push_back(std::move(grid));
+        }
+        waterGrids.clear();
+        entitiesInWater.clear();
+
+        // Re-map to new entity IDs
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterComponent>();
+
+        size_t gridIndex = 0;
+        for (auto entity : view)
+        {
+            if (gridIndex >= grids.size())
+                break;
+
+            uint64_t newId = internal::toHandle(entity).id;
+            waterGrids[newId] = std::move(grids[gridIndex]);
+
+            // Re-create physics sensors for tile children
+            if (physicsProvider)
+            {
+                scene::Entity waterEntity(entity);
+                const auto& waterComp = registry.get<components::WaterComponent>(entity);
+                float tileSize = waterComp.worldTileSize;
+
+                for (auto& child : waterEntity.getChildren())
+                {
+                    if (!child.hasComponent<components::WaterTileComponent>())
+                        continue;
+
+                    const auto& tileComp = child.getComponent<components::WaterTileComponent>();
+                    if (tileComp.physicsEnabled)
+                    {
+                        EntityHandle tileHandle = internal::toHandle(child.getHandle());
+                        glm::vec3 halfExtents(tileSize * 0.5f, 0.5f, tileSize * 0.5f);
+                        auto& transform = child.getComponent<components::TransformComponent>();
+                        glm::vec3 position = transform.position + halfExtents;
+                        physicsProvider->addWaterSensorBody(tileHandle, position, halfExtents);
+                    }
+                }
+            }
+
+            gridIndex++;
+        }
+
+        vfLogInfo("WaterService: Remapped {} water grid(s) to new entity IDs", waterGrids.size());
     }
 }

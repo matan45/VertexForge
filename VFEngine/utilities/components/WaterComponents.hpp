@@ -9,7 +9,7 @@ namespace components
     {
         float globalDensity = 1000.0f;
         float globalDrag = 0.5f;
-        float globalBuoyancyStrength = 1.0f;
+        float globalBuoyancyStrength = 2.0f;
 
         float defaultWaterHeight = 0.0f;
         float defaultWaveIntensity = 1.0f;
@@ -25,6 +25,8 @@ namespace components
 
         float dudvTiling = 4.0f;
         float dudvStrength = 0.02f;
+
+        float worldTileSize = 32.0f;
 
         int32_t gridMinX = 0;
         int32_t gridMinZ = 0;

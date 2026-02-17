@@ -70,6 +70,14 @@ namespace events::water
         std::string_view getName() const override { return "HasWaterTileComponent"; }
     };
 
+    struct RebuildWaterFromComponentsCommand : ICommand<void> {
+        std::string_view getName() const override { return "RebuildWaterFromComponents"; }
+    };
+
+    struct RemapWaterEntitiesCommand : ICommand<void> {
+        std::string_view getName() const override { return "RemapWaterEntities"; }
+    };
+
     // === Notifications ===
 
     struct WaterCreatedNotification : INotification {

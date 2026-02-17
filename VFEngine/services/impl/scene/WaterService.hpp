@@ -80,6 +80,9 @@ namespace services
         void updateBuoyancy(float deltaTime);
         void clearBuoyancyTracking();
 
+        void rebuildWaterFromComponents();
+        void remapWaterEntities();
+
     private:
         void registerWaterCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerWaterQueryHandlers(::events::EventDispatcher& dispatcher);

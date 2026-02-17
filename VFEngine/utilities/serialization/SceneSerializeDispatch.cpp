@@ -102,6 +102,18 @@ namespace serialization
                 entity.getComponent<components::TerrainTileComponent>());
         }
 
+        if (entity.hasComponent<components::WaterComponent>())
+        {
+            componentsJson["water"] = serializeWater(
+                entity.getComponent<components::WaterComponent>());
+        }
+
+        if (entity.hasComponent<components::WaterTileComponent>())
+        {
+            componentsJson["waterTile"] = serializeWaterTile(
+                entity.getComponent<components::WaterTileComponent>());
+        }
+
         if (entity.hasComponent<components::UICanvasComponent>())
         {
             componentsJson["uiCanvas"] = serializeUICanvas(
@@ -323,6 +335,18 @@ namespace serialization
         {
             auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
             deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
+        }
+
+        if (componentsJson.contains("water"))
+        {
+            auto& waterComp = entity.addOrReplaceComponent<components::WaterComponent>();
+            deserializeWater(componentsJson["water"], waterComp);
+        }
+
+        if (componentsJson.contains("waterTile"))
+        {
+            auto& waterTileComp = entity.addOrReplaceComponent<components::WaterTileComponent>();
+            deserializeWaterTile(componentsJson["waterTile"], waterTileComp);
         }
 
         if (componentsJson.contains("uiCanvas"))

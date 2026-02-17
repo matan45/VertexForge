@@ -19,7 +19,7 @@ namespace water
     {
         float density = 1000.0f;
         float drag = 0.5f;
-        float buoyancyStrength = 1.0f;
+        float buoyancyStrength = 2.0f;
 
         float waveSpeed = 1.0f;
         float waveAmplitude = 0.5f;

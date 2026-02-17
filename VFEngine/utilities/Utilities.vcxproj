@@ -218,6 +218,7 @@
     <ClCompile Include="serialization\SceneSerializeSettings.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
+    <ClCompile Include="serialization\SceneSerializeWater.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />
     <ClCompile Include="terrain\BrushSampler.cpp" />
     <ClCompile Include="terrain\HeightmapLoader.cpp" />
