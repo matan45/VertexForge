@@ -130,6 +130,7 @@
     <ClInclude Include="adapters\api\PhysicsColliderAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
+    <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />

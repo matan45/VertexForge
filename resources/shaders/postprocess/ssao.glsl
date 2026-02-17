@@ -16,11 +16,12 @@ layout(set = 1, binding = 1) uniform SSAOParams {
     mat4 projection;
     mat4 inverseProjection;
     vec4 params;         // radius, bias, intensity, power
-    vec2 noiseScale;     // screenSize / 4.0
+    vec2 noiseScale;
     int kernelSize;
     float nearPlane;
     float farPlane;
-    float padding[3];
+    // C++ struct has 3 floats of padding here (12 bytes);
+    // std140 rounds block size to vec4 alignment (176 bytes total), matching C++ sizeof
 } ssao;
 
 float linearizeDepth(float d)

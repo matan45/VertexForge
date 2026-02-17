@@ -5,22 +5,12 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/PostProcessEvents.hpp"
+#include "PostProcessAPIHelpers.hpp"
+
+using core::api::detail::modifySettings;
 
 namespace core::api
 {
-    namespace
-    {
-        template<typename Mutator>
-        value::Value modifySettings(events::EventDispatcher& dispatcher, Mutator&& mutator)
-        {
-            auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-            mutator(settings);
-            events::postprocess::ApplyPostProcessSettingsCommand cmd;
-            cmd.settings = settings;
-            dispatcher.execute(cmd);
-            return value::Value(std::monostate{});
-        }
-    }
 
     void PostProcessAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {

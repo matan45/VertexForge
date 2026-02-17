@@ -138,6 +138,15 @@ namespace render
         gpuDrivenRendererInitialized = true;
     }
 
+    void RenderPassHandler::resetVolumetricFogComposite()
+    {
+        if (volumetricFogComposite)
+        {
+            volumetricFogComposite->cleanup();
+            volumetricFogComposite.reset();
+        }
+    }
+
     void RenderPassHandler::initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline)
     {
         if (volumetricFogComposite && volumetricFogComposite->isInitialized())

@@ -80,6 +80,7 @@ namespace controllers
         glm::vec2 uiViewportOffset{0.0f, 0.0f};
         glm::vec2 uiViewportPanelSize{0.0f, 0.0f};
         postprocess::PostProcessSettings currentPostProcessSettings;
+        postprocess::VolumetricQuality activeVolumetricQuality = postprocess::VolumetricQuality::Medium;
 
     public:
         explicit OffScreenController();

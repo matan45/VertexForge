@@ -259,6 +259,7 @@ namespace render
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
 
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
+        void resetVolumetricFogComposite();
         volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
 
         void cleanUp() const;

@@ -276,6 +276,15 @@ namespace controllers
             if (settings.volumetricFog.enabled && !gpuRenderer->getVolumetricPipeline())
             {
                 gpuRenderer->initVolumetricFog(settings.volumetricFog.quality);
+                activeVolumetricQuality = settings.volumetricFog.quality;
+            }
+            else if (settings.volumetricFog.enabled && gpuRenderer->getVolumetricPipeline()
+                     && settings.volumetricFog.quality != activeVolumetricQuality)
+            {
+                device.getLogicalDevice().waitIdle();
+                renderHandler->resetVolumetricFogComposite();
+                gpuRenderer->initVolumetricFog(settings.volumetricFog.quality);
+                activeVolumetricQuality = settings.volumetricFog.quality;
             }
 
             if (gpuRenderer->getVolumetricPipeline())
