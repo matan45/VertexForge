@@ -35,7 +35,6 @@ vec3 reconstructViewPos(vec2 uv, float depth)
     return viewPos.xyz / viewPos.w;
 }
 
-// Procedural noise based on pixel coordinates
 float hash(vec2 p)
 {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -48,7 +47,6 @@ vec2 hash2(vec2 p)
     return vec2(hash(p), hash(p + vec2(127.1, 311.7)));
 }
 
-// Generate hemisphere sample kernel
 vec3 generateSample(int index, vec2 noise)
 {
     float fi = float(index);
@@ -71,7 +69,6 @@ void main()
 {
     float depth = texture(depthTexture, texCoord).r;
 
-    // Skip sky pixels
     if (depth >= 1.0)
     {
         outOcclusion = 1.0;
@@ -80,16 +77,13 @@ void main()
 
     vec3 viewPos = reconstructViewPos(texCoord, depth);
 
-    // Reconstruct normal from depth derivatives
     vec3 dPdx = dFdx(viewPos);
     vec3 dPdy = dFdy(viewPos);
     vec3 normal = normalize(cross(dPdy, dPdx));
 
-    // Procedural noise for sample rotation
     vec2 pixelCoord = gl_FragCoord.xy;
     vec2 noise = hash2(pixelCoord) * 2.0 - 1.0;
 
-    // Build TBN matrix from normal + noise
     vec3 tangent = normalize(noise.x * dPdx + noise.y * dPdy);
     tangent = normalize(tangent - normal * dot(tangent, normal)); // Gram-Schmidt
     vec3 bitangent = cross(normal, tangent);
@@ -106,22 +100,19 @@ void main()
         vec3 sampleDir = TBN * generateSample(i, hash2(pixelCoord + vec2(float(i))));
         vec3 samplePos = viewPos + sampleDir * radius;
 
-        // Project sample to screen space
         vec4 offset = ssao.projection * vec4(samplePos, 1.0);
         offset.xyz /= offset.w;
         offset.xy = offset.xy * 0.5 + 0.5;
 
-        // Sample depth at projected position
         float sampleDepth = texture(depthTexture, offset.xy).r;
         vec3 sampleViewPos = reconstructViewPos(offset.xy, sampleDepth);
 
         // Range check: attenuate contribution based on distance
         float rangeCheck = smoothstep(0.0, 1.0, radius / abs(viewPos.z - sampleViewPos.z));
 
-        // Occlusion test
         occlusion += (sampleViewPos.z >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
     }
 
     occlusion = 1.0 - (occlusion / float(samples));
-    outOcclusion = pow(occlusion, ssao.params.w); // power
+    outOcclusion = pow(occlusion, ssao.params.w);
 }

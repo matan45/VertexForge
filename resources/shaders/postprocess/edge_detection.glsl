@@ -50,12 +50,10 @@ void main()
     d01 *= invFar; d21 *= invFar;
     d02 *= invFar; d12 *= invFar; d22 *= invFar;
 
-    // Sobel horizontal: Gx
     float gx = -d00 + d20
              - 2.0 * d01 + 2.0 * d21
              - d02 + d22;
 
-    // Sobel vertical: Gy
     float gy = -d00 - 2.0 * d10 - d20
              + d02 + 2.0 * d12 + d22;
 

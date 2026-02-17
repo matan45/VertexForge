@@ -2,10 +2,6 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 
-// Volumetric Light Injection Compute Shader
-// Injects light contributions into the froxel scattering volume
-// Each invocation processes one froxel cell
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(push_constant) uniform PushConstants {
@@ -134,27 +130,22 @@ layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
 // Shadow constants (must match ShadowTypes.hpp)
 const int MAX_SHADOW_VIEWS = 272;
-const int MAX_POINT_SHADOW_CUBES = 32;
 
-// Constants
 const float VOL_PI = 3.14159265359;
 const float LIGHT_INTENSITY_SCALE = 100.0;
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
-// Henyey-Greenstein phase function
 float henyeyGreenstein(float cosTheta, float g) {
     float g2 = g * g;
     float denom = 1.0 + g2 - 2.0 * g * cosTheta;
     return (1.0 - g2) / (4.0 * VOL_PI * pow(denom, 1.5));
 }
 
-// Logarithmic depth slice to linear depth
 float sliceToDepth(float slice, float near, float far, float numSlices) {
     float t = slice / numSlices;
     return near * pow(far / near, t);
 }
 
-// Reconstruct world-space position from froxel coordinates
 vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
     vec2 uv = (vec2(froxelCoord.xy) + 0.5) / vec2(dims.xy);
     float near = depthParams.x;
@@ -169,9 +160,8 @@ vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
     return worldPos.xyz / worldPos.w;
 }
 
-// Compute fog density at world position
 float computeFogDensity(vec3 worldPos) {
-    float density = fogParams.x; // uniform density
+    float density = fogParams.x;
 
     // Height-based exponential fog
     float heightAboveOffset = worldPos.y - fogParams.w;
@@ -185,21 +175,17 @@ float computeFogDensity(vec3 worldPos) {
     return max(density, 0.0);
 }
 
-// Map froxel to cluster index
 uint froxelToClusterIndex(ivec3 froxelCoord, uvec3 volDims) {
-    // Map froxel XY to screen-space tile, then compute cluster index
     float screenX = (float(froxelCoord.x) + 0.5) / float(volDims.x) * clusterParams.screenParams.x;
     float screenY = (float(froxelCoord.y) + 0.5) / float(volDims.y) * clusterParams.screenParams.y;
 
     uint tileX = uint(screenX / clusterParams.screenParams.z);
     uint tileY = uint(screenY / clusterParams.screenParams.w);
 
-    // Compute depth for this froxel
     float near = depthParams.x;
     float far = depthParams.y;
     float depth = sliceToDepth(float(froxelCoord.z) + 0.5, near, far, float(volDims.z));
 
-    // Map to cluster depth slice using cluster grid's log distribution
     float clusterNear = clusterParams.depthParams.x;
     float logRatio = log(max(depth, clusterNear) / clusterNear);
     uint slice = uint(logRatio * clusterParams.depthParams.w);
@@ -212,7 +198,6 @@ uint froxelToClusterIndex(ivec3 froxelCoord, uvec3 volDims) {
            slice * clusterParams.gridDimensions.x * clusterParams.gridDimensions.y;
 }
 
-// Shadow sampling for cascade shadows (simplified for volumetric - no PCF needed)
 float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
@@ -227,11 +212,9 @@ float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
     projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
     projCoords.z = clamp(projCoords.z, 0.0, 1.0);
 
-    // Single-tap shadow for volumetric (PCF not needed per-froxel)
     return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
 }
 
-// Directional shadow with cascade selection
 float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
@@ -263,7 +246,6 @@ float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, floa
     return mix(1.0, shadow, fadeFactor);
 }
 
-// Point light attenuation
 float smoothDistanceAttenuation(float distance, float range) {
     float distRatio = distance / range;
     float attenuation = clamp(1.0 - distRatio * distRatio, 0.0, 1.0);
@@ -276,7 +258,6 @@ float physicalAttenuation(float distance, float range) {
     return distAtt * windowFn;
 }
 
-// Spot light angle attenuation
 float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float cosOuter) {
     float cosAngle = dot(-lightDir, spotDir);
     if (cosInner <= cosOuter) {
@@ -292,39 +273,32 @@ void main() {
     if (froxelCoord.x >= int(dims.x) || froxelCoord.y >= int(dims.y) || froxelCoord.z >= int(dims.z))
         return;
 
-    // Reconstruct world-space position
     vec3 worldPos = froxelToWorld(froxelCoord, dims);
-
-    // Check max distance
     float distFromCamera = length(worldPos - cameraPosition.xyz);
     if (distFromCamera > scatterParams.w) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
         return;
     }
 
-    // Compute fog density
     float density = computeFogDensity(worldPos);
     if (density <= 0.0) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
         return;
     }
 
-    float sigmaS = scatterParams.x * density; // scattering coefficient
-    float sigmaA = scatterParams.y * density; // absorption coefficient
-    float sigmaT = sigmaS + sigmaA;           // extinction coefficient
+    float sigmaS = scatterParams.x * density;
+    float sigmaA = scatterParams.y * density;
+    float sigmaT = sigmaS + sigmaA;
     float anisotropy = scatterParams.z;
 
     vec3 viewDir = normalize(cameraPosition.xyz - worldPos);
     vec3 inScattered = vec3(0.0);
 
-    // Ambient contribution
     float ambientIntensity = ambientParams.x;
     inScattered += fogColor.rgb * fogColor.a * ambientIntensity;
 
-    // Compute view-space Z for cascade selection
     float viewZ = distFromCamera;
 
-    // Directional lights (with shadow sampling)
     for (uint i = 0; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
         vec3 L = -normalize(light.direction);
@@ -332,7 +306,6 @@ void main() {
         float phase = henyeyGreenstein(dot(viewDir, L), anisotropy);
         vec3 lightContrib = light.color * light.intensity * phase;
 
-        // Shadow attenuation
         float shadowFactor = 1.0;
         if (light.shadowIndex >= 0) {
             shadowFactor = sampleDirectionalShadowVolumetric(light.shadowIndex, worldPos, viewZ);
@@ -343,14 +316,12 @@ void main() {
         inScattered += lightContrib * shadowFactor;
     }
 
-    // Clustered point and spot lights
     uint clusterIndex = froxelToClusterIndex(froxelCoord, dims);
     ClusterLightData clusterData = clusterLightGrid[clusterIndex];
 
     uint pointCount = clusterData.counts & 0xFFFFu;
     uint spotCount = clusterData.counts >> 16u;
 
-    // Point lights
     for (uint i = 0; i < pointCount; ++i) {
         uint lightIndex = lightIndexList[clusterData.offset + i] & LIGHT_INDEX_MASK;
         PointLight light = pointLights[lightIndex];
@@ -366,7 +337,6 @@ void main() {
         inScattered += light.color * light.intensity * attenuation * phase;
     }
 
-    // Spot lights
     for (uint i = 0; i < spotCount; ++i) {
         uint packedIndex = lightIndexList[clusterData.offset + pointCount + i];
         uint lightIndex = packedIndex & LIGHT_INDEX_MASK;

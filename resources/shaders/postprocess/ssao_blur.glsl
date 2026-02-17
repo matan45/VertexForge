@@ -31,7 +31,6 @@ void main()
     float result = 0.0;
     float totalWeight = 0.0;
 
-    // 4x4 bilateral blur
     for (int x = -2; x <= 2; ++x)
     {
         for (int y = -2; y <= 2; ++y)

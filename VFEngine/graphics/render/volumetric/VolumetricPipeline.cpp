@@ -33,14 +33,12 @@ namespace render::volumetric
             return;
         }
 
-        // Create grid manager (3D images, descriptors, UBO)
         gridManager = std::make_unique<VolumetricGridManager>(device);
         gridManager->init(quality);
 
         const auto& dims = gridManager->getDimensions();
         auto gridDescLayout = gridManager->getDescriptorSetLayout();
 
-        // Create compute passes
         lightInjection = std::make_unique<VolumetricLightInjection>(device);
         lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout,
                              shadowDataLayout, shadowTextureLayout);

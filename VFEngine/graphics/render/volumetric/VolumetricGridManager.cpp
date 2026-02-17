@@ -155,18 +155,15 @@ namespace render::volumetric
 
     void VolumetricGridManager::createImages()
     {
-        // Scattering: written by injection compute, read by temporal compute
         create3DImage(scatteringImage, scatteringMemory, scatteringView,
                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
 
-        // History ping-pong: read as sampler, write as storage
         for (int i = 0; i < 2; ++i)
         {
             create3DImage(historyImages[i], historyMemory[i], historyViews[i],
                           vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
         }
 
-        // Integrated output: written by ray march, read by composite fragment shader
         create3DImage(integratedImage, integratedMemory, integratedView,
                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
     }
@@ -176,7 +173,6 @@ namespace render::volumetric
         auto& dev = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(dev, device.getStagingCommandPool());
 
-        // Collect all images that need transitioning: scattering + 2 history + integrated
         std::array<vk::ImageMemoryBarrier, 4> barriers{};
 
         vk::ImageSubresourceRange subRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};

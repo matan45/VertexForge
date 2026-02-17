@@ -10,13 +10,9 @@
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 outColor;
 
-// Binding 0: Depth texture
 layout(set = 0, binding = 0) uniform sampler2D depthTexture;
-
-// Binding 1: 3D integrated volume from compute passes
 layout(set = 0, binding = 1) uniform sampler3D integratedVolume;
 
-// Binding 2: Composite parameters
 layout(set = 0, binding = 2) uniform VolumetricCompositeParams {
     float nearPlane;
     float farPlane;
@@ -40,21 +36,17 @@ void main()
 {
     float rawDepth = texture(depthTexture, texCoord).r;
 
-    // Linearize depth
     float linearZ = linearizeDepth(rawDepth, params.nearPlane, params.farPlane);
 
-    // Convert to froxel UV
     float slice = depthToSlice(linearZ, params.nearPlane, params.farPlane, float(params.gridDimensions.z));
     float w = (slice + 0.5) / float(params.gridDimensions.z);
 
     vec3 volumeUV = vec3(texCoord, w);
 
-    // Sample integrated volume (trilinear filtering)
     vec4 volumeData = texture(integratedVolume, volumeUV);
 
     vec3 inScattered = volumeData.rgb * params.intensity;
     float transmittance = volumeData.a;
 
-    // Output: scattering.rgb + transmittance in alpha
     outColor = vec4(inScattered, transmittance);
 }

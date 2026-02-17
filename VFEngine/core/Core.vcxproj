@@ -191,6 +191,7 @@
     <ClCompile Include="adapters\api\PhysicsColliderAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
+    <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />

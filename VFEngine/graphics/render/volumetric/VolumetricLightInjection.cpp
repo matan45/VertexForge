@@ -81,7 +81,7 @@ namespace render::volumetric
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(uint32_t); // frameIndex
+        pushConstantRange.size = sizeof(uint32_t);
 
         std::array<vk::DescriptorSetLayout, 6> setLayouts = {
             volumetricGridLayout,   // Set 0: Volumetric grid params + scattering volume

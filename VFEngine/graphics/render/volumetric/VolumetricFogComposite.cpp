@@ -151,20 +151,17 @@ namespace render::volumetric
 
         updateParamsBuffer();
 
-        // Transition scene color: ShaderReadOnly -> ColorAttachment
         vk::Image sceneColor = offscreenResources.colorImages[imageIndex].colorImage;
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneColor,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        // Transition depth: DepthStencilAttachment -> DepthStencilReadOnly
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        // Begin render pass - blends fog directly into scene color
         vk::RenderPassBeginInfo rpBegin{};
         rpBegin.renderPass = renderPass;
         rpBegin.framebuffer = framebuffers[imageIndex];
@@ -180,7 +177,6 @@ namespace render::volumetric
 
         commandBuffer.endRenderPass();
 
-        // Transition depth back: DepthStencilReadOnly -> DepthStencilAttachment
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,

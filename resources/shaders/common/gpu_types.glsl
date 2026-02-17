@@ -105,9 +105,9 @@ struct TerrainTileGPUData {
     uvec4 lod2MeshletData;      // Same layout
     uvec4 lod3MeshletData;      // Same layout
     vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds (world units)
-    int coordX;                 // Tile coordinate X
-    int coordZ;                 // Tile coordinate Z
-    uint flags;                 // Rendering flags
+    int coordX;
+    int coordZ;
+    uint flags;
     uint weightMapOffset;       // Byte offset into weight map SSBO
 };
 
@@ -115,7 +115,7 @@ struct TerrainTileGPUData {
 struct TerrainLayerGPUData {
     uint albedoTextureIndex;    // Bindless index (0 = default white)
     uint normalTextureIndex;    // Bindless index (0 = default)
-    float tilingScale;          // UV tiling multiplier
+    float tilingScale;
     uint padding;
 };
 

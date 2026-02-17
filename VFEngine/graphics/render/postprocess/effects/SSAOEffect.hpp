@@ -37,13 +37,11 @@ namespace render::postprocess
         core::OffscreenResources& offscreenResources;
         PostProcessPipeline& pipeline;
 
-        // SSAO raw output image (R8Unorm)
         vk::Image ssaoRawImage;
         vk::DeviceMemory ssaoRawMemory;
         vk::ImageView ssaoRawImageView;
         vk::Framebuffer ssaoRawFramebuffer;
 
-        // SSAO blurred output image (R8Unorm)
         vk::Image ssaoBlurredImage;
         vk::DeviceMemory ssaoBlurredMemory;
         vk::ImageView ssaoBlurredImageView;

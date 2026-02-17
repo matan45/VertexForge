@@ -1,9 +1,6 @@
 #ifndef VOLUMETRIC_COMMON_GLSL
 #define VOLUMETRIC_COMMON_GLSL
 
-// Shared volumetric fog utility functions
-// Used by injection, temporal, ray march, and composite shaders
-
 const float VOL_PI = 3.14159265359;
 
 // Logarithmic depth slice distribution (matches cluster grid)
@@ -17,7 +14,6 @@ float depthToSlice(float depth, float near, float far, float numSlices) {
     return clamp(logRatio * numSlices, 0.0, numSlices - 1.0);
 }
 
-// Henyey-Greenstein phase function
 // g > 0: forward scattering, g < 0: back scattering, g = 0: isotropic
 float henyeyGreenstein(float cosTheta, float g) {
     float g2 = g * g;
@@ -25,17 +21,13 @@ float henyeyGreenstein(float cosTheta, float g) {
     return (1.0 - g2) / (4.0 * VOL_PI * pow(denom, 1.5));
 }
 
-// Reconstruct world-space position from froxel coordinates
 vec3 froxelToWorld(ivec3 froxelCoord, uvec3 gridDims, vec4 depthParams, mat4 invViewProj) {
-    // Normalized UV in [0,1]
     vec2 uv = (vec2(froxelCoord.xy) + 0.5) / vec2(gridDims.xy);
 
-    // Logarithmic depth
     float near = depthParams.x;
     float far = depthParams.y;
     float depth = sliceToDepth(float(froxelCoord.z) + 0.5, near, far, float(gridDims.z));
 
-    // NDC position
     vec2 ndc = uv * 2.0 - 1.0;
     float ndcDepth = (far * (depth - near)) / (depth * (far - near));
 
@@ -44,7 +36,6 @@ vec3 froxelToWorld(ivec3 froxelCoord, uvec3 gridDims, vec4 depthParams, mat4 inv
     return worldPos.xyz / worldPos.w;
 }
 
-// Compute fog density at a world-space position
 float computeFogDensity(vec3 worldPos, float uniformDensity, float heightDensity,
                         float heightFalloff, float heightOffset) {
     float density = uniformDensity;

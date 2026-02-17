@@ -1,10 +1,6 @@
 #type COMPUTE
 #version 450
 
-// Volumetric Ray March / Accumulation Compute Shader
-// Front-to-back accumulation of scattering and transmittance
-// 2D dispatch: each thread processes one XY column through all Z slices
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Set 0: Volumetric Grid (VolumetricGridManager)
@@ -20,13 +16,9 @@ layout(std140, set = 0, binding = 0) uniform VolumetricParamsUBO {
     vec4 cameraPosition;
 };
 
-// Read temporal-filtered scattering from history write (current frame output)
 layout(rgba16f, set = 0, binding = 3) uniform readonly image3D temporalOutput;
-
-// Write integrated volume
 layout(rgba16f, set = 0, binding = 4) uniform writeonly image3D integratedVolume;
 
-// Logarithmic depth slice to linear depth
 float sliceToDepth(float slice, float near, float far, float numSlices) {
     float t = slice / numSlices;
     return near * pow(far / near, t);
@@ -42,24 +34,20 @@ void main() {
     float near = depthParams.x;
     float far = depthParams.y;
 
-    // Front-to-back accumulation
     vec3 accumulatedScattering = vec3(0.0);
     float accumulatedTransmittance = 1.0;
 
     for (uint z = 0; z < dims.z; ++z) {
         ivec3 coord = ivec3(pixelCoord, z);
 
-        // Read temporally-filtered scattering data
         vec4 scatteringData = imageLoad(temporalOutput, coord);
-        vec3 inScattered = scatteringData.rgb;  // in-scattered light * sigma_s
-        float extinction = scatteringData.a;     // sigma_t (extinction coefficient)
+        vec3 inScattered = scatteringData.rgb;
+        float extinction = scatteringData.a;
 
-        // Compute slice thickness in world units
         float depthFront = sliceToDepth(float(z), near, far, float(dims.z));
         float depthBack = sliceToDepth(float(z + 1), near, far, float(dims.z));
         float sliceThickness = depthBack - depthFront;
 
-        // Compute transmittance through this slice
         float sliceTransmittance = exp(-extinction * sliceThickness);
 
         // Analytical integration of in-scattering within the slice
@@ -72,11 +60,9 @@ void main() {
             sliceScattering = inScattered * sliceThickness;
         }
 
-        // Accumulate with current transmittance
         accumulatedScattering += accumulatedTransmittance * sliceScattering;
         accumulatedTransmittance *= sliceTransmittance;
 
-        // Store per-slice integrated result
         imageStore(integratedVolume, coord, vec4(accumulatedScattering, accumulatedTransmittance));
     }
 }

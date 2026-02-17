@@ -32,15 +32,12 @@ namespace render::volumetric
         vk::DeviceMemory integratedMemory;
         vk::ImageView integratedView;
 
-        // Shared sampler (trilinear, clamp-to-edge)
         vk::Sampler trilinearSampler;
 
-        // UBO
         vk::Buffer paramsBuffer;
         vk::DeviceMemory paramsMemory;
         void* paramsMapped = nullptr;
 
-        // Descriptor resources
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSets[2]; // double-buffered for history ping-pong
