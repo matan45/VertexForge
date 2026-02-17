@@ -8,6 +8,7 @@
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
+#include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "offscreen/IBLController.hpp"
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
@@ -267,6 +268,33 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler)
             return;
+
+        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+
+        if (gpuRenderer && renderHandler->isGPUDrivenRendererInitialized())
+        {
+            if (settings.volumetricFog.enabled && !gpuRenderer->getVolumetricPipeline())
+            {
+                gpuRenderer->initVolumetricFog(settings.volumetricFog.quality);
+            }
+
+            if (gpuRenderer->getVolumetricPipeline())
+            {
+                gpuRenderer->updateVolumetricSettings(settings.volumetricFog);
+                gpuRenderer->setVolumetricFogEnabled(settings.volumetricFog.enabled);
+
+                if (!renderHandler->getVolumetricFogComposite())
+                {
+                    renderHandler->initVolumetricFogComposite(gpuRenderer->getVolumetricPipeline());
+                }
+
+                auto* composite = renderHandler->getVolumetricFogComposite();
+                if (composite)
+                {
+                    composite->setIntensity(settings.volumetricFog.intensity);
+                }
+            }
+        }
 
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)

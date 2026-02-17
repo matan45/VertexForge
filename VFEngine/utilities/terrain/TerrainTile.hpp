@@ -18,6 +18,7 @@ namespace terrain
         std::vector<resource::Meshlet> meshlets;
         std::vector<uint32_t> meshletVertices;
         std::vector<uint32_t> meshletPrimitives;
+        uint32_t mainMeshletCount = 0; // Surface-only meshlets (excludes skirts), used by shadow pass
 
         math::AABB aabb;
         glm::vec4 boundingSphere{0.0f};
@@ -33,6 +34,7 @@ namespace terrain
             meshlets.clear();
             meshletVertices.clear();
             meshletPrimitives.clear();
+            mainMeshletCount = 0;
             aabb = math::AABB();
             boundingSphere = glm::vec4(0.0f);
         }

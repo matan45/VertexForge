@@ -26,6 +26,7 @@ namespace render::postprocess
         float farPlane = 1000.0f;
         glm::vec3 cameraPosition{0.0f};
         glm::mat4 viewMatrix{1.0f};
+        glm::mat4 projectionMatrix{1.0f};
         float time = 0.0f;
     };
 
@@ -82,7 +83,7 @@ namespace render::postprocess
         const SunInfo& getSunData() const { return sunInfo; }
 
         void setCameraData(float nearPlane, float farPlane, const glm::vec3& cameraPosition,
-                          const glm::mat4& viewMatrix, float time);
+                          const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, float time);
         const CameraInfo& getCameraData() const { return cameraInfo; }
 
         bool hasEnabledEffects() const;

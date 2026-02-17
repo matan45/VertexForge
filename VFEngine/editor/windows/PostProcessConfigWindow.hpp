@@ -17,8 +17,10 @@ namespace windows
         void drawVignetteSection();
         void drawChromaticAberrationSection();
         void drawFilmGrainSection();
-        void drawGodRaysSection();
         void drawDepthOfFieldSection();
+        void drawVolumetricFogSection();
+        void drawSSAOSection();
+        void drawEdgeDetectionSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();

@@ -83,19 +83,23 @@ namespace terrain
         calculateNormals(lodData.vertices, lodData.indices, vertCount);
         overrideBoundaryNormals(lodData.vertices, tile, lodLevel, vertCount, getTile);
 
-        // Generate skirts for LOD crack prevention
+        // Generate meshlets for main surface BEFORE adding skirts
+        // so shadow pass can render only surface meshlets (no skirt shadows)
+        generateMeshlets(lodData);
+        lodData.mainMeshletCount = static_cast<uint32_t>(lodData.meshlets.size());
+
+        // Generate skirts for LOD crack prevention and append skirt meshlets
         if (config.skirtDepth > 0.0f)
         {
+            uint32_t mainIndexCount = static_cast<uint32_t>(lodData.indices.size());
             generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
+            appendSkirtMeshlets(lodData, mainIndexCount);
         }
 
         calculateBounds(lodData);
 
         // Extract edge vertices for stitching
         extractEdgeVertices(tile, lodLevel);
-
-        // Generate meshlets for GPU mesh shading
-        generateMeshlets(lodData);
 
         tile.clearLODDirty(lodLevel);
         if (tile.dirtyLODMask == 0)
@@ -116,6 +120,7 @@ namespace terrain
         auto meshlets = std::move(lodData.meshlets);
         auto meshletVertices = std::move(lodData.meshletVertices);
         auto meshletPrimitives = std::move(lodData.meshletPrimitives);
+        uint32_t savedMainMeshletCount = lodData.mainMeshletCount;
 
         lodData.clear();
 
@@ -139,6 +144,7 @@ namespace terrain
         lodData.meshlets = std::move(meshlets);
         lodData.meshletVertices = std::move(meshletVertices);
         lodData.meshletPrimitives = std::move(meshletPrimitives);
+        lodData.mainMeshletCount = savedMainMeshletCount;
 
         updateMeshletBounds(lodData);
 

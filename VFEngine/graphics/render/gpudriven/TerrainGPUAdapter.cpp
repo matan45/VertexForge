@@ -428,30 +428,30 @@ namespace render::gpudriven
                 static_cast<float>(tile->weightMap.activeLayerCount));
 
             // LOD meshlet data for each level
-            // Format: x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+            // Format: x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
             gpuTile.lod0MeshletData = glm::uvec4(
                 alloc.lodAllocs[0].meshletOffset,
                 alloc.lodAllocs[0].meshletCount,
                 alloc.lodAllocs[0].vertexOffset,
-                0
+                tile->lodLevels[0].mainMeshletCount
             );
             gpuTile.lod1MeshletData = glm::uvec4(
                 alloc.lodAllocs[1].meshletOffset,
                 alloc.lodAllocs[1].meshletCount,
                 alloc.lodAllocs[1].vertexOffset,
-                0
+                tile->lodLevels[1].mainMeshletCount
             );
             gpuTile.lod2MeshletData = glm::uvec4(
                 alloc.lodAllocs[2].meshletOffset,
                 alloc.lodAllocs[2].meshletCount,
                 alloc.lodAllocs[2].vertexOffset,
-                0
+                tile->lodLevels[2].mainMeshletCount
             );
             gpuTile.lod3MeshletData = glm::uvec4(
                 alloc.lodAllocs[3].meshletOffset,
                 alloc.lodAllocs[3].meshletCount,
                 alloc.lodAllocs[3].vertexOffset,
-                0
+                tile->lodLevels[3].mainMeshletCount
             );
 
             // Use current geometric errors from tile (not stale allocation) for correct GPU LOD selection

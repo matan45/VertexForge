@@ -253,72 +253,6 @@ public class PostProcess {
     }
 
     // ============================================
-    // God Rays
-    // ============================================
-
-    public static function isGodRaysEnabled(): bool {
-        return _native_postprocess_godRays_isEnabled();
-    }
-
-    public static function setGodRaysEnabled(bool enabled): void {
-        _native_postprocess_godRays_setEnabled(enabled);
-    }
-
-    // God rays overall brightness (0.0 - 2.0)
-    public static function getGodRaysIntensity(): float {
-        return _native_postprocess_godRays_getIntensity();
-    }
-
-    public static function setGodRaysIntensity(float value): void {
-        _native_postprocess_godRays_setIntensity(value);
-    }
-
-    // Exponential falloff per sample step (0.9 - 1.0)
-    public static function getGodRaysDecay(): float {
-        return _native_postprocess_godRays_getDecay();
-    }
-
-    public static function setGodRaysDecay(float value): void {
-        _native_postprocess_godRays_setDecay(value);
-    }
-
-    // Sample step spacing (0.1 - 2.0)
-    public static function getGodRaysDensity(): float {
-        return _native_postprocess_godRays_getDensity();
-    }
-
-    public static function setGodRaysDensity(float value): void {
-        _native_postprocess_godRays_setDensity(value);
-    }
-
-    // Per-sample contribution weight (0.0 - 2.0)
-    public static function getGodRaysWeight(): float {
-        return _native_postprocess_godRays_getWeight();
-    }
-
-    public static function setGodRaysWeight(float value): void {
-        _native_postprocess_godRays_setWeight(value);
-    }
-
-    // Number of ray marching steps (16 - 128)
-    public static function getGodRaysSampleCount(): int {
-        return _native_postprocess_godRays_getSampleCount();
-    }
-
-    public static function setGodRaysSampleCount(int value): void {
-        _native_postprocess_godRays_setSampleCount(value);
-    }
-
-    // Depth threshold for sky detection (0.0 - 1.0)
-    public static function getGodRaysThreshold(): float {
-        return _native_postprocess_godRays_getThreshold();
-    }
-
-    public static function setGodRaysThreshold(float value): void {
-        _native_postprocess_godRays_setThreshold(value);
-    }
-
-    // ============================================
     // Depth of Field
     // ============================================
 
@@ -399,5 +333,255 @@ public class PostProcess {
 
     public static function setDoFSampleCount(int value): void {
         _native_postprocess_dof_setSampleCount(value);
+    }
+
+    // ============================================
+    // Volumetric Fog
+    // ============================================
+
+    public static function isVolumetricFogEnabled(): bool {
+        return _native_postprocess_volumetricFog_isEnabled();
+    }
+
+    public static function setVolumetricFogEnabled(bool enabled): void {
+        _native_postprocess_volumetricFog_setEnabled(enabled);
+    }
+
+    // Quality: 0 = Low, 1 = Medium, 2 = High
+    public static function getVolumetricFogQuality(): int {
+        return _native_postprocess_volumetricFog_getQuality();
+    }
+
+    public static function setVolumetricFogQuality(int quality): void {
+        _native_postprocess_volumetricFog_setQuality(quality);
+    }
+
+    // Uniform fog density (0.0 - 1.0)
+    public static function getVolumetricFogDensity(): float {
+        return _native_postprocess_volumetricFog_getDensity();
+    }
+
+    public static function setVolumetricFogDensity(float value): void {
+        _native_postprocess_volumetricFog_setDensity(value);
+    }
+
+    // Fog color (RGB, 0.0 - 1.0 each)
+    public static function getVolumetricFogColorR(): float {
+        return _native_postprocess_volumetricFog_getColorR();
+    }
+
+    public static function getVolumetricFogColorG(): float {
+        return _native_postprocess_volumetricFog_getColorG();
+    }
+
+    public static function getVolumetricFogColorB(): float {
+        return _native_postprocess_volumetricFog_getColorB();
+    }
+
+    public static function setVolumetricFogColor(float r, float g, float b): void {
+        _native_postprocess_volumetricFog_setColor(r, g, b);
+    }
+
+    // Height fog density (0.0 - 1.0)
+    public static function getVolumetricFogHeightDensity(): float {
+        return _native_postprocess_volumetricFog_getHeightFogDensity();
+    }
+
+    public static function setVolumetricFogHeightDensity(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogDensity(value);
+    }
+
+    // Height fog falloff rate (0.0 - 1.0)
+    public static function getVolumetricFogHeightFalloff(): float {
+        return _native_postprocess_volumetricFog_getHeightFogFalloff();
+    }
+
+    public static function setVolumetricFogHeightFalloff(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogFalloff(value);
+    }
+
+    // Height fog offset (world Y position, -100.0 - 500.0)
+    public static function getVolumetricFogHeightOffset(): float {
+        return _native_postprocess_volumetricFog_getHeightFogOffset();
+    }
+
+    public static function setVolumetricFogHeightOffset(float value): void {
+        _native_postprocess_volumetricFog_setHeightFogOffset(value);
+    }
+
+    // Scattering coefficient (0.0 - 5.0)
+    public static function getVolumetricFogScattering(): float {
+        return _native_postprocess_volumetricFog_getScatteringCoefficient();
+    }
+
+    public static function setVolumetricFogScattering(float value): void {
+        _native_postprocess_volumetricFog_setScatteringCoefficient(value);
+    }
+
+    // Absorption coefficient (0.0 - 5.0)
+    public static function getVolumetricFogAbsorption(): float {
+        return _native_postprocess_volumetricFog_getAbsorptionCoefficient();
+    }
+
+    public static function setVolumetricFogAbsorption(float value): void {
+        _native_postprocess_volumetricFog_setAbsorptionCoefficient(value);
+    }
+
+    // Anisotropy: directional scattering bias (-1.0 to 1.0)
+    public static function getVolumetricFogAnisotropy(): float {
+        return _native_postprocess_volumetricFog_getAnisotropy();
+    }
+
+    public static function setVolumetricFogAnisotropy(float value): void {
+        _native_postprocess_volumetricFog_setAnisotropy(value);
+    }
+
+    // Overall fog intensity multiplier (0.0 - 5.0)
+    public static function getVolumetricFogIntensity(): float {
+        return _native_postprocess_volumetricFog_getIntensity();
+    }
+
+    public static function setVolumetricFogIntensity(float value): void {
+        _native_postprocess_volumetricFog_setIntensity(value);
+    }
+
+    // Ambient light contribution in fog (0.0 - 1.0)
+    public static function getVolumetricFogAmbientIntensity(): float {
+        return _native_postprocess_volumetricFog_getAmbientIntensity();
+    }
+
+    public static function setVolumetricFogAmbientIntensity(float value): void {
+        _native_postprocess_volumetricFog_setAmbientIntensity(value);
+    }
+
+    // Maximum fog render distance (10.0 - 5000.0)
+    public static function getVolumetricFogMaxDistance(): float {
+        return _native_postprocess_volumetricFog_getMaxDistance();
+    }
+
+    public static function setVolumetricFogMaxDistance(float value): void {
+        _native_postprocess_volumetricFog_setMaxDistance(value);
+    }
+
+    // Temporal blend factor for smoothing (0.0 - 1.0)
+    public static function getVolumetricFogTemporalBlend(): float {
+        return _native_postprocess_volumetricFog_getTemporalBlendFactor();
+    }
+
+    public static function setVolumetricFogTemporalBlend(float value): void {
+        _native_postprocess_volumetricFog_setTemporalBlendFactor(value);
+    }
+
+    // ============================================
+    // SSAO (Screen-Space Ambient Occlusion)
+    // ============================================
+
+    public static function isSSAOEnabled(): bool {
+        return _native_postprocess_ssao_isEnabled();
+    }
+
+    public static function setSSAOEnabled(bool enabled): void {
+        _native_postprocess_ssao_setEnabled(enabled);
+    }
+
+    // World-space sample radius (0.1 - 5.0)
+    public static function getSSAORadius(): float {
+        return _native_postprocess_ssao_getRadius();
+    }
+
+    public static function setSSAORadius(float value): void {
+        _native_postprocess_ssao_setRadius(value);
+    }
+
+    // Depth comparison bias (0.001 - 0.1)
+    public static function getSSAOBias(): float {
+        return _native_postprocess_ssao_getBias();
+    }
+
+    public static function setSSAOBias(float value): void {
+        _native_postprocess_ssao_setBias(value);
+    }
+
+    // AO darkening strength (0.1 - 5.0)
+    public static function getSSAOIntensity(): float {
+        return _native_postprocess_ssao_getIntensity();
+    }
+
+    public static function setSSAOIntensity(float value): void {
+        _native_postprocess_ssao_setIntensity(value);
+    }
+
+    // Hemisphere samples (8 - 64)
+    public static function getSSAOKernelSize(): int {
+        return _native_postprocess_ssao_getKernelSize();
+    }
+
+    public static function setSSAOKernelSize(int value): void {
+        _native_postprocess_ssao_setKernelSize(value);
+    }
+
+    // Contrast power curve (0.5 - 5.0)
+    public static function getSSAOPower(): float {
+        return _native_postprocess_ssao_getPower();
+    }
+
+    public static function setSSAOPower(float value): void {
+        _native_postprocess_ssao_setPower(value);
+    }
+
+    // ============================================
+    // Edge Detection
+    // ============================================
+
+    public static function isEdgeDetectionEnabled(): bool {
+        return _native_postprocess_edgeDetection_isEnabled();
+    }
+
+    public static function setEdgeDetectionEnabled(bool enabled): void {
+        _native_postprocess_edgeDetection_setEnabled(enabled);
+    }
+
+    // Edge sensitivity threshold (0.01 - 1.0)
+    public static function getEdgeDetectionThreshold(): float {
+        return _native_postprocess_edgeDetection_getThreshold();
+    }
+
+    public static function setEdgeDetectionThreshold(float value): void {
+        _native_postprocess_edgeDetection_setThreshold(value);
+    }
+
+    // Edge line thickness (0.5 - 3.0)
+    public static function getEdgeDetectionWidth(): float {
+        return _native_postprocess_edgeDetection_getEdgeWidth();
+    }
+
+    public static function setEdgeDetectionWidth(float value): void {
+        _native_postprocess_edgeDetection_setEdgeWidth(value);
+    }
+
+    // Edge color (RGB, 0.0 - 1.0 each)
+    public static function getEdgeDetectionColorR(): float {
+        return _native_postprocess_edgeDetection_getColorR();
+    }
+
+    public static function getEdgeDetectionColorG(): float {
+        return _native_postprocess_edgeDetection_getColorG();
+    }
+
+    public static function getEdgeDetectionColorB(): float {
+        return _native_postprocess_edgeDetection_getColorB();
+    }
+
+    public static function setEdgeDetectionColor(float r, float g, float b): void {
+        _native_postprocess_edgeDetection_setColor(r, g, b);
+    }
+
+    // Edge overlay opacity (0.0 - 1.0)
+    public static function getEdgeDetectionOpacity(): float {
+        return _native_postprocess_edgeDetection_getOpacity();
+    }
+
+    public static function setEdgeDetectionOpacity(float value): void {
+        _native_postprocess_edgeDetection_setOpacity(value);
     }
 }

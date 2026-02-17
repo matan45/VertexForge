@@ -11,5 +11,9 @@ namespace core::api
     {
     public:
         static void registerAPI(services::ScriptInterpreter* interpreter);
+
+    private:
+        static void registerCoreEffects(services::ScriptInterpreter* interpreter);
+        static void registerAdvancedEffects(services::ScriptInterpreter* interpreter);
     };
 }

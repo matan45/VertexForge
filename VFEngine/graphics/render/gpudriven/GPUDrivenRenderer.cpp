@@ -193,6 +193,7 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (volumetricPipeline) volumetricPipeline->cleanup();
         if (terrainPipeline) terrainPipeline->cleanup();
         if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -209,6 +210,7 @@ namespace render::gpudriven
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        volumetricPipeline.reset();
         meshStreamManager.reset();
         terrainStreamManager.reset();
         terrainAdapter.reset();
@@ -477,5 +479,49 @@ namespace render::gpudriven
     uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
     {
         return lightsAfterHiZCull;
+    }
+
+    void GPUDrivenRenderer::initVolumetricFog(::postprocess::VolumetricQuality quality)
+    {
+        if (!initialized || !clusterGridManager || !lightBufferManager || !lightCullingPipeline)
+        {
+            loggerWarning("GPUDrivenRenderer: Cannot init volumetric fog - lighting subsystems not ready");
+            return;
+        }
+
+        if (volumetricPipeline)
+        {
+            volumetricPipeline->cleanup();
+            volumetricPipeline.reset();
+        }
+
+        auto volQuality = static_cast<volumetric::VolumetricQuality>(static_cast<uint8_t>(quality));
+
+        volumetricPipeline = std::make_unique<volumetric::VolumetricPipeline>(device);
+        volumetricPipeline->init(
+            volQuality,
+            clusterGridManager->getDescriptorSetLayout(),
+            lightBufferManager->getDescriptorSetLayout(),
+            lightCullingPipeline->getDescriptorSetLayout(),
+            shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
+            shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
+
+        loggerInfo("GPUDrivenRenderer: Volumetric fog initialized");
+    }
+
+    void GPUDrivenRenderer::setVolumetricFogEnabled(bool value)
+    {
+        if (volumetricPipeline)
+            volumetricPipeline->setEnabled(value);
+    }
+
+    bool GPUDrivenRenderer::isVolumetricFogEnabled() const
+    {
+        return volumetricPipeline && volumetricPipeline->isEnabled();
+    }
+
+    void GPUDrivenRenderer::updateVolumetricSettings(const ::postprocess::VolumetricFogSettings& settings)
+    {
+        cachedVolumetricSettings = settings;
     }
 }

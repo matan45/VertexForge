@@ -1,19 +1,17 @@
-#include "GodRaysEffect.hpp"
+#include "EdgeDetectionEffect.hpp"
 #include "../PostProcessPipeline.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/OffScreen.hpp"
 #include "../../../core/ImageUtilities.hpp"
-#include "../../../core/BufferUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
-#include <cstring>
 
 namespace render::postprocess
 {
-    GodRaysEffect::GodRaysEffect(core::Device& device, core::SwapChain& swapChain,
-                                   core::OffscreenResources& offscreenResources,
-                                   PostProcessPipeline& pipeline)
+    EdgeDetectionEffect::EdgeDetectionEffect(core::Device& device, core::SwapChain& swapChain,
+                                             core::OffscreenResources& offscreenResources,
+                                             PostProcessPipeline& pipeline)
         : device{device}, swapChain{swapChain},
           offscreenResources{offscreenResources}, pipeline{pipeline}
     {
@@ -29,31 +27,30 @@ namespace render::postprocess
         }
     }
 
-    void GodRaysEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void EdgeDetectionEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
     {
         currentExtent = extent;
 
         createSampler();
-        createRayRenderPass();
-        createRayImage();
+        createEdgeRenderPass();
+        createIntermediateImage();
         createDepthImageView();
-        createSunBuffer();
         createDescriptorSetLayouts();
         createDescriptorPool();
         createDescriptorSets();
         loadShaders();
-        createRayPipeline();
+        createEdgePipeline();
         createCompositePipeline(renderPass);
 
         initialized = true;
     }
 
-    void GodRaysEffect::cleanup()
+    void EdgeDetectionEffect::cleanup()
     {
         auto& dev = device.getLogicalDevice();
 
         cleanupPipelines();
-        cleanupRayImage();
+        cleanupIntermediateImage();
 
         if (depthOnlyImageView)
         {
@@ -67,10 +64,10 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (rayDescriptorSetLayout)
+        if (edgeDescriptorSetLayout)
         {
-            dev.destroyDescriptorSetLayout(rayDescriptorSetLayout);
-            rayDescriptorSetLayout = nullptr;
+            dev.destroyDescriptorSetLayout(edgeDescriptorSetLayout);
+            edgeDescriptorSetLayout = nullptr;
         }
 
         if (compositeDescriptorSetLayout)
@@ -79,20 +76,10 @@ namespace render::postprocess
             compositeDescriptorSetLayout = nullptr;
         }
 
-        if (rayRenderPass)
+        if (edgeRenderPass)
         {
-            dev.destroyRenderPass(rayRenderPass);
-            rayRenderPass = nullptr;
-        }
-
-        if (sunBuffer)
-        {
-            if (sunBufferMapped)
-            {
-                dev.unmapMemory(sunBufferMemory);
-                sunBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, sunBuffer, sunBufferMemory);
+            dev.destroyRenderPass(edgeRenderPass);
+            edgeRenderPass = nullptr;
         }
 
         if (sampler)
@@ -101,28 +88,19 @@ namespace render::postprocess
             sampler = nullptr;
         }
 
-        if (rayShader)
-        {
-            rayShader->cleanUp();
-            rayShader.reset();
-        }
-
-        if (compositeShader)
-        {
-            compositeShader->cleanUp();
-            compositeShader.reset();
-        }
+        if (edgeShader) { edgeShader->cleanUp(); edgeShader.reset(); }
+        if (compositeShader) { compositeShader->cleanUp(); compositeShader.reset(); }
 
         initialized = false;
     }
 
-    void GodRaysEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void EdgeDetectionEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
     {
         currentExtent = extent;
         auto& dev = device.getLogicalDevice();
 
         cleanupPipelines();
-        cleanupRayImage();
+        cleanupIntermediateImage();
 
         if (depthOnlyImageView)
         {
@@ -136,26 +114,24 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (rayRenderPass)
+        if (edgeRenderPass)
         {
-            dev.destroyRenderPass(rayRenderPass);
-            rayRenderPass = nullptr;
+            dev.destroyRenderPass(edgeRenderPass);
+            edgeRenderPass = nullptr;
         }
 
-        createRayRenderPass();
-        createRayImage();
+        createEdgeRenderPass();
+        createIntermediateImage();
         createDepthImageView();
         createDescriptorPool();
         createDescriptorSets();
-        createRayPipeline();
+        createEdgePipeline();
         createCompositePipeline(renderPass);
     }
 
-    void GodRaysEffect::preRecord(const vk::CommandBuffer& commandBuffer,
-                                    vk::DescriptorSet inputDescriptorSet)
+    void EdgeDetectionEffect::preRecord(const vk::CommandBuffer& commandBuffer,
+                                         vk::DescriptorSet inputDescriptorSet)
     {
-        updateSunBuffer();
-
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
@@ -163,16 +139,35 @@ namespace render::postprocess
             depthAspectMask);
 
         vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = rayRenderPass;
-        rpBegin.framebuffer = rayFramebuffer;
+        rpBegin.renderPass = edgeRenderPass;
+        rpBegin.framebuffer = intermediateFramebuffer;
         rpBegin.renderArea.offset = vk::Offset2D{0, 0};
         rpBegin.renderArea.extent = currentExtent;
 
         commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, rayPipeline);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, edgePipeline);
+
+        std::array<vk::DescriptorSet, 2> sets = {inputDescriptorSet, edgeDescriptorSet};
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                          rayPipelineLayout, 0, rayDescriptorSet, nullptr);
+                                          edgePipelineLayout, 0,
+                                          static_cast<uint32_t>(sets.size()),
+                                          sets.data(), 0, nullptr);
+
+        const auto& camInfo = pipeline.getCameraData();
+        EdgeDetectionPushConstants pc{};
+        pc.threshold = currentThreshold;
+        pc.edgeWidth = currentEdgeWidth;
+        pc.edgeColorR = currentEdgeColor[0];
+        pc.edgeColorG = currentEdgeColor[1];
+        pc.edgeColorB = currentEdgeColor[2];
+        pc.opacity = currentOpacity;
+        pc.nearPlane = camInfo.nearPlane;
+        pc.farPlane = camInfo.farPlane;
+
+        commandBuffer.pushConstants(edgePipelineLayout,
+                                     vk::ShaderStageFlagBits::eFragment,
+                                     0, sizeof(EdgeDetectionPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
         commandBuffer.endRenderPass();
@@ -184,8 +179,8 @@ namespace render::postprocess
             depthAspectMask);
     }
 
-    void GodRaysEffect::record(const vk::CommandBuffer& commandBuffer,
-                                 vk::DescriptorSet inputDescriptorSet)
+    void EdgeDetectionEffect::record(const vk::CommandBuffer& commandBuffer,
+                                      vk::DescriptorSet inputDescriptorSet)
     {
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
 
@@ -198,19 +193,19 @@ namespace render::postprocess
         commandBuffer.draw(3, 1, 0, 0);
     }
 
-    void GodRaysEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)
+    void EdgeDetectionEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)
     {
-        const auto& g = settings.godRays;
-        enabled = g.enabled;
-        currentIntensity = g.intensity;
-        currentDecay = g.decay;
-        currentDensity = g.density;
-        currentWeight = g.weight;
-        currentSampleCount = g.sampleCount;
-        currentThreshold = g.threshold;
+        const auto& e = settings.edgeDetection;
+        enabled = e.enabled;
+        currentThreshold = e.threshold;
+        currentEdgeWidth = e.edgeWidth;
+        currentEdgeColor[0] = e.edgeColor[0];
+        currentEdgeColor[1] = e.edgeColor[1];
+        currentEdgeColor[2] = e.edgeColor[2];
+        currentOpacity = e.opacity;
     }
 
-    void GodRaysEffect::createSampler()
+    void EdgeDetectionEffect::createSampler()
     {
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -225,7 +220,7 @@ namespace render::postprocess
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 
-    void GodRaysEffect::createRayRenderPass()
+    void EdgeDetectionEffect::createEdgeRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = vk::Format::eR8G8B8A8Unorm;
@@ -262,10 +257,10 @@ namespace render::postprocess
         rpInfo.dependencyCount = 1;
         rpInfo.pDependencies = &dependency;
 
-        rayRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
+        edgeRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
     }
 
-    void GodRaysEffect::createRayImage()
+    void EdgeDetectionEffect::createIntermediateImage()
     {
         auto& dev = device.getLogicalDevice();
 
@@ -278,24 +273,24 @@ namespace render::postprocess
                   | vk::ImageUsageFlagBits::eSampled;
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::ImageUtilities::createImage(req, rayImage, rayMemory);
+        core::ImageUtilities::createImage(req, intermediateImage, intermediateMemory);
 
-        core::ImageViewInfoRequest viewReq(dev, rayImage);
+        core::ImageViewInfoRequest viewReq(dev, intermediateImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
-        core::ImageUtilities::createImageView(viewReq, rayImageView);
+        core::ImageUtilities::createImageView(viewReq, intermediateImageView);
 
         vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = rayRenderPass;
+        fbInfo.renderPass = edgeRenderPass;
         fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &rayImageView;
+        fbInfo.pAttachments = &intermediateImageView;
         fbInfo.width = currentExtent.width;
         fbInfo.height = currentExtent.height;
         fbInfo.layers = 1;
 
-        rayFramebuffer = dev.createFramebuffer(fbInfo);
+        intermediateFramebuffer = dev.createFramebuffer(fbInfo);
     }
 
-    void GodRaysEffect::createDepthImageView()
+    void EdgeDetectionEffect::createDepthImageView()
     {
         vk::ImageViewCreateInfo viewInfo{};
         viewInfo.image = offscreenResources.depthImage.depthImage;
@@ -310,44 +305,26 @@ namespace render::postprocess
         depthOnlyImageView = device.getLogicalDevice().createImageView(viewInfo);
     }
 
-    void GodRaysEffect::createSunBuffer()
+    void EdgeDetectionEffect::createDescriptorSetLayouts()
     {
         auto& dev = device.getLogicalDevice();
 
-        core::BufferInfoRequest bufReq(dev, device.getPhysicalDevice());
-        bufReq.size = sizeof(GodRaysSunData);
-        bufReq.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-        bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
-                          | vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        core::BufferUtilities::createBuffer(bufReq, sunBuffer, sunBufferMemory);
-        sunBufferMapped = dev.mapMemory(sunBufferMemory, 0, sizeof(GodRaysSunData));
-    }
-
-    void GodRaysEffect::createDescriptorSetLayouts()
-    {
-        auto& dev = device.getLogicalDevice();
-
+        // Edge pass: binding 0 = depth sampler
         {
-            std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
-
-            bindings[0].binding = 0;
-            bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            bindings[0].descriptorCount = 1;
-            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-            bindings[1].binding = 1;
-            bindings[1].descriptorType = vk::DescriptorType::eUniformBuffer;
-            bindings[1].descriptorCount = 1;
-            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+            vk::DescriptorSetLayoutBinding binding{};
+            binding.binding = 0;
+            binding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            binding.descriptorCount = 1;
+            binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &binding;
 
-            rayDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
+            edgeDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
         }
 
+        // Composite pass: binding 0 = intermediate image sampler
         {
             vk::DescriptorSetLayoutBinding binding{};
             binding.binding = 0;
@@ -363,31 +340,27 @@ namespace render::postprocess
         }
     }
 
-    void GodRaysEffect::createDescriptorPool()
+    void EdgeDetectionEffect::createDescriptorPool()
     {
-        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
-
-        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2;
-
-        poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 1;
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        poolSize.descriptorCount = 2;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         poolInfo.maxSets = 2;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
-    void GodRaysEffect::createDescriptorSets()
+    void EdgeDetectionEffect::createDescriptorSets()
     {
         auto& dev = device.getLogicalDevice();
 
         std::array<vk::DescriptorSetLayout, 2> layouts = {
-            rayDescriptorSetLayout, compositeDescriptorSetLayout
+            edgeDescriptorSetLayout, compositeDescriptorSetLayout
         };
 
         vk::DescriptorSetAllocateInfo allocInfo{};
@@ -396,44 +369,33 @@ namespace render::postprocess
         allocInfo.pSetLayouts = layouts.data();
 
         auto sets = dev.allocateDescriptorSets(allocInfo);
-        rayDescriptorSet = sets[0];
+        edgeDescriptorSet = sets[0];
         compositeDescriptorSet = sets[1];
 
+        // Edge descriptor: depth texture
         {
             vk::DescriptorImageInfo depthImageInfo{};
             depthImageInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
             depthImageInfo.imageView = depthOnlyImageView;
             depthImageInfo.sampler = sampler;
 
-            vk::DescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = sunBuffer;
-            bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(GodRaysSunData);
+            vk::WriteDescriptorSet write{};
+            write.dstSet = edgeDescriptorSet;
+            write.dstBinding = 0;
+            write.dstArrayElement = 0;
+            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            write.descriptorCount = 1;
+            write.pImageInfo = &depthImageInfo;
 
-            std::array<vk::WriteDescriptorSet, 2> writes{};
-
-            writes[0].dstSet = rayDescriptorSet;
-            writes[0].dstBinding = 0;
-            writes[0].dstArrayElement = 0;
-            writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            writes[0].descriptorCount = 1;
-            writes[0].pImageInfo = &depthImageInfo;
-
-            writes[1].dstSet = rayDescriptorSet;
-            writes[1].dstBinding = 1;
-            writes[1].dstArrayElement = 0;
-            writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
-            writes[1].descriptorCount = 1;
-            writes[1].pBufferInfo = &bufferInfo;
-
-            dev.updateDescriptorSets(writes, nullptr);
+            dev.updateDescriptorSets(write, nullptr);
         }
 
+        // Composite descriptor: intermediate image
         {
-            vk::DescriptorImageInfo rayImageInfo{};
-            rayImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            rayImageInfo.imageView = rayImageView;
-            rayImageInfo.sampler = sampler;
+            vk::DescriptorImageInfo intermediateInfo{};
+            intermediateInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            intermediateInfo.imageView = intermediateImageView;
+            intermediateInfo.sampler = sampler;
 
             vk::WriteDescriptorSet write{};
             write.dstSet = compositeDescriptorSet;
@@ -441,30 +403,41 @@ namespace render::postprocess
             write.dstArrayElement = 0;
             write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
             write.descriptorCount = 1;
-            write.pImageInfo = &rayImageInfo;
+            write.pImageInfo = &intermediateInfo;
 
             dev.updateDescriptorSets(write, nullptr);
         }
     }
 
-    void GodRaysEffect::loadShaders()
+    void EdgeDetectionEffect::loadShaders()
     {
-        rayShader = std::make_shared<core::Shader>(device);
-        rayShader->readShader("../../resources/shaders/postprocess/god_rays.glsl");
+        edgeShader = std::make_shared<core::Shader>(device);
+        edgeShader->readShader("../../resources/shaders/postprocess/edge_detection.glsl");
 
         compositeShader = std::make_shared<core::Shader>(device);
-        compositeShader->readShader("../../resources/shaders/postprocess/god_rays_composite.glsl");
+        compositeShader->readShader("../../resources/shaders/postprocess/edge_detection_composite.glsl");
     }
 
-    void GodRaysEffect::createRayPipeline()
+    void EdgeDetectionEffect::createEdgePipeline()
     {
         auto& dev = device.getLogicalDevice();
 
-        vk::PipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &rayDescriptorSetLayout;
+        std::array<vk::DescriptorSetLayout, 2> setLayouts = {
+            pipeline.getInputDescriptorSetLayout(), edgeDescriptorSetLayout
+        };
 
-        rayPipelineLayout = dev.createPipelineLayout(layoutInfo);
+        vk::PushConstantRange pushConstant{};
+        pushConstant.stageFlags = vk::ShaderStageFlagBits::eFragment;
+        pushConstant.offset = 0;
+        pushConstant.size = sizeof(EdgeDetectionPushConstants);
+
+        vk::PipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+        layoutInfo.pSetLayouts = setLayouts.data();
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pushConstant;
+
+        edgePipelineLayout = dev.createPipelineLayout(layoutInfo);
 
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
 
@@ -510,7 +483,7 @@ namespace render::postprocess
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        const auto& stages = rayShader->getShaderStages();
+        const auto& stages = edgeShader->getShaderStages();
 
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
@@ -522,17 +495,17 @@ namespace render::postprocess
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.layout = rayPipelineLayout;
-        pipelineInfo.renderPass = rayRenderPass;
+        pipelineInfo.layout = edgePipelineLayout;
+        pipelineInfo.renderPass = edgeRenderPass;
         pipelineInfo.subpass = 0;
 
-        rayPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
+        edgePipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
-    void GodRaysEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
+    void EdgeDetectionEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
     {
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
-            compositeDescriptorSetLayout, compositeDescriptorSetLayout
+            pipeline.getInputDescriptorSetLayout(), compositeDescriptorSetLayout
         };
 
         core::GraphicsPipelineConfig config{};
@@ -551,77 +524,23 @@ namespace render::postprocess
         compositePipelineLayout = result.pipelineLayout;
     }
 
-    void GodRaysEffect::cleanupRayImage()
+    void EdgeDetectionEffect::cleanupIntermediateImage()
     {
         auto& dev = device.getLogicalDevice();
 
-        if (rayFramebuffer)
-        {
-            dev.destroyFramebuffer(rayFramebuffer);
-            rayFramebuffer = nullptr;
-        }
-
-        if (rayImageView)
-        {
-            dev.destroyImageView(rayImageView);
-            rayImageView = nullptr;
-        }
-
-        if (rayImage)
-        {
-            dev.destroyImage(rayImage);
-            rayImage = nullptr;
-        }
-
-        if (rayMemory)
-        {
-            dev.freeMemory(rayMemory);
-            rayMemory = nullptr;
-        }
+        if (intermediateFramebuffer) { dev.destroyFramebuffer(intermediateFramebuffer); intermediateFramebuffer = nullptr; }
+        if (intermediateImageView) { dev.destroyImageView(intermediateImageView); intermediateImageView = nullptr; }
+        if (intermediateImage) { dev.destroyImage(intermediateImage); intermediateImage = nullptr; }
+        if (intermediateMemory) { dev.freeMemory(intermediateMemory); intermediateMemory = nullptr; }
     }
 
-    void GodRaysEffect::cleanupPipelines()
+    void EdgeDetectionEffect::cleanupPipelines()
     {
         auto& dev = device.getLogicalDevice();
 
-        if (rayPipeline)
-        {
-            dev.destroyPipeline(rayPipeline);
-            rayPipeline = nullptr;
-        }
-
-        if (rayPipelineLayout)
-        {
-            dev.destroyPipelineLayout(rayPipelineLayout);
-            rayPipelineLayout = nullptr;
-        }
-
-        if (compositePipeline)
-        {
-            dev.destroyPipeline(compositePipeline);
-            compositePipeline = nullptr;
-        }
-
-        if (compositePipelineLayout)
-        {
-            dev.destroyPipelineLayout(compositePipelineLayout);
-            compositePipelineLayout = nullptr;
-        }
-    }
-
-    void GodRaysEffect::updateSunBuffer()
-    {
-        const auto& sunData = pipeline.getSunData();
-
-        GodRaysSunData data{};
-        data.sunScreenPos = sunData.screenPos;
-        data.intensity = sunData.hasSun ? currentIntensity : 0.0f;
-        data.decay = currentDecay;
-        data.density = currentDensity;
-        data.weight = currentWeight;
-        data.sampleCount = currentSampleCount;
-        data.threshold = currentThreshold;
-
-        std::memcpy(sunBufferMapped, &data, sizeof(GodRaysSunData));
+        if (edgePipeline) { dev.destroyPipeline(edgePipeline); edgePipeline = nullptr; }
+        if (edgePipelineLayout) { dev.destroyPipelineLayout(edgePipelineLayout); edgePipelineLayout = nullptr; }
+        if (compositePipeline) { dev.destroyPipeline(compositePipeline); compositePipeline = nullptr; }
+        if (compositePipelineLayout) { dev.destroyPipelineLayout(compositePipelineLayout); compositePipelineLayout = nullptr; }
     }
 }

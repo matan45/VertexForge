@@ -155,19 +155,6 @@ namespace serialization
             };
         }
 
-        json serializeGodRays(const postprocess::GodRaysSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"intensity", s.intensity},
-                {"decay", s.decay},
-                {"density", s.density},
-                {"weight", s.weight},
-                {"sampleCount", s.sampleCount},
-                {"threshold", s.threshold}
-            };
-        }
-
         json serializeDepthOfField(const postprocess::DepthOfFieldSettings& s)
         {
             return {
@@ -181,6 +168,68 @@ namespace serialization
                 {"focalRange", s.focalRange},
                 {"maxBlurRadius", s.maxBlurRadius},
                 {"sampleCount", s.sampleCount}
+            };
+        }
+
+        std::string volumetricQualityToStr(postprocess::VolumetricQuality quality)
+        {
+            switch (quality)
+            {
+            case postprocess::VolumetricQuality::Low: return "low";
+            case postprocess::VolumetricQuality::Medium: return "medium";
+            case postprocess::VolumetricQuality::High: return "high";
+            default: return "medium";
+            }
+        }
+
+        postprocess::VolumetricQuality strToVolumetricQuality(const std::string& str)
+        {
+            if (str == "low") return postprocess::VolumetricQuality::Low;
+            if (str == "medium") return postprocess::VolumetricQuality::Medium;
+            if (str == "high") return postprocess::VolumetricQuality::High;
+            return postprocess::VolumetricQuality::Medium;
+        }
+
+        json serializeSSAO(const postprocess::SSAOSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"radius", s.radius},
+                {"bias", s.bias},
+                {"intensity", s.intensity},
+                {"kernelSize", s.kernelSize},
+                {"power", s.power}
+            };
+        }
+
+        json serializeEdgeDetection(const postprocess::EdgeDetectionSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"threshold", s.threshold},
+                {"edgeWidth", s.edgeWidth},
+                {"edgeColor", {s.edgeColor[0], s.edgeColor[1], s.edgeColor[2]}},
+                {"opacity", s.opacity}
+            };
+        }
+
+        json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"quality", volumetricQualityToStr(s.quality)},
+                {"uniformDensity", s.uniformDensity},
+                {"fogColor", {s.fogColor[0], s.fogColor[1], s.fogColor[2]}},
+                {"heightFogDensity", s.heightFogDensity},
+                {"heightFogFalloff", s.heightFogFalloff},
+                {"heightFogOffset", s.heightFogOffset},
+                {"scatteringCoefficient", s.scatteringCoefficient},
+                {"absorptionCoefficient", s.absorptionCoefficient},
+                {"anisotropy", s.anisotropy},
+                {"temporalBlendFactor", s.temporalBlendFactor},
+                {"intensity", s.intensity},
+                {"ambientIntensity", s.ambientIntensity},
+                {"maxDistance", s.maxDistance}
             };
         }
 
@@ -274,27 +323,6 @@ namespace serialization
                 s.size = std::clamp(fg["size"].get<float>(), 0.1f, 5.0f);
         }
 
-        void deserializeGodRays(const json& j, postprocess::GodRaysSettings& s)
-        {
-            if (!j.contains("godRays") || !j["godRays"].is_object())
-                return;
-            const auto& gr = j["godRays"];
-            if (gr.contains("enabled") && gr["enabled"].is_boolean())
-                s.enabled = gr["enabled"].get<bool>();
-            if (gr.contains("intensity") && gr["intensity"].is_number())
-                s.intensity = std::clamp(gr["intensity"].get<float>(), 0.0f, 2.0f);
-            if (gr.contains("decay") && gr["decay"].is_number())
-                s.decay = std::clamp(gr["decay"].get<float>(), 0.9f, 1.0f);
-            if (gr.contains("density") && gr["density"].is_number())
-                s.density = std::clamp(gr["density"].get<float>(), 0.1f, 2.0f);
-            if (gr.contains("weight") && gr["weight"].is_number())
-                s.weight = std::clamp(gr["weight"].get<float>(), 0.0f, 2.0f);
-            if (gr.contains("sampleCount") && gr["sampleCount"].is_number_integer())
-                s.sampleCount = std::clamp(gr["sampleCount"].get<int>(), 16, 128);
-            if (gr.contains("threshold") && gr["threshold"].is_number())
-                s.threshold = std::clamp(gr["threshold"].get<float>(), 0.0f, 1.0f);
-        }
-
         void deserializeDepthOfField(const json& j, postprocess::DepthOfFieldSettings& s)
         {
             if (!j.contains("depthOfField") || !j["depthOfField"].is_object())
@@ -321,6 +349,85 @@ namespace serialization
                 s.maxBlurRadius = std::clamp(df["maxBlurRadius"].get<float>(), 0.0f, 20.0f);
             if (df.contains("sampleCount") && df["sampleCount"].is_number_integer())
                 s.sampleCount = std::clamp(df["sampleCount"].get<int>(), 4, 32);
+        }
+
+        void deserializeVolumetricFog(const json& j, postprocess::VolumetricFogSettings& s)
+        {
+            if (!j.contains("volumetricFog") || !j["volumetricFog"].is_object())
+                return;
+            const auto& vf = j["volumetricFog"];
+            if (vf.contains("enabled") && vf["enabled"].is_boolean())
+                s.enabled = vf["enabled"].get<bool>();
+            if (vf.contains("quality") && vf["quality"].is_string())
+                s.quality = strToVolumetricQuality(vf["quality"].get<std::string>());
+            if (vf.contains("uniformDensity") && vf["uniformDensity"].is_number())
+                s.uniformDensity = std::clamp(vf["uniformDensity"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("fogColor") && vf["fogColor"].is_array() && vf["fogColor"].size() == 3)
+            {
+                s.fogColor[0] = std::clamp(vf["fogColor"][0].get<float>(), 0.0f, 1.0f);
+                s.fogColor[1] = std::clamp(vf["fogColor"][1].get<float>(), 0.0f, 1.0f);
+                s.fogColor[2] = std::clamp(vf["fogColor"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (vf.contains("heightFogDensity") && vf["heightFogDensity"].is_number())
+                s.heightFogDensity = std::clamp(vf["heightFogDensity"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("heightFogFalloff") && vf["heightFogFalloff"].is_number())
+                s.heightFogFalloff = std::clamp(vf["heightFogFalloff"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("heightFogOffset") && vf["heightFogOffset"].is_number())
+                s.heightFogOffset = std::clamp(vf["heightFogOffset"].get<float>(), -100.0f, 100.0f);
+            if (vf.contains("scatteringCoefficient") && vf["scatteringCoefficient"].is_number())
+                s.scatteringCoefficient = std::clamp(vf["scatteringCoefficient"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("absorptionCoefficient") && vf["absorptionCoefficient"].is_number())
+                s.absorptionCoefficient = std::clamp(vf["absorptionCoefficient"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("anisotropy") && vf["anisotropy"].is_number())
+                s.anisotropy = std::clamp(vf["anisotropy"].get<float>(), -1.0f, 1.0f);
+            if (vf.contains("temporalBlendFactor") && vf["temporalBlendFactor"].is_number())
+                s.temporalBlendFactor = std::clamp(vf["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("intensity") && vf["intensity"].is_number())
+                s.intensity = std::clamp(vf["intensity"].get<float>(), 0.0f, 5.0f);
+            if (vf.contains("ambientIntensity") && vf["ambientIntensity"].is_number())
+                s.ambientIntensity = std::clamp(vf["ambientIntensity"].get<float>(), 0.0f, 2.0f);
+            if (vf.contains("maxDistance") && vf["maxDistance"].is_number())
+                s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
+        }
+
+        void deserializeSSAO(const json& j, postprocess::SSAOSettings& s)
+        {
+            if (!j.contains("ssao") || !j["ssao"].is_object())
+                return;
+            const auto& ao = j["ssao"];
+            if (ao.contains("enabled") && ao["enabled"].is_boolean())
+                s.enabled = ao["enabled"].get<bool>();
+            if (ao.contains("radius") && ao["radius"].is_number())
+                s.radius = std::clamp(ao["radius"].get<float>(), 0.1f, 5.0f);
+            if (ao.contains("bias") && ao["bias"].is_number())
+                s.bias = std::clamp(ao["bias"].get<float>(), 0.001f, 0.1f);
+            if (ao.contains("intensity") && ao["intensity"].is_number())
+                s.intensity = std::clamp(ao["intensity"].get<float>(), 0.1f, 5.0f);
+            if (ao.contains("kernelSize") && ao["kernelSize"].is_number_integer())
+                s.kernelSize = std::clamp(ao["kernelSize"].get<int>(), 8, 64);
+            if (ao.contains("power") && ao["power"].is_number())
+                s.power = std::clamp(ao["power"].get<float>(), 0.5f, 5.0f);
+        }
+
+        void deserializeEdgeDetection(const json& j, postprocess::EdgeDetectionSettings& s)
+        {
+            if (!j.contains("edgeDetection") || !j["edgeDetection"].is_object())
+                return;
+            const auto& ed = j["edgeDetection"];
+            if (ed.contains("enabled") && ed["enabled"].is_boolean())
+                s.enabled = ed["enabled"].get<bool>();
+            if (ed.contains("threshold") && ed["threshold"].is_number())
+                s.threshold = std::clamp(ed["threshold"].get<float>(), 0.01f, 1.0f);
+            if (ed.contains("edgeWidth") && ed["edgeWidth"].is_number())
+                s.edgeWidth = std::clamp(ed["edgeWidth"].get<float>(), 0.5f, 3.0f);
+            if (ed.contains("edgeColor") && ed["edgeColor"].is_array() && ed["edgeColor"].size() == 3)
+            {
+                s.edgeColor[0] = std::clamp(ed["edgeColor"][0].get<float>(), 0.0f, 1.0f);
+                s.edgeColor[1] = std::clamp(ed["edgeColor"][1].get<float>(), 0.0f, 1.0f);
+                s.edgeColor[2] = std::clamp(ed["edgeColor"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (ed.contains("opacity") && ed["opacity"].is_number())
+                s.opacity = std::clamp(ed["opacity"].get<float>(), 0.0f, 1.0f);
         }
 
         // ---- Deserialize render sub-helpers ----
@@ -462,8 +569,10 @@ namespace serialization
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
         j["filmGrain"] = serializeFilmGrain(settings.filmGrain);
-        j["godRays"] = serializeGodRays(settings.godRays);
         j["depthOfField"] = serializeDepthOfField(settings.depthOfField);
+        j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
+        j["ssao"] = serializeSSAO(settings.ssao);
+        j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
 
         return j;
     }
@@ -479,7 +588,9 @@ namespace serialization
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);
         deserializeFilmGrain(j, settings.filmGrain);
-        deserializeGodRays(j, settings.godRays);
         deserializeDepthOfField(j, settings.depthOfField);
+        deserializeVolumetricFog(j, settings.volumetricFog);
+        deserializeSSAO(j, settings.ssao);
+        deserializeEdgeDetection(j, settings.edgeDetection);
     }
 }

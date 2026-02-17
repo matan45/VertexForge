@@ -238,6 +238,7 @@
     <ClCompile Include="windows\PaintToolPanel.cpp" />
     <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\PostProcessConfigWindow.cpp" />
+    <ClCompile Include="windows\PostProcessConfigWindowSections.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />

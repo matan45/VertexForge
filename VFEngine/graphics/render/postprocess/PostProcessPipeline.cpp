@@ -5,8 +5,9 @@
 #include "effects/VignetteEffect.hpp"
 #include "effects/ChromaticAberrationEffect.hpp"
 #include "effects/FilmGrainEffect.hpp"
-#include "effects/GodRaysEffect.hpp"
 #include "effects/DepthOfFieldEffect.hpp"
+#include "effects/SSAOEffect.hpp"
+#include "effects/EdgeDetectionEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -34,12 +35,14 @@ namespace render::postprocess
 
     void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
                                               const glm::vec3& cameraPosition,
-                                              const glm::mat4& viewMatrix, float time)
+                                              const glm::mat4& viewMatrix,
+                                              const glm::mat4& projectionMatrix, float time)
     {
         cameraInfo.nearPlane = nearPlane;
         cameraInfo.farPlane = farPlane;
         cameraInfo.cameraPosition = cameraPosition;
         cameraInfo.viewMatrix = viewMatrix;
+        cameraInfo.projectionMatrix = projectionMatrix;
         cameraInfo.time = time;
     }
 
@@ -409,11 +412,14 @@ namespace render::postprocess
         syncEffect(::postprocess::EffectType::FilmGrain, settings.filmGrain.enabled,
             [this]() { return std::make_unique<FilmGrainEffect>(device); });
 
-        syncEffect(::postprocess::EffectType::GodRays, settings.godRays.enabled,
-            [this]() { return std::make_unique<GodRaysEffect>(device, swapChain, offscreenResources, *this); });
-
         syncEffect(::postprocess::EffectType::DepthOfField, settings.depthOfField.enabled,
             [this]() { return std::make_unique<DepthOfFieldEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::SSAO, settings.ssao.enabled,
+            [this]() { return std::make_unique<SSAOEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::EdgeDetection, settings.edgeDetection.enabled,
+            [this]() { return std::make_unique<EdgeDetectionEffect>(device, swapChain, offscreenResources, *this); });
 
         updateSettings(settings);
     }

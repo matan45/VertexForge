@@ -203,9 +203,10 @@
     <ClInclude Include="render\postprocess\effects\BloomEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ChromaticAberrationEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FXAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
-    <ClInclude Include="render\postprocess\effects\GodRaysEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
@@ -252,6 +253,13 @@
     <ClInclude Include="render\vfx\VFXQuadData.hpp" />
     <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricFogComposite.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricGridManager.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricLightInjection.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricPipeline.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricRayMarch.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricTemporalFilter.hpp" />
+    <ClInclude Include="render\volumetric\VolumetricTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animation\AnimationBlender.cpp" />
@@ -305,7 +313,9 @@
     <ClCompile Include="render\IBL.cpp" />
     <ClCompile Include="render\OffScreenViewPort.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
+    <ClCompile Include="render\RenderPassHandlerDelegates.cpp" />
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
+    <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
@@ -357,9 +367,11 @@
     <ClCompile Include="render\postprocess\effects\BloomEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\EdgeDetectionEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FXAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
-    <ClCompile Include="render\postprocess\effects\GodRaysEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
@@ -403,6 +415,12 @@
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricFogComposite.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricGridManager.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricLightInjection.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricPipeline.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricRayMarch.cpp" />
+    <ClCompile Include="render\volumetric\VolumetricTemporalFilter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
@@ -411,6 +429,7 @@
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
+    <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_terrain.glsl" />
@@ -437,13 +456,17 @@
     <None Include="..\..\resources\shaders\postprocess\chromatic_aberration.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\edge_detection.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\edge_detection_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\god_rays.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\god_rays_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
@@ -461,6 +484,9 @@
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
+    <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
+    <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />
+    <None Include="..\..\resources\shaders\volumetric\volumetric_temporal.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

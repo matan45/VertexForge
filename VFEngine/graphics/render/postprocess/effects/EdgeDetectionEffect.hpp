@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
-#include <glm/glm.hpp>
+#include "postprocess/PostProcessTypes.hpp"
 #include <memory>
 
 namespace core
@@ -16,18 +16,19 @@ namespace render::postprocess
 {
     class PostProcessPipeline;
 
-    struct GodRaysSunData
+    struct EdgeDetectionPushConstants
     {
-        glm::vec2 sunScreenPos;
-        float intensity;
-        float decay;
-        float density;
-        float weight;
-        int32_t sampleCount;
         float threshold;
+        float edgeWidth;
+        float edgeColorR;
+        float edgeColorG;
+        float edgeColorB;
+        float opacity;
+        float nearPlane;
+        float farPlane;
     };
 
-    class GodRaysEffect : public PostProcessEffect
+    class EdgeDetectionEffect : public PostProcessEffect
     {
     private:
         core::Device& device;
@@ -35,50 +36,44 @@ namespace render::postprocess
         core::OffscreenResources& offscreenResources;
         PostProcessPipeline& pipeline;
 
-        vk::Image rayImage;
-        vk::DeviceMemory rayMemory;
-        vk::ImageView rayImageView;
-        vk::Framebuffer rayFramebuffer;
+        vk::Image intermediateImage;
+        vk::DeviceMemory intermediateMemory;
+        vk::ImageView intermediateImageView;
+        vk::Framebuffer intermediateFramebuffer;
 
         vk::ImageView depthOnlyImageView;
-        vk::RenderPass rayRenderPass;
+        vk::RenderPass edgeRenderPass;
 
-        std::shared_ptr<core::Shader> rayShader;
+        std::shared_ptr<core::Shader> edgeShader;
         std::shared_ptr<core::Shader> compositeShader;
 
-        vk::Pipeline rayPipeline;
-        vk::PipelineLayout rayPipelineLayout;
+        vk::Pipeline edgePipeline;
+        vk::PipelineLayout edgePipelineLayout;
 
         vk::Pipeline compositePipeline;
         vk::PipelineLayout compositePipelineLayout;
 
-        vk::DescriptorSetLayout rayDescriptorSetLayout;
+        vk::DescriptorSetLayout edgeDescriptorSetLayout;
         vk::DescriptorSetLayout compositeDescriptorSetLayout;
 
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet rayDescriptorSet;
+        vk::DescriptorSet edgeDescriptorSet;
         vk::DescriptorSet compositeDescriptorSet;
-
-        vk::Buffer sunBuffer;
-        vk::DeviceMemory sunBufferMemory;
-        void* sunBufferMapped = nullptr;
 
         vk::Sampler sampler;
         vk::ImageAspectFlags depthAspectMask;
 
-        float currentIntensity = 0.8f;
-        float currentDecay = 0.98f;
-        float currentDensity = 1.0f;
-        float currentWeight = 1.0f;
-        int currentSampleCount = 64;
-        float currentThreshold = 0.5f;
+        float currentThreshold = 0.1f;
+        float currentEdgeWidth = 1.0f;
+        float currentEdgeColor[3] = {0.0f, 0.0f, 0.0f};
+        float currentOpacity = 1.0f;
 
         vk::Extent2D currentExtent{};
 
     public:
-        GodRaysEffect(core::Device& device, core::SwapChain& swapChain,
-                       core::OffscreenResources& offscreenResources,
-                       PostProcessPipeline& pipeline);
+        EdgeDetectionEffect(core::Device& device, core::SwapChain& swapChain,
+                            core::OffscreenResources& offscreenResources,
+                            PostProcessPipeline& pipeline);
 
         void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
         void cleanup() override;
@@ -92,24 +87,22 @@ namespace render::postprocess
 
         void updateParameters(const ::postprocess::PostProcessSettings& settings) override;
 
-        ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::GodRays; }
-        uint32_t getPriority() const override { return 40; }
+        ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::EdgeDetection; }
+        uint32_t getPriority() const override { return 250; }
 
     private:
         void createSampler();
-        void createRayRenderPass();
-        void createRayImage();
+        void createEdgeRenderPass();
+        void createIntermediateImage();
         void createDepthImageView();
-        void createSunBuffer();
         void createDescriptorSetLayouts();
         void createDescriptorPool();
         void createDescriptorSets();
         void loadShaders();
-        void createRayPipeline();
+        void createEdgePipeline();
         void createCompositePipeline(vk::RenderPass externalRenderPass);
 
-        void cleanupRayImage();
+        void cleanupIntermediateImage();
         void cleanupPipelines();
-        void updateSunBuffer();
     };
 }
