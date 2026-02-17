@@ -325,4 +325,10 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setWaterRenderProvider(services::IWaterRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setWaterRenderProvider(provider);
+        }
+    }
+
 }

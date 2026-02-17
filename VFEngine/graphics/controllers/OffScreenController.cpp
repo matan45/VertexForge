@@ -520,6 +520,15 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setWaterRenderProvider(provider);
+        }
+    }
+
     void OffScreenController::setRaycastCursorUV(const glm::vec2& uv)
     {
         offScreen->setRaycastCursorUV(uv);

@@ -36,6 +36,7 @@ namespace services
 {
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
+    class IWaterRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -178,6 +179,7 @@ namespace controllers
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
 
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();

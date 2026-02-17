@@ -118,6 +118,7 @@
     <ClInclude Include="adapters\TerrainRenderAdapter.hpp" />
     <ClInclude Include="adapters\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\VFXRuntimeAdapter.hpp" />
+    <ClInclude Include="adapters\WaterRenderAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
@@ -181,6 +182,7 @@
     <ClCompile Include="adapters\TerrainRenderAdapter.cpp" />
     <ClCompile Include="adapters\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\VFXRuntimeAdapter.cpp" />
+    <ClCompile Include="adapters\WaterRenderAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />

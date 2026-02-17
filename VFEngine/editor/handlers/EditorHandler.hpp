@@ -16,6 +16,7 @@
 #include "interfaces/IPhysicsService.hpp"
 #include "interfaces/IProjectService.hpp"
 #include "interfaces/ITerrainService.hpp"
+#include "interfaces/IWaterService.hpp"
 #include "interfaces/ISculptModeService.hpp"
 #include "interfaces/IBrushService.hpp"
 #include "interfaces/IPaintModeService.hpp"
@@ -59,6 +60,7 @@ namespace handlers {
 		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::shared_ptr<services::IProjectService> projectService;
 		std::shared_ptr<services::ITerrainService> terrainService;
+		std::shared_ptr<services::IWaterService> waterService;
 		std::shared_ptr<services::ISculptModeService> sculptModeService;
 		std::shared_ptr<services::IBrushService> brushService;
 		std::shared_ptr<services::IPaintModeService> paintModeService;
@@ -88,6 +90,7 @@ namespace handlers {
 		void createPhysicsServices();
 		void createVFXServices();
 		void createTerrainServices();
+		void createWaterServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();
