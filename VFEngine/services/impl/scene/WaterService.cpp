@@ -495,6 +495,7 @@ namespace services
             settings.fresnelPower = comp.fresnelPower;
             settings.dudvTiling = comp.dudvTiling;
             settings.dudvStrength = comp.dudvStrength;
+            settings.waveDirectionDegrees = comp.waveDirectionDegrees;
             break;
         }
 
@@ -535,6 +536,7 @@ namespace services
         comp.fresnelPower = settings.fresnelPower;
         comp.dudvTiling = settings.dudvTiling;
         comp.dudvStrength = settings.dudvStrength;
+        comp.waveDirectionDegrees = settings.waveDirectionDegrees;
     }
 
     void WaterService::onEntityDeleted(EntityHandle entity)

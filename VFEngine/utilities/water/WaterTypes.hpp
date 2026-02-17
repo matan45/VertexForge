@@ -32,5 +32,6 @@ namespace water
 
         float dudvTiling = 4.0f;
         float dudvStrength = 0.02f;
+        float waveDirectionDegrees = 0.0f;
     };
 }

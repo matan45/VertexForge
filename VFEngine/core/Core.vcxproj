@@ -137,6 +137,7 @@
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
+    <ClInclude Include="adapters\api\WaterAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
@@ -200,6 +201,7 @@
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
+    <ClCompile Include="adapters\api\WaterAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />

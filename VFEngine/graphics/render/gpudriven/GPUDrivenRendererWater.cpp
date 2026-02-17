@@ -69,7 +69,7 @@ namespace render::gpudriven
         cachedWaterPushConstants.subdivisions = tileConfig.subdivisions;
         cachedWaterPushConstants.dudvTiling = settings.dudvTiling;
         cachedWaterPushConstants.dudvStrength = settings.dudvStrength;
-        cachedWaterPushConstants.padding = 0.0f;
+        cachedWaterPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
     }
 
     void GPUDrivenRenderer::renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)

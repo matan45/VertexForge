@@ -23,6 +23,7 @@ namespace serialization
         j["fresnelPower"] = water.fresnelPower;
         j["dudvTiling"] = water.dudvTiling;
         j["dudvStrength"] = water.dudvStrength;
+        j["waveDirectionDegrees"] = water.waveDirectionDegrees;
         j["worldTileSize"] = water.worldTileSize;
         j["gridMinX"] = water.gridMinX;
         j["gridMinZ"] = water.gridMinZ;
@@ -65,6 +66,8 @@ namespace serialization
             water.dudvTiling = it->get<float>();
         if (auto it = j.find("dudvStrength"); it != j.end() && it->is_number())
             water.dudvStrength = it->get<float>();
+        if (auto it = j.find("waveDirectionDegrees"); it != j.end() && it->is_number())
+            water.waveDirectionDegrees = it->get<float>();
         if (auto it = j.find("worldTileSize"); it != j.end() && it->is_number())
             water.worldTileSize = it->get<float>();
         if (auto it = j.find("gridMinX"); it != j.end() && it->is_number_integer())

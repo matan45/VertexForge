@@ -40,6 +40,7 @@ namespace windows
             globalSettings.fresnelPower = comp.fresnelPower;
             globalSettings.dudvTiling = comp.dudvTiling;
             globalSettings.dudvStrength = comp.dudvStrength;
+            globalSettings.waveDirectionDegrees = comp.waveDirectionDegrees;
             settingsDirty = false;
             break;
         }
@@ -171,6 +172,14 @@ namespace windows
             ImGui::Text("Wave Frequency");
             ImGui::PushItemWidth(-1);
             if (ImGui::DragFloat("##WaveFrequency", &globalSettings.waveFrequency, 0.01f, 0.0f, 10.0f, "%.2f"))
+            {
+                settingsDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Text("Wave Direction");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::SliderFloat("##WaveDirection", &globalSettings.waveDirectionDegrees, 0.0f, 360.0f, "%.0f deg"))
             {
                 settingsDirty = true;
             }

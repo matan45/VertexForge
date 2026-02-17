@@ -28,7 +28,7 @@ namespace render::water
         uint32_t subdivisions;          // 4
         float dudvTiling;               // 4
         float dudvStrength;             // 4
-        float padding;                  // 4
+        float waveDirection;            // 4 (angle in radians)
     };
     static_assert(sizeof(WaterPushConstants) == 72);
 

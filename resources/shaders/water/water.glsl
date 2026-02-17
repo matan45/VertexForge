@@ -38,10 +38,17 @@ layout(push_constant) uniform PushConstants {
     uint subdivisions;
     float dudvTiling;
     float dudvStrength;
-    float padding;
+    float waveDirection;
 } pc;
 
 const float PI = 3.14159265358979;
+
+// Rotate a 2D vector by angle (radians)
+vec2 rotateDir(vec2 dir, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(c * dir.x - s * dir.y, s * dir.x + c * dir.y);
+}
 
 // Gerstner wave displacement
 vec3 gerstnerWave(vec2 pos, vec2 dir, float steepness, float wavelength, float speed, float time) {
@@ -70,13 +77,17 @@ void main() {
         tileOrigin.z + inPosition.z * tileSize
     );
 
-    // Apply Gerstner waves (3 overlapping waves)
+    // Apply Gerstner waves (3 overlapping waves) with user-controlled direction
     float time = camera.u_Time * pc.waveSpeed;
     float amp = pc.waveAmplitude * waveIntensity;
 
-    vec3 wave1 = gerstnerWave(worldPos.xz, vec2(1.0, 0.3), 0.25 * amp, 8.0, 2.0, time);
-    vec3 wave2 = gerstnerWave(worldPos.xz, vec2(-0.4, 1.0), 0.15 * amp, 5.0, 1.5, time);
-    vec3 wave3 = gerstnerWave(worldPos.xz, vec2(0.6, -0.8), 0.1 * amp, 12.0, 3.0, time);
+    vec2 dir1 = rotateDir(vec2(1.0, 0.3), pc.waveDirection);
+    vec2 dir2 = rotateDir(vec2(-0.4, 1.0), pc.waveDirection);
+    vec2 dir3 = rotateDir(vec2(0.6, -0.8), pc.waveDirection);
+
+    vec3 wave1 = gerstnerWave(worldPos.xz, dir1, 0.25 * amp, 8.0, 2.0, time);
+    vec3 wave2 = gerstnerWave(worldPos.xz, dir2, 0.15 * amp, 5.0, 1.5, time);
+    vec3 wave3 = gerstnerWave(worldPos.xz, dir3, 0.1 * amp, 12.0, 3.0, time);
 
     worldPos += wave1 + wave2 + wave3;
 
@@ -85,14 +96,14 @@ void main() {
     vec2 baseXZ = worldPos.xz;
 
     vec3 posX = vec3(worldPos.x + eps, waterHeight, worldPos.z);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), vec2(1.0, 0.3), 0.25 * amp, 8.0, 2.0, time);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), vec2(-0.4, 1.0), 0.15 * amp, 5.0, 1.5, time);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), vec2(0.6, -0.8), 0.1 * amp, 12.0, 3.0, time);
+    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir1, 0.25 * amp, 8.0, 2.0, time);
+    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir2, 0.15 * amp, 5.0, 1.5, time);
+    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir3, 0.1 * amp, 12.0, 3.0, time);
 
     vec3 posZ = vec3(worldPos.x, waterHeight, worldPos.z + eps);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), vec2(1.0, 0.3), 0.25 * amp, 8.0, 2.0, time);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), vec2(-0.4, 1.0), 0.15 * amp, 5.0, 1.5, time);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), vec2(0.6, -0.8), 0.1 * amp, 12.0, 3.0, time);
+    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir1, 0.25 * amp, 8.0, 2.0, time);
+    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir2, 0.15 * amp, 5.0, 1.5, time);
+    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir3, 0.1 * amp, 12.0, 3.0, time);
 
     vec3 tangentX = posX - worldPos;
     vec3 tangentZ = posZ - worldPos;
@@ -140,7 +151,7 @@ layout(push_constant) uniform PushConstants {
     uint subdivisions;
     float dudvTiling;
     float dudvStrength;
-    float padding;
+    float waveDirection;
 } pc;
 
 void main() {
