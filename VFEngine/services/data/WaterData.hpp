@@ -53,5 +53,8 @@ namespace services
         glm::vec4 deepColor{0.0f, 0.1f, 0.3f, 0.9f};
         float maxVisibleDepth = 10.0f;
         float fresnelPower = 5.0f;
+
+        float dudvTiling = 4.0f;
+        float dudvStrength = 0.02f;
     };
 }

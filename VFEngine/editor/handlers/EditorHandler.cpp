@@ -258,6 +258,8 @@ namespace handlers
         auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
         waterService = waterServiceImpl;
 
+        waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
+
         if (auto* waterAdapter = bootstrap->getWaterRenderAdapterInternal())
         {
             waterAdapter->setWaterService(waterServiceImpl.get());

@@ -7,7 +7,9 @@
 #include "impl/AudioServiceImpl.hpp"
 #include "impl/ScriptingServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
+#include "impl/scene/WaterService.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
+#include "../adapters/WaterRenderAdapter.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/ProjectEvents.hpp"
@@ -56,6 +58,7 @@ namespace handlers {
     void RuntimeHandler::cleanUp() {
         cleanupEventSubscriptions();
 
+        waterService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
@@ -129,6 +132,15 @@ namespace handlers {
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
+        // Create water service and wire to render adapter
+        auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
+        waterService = waterServiceImpl;
+        waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
+        if (auto* waterAdapter = bootstrap->getWaterRenderAdapterInternal())
+        {
+            waterAdapter->setWaterService(waterServiceImpl.get());
+        }
+
         // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
@@ -137,6 +149,7 @@ namespace handlers {
         windowStateService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
+        waterService->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()

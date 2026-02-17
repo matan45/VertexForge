@@ -13,6 +13,7 @@ namespace windows
     class ProjectSettingsWindow;
     class TerrainCreationWindow;
     class PostProcessConfigWindow;
+    class WaterEditorWindow;
 
     class MainMenuBar
     {
@@ -28,6 +29,7 @@ namespace windows
         RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
         TerrainCreationWindow* terrainCreationWindow = nullptr;
+        WaterEditorWindow* waterEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
 
     public:
@@ -55,6 +57,11 @@ namespace windows
         void setTerrainCreationWindow(TerrainCreationWindow* window)
         {
             terrainCreationWindow = window;
+        }
+
+        void setWaterEditorWindow(WaterEditorWindow* window)
+        {
+            waterEditorWindow = window;
         }
 
         void setPostProcessConfigWindow(PostProcessConfigWindow* window)

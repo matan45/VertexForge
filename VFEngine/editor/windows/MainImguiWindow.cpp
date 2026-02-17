@@ -19,6 +19,7 @@ namespace windows
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
+        menuBar.setWaterEditorWindow(&waterEditorWindow);
 
         subscribeToEvents();
     }
@@ -89,6 +90,7 @@ namespace windows
             postProcessConfigWindow.draw();
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
+            waterEditorWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
 

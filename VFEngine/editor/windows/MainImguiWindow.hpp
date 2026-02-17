@@ -10,6 +10,7 @@
 #include "PostProcessConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
+#include "WaterEditorWindow.hpp"
 #include "SculptToolPanel.hpp"
 #include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
@@ -38,6 +39,7 @@ namespace windows
         PostProcessConfigWindow postProcessConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
+        WaterEditorWindow waterEditorWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         MainMenuBar menuBar;

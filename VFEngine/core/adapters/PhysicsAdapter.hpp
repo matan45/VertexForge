@@ -71,6 +71,11 @@ namespace core
                                          const services::TerrainTileColliderInfo& tile) override;
         bool hasTerrainCollider(services::EntityHandle entity) const override;
 
+        void addWaterSensorBody(services::EntityHandle entity, const glm::vec3& position,
+                                const glm::vec3& halfExtents) override;
+        void removeWaterSensorBody(services::EntityHandle entity) override;
+        bool hasWaterSensorBody(services::EntityHandle entity) const override;
+
     private:
         void onContactAdded(const physics::ContactEvent& event);
         void onContactRemoved(const physics::ContactEvent& event);

@@ -26,9 +26,11 @@ namespace render::water
         float fresnelPower;             // 4
         uint32_t tileCount;             // 4
         uint32_t subdivisions;          // 4
+        float dudvTiling;               // 4
+        float dudvStrength;             // 4
         float padding;                  // 4
     };
-    static_assert(sizeof(WaterPushConstants) == 64);
+    static_assert(sizeof(WaterPushConstants) == 72);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

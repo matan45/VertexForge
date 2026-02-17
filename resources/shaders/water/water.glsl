@@ -36,6 +36,8 @@ layout(push_constant) uniform PushConstants {
     float fresnelPower;
     uint tileCount;
     uint subdivisions;
+    float dudvTiling;
+    float dudvStrength;
     float padding;
 } pc;
 
@@ -123,6 +125,9 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
+// Set 2: DuDv distortion texture
+layout(set = 2, binding = 0) uniform sampler2D dudvMap;
+
 layout(push_constant) uniform PushConstants {
     vec4 shallowColor;
     vec4 deepColor;
@@ -133,11 +138,26 @@ layout(push_constant) uniform PushConstants {
     float fresnelPower;
     uint tileCount;
     uint subdivisions;
+    float dudvTiling;
+    float dudvStrength;
     float padding;
 } pc;
 
 void main() {
     vec3 N = normalize(fragNormal);
+
+    // Animated dudv sampling (two layers scrolling in different directions)
+    float moveSpeed = pc.waveSpeed * 0.03;
+    vec2 dudvUV1 = fragTexCoord * pc.dudvTiling + vec2(camera.u_Time * moveSpeed);
+    vec2 dudvUV2 = fragTexCoord * pc.dudvTiling * 0.8 + vec2(-camera.u_Time * moveSpeed * 0.7, camera.u_Time * moveSpeed * 0.5);
+
+    vec2 distortion1 = texture(dudvMap, dudvUV1).rg * 2.0 - 1.0;
+    vec2 distortion2 = texture(dudvMap, dudvUV2).rg * 2.0 - 1.0;
+    vec2 totalDistortion = (distortion1 + distortion2) * pc.dudvStrength;
+
+    // Perturb normal with dudv distortion
+    N = normalize(N + vec3(totalDistortion.x, 0.0, totalDistortion.y));
+
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
     vec3 R = reflect(-V, N);
 

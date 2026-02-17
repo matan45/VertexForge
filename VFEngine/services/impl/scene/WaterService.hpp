@@ -4,6 +4,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../events/WaterEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../data/TerrainData.hpp"
 #include "water/WaterTypes.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
@@ -24,19 +25,31 @@ namespace water
 
 namespace services
 {
+    class IPhysicsProvider;
+}
+
+namespace services
+{
     class WaterService : public IWaterService
     {
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+        IPhysicsProvider* physicsProvider = nullptr;
 
         std::unordered_map<uint64_t, std::unique_ptr<water::WaterGrid>> waterGrids;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
+        std::unique_ptr<::events::SubscriptionToken> triggerEnterSubscription;
+        std::unique_ptr<::events::SubscriptionToken> triggerExitSubscription;
+        std::unique_ptr<::events::SubscriptionToken> terrainCreatedSubscription;
+        std::unique_ptr<::events::SubscriptionToken> terrainDeletedSubscription;
 
     public:
         explicit WaterService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~WaterService() override;
+
+        void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
 
         void registerEventHandlers() override;
 
@@ -69,5 +82,7 @@ namespace services
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+        void onTerrainCreated(const TerrainCreationData& config, EntityHandle terrainEntity);
+        void onTerrainDeleted(EntityHandle terrainEntity);
     };
 }

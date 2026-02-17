@@ -8,6 +8,7 @@
 #include "interfaces/IAudioService.hpp"
 #include "interfaces/IScriptingService.hpp"
 #include "interfaces/IProjectService.hpp"
+#include "interfaces/IWaterService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core::audio {
@@ -31,6 +32,7 @@ namespace handlers {
         std::shared_ptr<services::IAudioService> audioService;
         std::shared_ptr<services::IScriptingService> scriptingService;
         std::shared_ptr<services::IProjectService> projectService;
+        std::shared_ptr<services::IWaterService> waterService;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
         events::SubscriptionToken resizeSubscription;

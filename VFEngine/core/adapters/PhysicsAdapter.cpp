@@ -391,4 +391,30 @@ namespace core
     {
         return physicsWorld && physicsWorld->hasTerrainBodies(entity.id);
     }
+
+    void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
+                                            const glm::vec3& position,
+                                            const glm::vec3& halfExtents)
+    {
+        if (!physicsWorld) return;
+
+        services::ColliderData collider;
+        collider.shape = services::ColliderData::Shape::Box;
+        collider.size = halfExtents * 2.0f;
+        collider.offset = position;
+        collider.isTrigger = true;
+        collider.collisionLayer = 3; // SENSOR layer
+
+        addCollider(entity, collider);
+    }
+
+    void PhysicsAdapter::removeWaterSensorBody(services::EntityHandle entity)
+    {
+        removeCollider(entity);
+    }
+
+    bool PhysicsAdapter::hasWaterSensorBody(services::EntityHandle entity) const
+    {
+        return hasRigidBody(entity);
+    }
 }

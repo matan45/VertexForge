@@ -10,6 +10,9 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/WaterEvents.hpp"
 #include "../../events/SceneEvents.hpp"
+#include "../../events/PhysicsEvents.hpp"
+#include "../../events/TerrainEvents.hpp"
+#include "../../providers/IPhysicsProvider.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -33,6 +36,26 @@ namespace services
         dispatcher.unregisterQueryHandler<events::water::GetWaterHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::water::HasWaterComponentQuery>();
         dispatcher.unregisterQueryHandler<events::water::HasWaterTileComponentQuery>();
+
+        if (triggerEnterSubscription && triggerEnterSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*triggerEnterSubscription);
+        }
+
+        if (triggerExitSubscription && triggerExitSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*triggerExitSubscription);
+        }
+
+        if (terrainCreatedSubscription && terrainCreatedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*terrainCreatedSubscription);
+        }
+
+        if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*terrainDeletedSubscription);
+        }
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())
         {
@@ -67,6 +90,64 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
+
+        // Physics trigger subscriptions for water sensor bodies
+        auto enterToken = dispatcher.subscribe<events::physics::TriggerEnterNotification>(
+            [this](const events::physics::TriggerEnterNotification& notification)
+            {
+                if (!hasWaterTileComponent(notification.triggerEntity))
+                    return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(notification.triggerEntity);
+                if (!registry.valid(ent) || !registry.all_of<components::WaterTileComponent>(ent))
+                    return;
+
+                const auto& tileComp = registry.get<components::WaterTileComponent>(ent);
+
+                events::water::WaterTileEnteredNotification waterNotif;
+                waterNotif.entity = notification.otherEntity;
+                waterNotif.tileX = tileComp.tileX;
+                waterNotif.tileZ = tileComp.tileZ;
+                events::EventDispatcher::instance().publish(waterNotif);
+            });
+        triggerEnterSubscription = std::make_unique<events::SubscriptionToken>(enterToken);
+
+        auto exitToken = dispatcher.subscribe<events::physics::TriggerExitNotification>(
+            [this](const events::physics::TriggerExitNotification& notification)
+            {
+                if (!hasWaterTileComponent(notification.triggerEntity))
+                    return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(notification.triggerEntity);
+                if (!registry.valid(ent) || !registry.all_of<components::WaterTileComponent>(ent))
+                    return;
+
+                const auto& tileComp = registry.get<components::WaterTileComponent>(ent);
+
+                events::water::WaterTileExitedNotification waterNotif;
+                waterNotif.entity = notification.otherEntity;
+                waterNotif.tileX = tileComp.tileX;
+                waterNotif.tileZ = tileComp.tileZ;
+                events::EventDispatcher::instance().publish(waterNotif);
+            });
+        triggerExitSubscription = std::make_unique<events::SubscriptionToken>(exitToken);
+
+        // Terrain lifecycle coupling — auto-create/delete water with terrain
+        auto terrainCreatedToken = dispatcher.subscribe<events::terrain::TerrainCreatedNotification>(
+            [this](const events::terrain::TerrainCreatedNotification& notification)
+            {
+                onTerrainCreated(notification.config, notification.terrainEntity);
+            });
+        terrainCreatedSubscription = std::make_unique<events::SubscriptionToken>(terrainCreatedToken);
+
+        auto terrainDeletedToken = dispatcher.subscribe<events::terrain::TerrainDeletedNotification>(
+            [this](const events::terrain::TerrainDeletedNotification& notification)
+            {
+                onTerrainDeleted(notification.terrainEntity);
+            });
+        terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainDeletedToken);
     }
 
     void WaterService::registerWaterCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -183,6 +264,7 @@ namespace services
     void WaterService::createTileEntities(EntityHandle parentHandle, water::WaterGrid& grid)
     {
         scene::Entity parentEntity(internal::fromHandle(parentHandle));
+        float tileSize = grid.getConfig().worldTileSize;
 
         for (auto* tile : grid.getAllTiles())
         {
@@ -202,6 +284,15 @@ namespace services
             auto& transform = tileEntity.getComponent<components::TransformComponent>();
             transform.position = tile->worldOrigin;
             transform.isDirty = true;
+
+            // Create physics sensor body for water detection
+            if (physicsProvider && tileComp.physicsEnabled)
+            {
+                EntityHandle tileHandle = internal::toHandle(tileEntity.getHandle());
+                glm::vec3 halfExtents(tileSize * 0.5f, 0.5f, tileSize * 0.5f);
+                glm::vec3 position = tile->worldOrigin + halfExtents;
+                physicsProvider->addWaterSensorBody(tileHandle, position, halfExtents);
+            }
         }
     }
 
@@ -376,8 +467,15 @@ namespace services
             settings.density = comp.globalDensity;
             settings.drag = comp.globalDrag;
             settings.buoyancyStrength = comp.globalBuoyancyStrength;
+            settings.waveSpeed = comp.waveSpeed;
+            settings.waveAmplitude = comp.waveAmplitude;
+            settings.waveFrequency = comp.waveFrequency;
             settings.shallowColor = comp.shallowColor;
             settings.deepColor = comp.deepColor;
+            settings.maxVisibleDepth = comp.maxVisibleDepth;
+            settings.fresnelPower = comp.fresnelPower;
+            settings.dudvTiling = comp.dudvTiling;
+            settings.dudvStrength = comp.dudvStrength;
             break;
         }
 
@@ -409,14 +507,27 @@ namespace services
         comp.globalDensity = settings.density;
         comp.globalDrag = settings.drag;
         comp.globalBuoyancyStrength = settings.buoyancyStrength;
+        comp.waveSpeed = settings.waveSpeed;
+        comp.waveAmplitude = settings.waveAmplitude;
+        comp.waveFrequency = settings.waveFrequency;
         comp.shallowColor = settings.shallowColor;
         comp.deepColor = settings.deepColor;
+        comp.maxVisibleDepth = settings.maxVisibleDepth;
+        comp.fresnelPower = settings.fresnelPower;
+        comp.dudvTiling = settings.dudvTiling;
+        comp.dudvStrength = settings.dudvStrength;
     }
 
     void WaterService::onEntityDeleted(EntityHandle entity)
     {
         if (!entity.isValid())
             return;
+
+        // Remove physics sensor body if this was a water tile entity
+        if (physicsProvider)
+        {
+            physicsProvider->removeWaterSensorBody(entity);
+        }
 
         auto it = waterGrids.find(entity.id);
         if (it != waterGrids.end())
@@ -432,5 +543,45 @@ namespace services
 
         waterGrids.clear();
         vfLogInfo("WaterService: Cleared all water on scene clear");
+    }
+
+    void WaterService::onTerrainCreated(const TerrainCreationData& config,
+                                        EntityHandle /*terrainEntity*/)
+    {
+        // Don't auto-create if water already exists
+        if (!waterGrids.empty())
+            return;
+
+        WaterCreationData waterConfig;
+        waterConfig.tilesX = config.tilesX;
+        waterConfig.tilesZ = config.tilesZ;
+        waterConfig.worldTileSize = config.worldTileSize;
+        waterConfig.waterHeight = 0.0f;
+        waterConfig.waveIntensity = 1.0f;
+        waterConfig.physicsEnabled = true;
+
+        createWater(waterConfig);
+        vfLogInfo("WaterService: Auto-created water matching terrain grid ({}x{})",
+                  config.tilesX, config.tilesZ);
+    }
+
+    void WaterService::onTerrainDeleted(EntityHandle /*terrainEntity*/)
+    {
+        if (waterGrids.empty())
+            return;
+
+        // Collect all water entity IDs then delete
+        std::vector<EntityHandle> toDelete;
+        for (const auto& [entityId, grid] : waterGrids)
+        {
+            toDelete.push_back(EntityHandle{entityId});
+        }
+
+        for (const auto& handle : toDelete)
+        {
+            deleteWater(handle);
+        }
+
+        vfLogInfo("WaterService: Auto-deleted water on terrain deletion");
     }
 }
