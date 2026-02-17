@@ -41,6 +41,31 @@ namespace render::water
         loggerInfo("WaterPipeline: Initialized");
     }
 
+    void WaterPipeline::recreate(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
+    {
+        if (!initialized)
+            return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        cachedIBLLayout = iblDescriptorSetLayout;
+
+        if (graphicsPipeline)
+        {
+            vkDevice.destroyPipeline(graphicsPipeline);
+            graphicsPipeline = nullptr;
+        }
+
+        if (pipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(pipelineLayout);
+            pipelineLayout = nullptr;
+        }
+
+        createGraphicsPipeline(iblDescriptorSetLayout, renderPass);
+        loggerInfo("WaterPipeline: Recreated after resize");
+    }
+
     void WaterPipeline::cleanup()
     {
         if (!initialized)

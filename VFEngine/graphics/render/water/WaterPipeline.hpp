@@ -52,6 +52,7 @@ namespace render::water
         ~WaterPipeline();
 
         void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void recreate(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void cleanup();
 
         void updateDescriptors(vk::Buffer tileSSBO, uint32_t tileCount);

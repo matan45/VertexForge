@@ -467,8 +467,7 @@ namespace render::gpudriven
 
             if (waterPipeline)
             {
-                waterPipeline->cleanup();
-                waterPipeline->init(cachedIBLLayout, cachedRenderPass);
+                waterPipeline->recreate(cachedIBLLayout, cachedRenderPass);
             }
         }
         else

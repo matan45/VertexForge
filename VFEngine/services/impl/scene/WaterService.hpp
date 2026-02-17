@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace scene
@@ -37,6 +38,7 @@ namespace services
         IPhysicsProvider* physicsProvider = nullptr;
 
         std::unordered_map<uint64_t, std::unique_ptr<water::WaterGrid>> waterGrids;
+        std::unordered_set<EntityHandle, EntityHandle::Hash> entitiesInWater;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
@@ -74,6 +76,9 @@ namespace services
 
         void setWaterTileHeight(EntityHandle waterEntity, int32_t tileX, int32_t tileZ, float height);
         void setWaterGlobalSettings(EntityHandle waterEntity, const WaterGlobalSettingsData& settings);
+
+        void updateBuoyancy(float deltaTime);
+        void clearBuoyancyTracking();
 
     private:
         void registerWaterCoreHandlers(::events::EventDispatcher& dispatcher);

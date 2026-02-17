@@ -264,6 +264,11 @@ namespace handlers
         {
             waterAdapter->setWaterService(waterServiceImpl.get());
         }
+
+        if (physicsPlayModeHandler)
+        {
+            physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
+        }
     }
 
     void EditorHandler::registerAllEventHandlers()
