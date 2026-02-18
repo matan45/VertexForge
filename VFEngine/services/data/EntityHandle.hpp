@@ -49,6 +49,7 @@ namespace services {
         Script,
         Collider,
         RigidBody,
+        PhysicsAnimation,
         Animator,
         VFX,
         Text,

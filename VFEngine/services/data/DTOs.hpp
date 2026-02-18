@@ -1,6 +1,7 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/PhysicsAnimationTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -196,6 +197,14 @@ namespace services
         bool freezeRotationX = false;
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
+    };
+
+    struct PhysicsAnimationComponentData
+    {
+        types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
+        uint8_t collisionLayer = 1;
+        std::vector<types::BoneBodyMapping> boneBodyMappings;
+        std::vector<types::JointConstraintLimits> jointLimits;
     };
 
     struct VFXData

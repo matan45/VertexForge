@@ -5,6 +5,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/SceneEvents.hpp"
+#include "../../../services/events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../../services/events/MaterialEvents.hpp"
 #include "../../../services/events/ScriptingEvents.hpp"
 #include "../../../services/events/UIEvents.hpp"
@@ -58,6 +59,9 @@ namespace core::api
                 {services::ComponentTypeId::Material, makeAddFn<events::material::AddMaterialComponentCommand>()},
                 {services::ComponentTypeId::AudioSource2D, makeAddFn<events::scene::AddAudioSource2DComponentCommand>()},
                 {services::ComponentTypeId::AudioSource3D, makeAddFn<events::scene::AddAudioSource3DComponentCommand>()},
+                {services::ComponentTypeId::Collider, makeAddFn<events::scene::AddColliderComponentCommand>()},
+                {services::ComponentTypeId::RigidBody, makeAddFn<events::scene::AddRigidBodyComponentCommand>()},
+                {services::ComponentTypeId::PhysicsAnimation, makeAddFn<events::scene::AddPhysicsAnimationComponentCommand>()},
                 {services::ComponentTypeId::Script, makeAddScriptFn()},
                 {services::ComponentTypeId::UICanvas, makeAddFn<events::ui::AddUICanvasComponentCommand>()},
                 {services::ComponentTypeId::UIRect, makeAddFn<events::ui::AddUIRectComponentCommand>()},
@@ -84,6 +88,9 @@ namespace core::api
                 {services::ComponentTypeId::Material, makeRemoveFn<events::material::RemoveMaterialComponentCommand>()},
                 {services::ComponentTypeId::AudioSource2D, makeRemoveFn<events::scene::RemoveAudioSource2DComponentCommand>()},
                 {services::ComponentTypeId::AudioSource3D, makeRemoveFn<events::scene::RemoveAudioSource3DComponentCommand>()},
+                {services::ComponentTypeId::Collider, makeRemoveFn<events::scene::RemoveColliderComponentCommand>()},
+                {services::ComponentTypeId::RigidBody, makeRemoveFn<events::scene::RemoveRigidBodyComponentCommand>()},
+                {services::ComponentTypeId::PhysicsAnimation, makeRemoveFn<events::scene::RemovePhysicsAnimationComponentCommand>()},
                 {services::ComponentTypeId::UICanvas, makeRemoveFn<events::ui::RemoveUICanvasComponentCommand>()},
                 {services::ComponentTypeId::UIRect, makeRemoveFn<events::ui::RemoveUIRectComponentCommand>()},
                 {services::ComponentTypeId::UIImage, makeRemoveFn<events::ui::RemoveUIImageComponentCommand>()},

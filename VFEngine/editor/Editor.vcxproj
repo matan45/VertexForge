@@ -172,6 +172,7 @@
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
+    <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
@@ -274,6 +275,7 @@
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
+    <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />

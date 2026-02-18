@@ -18,6 +18,8 @@ namespace core::physics
         glm::vec3 normal{0.0f};
         float penetrationDepth = 0.0f;
         bool isSensor = false;
+        int boneIndexA = -1;  // -1 = not a bone body, >= 0 = physics bone index
+        int boneIndexB = -1;
     };
 
     using ContactCallback = std::function<void(const ContactEvent&)>;

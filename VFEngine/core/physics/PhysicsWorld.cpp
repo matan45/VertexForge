@@ -272,6 +272,10 @@ namespace core::physics
 
     void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
     {
+        // Clean up all physics bodies associated with this entity
+        destroyKinematicBoneBodies(entityId);
+        destroyRagdoll(entityId);
+
         auto it = entityToBody.find(entityId);
         if (it != entityToBody.end()) removeRigidBody(it->second);
     }
@@ -620,12 +624,32 @@ namespace core::physics
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
 
         it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+
+        // Register ragdoll body IDs for contact resolution
+        for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
+        {
+            JPH::BodyID bodyId = it->second.ragdoll->GetBodyID(i);
+            if (!bodyId.IsInvalid())
+            {
+                bodyToEntity[bodyId.GetIndex()] = entityId;
+            }
+        }
     }
 
     void PhysicsWorld::deactivateRagdoll(uint64_t entityId)
     {
         auto it = entityRagdolls.find(entityId);
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+
+        // Unregister ragdoll body IDs before removing from physics
+        for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
+        {
+            JPH::BodyID bodyId = it->second.ragdoll->GetBodyID(i);
+            if (!bodyId.IsInvalid())
+            {
+                bodyToEntity.erase(bodyId.GetIndex());
+            }
+        }
 
         it->second.ragdoll->RemoveFromPhysicsSystem();
     }
@@ -825,5 +849,35 @@ namespace core::physics
 
         // Create kinematic bone bodies at the ragdoll's last positions
         createKinematicBoneBodies(entityId, buildResult, entityPosition);
+    }
+
+    int PhysicsWorld::getBoneIndexForBody(JPH::BodyID bodyId) const
+    {
+        if (bodyId.IsInvalid()) return -1;
+
+        uint64_t entityId = getEntityForBody(bodyId);
+        if (entityId == 0) return -1;
+
+        // Check kinematic bone bodies
+        auto boneIt = entityBoneBodies.find(entityId);
+        if (boneIt != entityBoneBodies.end())
+        {
+            for (int i = 0; i < static_cast<int>(boneIt->second.size()); ++i)
+            {
+                if (boneIt->second[i] == bodyId) return i;
+            }
+        }
+
+        // Check ragdoll bodies
+        auto ragIt = entityRagdolls.find(entityId);
+        if (ragIt != entityRagdolls.end() && ragIt->second.ragdoll)
+        {
+            for (int i = 0; i < static_cast<int>(ragIt->second.ragdoll->GetBodyCount()); ++i)
+            {
+                if (ragIt->second.ragdoll->GetBodyID(i) == bodyId) return i;
+            }
+        }
+
+        return -1;
     }
 }

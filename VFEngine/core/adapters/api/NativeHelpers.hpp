@@ -142,6 +142,7 @@ namespace core::api
         if (type == "Script") return services::ComponentTypeId::Script;
         if (type == "Collider") return services::ComponentTypeId::Collider;
         if (type == "RigidBody") return services::ComponentTypeId::RigidBody;
+        if (type == "PhysicsAnimation") return services::ComponentTypeId::PhysicsAnimation;
         if (type == "Animator") return services::ComponentTypeId::Animator;
         if (type == "VFX") return services::ComponentTypeId::VFX;
         if (type == "Text") return services::ComponentTypeId::Text;
@@ -184,6 +185,7 @@ namespace core::api
         case services::ComponentTypeId::Script: return "Script";
         case services::ComponentTypeId::Collider: return "Collider";
         case services::ComponentTypeId::RigidBody: return "RigidBody";
+        case services::ComponentTypeId::PhysicsAnimation: return "PhysicsAnimation";
         case services::ComponentTypeId::Animator: return "Animator";
         case services::ComponentTypeId::VFX: return "VFX";
         case services::ComponentTypeId::Text: return "Text";

@@ -198,5 +198,8 @@ namespace core::physics
         void transitionToKinematic(uint64_t entityId, const RagdollBuildResult& buildResult,
                                     const glm::vec3& entityPosition);
 
+        // Bone body lookup
+        int getBoneIndexForBody(JPH::BodyID bodyId) const;
+
     };
 }

@@ -549,6 +549,11 @@ namespace core
             conversion.physicsToAnimBoneIndex, entityPosition);
 
         physicsWorld->transitionToRagdoll(entity.id, currentPose);
+
+        // Pause animator so ragdoll drives bones
+        auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(entity.id));
+        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(enttEntity);
+        if (animator) animator->pause();
     }
 
     void PhysicsAdapter::transitionToKinematic(services::EntityHandle entity, const glm::vec3& entityPosition)
@@ -558,6 +563,11 @@ namespace core
         if (it == physicsAnimationEntities.end()) return;
 
         physicsWorld->transitionToKinematic(entity.id, it->second.buildResult, entityPosition);
+
+        // Resume animator for kinematic bone driving
+        auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(entity.id));
+        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(enttEntity);
+        if (animator) animator->play();
     }
 
     void PhysicsAdapter::applyRagdollImpulse(services::EntityHandle entity, const glm::vec3& impulse)

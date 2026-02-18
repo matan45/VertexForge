@@ -3,6 +3,7 @@
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
+#include "../components/PhysicsAnimationComponent.hpp"
 #include "../print/EditorLogger.hpp"
 #include <fstream>
 
@@ -71,6 +72,12 @@ namespace serialization
         {
             out["rigidBody"] = SceneSerialization::serializeRigidBody(
                 entity.getComponent<components::RigidBodyComponent>());
+        }
+
+        if (entity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            out["physicsAnimation"] = SceneSerialization::serializePhysicsAnimation(
+                entity.getComponent<components::PhysicsAnimationComponent>());
         }
 
         if (entity.hasComponent<components::VFXComponent>())
@@ -195,6 +202,12 @@ namespace serialization
         {
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+
+        if (componentsJson.contains("physicsAnimation"))
+        {
+            auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();
+            SceneSerialization::deserializePhysicsAnimation(componentsJson["physicsAnimation"], physAnimComp);
         }
     }
 

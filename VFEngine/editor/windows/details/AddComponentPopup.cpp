@@ -1,6 +1,7 @@
 #include "AddComponentPopup.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "events/ScriptingEvents.hpp"
 #include "events/UIEvents.hpp"
 #include <imgui.h>
@@ -9,7 +10,8 @@ namespace windows::details
 {
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
-                                 bool hasCollider, bool hasRigidBody, bool hasVFX, bool hasBillboard,
+                                 bool hasCollider, bool hasRigidBody, bool hasPhysicsAnimation,
+                                 bool hasVFX, bool hasBillboard,
                                  bool hasText, bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight,
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
@@ -184,6 +186,20 @@ namespace windows::details
                 if (ImGui::IsItemHovered())
                 {
                     ImGui::SetTooltip("Physics body for dynamics simulation");
+                }
+            }
+
+            if (!hasPhysicsAnimation)
+            {
+                if (ImGui::Selectable("  Physics Animation"))
+                {
+                    events::scene::AddPhysicsAnimationComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Ragdoll and kinematic bone physics for animated meshes");
                 }
             }
 
@@ -422,7 +438,8 @@ namespace windows::details
             }
 
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
-                           hasCollider && hasRigidBody && hasVFX && hasBillboard && hasText &&
+                           hasCollider && hasRigidBody && hasPhysicsAnimation &&
+                           hasVFX && hasBillboard && hasText &&
                            hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
                            hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
