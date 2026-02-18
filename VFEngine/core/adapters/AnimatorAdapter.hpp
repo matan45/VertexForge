@@ -39,5 +39,8 @@ namespace core
         [[nodiscard]] bool hasAnimator(services::EntityHandle entity) const override;
 
         bool forceTransitionTo(services::EntityHandle entity, const std::string& stateName, float blendDuration) override;
+
+        void setRootMotion(services::EntityHandle entity, bool enabled) override;
+        [[nodiscard]] bool getRootMotion(services::EntityHandle entity) const override;
     };
 }

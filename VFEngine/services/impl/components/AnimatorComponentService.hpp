@@ -39,6 +39,9 @@ namespace services
 
         bool forceTransitionTo(EntityHandle entity, const std::string& stateName, float blendDuration);
 
+        void setRootMotion(EntityHandle entity, bool enabled);
+        bool getRootMotion(EntityHandle entity) const;
+
         void registerEventHandlers(::events::EventDispatcher& dispatcher);
     };
 }

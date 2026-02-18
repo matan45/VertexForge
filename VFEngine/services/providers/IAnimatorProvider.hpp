@@ -31,5 +31,8 @@ namespace services
         [[nodiscard]] virtual bool hasAnimator(EntityHandle entity) const = 0;
 
         virtual bool forceTransitionTo(EntityHandle entity, const std::string& stateName, float blendDuration) = 0;
+
+        virtual void setRootMotion(EntityHandle entity, bool enabled) = 0;
+        [[nodiscard]] virtual bool getRootMotion(EntityHandle entity) const = 0;
     };
 }

@@ -58,6 +58,11 @@ namespace serialization
             std::string cleanAnimatorPath = mesh.animatorPath;
             cleanNullTerminators(cleanAnimatorPath);
             j["animatorPath"] = cleanAnimatorPath;
+
+            if (mesh.applyRootMotion)
+            {
+                j["applyRootMotion"] = true;
+            }
         }
         return j;
     }
@@ -124,6 +129,10 @@ namespace serialization
         if (auto it = j.find("animatorPath"); it != j.end() && it->is_string())
         {
             mesh.animatorPath = it->get<std::string>();
+        }
+        if (auto it = j.find("applyRootMotion"); it != j.end() && it->is_boolean())
+        {
+            mesh.applyRootMotion = it->get<bool>();
         }
     }
 

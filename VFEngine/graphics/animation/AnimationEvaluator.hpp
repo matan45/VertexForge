@@ -37,6 +37,7 @@ namespace animation
         void clear();
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
+        std::vector<glm::mat4> evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
 

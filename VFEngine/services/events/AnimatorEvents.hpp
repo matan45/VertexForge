@@ -119,4 +119,17 @@ namespace services::events::animator
         ::services::EntityHandle entity;
         std::string_view getName() const override { return "HasEntityAnimator"; }
     };
+
+    struct SetEntityRootMotionCommand : ::events::ICommand<void>
+    {
+        ::services::EntityHandle entity;
+        bool enabled;
+        std::string_view getName() const override { return "SetEntityRootMotion"; }
+    };
+
+    struct GetEntityRootMotionQuery : ::events::IQuery<bool>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "GetEntityRootMotion"; }
+    };
 }

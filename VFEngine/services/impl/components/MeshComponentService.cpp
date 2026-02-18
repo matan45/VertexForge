@@ -28,6 +28,7 @@ namespace services {
         data.meshPath = comp.meshPath;
         data.animatorPath = comp.animatorPath;
         data.showBoundingBox = comp.showBoundingBox;
+        data.applyRootMotion = comp.applyRootMotion;
 
         return data;
     }
@@ -44,12 +45,20 @@ namespace services {
             comp.meshPath = mesh.meshPath;
             comp.animatorPath = mesh.animatorPath;
             comp.showBoundingBox = mesh.showBoundingBox;
+            comp.applyRootMotion = mesh.applyRootMotion;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
             comp.animatorPath = mesh.animatorPath;
             comp.showBoundingBox = mesh.showBoundingBox;
+            comp.applyRootMotion = mesh.applyRootMotion;
+        }
+
+        // Sync applyRootMotion to AnimatorComponent if it exists
+        if (sceneEntity.hasComponent<components::AnimatorComponent>()) {
+            auto& animComp = sceneEntity.getComponent<components::AnimatorComponent>();
+            animComp.applyRootMotion = mesh.applyRootMotion;
         }
 
         // Publish notification to allow preloading of mesh assets and animator cleanup

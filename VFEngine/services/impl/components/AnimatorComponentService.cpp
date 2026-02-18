@@ -96,6 +96,16 @@ namespace services
         return animatorProvider->forceTransitionTo(entity, stateName, blendDuration);
     }
 
+    void AnimatorComponentService::setRootMotion(EntityHandle entity, bool enabled)
+    {
+        animatorProvider->setRootMotion(entity, enabled);
+    }
+
+    bool AnimatorComponentService::getRootMotion(EntityHandle entity) const
+    {
+        return animatorProvider->getRootMotion(entity);
+    }
+
     void AnimatorComponentService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
         dispatcher.registerCommandHandler<events::animator::SetEntityAnimatorFloatCommand>(
@@ -198,6 +208,18 @@ namespace services
             [this](const events::animator::HasEntityAnimatorQuery& query)
             {
                 return hasAnimator(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::animator::SetEntityRootMotionCommand>(
+            [this](const events::animator::SetEntityRootMotionCommand& cmd)
+            {
+                setRootMotion(cmd.entity, cmd.enabled);
+            });
+
+        dispatcher.registerQueryHandler<events::animator::GetEntityRootMotionQuery>(
+            [this](const events::animator::GetEntityRootMotionQuery& query)
+            {
+                return getRootMotion(query.entity);
             });
     }
 }

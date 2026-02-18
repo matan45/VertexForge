@@ -120,4 +120,14 @@ namespace core
             return controller->forceTransitionTo(e, stateName, blendDuration);
         });
     }
+
+    void AnimatorAdapter::setRootMotion(services::EntityHandle entity, bool enabled)
+    {
+        withEntity(entity, [&](entt::entity e) { controller->setRootMotion(e, enabled); });
+    }
+
+    bool AnimatorAdapter::getRootMotion(services::EntityHandle entity) const
+    {
+        return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->getRootMotion(e); });
+    }
 }

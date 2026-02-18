@@ -7,6 +7,7 @@
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
+#include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
 
 namespace animation
@@ -83,11 +84,33 @@ namespace animation
 
     void RuntimeAnimatorSystem::updateAll(float deltaTime)
     {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
         for (auto& [entity, animator] : animators)
         {
-            if (animator && animator->isInitialized() && animator->isPlaying())
+            if (!animator || !animator->isInitialized() || !animator->isPlaying())
+                continue;
+
+            animator->update(deltaTime);
+
+            // Apply root motion delta to entity transform
+            if (registry.valid(entity) &&
+                registry.all_of<components::AnimatorComponent, components::TransformComponent>(entity))
             {
-                animator->update(deltaTime);
+                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+                if (animComp.applyRootMotion)
+                {
+                    glm::vec3 delta = animator->consumeRootMotionDelta();
+                    if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
+                    {
+                        auto& transform = registry.get<components::TransformComponent>(entity);
+                        // Delta is in model space; scale by entity scale to get world space
+                        delta *= transform.scale;
+                        glm::quat rotation = glm::quat(glm::radians(transform.rotation));
+                        transform.position += rotation * delta;
+                        transform.isDirty = true;
+                    }
+                }
             }
         }
     }
@@ -182,6 +205,14 @@ namespace animation
         animComp.stateMachine = rawPtr;
         animComp.animatorPath = animatorPath;
         animComp.isInitialized = true;
+
+        // Sync root motion flag from MeshComponent (persistent storage)
+        if (registry.all_of<components::MeshComponent>(entity))
+        {
+            const auto& meshComp = registry.get<components::MeshComponent>(entity);
+            animComp.applyRootMotion = meshComp.applyRootMotion;
+        }
+        rawPtr->setRootMotionEnabled(animComp.applyRootMotion);
     }
 
     void RuntimeAnimatorSystem::destroyEntityAnimator(entt::entity entity)

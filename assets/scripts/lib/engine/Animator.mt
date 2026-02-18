@@ -138,4 +138,20 @@ public class Animator {
     public static function forceTransitionToImmediate(int entityId, string stateName): bool {
         return _native_animator_forceTransitionTo(entityId, stateName, 0.25);
     }
+
+    // ============================================
+    // Root Motion
+    // ============================================
+
+    // Enable or disable root motion for an entity
+    // When enabled, the animation's root bone movement updates the entity transform
+    // When disabled, scripts handle entity movement instead
+    public static function setRootMotion(int entityId, bool enabled): void {
+        _native_animator_setRootMotion(entityId, enabled);
+    }
+
+    // Check if root motion is enabled for an entity
+    public static function getRootMotion(int entityId): bool {
+        return _native_animator_getRootMotion(entityId);
+    }
 }

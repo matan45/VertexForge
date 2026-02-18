@@ -46,6 +46,7 @@ namespace services
         std::string meshPath;
         std::string animatorPath; // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
+        bool applyRootMotion = false;
     };
 
     struct MeshBoundingBox
