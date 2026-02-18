@@ -16,6 +16,9 @@
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "../../services/providers/IWaterRenderProvider.hpp"
+#include "water/WaterTypes.hpp"
+#include "water/WaterTile.hpp"
 
 namespace
 {
@@ -67,6 +70,14 @@ namespace render
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
         }
+
+        if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
+        {
+            auto visibleTiles = waterRenderProvider->getVisibleWaterTiles(*currentFrustum, currentCameraPosition);
+            auto settings = waterRenderProvider->getWaterGlobalSettings();
+            auto tileConfig = waterRenderProvider->getWaterTileConfig();
+            gpuDrivenRenderer->updateWater(visibleTiles, settings, tileConfig);
+        }
     }
 
     void RenderPassHandler::drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -84,8 +95,11 @@ namespace render
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
+        bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
+            && waterRenderProvider && waterRenderProvider->hasActiveWater();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
-            || hasDebugItems || hasVFX || hasTerrainToRender);
+            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender);
 
         updateGPUDrivenSceneData();
 
@@ -103,7 +117,7 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
             drawGPUDrivenMeshPass(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
         }
@@ -138,6 +152,11 @@ namespace render
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
         {
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        if (gpuDrivenRenderer->isWaterRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
         }
 
         if (hasCustomShaderMeshes)

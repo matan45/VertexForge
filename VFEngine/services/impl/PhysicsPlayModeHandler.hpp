@@ -8,10 +8,13 @@
 
 namespace services
 {
+    class WaterService;
+
     class PhysicsPlayModeHandler
     {
     private:
         IPhysicsProvider* physicsProvider = nullptr;
+        WaterService* waterService = nullptr;
         ::events::SubscriptionToken editorModeChangedToken;
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
         bool physicsActive = false;
@@ -22,6 +25,8 @@ namespace services
 
         PhysicsPlayModeHandler(const PhysicsPlayModeHandler&) = delete;
         PhysicsPlayModeHandler& operator=(const PhysicsPlayModeHandler&) = delete;
+
+        void setWaterService(WaterService* service) { waterService = service; }
 
         void subscribeToEvents();
         void unsubscribeFromEvents();

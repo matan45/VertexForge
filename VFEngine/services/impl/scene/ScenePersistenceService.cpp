@@ -11,6 +11,7 @@
 #include "../../events/SceneEvents.hpp"
 #include "../../events/RenderEvents.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/WaterEvents.hpp"
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
 #include "../../events/PostProcessEvents.hpp"
@@ -267,6 +268,12 @@ namespace services
                     loadCmd.path = path;
                     dispatcher.execute(loadCmd);
                 }
+            }
+
+            // Rebuild water runtime state from deserialized components
+            {
+                events::water::RebuildWaterFromComponentsCommand rebuildWaterCmd;
+                dispatcher.execute(rebuildWaterCmd);
             }
 
             events::physics::ApplyPhysicsSettingsCommand physicsCmd;

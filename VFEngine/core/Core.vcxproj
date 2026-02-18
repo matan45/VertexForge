@@ -118,6 +118,7 @@
     <ClInclude Include="adapters\TerrainRenderAdapter.hpp" />
     <ClInclude Include="adapters\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\VFXRuntimeAdapter.hpp" />
+    <ClInclude Include="adapters\WaterRenderAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
@@ -136,6 +137,7 @@
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
+    <ClInclude Include="adapters\api\WaterAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
@@ -181,6 +183,7 @@
     <ClCompile Include="adapters\TerrainRenderAdapter.cpp" />
     <ClCompile Include="adapters\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\VFXRuntimeAdapter.cpp" />
+    <ClCompile Include="adapters\WaterRenderAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
@@ -198,6 +201,7 @@
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
+    <ClCompile Include="adapters\api\WaterAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />

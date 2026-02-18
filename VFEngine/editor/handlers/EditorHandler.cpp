@@ -17,12 +17,14 @@
 #include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
+#include "impl/scene/WaterService.hpp"
 #include "impl/SculptModeServiceImpl.hpp"
 #include "impl/BrushServiceImpl.hpp"
 #include "impl/PaintModeServiceImpl.hpp"
 #include "impl/PaintBrushServiceImpl.hpp"
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
+#include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -119,6 +121,7 @@ namespace handlers
         sceneService.reset();
 
         terrainService.reset();
+        waterService.reset();
         projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();
@@ -164,6 +167,7 @@ namespace handlers
         createPhysicsServices();
         createVFXServices();
         createTerrainServices();
+        createWaterServices();
         registerAllEventHandlers();
     }
 
@@ -249,6 +253,24 @@ namespace handlers
             bootstrap->getTerrainRaycastProvider());
     }
 
+    void EditorHandler::createWaterServices()
+    {
+        auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
+        waterService = waterServiceImpl;
+
+        waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
+
+        if (auto* waterAdapter = bootstrap->getWaterRenderAdapterInternal())
+        {
+            waterAdapter->setWaterService(waterServiceImpl.get());
+        }
+
+        if (physicsPlayModeHandler)
+        {
+            physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
+        }
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -264,6 +286,7 @@ namespace handlers
         physicsService->registerEventHandlers();
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();
+        waterService->registerEventHandlers();
         sculptModeService->registerEventHandlers();
         brushService->registerEventHandlers();
         paintModeService->registerEventHandlers();

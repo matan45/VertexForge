@@ -260,6 +260,9 @@
     <ClInclude Include="render\volumetric\VolumetricRayMarch.hpp" />
     <ClInclude Include="render\volumetric\VolumetricTemporalFilter.hpp" />
     <ClInclude Include="render\volumetric\VolumetricTypes.hpp" />
+    <ClInclude Include="render\water\WaterGPUTypes.hpp" />
+    <ClInclude Include="render\water\WaterMeshBuffer.hpp" />
+    <ClInclude Include="render\water\WaterPipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animation\AnimationBlender.cpp" />
@@ -328,6 +331,7 @@
     <ClCompile Include="render\gpudriven\GPUDrivenRendererCompute.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererScene.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererTerrain.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRendererWater.cpp" />
     <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MeshShaderPipeline.cpp" />
@@ -421,6 +425,8 @@
     <ClCompile Include="render\volumetric\VolumetricPipeline.cpp" />
     <ClCompile Include="render\volumetric\VolumetricRayMarch.cpp" />
     <ClCompile Include="render\volumetric\VolumetricTemporalFilter.cpp" />
+    <ClCompile Include="render\water\WaterMeshBuffer.cpp" />
+    <ClCompile Include="render\water\WaterPipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
@@ -487,6 +493,7 @@
     <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_temporal.glsl" />
+    <None Include="..\..\resources\shaders\water\water.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

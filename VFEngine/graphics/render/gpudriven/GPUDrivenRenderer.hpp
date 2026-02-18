@@ -11,6 +11,9 @@
 #include "TerrainMeshBuffer.hpp"
 #include "TerrainGPUAdapter.hpp"
 #include "TerrainStreamManager.hpp"
+#include "../water/WaterPipeline.hpp"
+#include "../water/WaterMeshBuffer.hpp"
+#include "../water/WaterGPUTypes.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -32,7 +35,6 @@ namespace core
 {
     class Device;
     class SwapChain;
-    class Shader;
     class DeferredDeletionQueue;
 }
 
@@ -56,6 +58,13 @@ namespace render::occlusion
 namespace terrain
 {
     class TerrainTile;
+}
+
+namespace water
+{
+    struct WaterTile;
+    struct WaterGlobalSettings;
+    struct WaterTileConfig;
 }
 
 namespace render::gpudriven
@@ -92,6 +101,13 @@ namespace render::gpudriven
         float terrainErrorThreshold = 2.0f;
         float terrainTextureScale = 0.1f;
         uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
+
+        // Water subsystem
+        std::unique_ptr<render::water::WaterPipeline> waterPipeline;
+        std::unique_ptr<render::water::WaterMeshBuffer> waterMeshBuffer;
+        std::vector<render::water::WaterTileGPUData> waterTileData;
+        render::water::WaterPushConstants cachedWaterPushConstants{};
+        bool waterRenderingEnabled = true;
 
         bool initialized = false;
         bool enabled = false;
@@ -254,6 +270,16 @@ namespace render::gpudriven
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
         void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
 
+        // Water rendering
+        void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
+                         const ::water::WaterGlobalSettings& settings,
+                         const ::water::WaterTileConfig& tileConfig);
+        void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void clearWaterData();
+
+        void setWaterRenderingEnabled(bool enabled) { waterRenderingEnabled = enabled; }
+        bool isWaterRenderingEnabled() const { return waterRenderingEnabled; }
+
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
@@ -291,6 +317,7 @@ namespace render::gpudriven
         void updatePipelineDescriptors();
 
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);

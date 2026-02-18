@@ -268,11 +268,24 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+    {
+        waterRenderProvider = provider;
+    }
+
     void RenderPassHandler::clearTerrainData()
     {
         if (gpuDrivenRenderer)
         {
             gpuDrivenRenderer->clearTerrainData();
+        }
+    }
+
+    void RenderPassHandler::clearWaterData()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearWaterData();
         }
     }
 

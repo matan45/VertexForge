@@ -335,6 +335,11 @@ namespace controllers {
 		offScreenController->setTerrainRenderProvider(provider);
 	}
 
+	void OffScreen::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+	{
+		offScreenController->setWaterRenderProvider(provider);
+	}
+
 	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
 	{
 		offScreenController->setRaycastCursorUV(uv);

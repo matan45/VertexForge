@@ -4,6 +4,7 @@
 #include "PhysicsComponents.hpp"
 #include "LightTextComponents.hpp"
 #include "TerrainComponents.hpp"
+#include "WaterComponents.hpp"
 #include "UIComponents.hpp"
 
 namespace components
@@ -12,7 +13,8 @@ namespace components
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
-                                               SpotLightComponent, TerrainComponent, TerrainTileComponent, TextComponent,
+                                               SpotLightComponent, TerrainComponent, TerrainTileComponent,
+                                               WaterComponent, WaterTileComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,

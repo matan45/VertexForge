@@ -142,6 +142,7 @@ namespace render::gpudriven
             }
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
+            initWaterSubsystems(iblDescriptorSetLayout, renderPass);
         }
         else
         {
@@ -194,6 +195,8 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (volumetricPipeline) volumetricPipeline->cleanup();
+        if (waterPipeline) waterPipeline->cleanup();
+        if (waterMeshBuffer) waterMeshBuffer->cleanup();
         if (terrainPipeline) terrainPipeline->cleanup();
         if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -216,6 +219,8 @@ namespace render::gpudriven
         terrainAdapter.reset();
         terrainPipeline.reset();
         terrainMeshBuffer.reset();
+        waterPipeline.reset();
+        waterMeshBuffer.reset();
         lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
@@ -458,6 +463,11 @@ namespace render::gpudriven
                                           shadowSystem->getShadowDataLayout(),
                                           shadowSystem->getShadowTextureLayout(),
                                           cachedRenderPass);
+            }
+
+            if (waterPipeline)
+            {
+                waterPipeline->recreate(cachedIBLLayout, cachedRenderPass);
             }
         }
         else

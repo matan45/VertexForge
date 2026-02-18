@@ -8,6 +8,7 @@
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
+#include "../adapters/WaterRenderAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -32,6 +33,7 @@ namespace core
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
+        waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -41,6 +43,9 @@ namespace core
         // Wire VFX runtime provider to offscreen renderer
         // This allows VFX to be rendered as part of the scene
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
+
+        // Wire water render provider to offscreen renderer
+        offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()
@@ -77,6 +82,7 @@ namespace core
         }
 
         postProcessAdapter.reset();
+        waterRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
@@ -123,6 +129,11 @@ namespace core
     services::IPostProcessProvider* RuntimeBootstrap::getPostProcessProvider()
     {
         return postProcessAdapter.get();
+    }
+
+    WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()
+    {
+        return waterRenderAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()

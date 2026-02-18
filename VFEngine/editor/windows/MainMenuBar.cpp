@@ -8,6 +8,7 @@
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
+#include "WaterEditorWindow.hpp"
 #include "PostProcessConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
@@ -144,6 +145,13 @@ namespace windows
                 if (terrainCreationWindow)
                 {
                     terrainCreationWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Water"))
+            {
+                if (waterEditorWindow)
+                {
+                    waterEditorWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Post Process"))

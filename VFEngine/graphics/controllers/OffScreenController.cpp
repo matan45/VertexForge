@@ -19,6 +19,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/WaterEvents.hpp"
 #include "types/RenderSettings.hpp"
 
 namespace controllers
@@ -39,6 +40,10 @@ namespace controllers
         if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*terrainDeletedSubscription);
+        }
+        if (waterDeletedSubscription && waterDeletedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*waterDeletedSubscription);
         }
     }
 
@@ -76,6 +81,17 @@ namespace controllers
                 }
             });
         terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainToken);
+
+        auto waterToken = events::EventDispatcher::instance().subscribe<events::water::WaterDeletedNotification>(
+            [this](const events::water::WaterDeletedNotification&)
+            {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler)
+                {
+                    renderHandler->clearWaterData();
+                }
+            });
+        waterDeletedSubscription = std::make_unique<events::SubscriptionToken>(waterToken);
     }
 
     void OffScreenController::recreate()
@@ -517,6 +533,15 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setTerrainRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setWaterRenderProvider(provider);
         }
     }
 

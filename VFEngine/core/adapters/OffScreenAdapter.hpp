@@ -10,6 +10,7 @@ namespace services
 {
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
+    class IWaterRenderProvider;
 }
 
 namespace core
@@ -25,6 +26,7 @@ namespace core
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
 
         void* render() override;
 

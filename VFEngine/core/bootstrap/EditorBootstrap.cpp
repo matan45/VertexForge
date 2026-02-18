@@ -16,6 +16,7 @@
 #include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/TerrainBrushComputeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
+#include "../adapters/WaterRenderAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -49,6 +50,7 @@ namespace core
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
+        waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -56,12 +58,15 @@ namespace core
         physicsAdapter->init();
 
         // Wire VFX runtime provider to offscreen renderer
-        // This allows VFX to be rendered as part of the scene
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
 
         // Wire terrain render provider to offscreen renderer
         // TerrainService will be connected later via setTerrainService() in EditorHandler
         offScreenAdapter->setTerrainRenderProvider(terrainRenderAdapter.get());
+
+        // Wire water render provider to offscreen renderer
+        // WaterService will be connected later via setWaterService() in EditorHandler
+        offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());
 
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
@@ -114,6 +119,7 @@ namespace core
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
+        waterRenderAdapter.reset();
 
         if (coreInterface)
         {
@@ -189,6 +195,11 @@ namespace core
     services::ITerrainBrushComputeProvider* EditorBootstrap::getTerrainBrushComputeProvider()
     {
         return terrainBrushComputeAdapter.get();
+    }
+
+    WaterRenderAdapter* EditorBootstrap::getWaterRenderAdapterInternal()
+    {
+        return waterRenderAdapter.get();
     }
 
     services::IPostProcessProvider* EditorBootstrap::getPostProcessProvider()

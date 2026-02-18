@@ -14,6 +14,7 @@ namespace services
 {
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
+    class IWaterRenderProvider;
 }
 
 namespace core
@@ -136,6 +137,7 @@ namespace render
 
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
+        services::IWaterRenderProvider* waterRenderProvider = nullptr;
 
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
@@ -227,6 +229,9 @@ namespace render
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
+
+        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void clearWaterData();
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

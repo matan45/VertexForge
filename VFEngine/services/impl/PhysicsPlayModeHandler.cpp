@@ -1,4 +1,5 @@
 #include "PhysicsPlayModeHandler.hpp"
+#include "scene/WaterService.hpp"
 #include "../events/EditorModeEvents.hpp"
 #include "../events/PhysicsEvents.hpp"
 #include "../events/SceneEvents.hpp"
@@ -317,6 +318,11 @@ namespace services
             return;
         }
 
+        if (waterService)
+        {
+            waterService->clearBuoyancyTracking();
+        }
+
         for (const auto& handle : activePhysicsBodies)
         {
             physicsProvider->removeRigidBody(handle);
@@ -333,6 +339,11 @@ namespace services
         if (!physicsActive || !physicsProvider)
         {
             return;
+        }
+
+        if (waterService)
+        {
+            waterService->updateBuoyancy();
         }
 
         physicsProvider->update(deltaTime);

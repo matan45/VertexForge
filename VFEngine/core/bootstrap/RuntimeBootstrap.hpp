@@ -38,6 +38,7 @@ namespace core
     class AnimatorAdapter;
     class VFXRuntimeAdapter;
     class PostProcessAdapter;
+    class WaterRenderAdapter;
 
     class RuntimeBootstrap
     {
@@ -52,6 +53,7 @@ namespace core
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
+        std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -82,6 +84,9 @@ namespace core
         services::IVFXRuntimeProvider* getVFXRuntimeProvider();
 
         services::IPostProcessProvider* getPostProcessProvider();
+
+        // For late binding - allows RuntimeHandler to connect WaterService
+        WaterRenderAdapter* getWaterRenderAdapterInternal();
 
         // === Other Accessors ===
 
