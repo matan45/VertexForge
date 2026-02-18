@@ -343,7 +343,7 @@ namespace services
 
         if (waterService)
         {
-            waterService->updateBuoyancy(deltaTime);
+            waterService->updateBuoyancy();
         }
 
         physicsProvider->update(deltaTime);
