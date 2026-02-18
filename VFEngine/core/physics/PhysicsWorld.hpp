@@ -103,6 +103,7 @@ namespace core::physics
         // Ragdoll data
         std::unordered_map<uint64_t, RagdollInstanceData> entityRagdolls;
         std::unordered_map<uint64_t, std::vector<JPH::BodyID>> entityBoneBodies;
+        std::unordered_map<uint32_t, int> bodyToBoneIndex; // BodyID index to bone index
         uint32_t nextCollisionGroupId = 1;
 
         bool initialized = false;

@@ -185,6 +185,7 @@ namespace core::physics
             }
         }
         entityBoneBodies.clear();
+        bodyToBoneIndex.clear();
 
         for (auto& [entityId, bodyId] : entityToBody)
             removeAndDestroyBody(bodyInterface, bodyId);
@@ -579,13 +580,14 @@ namespace core::physics
             return false;
         }
 
-        // Register all ragdoll body IDs in bodyToEntity for contact resolution
+        // Register all ragdoll body IDs in bodyToEntity/bodyToBoneIndex for contact resolution
         for (size_t i = 0; i < ragdoll->GetBodyCount(); ++i)
         {
             JPH::BodyID bodyId = ragdoll->GetBodyID(static_cast<int>(i));
             if (!bodyId.IsInvalid())
             {
                 bodyToEntity[bodyId.GetIndex()] = entityId;
+                bodyToBoneIndex[bodyId.GetIndex()] = static_cast<int>(i);
             }
         }
 
@@ -606,13 +608,14 @@ namespace core::physics
         auto& ragdollData = it->second;
         if (ragdollData.ragdoll)
         {
-            // Unregister body IDs from bodyToEntity
+            // Unregister body IDs from bodyToEntity/bodyToBoneIndex
             for (size_t i = 0; i < ragdollData.ragdoll->GetBodyCount(); ++i)
             {
                 JPH::BodyID bodyId = ragdollData.ragdoll->GetBodyID(static_cast<int>(i));
                 if (!bodyId.IsInvalid())
                 {
                     bodyToEntity.erase(bodyId.GetIndex());
+                    bodyToBoneIndex.erase(bodyId.GetIndex());
                 }
             }
             ragdollData.ragdoll->RemoveFromPhysicsSystem();
@@ -640,6 +643,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyToEntity[bodyId.GetIndex()] = entityId;
+                bodyToBoneIndex[bodyId.GetIndex()] = i;
             }
         }
     }
@@ -656,6 +660,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyToEntity.erase(bodyId.GetIndex());
+                bodyToBoneIndex.erase(bodyId.GetIndex());
             }
         }
 
@@ -768,6 +773,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyToEntity[bodyId.GetIndex()] = entityId;
+                bodyToBoneIndex[bodyId.GetIndex()] = i;
                 boneBodies.push_back(bodyId);
             }
             else
@@ -792,6 +798,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyToEntity.erase(bodyId.GetIndex());
+                bodyToBoneIndex.erase(bodyId.GetIndex());
                 removeAndDestroyBody(bodyInterface, bodyId);
             }
         }
@@ -862,30 +869,7 @@ namespace core::physics
     int PhysicsWorld::getBoneIndexForBody(JPH::BodyID bodyId) const
     {
         if (bodyId.IsInvalid()) return -1;
-
-        uint64_t entityId = getEntityForBody(bodyId);
-        if (entityId == 0) return -1;
-
-        // Check kinematic bone bodies
-        auto boneIt = entityBoneBodies.find(entityId);
-        if (boneIt != entityBoneBodies.end())
-        {
-            for (int i = 0; i < static_cast<int>(boneIt->second.size()); ++i)
-            {
-                if (boneIt->second[i] == bodyId) return i;
-            }
-        }
-
-        // Check ragdoll bodies
-        auto ragIt = entityRagdolls.find(entityId);
-        if (ragIt != entityRagdolls.end() && ragIt->second.ragdoll)
-        {
-            for (int i = 0; i < static_cast<int>(ragIt->second.ragdoll->GetBodyCount()); ++i)
-            {
-                if (ragIt->second.ragdoll->GetBodyID(i) == bodyId) return i;
-            }
-        }
-
-        return -1;
+        auto it = bodyToBoneIndex.find(bodyId.GetIndex());
+        return it != bodyToBoneIndex.end() ? it->second : -1;
     }
 }
