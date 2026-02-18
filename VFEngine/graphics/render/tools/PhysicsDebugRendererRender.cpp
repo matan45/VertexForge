@@ -290,7 +290,8 @@ namespace render::mesh
                     if (!boxVertexBuffer) break;
 
                     glm::mat4 model = collider.worldMatrix;
-                    model = glm::scale(model, collider.size);
+                    // Unit cube vertices span -1 to +1, so scale by half-extents (size * 0.5)
+                    model = glm::scale(model, collider.size * 0.5f);
 
                     pushConstants.mvp = viewProj * model;
 
@@ -384,7 +385,7 @@ namespace render::mesh
                         pushConstants.color = glm::vec4(0.9f, 0.9f, 0.2f, 0.8f);
 
                         glm::mat4 model = collider.worldMatrix;
-                        model = glm::scale(model, collider.size);
+                        model = glm::scale(model, collider.size * 0.5f);
 
                         pushConstants.mvp = viewProj * model;
 

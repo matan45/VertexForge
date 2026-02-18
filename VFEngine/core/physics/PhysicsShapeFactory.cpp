@@ -8,6 +8,7 @@
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include "print/Logger.hpp"
+#include <algorithm>
 
 namespace core::physics
 {
@@ -16,7 +17,9 @@ namespace core::physics
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::makeBoxFallback(const glm::vec3& halfExtents)
     {
         glm::vec3 safeExtents = glm::max(halfExtents, glm::vec3(MIN_DIMENSION));
-        return new JPH::BoxShape(toJolt(safeExtents));
+        float minExtent = std::min({safeExtents.x, safeExtents.y, safeExtents.z});
+        float convexRadius = std::min(JPH::cDefaultConvexRadius, minExtent);
+        return new JPH::BoxShape(toJolt(safeExtents), convexRadius);
     }
 
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::createShape(const ColliderCreateInfo& info)
@@ -32,7 +35,9 @@ namespace core::physics
                                   info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
                                   safeExtents.x, safeExtents.y, safeExtents.z);
                 }
-                return new JPH::BoxShape(toJolt(safeExtents));
+                float minExtent = std::min({safeExtents.x, safeExtents.y, safeExtents.z});
+                float convexRadius = std::min(JPH::cDefaultConvexRadius, minExtent);
+                return new JPH::BoxShape(toJolt(safeExtents), convexRadius);
             }
 
         case ColliderShape::Sphere:
