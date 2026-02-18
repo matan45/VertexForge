@@ -45,6 +45,11 @@ namespace services
 
         std::string savePath;
         bool saveDirty = false;
+
+        // Collider properties (from TerrainColliderComponent)
+        uint8_t colliderCollisionLayer = 0;
+        float colliderFriction = 0.5f;
+        float colliderRestitution = 0.0f;
     };
 
     struct TerrainTileData

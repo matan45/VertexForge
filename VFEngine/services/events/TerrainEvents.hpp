@@ -106,6 +106,15 @@ namespace events::terrain
         std::string_view getName() const override { return "TerrainSaved"; }
     };
 
+    struct SetTerrainColliderPropertiesCommand : ICommand<> {
+        services::EntityHandle entity;
+        uint8_t collisionLayer = 0;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+
+        std::string_view getName() const override { return "SetTerrainColliderProperties"; }
+    };
+
     struct BeginTerrainLoadCommand : ICommand<bool> {
         std::string path;
 

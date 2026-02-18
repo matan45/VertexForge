@@ -16,6 +16,39 @@ namespace services
 {
     namespace
     {
+        void applyScaleToCollider(ColliderData& colData, const glm::vec3& scale)
+        {
+            // Use absolute scale to handle negative scaling
+            glm::vec3 absScale = glm::abs(scale);
+
+            switch (colData.shape)
+            {
+            case ColliderData::Shape::Box:
+                colData.size *= absScale;
+                break;
+            case ColliderData::Shape::Sphere:
+            {
+                float uniformScale = glm::max(absScale.x, glm::max(absScale.y, absScale.z));
+                colData.size.x *= uniformScale;
+                break;
+            }
+            case ColliderData::Shape::Capsule:
+            {
+                // Capsule is vertical: radius scales by horizontal, height by vertical
+                float horizontalScale = glm::max(absScale.x, absScale.z);
+                colData.size.x *= horizontalScale;
+                colData.height *= absScale.y;
+                break;
+            }
+            case ColliderData::Shape::ConvexMesh:
+            case ColliderData::Shape::TriangleMesh:
+                colData.size *= absScale;
+                break;
+            }
+
+            colData.offset *= absScale;
+        }
+
         std::string validateCollider(const components::ColliderComponent& collider,
                                      const components::RigidBodyComponent& rigidBody,
                                      const std::string& entityName)
@@ -222,6 +255,8 @@ namespace services
                 colData.size = glm::vec3(1.0f);
             }
 
+            applyScaleToCollider(colData, transform.scale);
+
             EntityHandle handle = internal::toHandle(entity);
 
             physicsProvider->addRigidBody(handle, rbData, colData);
@@ -296,6 +331,8 @@ namespace services
             colData.isTrigger = collider.isTrigger;
             colData.offset = collider.offset;
             colData.collisionLayer = collider.collisionLayer;
+
+            applyScaleToCollider(colData, transform.scale);
 
             EntityHandle handle = internal::toHandle(entity);
 

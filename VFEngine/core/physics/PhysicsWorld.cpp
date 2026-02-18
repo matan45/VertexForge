@@ -10,6 +10,7 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/GroupFilterTable.h>
@@ -239,6 +240,13 @@ namespace core::physics
 
         JPH::Ref<JPH::Shape> shape = PhysicsShapeFactory::createShape(colliderInfo);
         if (!shape) return JPH::BodyID();
+
+        // Apply collider offset by wrapping shape with RotatedTranslatedShape
+        if (colliderInfo.offset.x != 0.0f || colliderInfo.offset.y != 0.0f || colliderInfo.offset.z != 0.0f)
+        {
+            shape = new JPH::RotatedTranslatedShape(
+                toJolt(colliderInfo.offset), JPH::Quat::sIdentity(), shape);
+        }
 
         auto settings = buildRigidBodySettings(shape, bodyInfo, colliderInfo, entityId);
 

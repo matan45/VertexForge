@@ -38,6 +38,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainSaveLockCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -201,6 +202,20 @@ namespace services
             {
                 return hasTerrainCollider(query.terrainEntity);
             });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>(
+            [this](const events::terrain::SetTerrainColliderPropertiesCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.entity);
+                if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+                {
+                    auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+                    cc.collisionLayer = cmd.collisionLayer;
+                    cc.friction = cmd.friction;
+                    cc.restitution = cmd.restitution;
+                }
+            });
     }
 
     void TerrainService::registerAsyncLoadHandlers(::events::EventDispatcher& dispatcher)
@@ -315,6 +330,14 @@ namespace services
         data.visibleTileCount = comp.visibleTileCount;
         data.savePath = comp.savePath;
         data.saveDirty = comp.saveDirty;
+
+        if (registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            data.colliderCollisionLayer = cc.collisionLayer;
+            data.colliderFriction = cc.friction;
+            data.colliderRestitution = cc.restitution;
+        }
 
         return data;
     }

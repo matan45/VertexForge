@@ -169,6 +169,43 @@ namespace windows::details {
                     cmd.terrainEntity = handle;
                     dispatcher.execute(cmd);
                 }
+
+                const char* layerNames[] = {
+                    "0 - Static", "1 - Dynamic", "2 - Kinematic", "3 - Sensor",
+                    "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
+                };
+                int layer = static_cast<int>(terrain.colliderCollisionLayer);
+                if (ImGui::Combo("Collision Layer", &layer, layerNames, IM_ARRAYSIZE(layerNames)))
+                {
+                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                    propCmd.entity = handle;
+                    propCmd.collisionLayer = static_cast<uint8_t>(layer);
+                    propCmd.friction = terrain.colliderFriction;
+                    propCmd.restitution = terrain.colliderRestitution;
+                    dispatcher.execute(propCmd);
+                }
+
+                float friction = terrain.colliderFriction;
+                if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
+                {
+                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                    propCmd.entity = handle;
+                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                    propCmd.friction = friction;
+                    propCmd.restitution = terrain.colliderRestitution;
+                    dispatcher.execute(propCmd);
+                }
+
+                float restitution = terrain.colliderRestitution;
+                if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
+                {
+                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                    propCmd.entity = handle;
+                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                    propCmd.friction = terrain.colliderFriction;
+                    propCmd.restitution = restitution;
+                    dispatcher.execute(propCmd);
+                }
             }
 
             ImGui::Unindent(10.0f);
