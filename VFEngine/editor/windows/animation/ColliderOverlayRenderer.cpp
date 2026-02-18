@@ -73,7 +73,7 @@ namespace windows::animation
         glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
 
         float screenX = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
-        float screenY = viewportPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y;
+        float screenY = viewportPos.y + (ndc.y * 0.5f + 0.5f) * viewportSize.y;
 
         return ImVec2(screenX, screenY);
     }

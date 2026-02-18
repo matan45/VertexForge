@@ -48,9 +48,12 @@ namespace core::physics
         case ColliderShape::Capsule:
             {
                 float safeRadius = std::max(info.radius, MIN_DIMENSION);
-                float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
-                if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius))
+                float halfHeight = info.height * 0.5f - safeRadius;
+                if (halfHeight < MIN_DIMENSION)
                 {
+                    // Radius exceeds half-height: shrink radius to fit a valid capsule
+                    halfHeight = MIN_DIMENSION;
+                    safeRadius = std::max(MIN_DIMENSION, info.height * 0.5f - MIN_DIMENSION);
                     loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
                                   info.radius, safeRadius, halfHeight, info.height);
                 }
