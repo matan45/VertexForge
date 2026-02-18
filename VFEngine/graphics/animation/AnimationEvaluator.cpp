@@ -204,12 +204,14 @@ namespace animation
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
 
-                // Extract horizontal root motion (XZ) and zero it; keep Y for correct height
+                // Extract root motion as displacement from bind pose.
+                // Keep the bind pose position in the bone (correct height/offset),
+                // output only the animated displacement for entity movement.
                 if (static_cast<int>(i) == rootMotionBone)
                 {
-                    outRootPosition = glm::vec3(pos.x, 0.0f, pos.z);
-                    pos.x = 0.0f;
-                    pos.z = 0.0f;
+                    glm::vec3 bindPos = glm::vec3(computedLocalBindPoses[i][3]);
+                    outRootPosition = pos - bindPos;
+                    pos = bindPos;
                 }
 
                 animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(

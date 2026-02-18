@@ -420,10 +420,25 @@ namespace services
                 continue;
             }
 
+            auto& transform = registry.get<components::TransformComponent>(entity);
+
+            // Root motion entities: entity position drives physics body (not the other way)
+            if (registry.all_of<components::AnimatorComponent>(entity))
+            {
+                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+                if (animComp.applyRootMotion)
+                {
+                    physicsProvider->setPosition(handle, transform.position);
+                    glm::vec3 eulerRad = glm::radians(transform.rotation);
+                    glm::quat rotQuat = glm::quat(eulerRad);
+                    physicsProvider->setRotation(handle, rotQuat);
+                    transform.isDirty = true;
+                    continue;
+                }
+            }
+
             bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
             bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
-
-            auto& transform = registry.get<components::TransformComponent>(entity);
 
             if (!allPositionFrozen)
             {
