@@ -338,7 +338,8 @@ namespace render::mesh
                     float cylinderHalfHeight = (collider.height - 2.0f * collider.radius) / 2.0f;
                     if (cylinderHalfHeight < 0.0f) cylinderHalfHeight = 0.0f;
                     float totalHalfHeight = cylinderHalfHeight + collider.radius;
-                    model = glm::scale(model, glm::vec3(collider.radius, totalHalfHeight, collider.radius));
+                    // Unit capsule has total half-height 2.0 (cylinder=1.0 + hemisphere=1.0)
+                    model = glm::scale(model, glm::vec3(collider.radius, totalHalfHeight * 0.5f, collider.radius));
 
                     pushConstants.mvp = viewProj * model;
 
