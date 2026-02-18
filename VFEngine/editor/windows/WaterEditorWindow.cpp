@@ -1,7 +1,6 @@
 #include "WaterEditorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/WaterEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 
 namespace windows

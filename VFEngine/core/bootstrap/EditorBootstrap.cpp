@@ -58,7 +58,6 @@ namespace core
         physicsAdapter->init();
 
         // Wire VFX runtime provider to offscreen renderer
-        // This allows VFX to be rendered as part of the scene
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
 
         // Wire terrain render provider to offscreen renderer

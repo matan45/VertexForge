@@ -273,6 +273,8 @@
     <ClCompile Include="impl\scene\TerrainPersistenceOps.cpp" />
     <ClCompile Include="impl\scene\TerrainService.cpp" />
     <ClCompile Include="impl\scene\TransformComponentService.cpp" />
+    <ClCompile Include="impl\scene\WaterBuoyancyOps.cpp" />
+    <ClCompile Include="impl\scene\WaterLifecycleOps.cpp" />
     <ClCompile Include="impl\scene\WaterService.cpp" />
   </ItemGroup>
   <ItemGroup>

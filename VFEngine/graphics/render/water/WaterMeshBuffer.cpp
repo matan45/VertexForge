@@ -89,7 +89,6 @@ namespace render::water
         vertexCount = static_cast<uint32_t>(vertices.size());
         indexCount = static_cast<uint32_t>(indices.size());
 
-        // Create device-local vertex buffer
         vk::DeviceSize vertexSize = vertices.size() * sizeof(WaterVertex);
         core::BufferInfoRequest vertexInfo(
             device, physicalDevice, vertexSize,
@@ -100,7 +99,6 @@ namespace render::water
         core::BufferUtilities::copyToBuffer(device, physicalDevice, graphicsQueue, commandPool,
                                             vertexBuffer, vertices.data(), vertexSize);
 
-        // Create device-local index buffer
         vk::DeviceSize indexSize = indices.size() * sizeof(uint32_t);
         core::BufferInfoRequest indexInfo(
             device, physicalDevice, indexSize,

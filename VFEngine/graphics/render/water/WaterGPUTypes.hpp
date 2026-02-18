@@ -2,7 +2,6 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
-#include <cstddef>
 
 namespace render::water
 {
@@ -24,13 +23,11 @@ namespace render::water
         float waveFrequency;            // 4
         float maxVisibleDepth;          // 4
         float fresnelPower;             // 4
-        uint32_t tileCount;             // 4
-        uint32_t subdivisions;          // 4
         float dudvTiling;               // 4
         float dudvStrength;             // 4
         float waveDirection;            // 4 (angle in radians)
     };
-    static_assert(sizeof(WaterPushConstants) == 72);
+    static_assert(sizeof(WaterPushConstants) == 64);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

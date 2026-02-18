@@ -35,7 +35,6 @@ namespace core
 {
     class Device;
     class SwapChain;
-    class Shader;
     class DeferredDeletionQueue;
 }
 

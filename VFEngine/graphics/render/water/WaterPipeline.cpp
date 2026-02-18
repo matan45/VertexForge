@@ -167,7 +167,6 @@ namespace render::water
 
         waterTileLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Pool: 1 storage buffer descriptor
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
@@ -179,7 +178,6 @@ namespace render::water
 
         waterTilePool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = waterTilePool;
         allocInfo.descriptorSetCount = 1;
@@ -371,7 +369,6 @@ namespace render::water
 
         dudvTextureLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Pool: 1 combined image sampler descriptor
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
         poolSize.descriptorCount = 1;
@@ -383,7 +380,6 @@ namespace render::water
 
         dudvTexturePool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = dudvTexturePool;
         allocInfo.descriptorSetCount = 1;
@@ -391,7 +387,6 @@ namespace render::water
 
         dudvTextureDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // Write dudv texture to descriptor
         vk::DescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfo.imageView = dudvImageView;
@@ -410,22 +405,18 @@ namespace render::water
 
     void WaterPipeline::createGraphicsPipeline(vk::DescriptorSetLayout iblLayout, vk::RenderPass renderPass)
     {
-        // Vertex binding: WaterVertex (position + texcoord)
         vk::VertexInputBindingDescription vertexBinding{};
         vertexBinding.binding = 0;
         vertexBinding.stride = sizeof(WaterVertex);
         vertexBinding.inputRate = vk::VertexInputRate::eVertex;
 
-        // Vertex attributes
         std::vector<vk::VertexInputAttributeDescription> vertexAttributes(2);
 
-        // location 0: position (vec3)
         vertexAttributes[0].binding = 0;
         vertexAttributes[0].location = 0;
         vertexAttributes[0].format = vk::Format::eR32G32B32Sfloat;
         vertexAttributes[0].offset = offsetof(WaterVertex, position);
 
-        // location 1: texCoord (vec2)
         vertexAttributes[1].binding = 0;
         vertexAttributes[1].location = 1;
         vertexAttributes[1].format = vk::Format::eR32G32Sfloat;
@@ -487,7 +478,6 @@ namespace render::water
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind vertex and index buffers
         vk::Buffer vertexBuffers[] = {meshBuffer.getVertexBuffer()};
         vk::DeviceSize offsets[] = {0};
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
@@ -498,7 +488,6 @@ namespace render::water
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                 0, descriptorSets, nullptr);
 
-        // Push constants
         cmd.pushConstants(pipelineLayout,
                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                            0, sizeof(WaterPushConstants), &pushConstants);

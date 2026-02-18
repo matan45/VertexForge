@@ -78,7 +78,7 @@ namespace services
         void setWaterTileHeight(EntityHandle waterEntity, int32_t tileX, int32_t tileZ, float height);
         void setWaterGlobalSettings(EntityHandle waterEntity, const WaterGlobalSettingsData& settings);
 
-        void updateBuoyancy(float deltaTime);
+        void updateBuoyancy();
         void clearBuoyancyTracking();
 
         void rebuildWaterFromComponents();

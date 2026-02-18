@@ -48,10 +48,8 @@ namespace render::gpudriven
             gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, 0.0f, 0.0f);
         }
 
-        // Upload to mesh buffer
         waterMeshBuffer->updateTileData(waterTileData);
 
-        // Update descriptor to point to SSBO
         waterPipeline->updateDescriptors(
             waterMeshBuffer->getTileSSBO(),
             static_cast<uint32_t>(waterTileData.size())
@@ -65,8 +63,6 @@ namespace render::gpudriven
         cachedWaterPushConstants.waveFrequency = settings.waveFrequency;
         cachedWaterPushConstants.maxVisibleDepth = settings.maxVisibleDepth;
         cachedWaterPushConstants.fresnelPower = settings.fresnelPower;
-        cachedWaterPushConstants.tileCount = static_cast<uint32_t>(waterTileData.size());
-        cachedWaterPushConstants.subdivisions = tileConfig.subdivisions;
         cachedWaterPushConstants.dudvTiling = settings.dudvTiling;
         cachedWaterPushConstants.dudvStrength = settings.dudvStrength;
         cachedWaterPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
