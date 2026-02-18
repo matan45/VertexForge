@@ -145,31 +145,32 @@ namespace animation
         if (animationData->duration > 0.0f)
             timeInTicks = std::fmod(timeInTicks, animationData->duration);
 
-        // Find the root motion bone: the topmost bone with animated position keys.
-        // Bone 0 is often a static "Armature" node; the actual movement is usually
-        // in its first child (e.g. "Hips") that has position animation keys.
+        // Find the root motion bone: the shallowest bone with animated position keys.
+        // Walk from the root down the hierarchy to find the first bone that actually
+        // translates (has > 1 position key). Handles Armature → Root → Hips chains.
         int rootMotionBone = -1;
         {
-            auto it0 = boneNameToChannelIndex.find(skeletonData->bones[0].name);
-            if (it0 != boneNameToChannelIndex.end() &&
-                animationData->channels[it0->second].positionKeys.size() > 1)
+            int bestDepth = std::numeric_limits<int>::max();
+            for (size_t b = 0; b < boneCount; ++b)
             {
-                rootMotionBone = 0;
-            }
-            else
-            {
-                for (size_t b = 1; b < boneCount; ++b)
+                auto itB = boneNameToChannelIndex.find(skeletonData->bones[b].name);
+                if (itB == boneNameToChannelIndex.end() ||
+                    animationData->channels[itB->second].positionKeys.size() <= 1)
+                    continue;
+
+                // Compute depth in hierarchy
+                int depth = 0;
+                int idx = static_cast<int>(b);
+                while (idx >= 0)
                 {
-                    if (skeletonData->bones[b].parentIndex == 0)
-                    {
-                        auto itB = boneNameToChannelIndex.find(skeletonData->bones[b].name);
-                        if (itB != boneNameToChannelIndex.end() &&
-                            animationData->channels[itB->second].positionKeys.size() > 1)
-                        {
-                            rootMotionBone = static_cast<int>(b);
-                            break;
-                        }
-                    }
+                    idx = skeletonData->bones[idx].parentIndex;
+                    ++depth;
+                }
+
+                if (depth < bestDepth)
+                {
+                    bestDepth = depth;
+                    rootMotionBone = static_cast<int>(b);
                 }
             }
         }
