@@ -18,7 +18,10 @@ namespace windows::animation
                                   int selectedChannel,
                                   bool showBoneVisualization,
                                   const services::PreviewInstanceId& instanceId,
-                                  bool& isDraggingPreview)
+                                  bool& isDraggingPreview,
+                                  bool showColliderOverlay,
+                                  const types::PhysicsAnimationConfig* physicsConfig,
+                                  const std::unordered_map<std::string, size_t>* boneNameToIndex)
     {
         ImGui::Text("3D Preview");
         ImGui::Separator();
@@ -77,6 +80,13 @@ namespace windows::animation
             if (showBoneVisualization && !evaluatedBones.empty())
             {
                 drawBoneVisualization(viewportPos, availSize, evaluatedBones, selectedChannel, camera);
+            }
+
+            if (showColliderOverlay && physicsConfig && boneNameToIndex && !evaluatedBones.empty())
+            {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                colliderOverlay.draw(drawList, viewportPos, availSize, camera,
+                                     evaluatedBones, *physicsConfig, *boneNameToIndex, selectedChannel);
             }
         }
         else

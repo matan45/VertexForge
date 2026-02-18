@@ -150,6 +150,7 @@
     <ClInclude Include="windows\ViewPortPicker.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationInfoPanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationSkeletonPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
@@ -157,6 +158,7 @@
     <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
     <ClInclude Include="windows\animation\AnimatorNodeGraph.hpp" />
     <ClInclude Include="windows\animation\AnimatorPropertiesPanel.hpp" />
+    <ClInclude Include="windows\animation\ColliderOverlayRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowserModals.hpp" />
@@ -254,6 +256,7 @@
     <ClCompile Include="windows\ViewPortPicker.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationInfoPanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationSkeletonPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
@@ -261,6 +264,7 @@
     <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
     <ClCompile Include="windows\animation\AnimatorNodeGraph.cpp" />
     <ClCompile Include="windows\animation\AnimatorPropertiesPanel.cpp" />
+    <ClCompile Include="windows\animation\ColliderOverlayRenderer.cpp" />
     <ClCompile Include="windows\contentbrowser\AssetGridRenderer.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowser.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowserModals.cpp" />

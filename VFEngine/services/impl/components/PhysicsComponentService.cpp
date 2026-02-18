@@ -287,6 +287,7 @@ namespace services
 
         const auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         PhysicsAnimationComponentData data;
+        data.physicsAnimationPath = comp.physicsAnimationPath;
         data.defaultMode = comp.config.defaultMode;
         data.collisionLayer = comp.config.collisionLayer;
         data.boneBodyMappings = comp.config.boneBodyMappings;
@@ -309,6 +310,7 @@ namespace services
         }
 
         auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
+        comp.physicsAnimationPath = data.physicsAnimationPath;
         comp.config.defaultMode = data.defaultMode;
         comp.config.collisionLayer = data.collisionLayer;
         comp.config.boneBodyMappings = data.boneBodyMappings;

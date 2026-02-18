@@ -71,6 +71,8 @@ namespace windows
 
                 ImGui::BeginChild("InfoPanel", ImVec2(leftPanelWidth, contentSize.y), true);
                 infoPanel.draw(panelState, getPreviewInstanceId());
+                ImGui::Spacing();
+                ImGui::Checkbox("Physics Panel", &showPhysicsPanel);
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -97,7 +99,10 @@ namespace windows
                                   selectedChannel,
                                   showBoneVisualization,
                                   getPreviewInstanceId(),
-                                  isDraggingPreview);
+                                  isDraggingPreview,
+                                  showPhysicsPanel && showColliderOverlay,
+                                  &physicsConfig,
+                                  &boneNameToIndex);
                     updateBoneTransformsFromService();
                     ImGui::EndChild();
 
@@ -111,16 +116,35 @@ namespace windows
 
                 ImGui::SameLine();
 
-                ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, contentSize.y), true);
+                ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), false);
+
+                float skeletonHeight = showPhysicsPanel ? contentSize.y * 0.4f : contentSize.y;
+
+                ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, skeletonHeight), true);
                 if (panelState.animationLoaded)
                 {
+                    const std::unordered_set<std::string>* mappedNames = showPhysicsPanel ? &mappedBoneNames : nullptr;
                     skeletonPanel.draw(evaluatedBones, boneChildrenMap, selectedChannel,
-                                       showBoneVisualization, panelState.meshLoadedInPreview, camera.get());
+                                       showBoneVisualization, panelState.meshLoadedInPreview, camera.get(),
+                                       mappedNames);
                 }
                 else
                 {
                     ImGui::TextDisabled("Loading...");
                 }
+                ImGui::EndChild();
+
+                if (showPhysicsPanel)
+                {
+                    ImGui::BeginChild("PhysicsPanel", ImVec2(rightPanelWidth, 0), true);
+                    if (physicsPanel.draw(physicsConfig, selectedChannel, evaluatedBones,
+                                          boneNameToIndex, showColliderOverlay, physicsConfigPath))
+                    {
+                        buildMappedBoneNames();
+                    }
+                    ImGui::EndChild();
+                }
+
                 ImGui::EndChild();
             }
         }
@@ -301,6 +325,15 @@ namespace windows
 
             currentFrame = static_cast<int>(currentTimeInTicks);
             updateBoneTransformsFromService();
+        }
+    }
+
+    void AnimationPreviewWindow::buildMappedBoneNames()
+    {
+        mappedBoneNames.clear();
+        for (const auto& mapping : physicsConfig.boneBodyMappings)
+        {
+            mappedBoneNames.insert(mapping.boneName);
         }
     }
 }

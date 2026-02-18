@@ -316,6 +316,9 @@ namespace serialization
         json j;
         const auto& config = physAnim.config;
 
+        if (!physAnim.physicsAnimationPath.empty())
+            j["physicsAnimationPath"] = physAnim.physicsAnimationPath;
+
         j["defaultMode"] = physicsAnimationModeToString(config.defaultMode);
         j["collisionLayer"] = config.collisionLayer;
         j["kinematicToRagdollBlendTime"] = config.kinematicToRagdollBlendTime;
@@ -357,6 +360,11 @@ namespace serialization
     void SceneSerialization::deserializePhysicsAnimation(const json& j, components::PhysicsAnimationComponent& physAnim)
     {
         auto& config = physAnim.config;
+
+        if (auto it = j.find("physicsAnimationPath"); it != j.end() && it->is_string())
+        {
+            physAnim.physicsAnimationPath = it->get<std::string>();
+        }
 
         if (auto it = j.find("defaultMode"); it != j.end() && it->is_string())
         {

@@ -201,6 +201,7 @@ namespace services
 
     struct PhysicsAnimationComponentData
     {
+        std::string physicsAnimationPath;
         types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
         uint8_t collisionLayer = 1;
         std::vector<types::BoneBodyMapping> boneBodyMappings;

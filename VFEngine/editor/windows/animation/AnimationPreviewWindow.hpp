@@ -5,15 +5,18 @@
 #include "AnimationViewport.hpp"
 #include "AnimationTimelinePanel.hpp"
 #include "AnimationSkeletonPanel.hpp"
+#include "AnimationPhysicsPanel.hpp"
 #include "resource/Types.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include "providers/IAnimationPreviewProvider.hpp"
+#include "types/PhysicsAnimationTypes.hpp"
 #include <string>
 #include <vector>
 #include <future>
 #include <atomic>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace editor { class OrbitCamera; }
 
@@ -76,5 +79,14 @@ namespace windows
         animation::AnimationViewport viewport;
         animation::AnimationTimelinePanel timelinePanel;
         animation::AnimationSkeletonPanel skeletonPanel;
+        animation::AnimationPhysicsPanel physicsPanel;
+
+        types::PhysicsAnimationConfig physicsConfig;
+        bool showPhysicsPanel = false;
+        bool showColliderOverlay = true;
+        std::string physicsConfigPath;
+
+        void buildMappedBoneNames();
+        std::unordered_set<std::string> mappedBoneNames;
     };
 }

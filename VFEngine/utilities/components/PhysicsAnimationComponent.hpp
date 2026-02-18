@@ -2,6 +2,7 @@
 #include "../types/PhysicsAnimationTypes.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace components
@@ -9,6 +10,7 @@ namespace components
     struct PhysicsAnimationComponent
     {
         // Config data (serialized)
+        std::string physicsAnimationPath;
         types::PhysicsAnimationConfig config;
 
         // Runtime state (transient, NOT serialized)

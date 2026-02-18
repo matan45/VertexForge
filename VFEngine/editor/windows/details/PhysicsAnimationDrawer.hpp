@@ -11,9 +11,7 @@ namespace windows::details
 
     private:
         bool drawHeader(bool& outRemove);
-        bool drawDefaultMode(services::PhysicsAnimationComponentData& data);
-        bool drawCollisionLayer(services::PhysicsAnimationComponentData& data);
-        bool drawBoneMappings(services::PhysicsAnimationComponentData& data);
-        bool drawJointLimits(services::PhysicsAnimationComponentData& data);
+        void drawFilePicker(services::EntityHandle handle, services::PhysicsAnimationComponentData& data, bool& changed);
+        void drawConfigSummary(const services::PhysicsAnimationComponentData& data);
     };
 }
