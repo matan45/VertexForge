@@ -2,7 +2,10 @@
 #include "physics/PhysicsAnimationAsset.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/PhysicsSettingsEvents.hpp"
 #include <imgui.h>
+#include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <filesystem>
 
@@ -128,14 +131,7 @@ namespace windows::animation
                 changed = true;
             }
 
-            int layer = static_cast<int>(config.collisionLayer);
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::DragInt("##Layer", &layer, 1.0f, 0, 15))
-            {
-                config.collisionLayer = static_cast<uint8_t>(layer);
-                changed = true;
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collision Layer (0-15)");
+            changed |= drawLayerCombo("##GlobalLayer", config.collisionLayer);
 
             ImGui::SetNextItemWidth(-1);
             if (ImGui::DragFloat("##BlendTime", &config.kinematicToRagdollBlendTime, 0.01f, 0.0f, 2.0f, "Blend: %.2fs"))
@@ -315,6 +311,22 @@ namespace windows::animation
         if (ImGui::SliderFloat("##Restit", &mapping.restitution, 0.0f, 1.0f, "Rest: %.2f"))
             changed = true;
 
+        bool useGlobalLayer = (mapping.collisionLayer == 255);
+        if (ImGui::Checkbox("##UseGlobalLayer", &useGlobalLayer))
+        {
+            mapping.collisionLayer = useGlobalLayer ? 255 : 1;
+            changed = true;
+        }
+        ImGui::SameLine();
+        if (useGlobalLayer)
+        {
+            ImGui::TextDisabled("Layer: Global");
+        }
+        else
+        {
+            changed |= drawLayerCombo("##BoneLayer", mapping.collisionLayer);
+        }
+
         return changed;
     }
 
@@ -402,5 +414,55 @@ namespace windows::animation
 
             ImGui::Unindent(5.0f);
         }
+    }
+
+    bool AnimationPhysicsPanel::drawLayerCombo(const char* id, uint8_t& layerValue)
+    {
+        std::vector<types::CollisionLayer> layers;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::physics::GetCollisionLayersQuery layersQuery;
+            layers = dispatcher.query(layersQuery);
+        }
+        catch (...) {}
+
+        if (layers.empty())
+        {
+            layers = types::PhysicsSettings::createDefault().layers;
+        }
+
+        if (layers.empty()) return false;
+
+        std::vector<std::string> layerNames;
+        int currentIndex = 0;
+        for (size_t i = 0; i < layers.size(); ++i)
+        {
+            layerNames.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
+            if (layers[i].index == layerValue)
+            {
+                currentIndex = static_cast<int>(i);
+            }
+        }
+
+        bool changed = false;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo(id, layerNames[currentIndex].c_str()))
+        {
+            for (size_t i = 0; i < layers.size(); ++i)
+            {
+                bool isSelected = (layers[i].index == layerValue);
+                if (ImGui::Selectable(layerNames[i].c_str(), isSelected))
+                {
+                    layerValue = layers[i].index;
+                    changed = true;
+                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collision Layer");
+
+        return changed;
     }
 }

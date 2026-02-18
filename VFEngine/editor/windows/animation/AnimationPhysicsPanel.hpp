@@ -29,6 +29,7 @@ namespace windows::animation
                                          const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
         bool drawMappingFields(types::BoneBodyMapping& mapping);
         bool drawJointLimitFields(types::JointConstraintLimits& limits);
+        bool drawLayerCombo(const char* id, uint8_t& layerValue);
         void drawAllMappingsSummary(const types::PhysicsAnimationConfig& config,
                                     int& selectedChannel,
                                     const std::unordered_map<std::string, size_t>& boneNameToIndex);

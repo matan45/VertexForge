@@ -25,6 +25,7 @@ namespace types
         float mass = 1.0f;
         float friction = 0.5f;
         float restitution = 0.0f;
+        uint8_t collisionLayer = 255; // 255 = use global config layer
     };
 
     struct JointConstraintLimits

@@ -24,6 +24,29 @@ namespace windows::animation
                                   const std::unordered_map<std::string, size_t>* boneNameToIndex)
     {
         ImGui::Text("3D Preview");
+        ImGui::SameLine();
+
+        float panStep = camera ? camera->distance * 0.1f : 0.5f;
+        if (ImGui::ArrowButton("##CamUp", ImGuiDir_Up))
+        {
+            if (camera)
+            {
+                camera->target.y += panStep;
+                camera->updateMatrices();
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera up");
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##CamDown", ImGuiDir_Down))
+        {
+            if (camera)
+            {
+                camera->target.y -= panStep;
+                camera->updateMatrices();
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera down");
+
         ImGui::Separator();
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();

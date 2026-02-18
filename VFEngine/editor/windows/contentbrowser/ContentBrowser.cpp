@@ -412,7 +412,7 @@ namespace windows
         if (extension == ".vfPrefab") return Prefab;
         if (extension == ".vfTerrainMat") return TerrainMaterial;
         if (extension == ".vfTerrain") return Terrain;
-        if (extension == ".vfPhysAnim") return Animation;
+        if (extension == ".vfPhysAnim") return Other;
         if (extension == ".mt") return Script;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||

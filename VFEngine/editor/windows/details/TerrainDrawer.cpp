@@ -3,6 +3,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/TerrainEvents.hpp"
 #include "events/PhysicsEvents.hpp"
+#include "events/PhysicsSettingsEvents.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <chrono>
@@ -170,19 +172,46 @@ namespace windows::details {
                     dispatcher.execute(cmd);
                 }
 
-                const char* layerNames[] = {
-                    "0 - Static", "1 - Dynamic", "2 - Kinematic", "3 - Sensor",
-                    "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
-                };
-                int layer = static_cast<int>(terrain.colliderCollisionLayer);
-                if (ImGui::Combo("Collision Layer", &layer, layerNames, IM_ARRAYSIZE(layerNames)))
+                std::vector<types::CollisionLayer> layers;
+                try
                 {
-                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
-                    propCmd.entity = handle;
-                    propCmd.collisionLayer = static_cast<uint8_t>(layer);
-                    propCmd.friction = terrain.colliderFriction;
-                    propCmd.restitution = terrain.colliderRestitution;
-                    dispatcher.execute(propCmd);
+                    events::physics::GetCollisionLayersQuery layersQuery;
+                    layers = dispatcher.query(layersQuery);
+                }
+                catch (...) {}
+
+                if (layers.empty())
+                    layers = types::PhysicsSettings::createDefault().layers;
+
+                if (!layers.empty())
+                {
+                    std::vector<std::string> layerLabels;
+                    int currentIndex = 0;
+                    for (size_t i = 0; i < layers.size(); ++i)
+                    {
+                        layerLabels.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
+                        if (layers[i].index == terrain.colliderCollisionLayer)
+                            currentIndex = static_cast<int>(i);
+                    }
+
+                    if (ImGui::BeginCombo("Collision Layer", layerLabels[currentIndex].c_str()))
+                    {
+                        for (size_t i = 0; i < layers.size(); ++i)
+                        {
+                            bool isSelected = (layers[i].index == terrain.colliderCollisionLayer);
+                            if (ImGui::Selectable(layerLabels[i].c_str(), isSelected))
+                            {
+                                events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                                propCmd.entity = handle;
+                                propCmd.collisionLayer = layers[i].index;
+                                propCmd.friction = terrain.colliderFriction;
+                                propCmd.restitution = terrain.colliderRestitution;
+                                dispatcher.execute(propCmd);
+                            }
+                            if (isSelected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
                 }
 
                 float friction = terrain.colliderFriction;

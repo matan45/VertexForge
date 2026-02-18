@@ -63,6 +63,8 @@ namespace physics
             m["mass"] = mapping.mass;
             m["friction"] = mapping.friction;
             m["restitution"] = mapping.restitution;
+            if (mapping.collisionLayer != 255)
+                m["collisionLayer"] = mapping.collisionLayer;
             mappingsArray.push_back(m);
         }
         j["boneBodyMappings"] = mappingsArray;
@@ -123,6 +125,11 @@ namespace physics
                     mapping.friction = mJson["friction"].get<float>();
                 if (mJson.contains("restitution") && mJson["restitution"].is_number())
                     mapping.restitution = mJson["restitution"].get<float>();
+                if (mJson.contains("collisionLayer") && mJson["collisionLayer"].is_number_unsigned())
+                {
+                    uint8_t layer = mJson["collisionLayer"].get<uint8_t>();
+                    mapping.collisionLayer = layer < 16 ? layer : 255;
+                }
                 config.boneBodyMappings.push_back(mapping);
             }
         }

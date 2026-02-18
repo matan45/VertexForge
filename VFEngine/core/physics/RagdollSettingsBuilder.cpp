@@ -108,7 +108,8 @@ namespace core::physics
             part.mPosition = toJoltR(bonePos);
             part.mRotation = toJolt(boneRot);
             part.mMotionType = JPH::EMotionType::Dynamic;
-            part.mObjectLayer = static_cast<JPH::ObjectLayer>(config.collisionLayer);
+            uint8_t layer = (mapping->collisionLayer != 255) ? mapping->collisionLayer : config.collisionLayer;
+            part.mObjectLayer = static_cast<JPH::ObjectLayer>(layer);
             part.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
             part.mMassPropertiesOverride.mMass = mapping->mass;
             part.mFriction = mapping->friction;
