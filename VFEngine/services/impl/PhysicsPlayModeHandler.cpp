@@ -7,6 +7,8 @@
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/PhysicsAnimationComponent.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
 
@@ -307,6 +309,8 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
+        initializePhysicsAnimations();
+
         physicsActive = true;
         vfLogInfo("Physics play mode started with {} bodies", activePhysicsBodies.size());
     }
@@ -317,6 +321,8 @@ namespace services
         {
             return;
         }
+
+        cleanupPhysicsAnimations();
 
         if (waterService)
         {
@@ -347,6 +353,7 @@ namespace services
         }
 
         physicsProvider->update(deltaTime);
+        physicsProvider->updatePhysicsAnimations(deltaTime);
         syncTransformsFromPhysics();
     }
 
@@ -402,5 +409,97 @@ namespace services
 
             transform.isDirty = true;
         }
+    }
+
+    void PhysicsPlayModeHandler::initializePhysicsAnimations()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::PhysicsAnimationComponent,
+                                   components::MeshComponent,
+                                   components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& meshComp = view.get<components::MeshComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            auto& physAnimComp = view.get<components::PhysicsAnimationComponent>(entity);
+
+            if (meshComp.meshPath.empty() || meshComp.animatorPath.empty())
+            {
+                continue;
+            }
+
+            auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+            if (!stream || !stream->hasSkeletonData())
+            {
+                continue;
+            }
+
+            resource::SkeletonData skeletonData;
+            if (!stream->readSkeleton(skeletonData) || skeletonData.bones.empty())
+            {
+                continue;
+            }
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            glm::vec3 eulerRad = glm::radians(transform.rotation);
+            glm::quat rotQuat = glm::quat(eulerRad);
+
+            bool created = physicsProvider->createPhysicsAnimation(
+                handle, physAnimComp.config, skeletonData, transform.position, rotQuat);
+
+            if (!created)
+            {
+                std::string entityName = "Unknown";
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    entityName = registry.get<components::NameComponent>(entity).name;
+                }
+                vfLogWarning("Failed to create physics animation for entity '{}'", entityName);
+                continue;
+            }
+
+            if (physAnimComp.config.defaultMode == types::PhysicsAnimationMode::Ragdoll)
+            {
+                physicsProvider->activateRagdoll(handle);
+                physAnimComp.currentMode = types::PhysicsAnimationMode::Ragdoll;
+            }
+            else
+            {
+                physicsProvider->createKinematicBones(handle, transform.position);
+                physAnimComp.currentMode = physAnimComp.config.defaultMode;
+            }
+
+            physAnimComp.isInitialized = true;
+            activePhysicsAnimationEntities.insert(handle);
+        }
+
+        if (!activePhysicsAnimationEntities.empty())
+        {
+            vfLogInfo("Initialized {} physics animation entities", activePhysicsAnimationEntities.size());
+        }
+    }
+
+    void PhysicsPlayModeHandler::cleanupPhysicsAnimations()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& handle : activePhysicsAnimationEntities)
+        {
+            physicsProvider->destroyPhysicsAnimation(handle);
+
+            auto entity = internal::fromHandle(handle);
+            if (registry.valid(entity) && registry.all_of<components::PhysicsAnimationComponent>(entity))
+            {
+                auto& physAnimComp = registry.get<components::PhysicsAnimationComponent>(entity);
+                physAnimComp.isInitialized = false;
+                physAnimComp.currentMode = types::PhysicsAnimationMode::Animated;
+                physAnimComp.overrideBoneMatrices.clear();
+                physAnimComp.transitionProgress = 0.0f;
+            }
+        }
+
+        activePhysicsAnimationEntities.clear();
     }
 }

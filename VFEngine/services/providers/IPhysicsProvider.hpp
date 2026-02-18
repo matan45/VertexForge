@@ -3,6 +3,8 @@
 #include "../data/EntityHandle.hpp"
 #include "../interfaces/IPhysicsService.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/PhysicsAnimationTypes.hpp"
+#include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
@@ -79,5 +81,34 @@ namespace services
                                         const glm::vec3& halfExtents) = 0;
         virtual void removeWaterSensorBody(EntityHandle entity) = 0;
         virtual bool hasWaterSensorBody(EntityHandle entity) const = 0;
+
+        // Physics Animation / Ragdoll
+        virtual bool createPhysicsAnimation(EntityHandle entity,
+                                             const types::PhysicsAnimationConfig& config,
+                                             const resource::SkeletonData& skeletonData,
+                                             const glm::vec3& entityPosition,
+                                             const glm::quat& entityRotation) = 0;
+        virtual void destroyPhysicsAnimation(EntityHandle entity) = 0;
+        virtual bool hasPhysicsAnimation(EntityHandle entity) const = 0;
+        virtual void activateRagdoll(EntityHandle entity) = 0;
+        virtual void deactivateRagdoll(EntityHandle entity) = 0;
+        virtual bool isRagdollActive(EntityHandle entity) const = 0;
+        virtual bool createKinematicBones(EntityHandle entity, const glm::vec3& entityPosition) = 0;
+        virtual void destroyKinematicBones(EntityHandle entity) = 0;
+        virtual void updateKinematicBones(EntityHandle entity,
+                                           const std::vector<glm::mat4>& boneWorldTransforms,
+                                           float deltaTime) = 0;
+        virtual std::vector<glm::mat4> getRagdollBoneMatrices(
+            EntityHandle entity,
+            const resource::SkeletonData& skeletonData,
+            const std::vector<glm::mat4>& fallbackAnimWorldTransforms) const = 0;
+        virtual void transitionToRagdoll(EntityHandle entity,
+                                          const std::vector<glm::mat4>& currentBoneWorldTransforms,
+                                          const glm::vec3& entityPosition) = 0;
+        virtual void transitionToKinematic(EntityHandle entity, const glm::vec3& entityPosition) = 0;
+        virtual void applyRagdollImpulse(EntityHandle entity, const glm::vec3& impulse) = 0;
+        virtual void applyRagdollBoneImpulse(EntityHandle entity, int animBoneIndex,
+                                              const glm::vec3& impulse) = 0;
+        virtual void updatePhysicsAnimations(float deltaTime) = 0;
     };
 }

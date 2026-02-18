@@ -5,19 +5,25 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Physics/Ragdoll/Ragdoll.h>
+#include <Jolt/Skeleton/SkeletonPose.h>
 #include "PhysicsLayers.hpp"
 #include "PhysicsContactListener.hpp"
+#include "PhysicsSkeletonConverter.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include <cstdint>
 #include <string>
 #include "JoltConversions.hpp"
 
 namespace core::physics
 {
+    struct RagdollBuildResult;
+
     using BodyType = types::RigidBodyType;
     using ColliderShape = types::ColliderShape;
 
@@ -67,25 +73,37 @@ namespace core::physics
         uint8_t collisionLayer = 0;
     };
 
+    struct RagdollInstanceData
+    {
+        JPH::Ref<JPH::Ragdoll> ragdoll;
+        SkeletonConversionResult skeletonConversion;
+        uint32_t collisionGroupId = 0;
+    };
+
     class PhysicsWorld
     {
     private:
         std::unique_ptr<JPH::JobSystemThreadPool> jobSystem;
         std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
         std::unique_ptr<JPH::PhysicsSystem> physicsSystem;
-        
+
         std::unique_ptr<BroadPhaseLayerInterfaceImpl> broadPhaseLayerInterface;
         std::unique_ptr<ObjectVsBroadPhaseLayerFilterImpl> objectVsBroadPhaseFilter;
         std::unique_ptr<ObjectLayerPairFilterImpl> objectLayerPairFilter;
-        
+
         std::unique_ptr<PhysicsContactListener> contactListener;
-        
+
         std::unordered_map<uint64_t, JPH::BodyID> entityToBody;
         std::unordered_map<uint32_t, uint64_t> bodyToEntity; // BodyID index to entity
 
         using TileCoordKey = uint64_t;
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
+
+        // Ragdoll data
+        std::unordered_map<uint64_t, RagdollInstanceData> entityRagdolls;
+        std::unordered_map<uint64_t, std::vector<JPH::BodyID>> entityBoneBodies;
+        uint32_t nextCollisionGroupId = 1;
 
         bool initialized = false;
 
@@ -151,6 +169,34 @@ namespace core::physics
 
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);
+
+        // Ragdoll management
+        bool createRagdoll(uint64_t entityId, const RagdollBuildResult& buildResult);
+        void destroyRagdoll(uint64_t entityId);
+        bool hasRagdoll(uint64_t entityId) const;
+        void activateRagdoll(uint64_t entityId);
+        void deactivateRagdoll(uint64_t entityId);
+        bool getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const;
+        void setRagdollPose(uint64_t entityId, const JPH::SkeletonPose& pose);
+        void driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& target, float deltaTime);
+        void applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse);
+        void applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse);
+        const SkeletonConversionResult* getRagdollSkeletonConversion(uint64_t entityId) const;
+
+        // Kinematic bone bodies
+        bool createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,
+                                        const glm::vec3& entityPosition = glm::vec3(0.0f));
+        void destroyKinematicBoneBodies(uint64_t entityId);
+        bool hasKinematicBoneBodies(uint64_t entityId) const;
+        void updateKinematicBonePoses(uint64_t entityId,
+                                       const std::vector<glm::mat4>& boneWorldTransforms,
+                                       const std::vector<int>& physicsToAnimBoneIndex,
+                                       float deltaTime);
+
+        // Mode transitions
+        void transitionToRagdoll(uint64_t entityId, const JPH::SkeletonPose& currentPose);
+        void transitionToKinematic(uint64_t entityId, const RagdollBuildResult& buildResult,
+                                    const glm::vec3& entityPosition);
 
     };
 }

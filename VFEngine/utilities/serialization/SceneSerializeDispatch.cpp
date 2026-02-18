@@ -67,6 +67,12 @@ namespace serialization
             componentsJson["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
         }
 
+        if (entity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            componentsJson["physicsAnimation"] = serializePhysicsAnimation(
+                entity.getComponent<components::PhysicsAnimationComponent>());
+        }
+
         if (entity.hasComponent<components::VFXComponent>())
         {
             componentsJson["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
@@ -279,6 +285,12 @@ namespace serialization
         {
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+
+        if (componentsJson.contains("physicsAnimation"))
+        {
+            auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();
+            deserializePhysicsAnimation(componentsJson["physicsAnimation"], physAnimComp);
         }
 
         if (componentsJson.contains("vfx"))

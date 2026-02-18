@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
+#include "../types/PhysicsAnimationTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
 
@@ -86,6 +87,12 @@ namespace serialization
 
         static json serializeVFX(const components::VFXComponent& vfx);
         static void deserializeVFX(const json& j, components::VFXComponent& vfx);
+
+        static json serializePhysicsAnimation(const components::PhysicsAnimationComponent& physAnim);
+        static void deserializePhysicsAnimation(const json& j, components::PhysicsAnimationComponent& physAnim);
+
+        static std::string physicsAnimationModeToString(types::PhysicsAnimationMode mode);
+        static types::PhysicsAnimationMode stringToPhysicsAnimationMode(const std::string& str);
 
         static json serializeDirectionalLight(const components::DirectionalLightComponent& light);
         static void deserializeDirectionalLight(const json& j, components::DirectionalLightComponent& light);

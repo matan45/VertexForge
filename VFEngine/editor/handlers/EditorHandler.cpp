@@ -12,6 +12,7 @@
 #include "impl/UndoRedoServiceImpl.hpp"
 #include "impl/FileOperationsServiceImpl.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
+#include "impl/PhysicsAnimationServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "impl/VFXPlayModeHandler.hpp"
 #include "impl/VFXRuntimeServiceImpl.hpp"
@@ -126,6 +127,7 @@ namespace handlers
         fileOperationsService.reset();
         undoRedoService.reset();
         physicsService.reset();
+        physicsAnimationService.reset();
         physicsPlayModeHandler.reset();
         vfxPlayModeHandler.reset();
         vfxRuntimeService.reset();
@@ -211,6 +213,7 @@ namespace handlers
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
+            physicsAnimationService = std::make_shared<services::PhysicsAnimationServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
         }
@@ -284,6 +287,10 @@ namespace handlers
         undoRedoService->registerEventHandlers();
         fileOperationsService->registerEventHandlers();
         physicsService->registerEventHandlers();
+        if (physicsAnimationService)
+        {
+            physicsAnimationService->registerEventHandlers();
+        }
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();
         waterService->registerEventHandlers();

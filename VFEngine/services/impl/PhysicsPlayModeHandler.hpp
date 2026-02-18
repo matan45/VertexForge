@@ -34,9 +34,13 @@ namespace services
         void update(float deltaTime);
 
     private:
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsAnimationEntities;
+
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
         void enterPlayMode();
         void exitPlayMode();
         void syncTransformsFromPhysics();
+        void initializePhysicsAnimations();
+        void cleanupPhysicsAnimations();
     };
 }
