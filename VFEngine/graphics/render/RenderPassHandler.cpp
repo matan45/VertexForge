@@ -281,6 +281,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::clearWaterData()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearWaterData();
+        }
+    }
+
     void RenderPassHandler::recreateOverlayPipelines()
     {
         if (debugRendererInitialized)

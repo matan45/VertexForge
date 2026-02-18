@@ -143,6 +143,11 @@ namespace services
         if (it != waterGrids.end())
         {
             waterGrids.erase(it);
+            globalSettingsDirty = true;
+
+            events::water::WaterDeletedNotification notification;
+            notification.waterEntity = entity;
+            events::EventDispatcher::instance().publish(notification);
         }
     }
 

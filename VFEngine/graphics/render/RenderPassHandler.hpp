@@ -231,6 +231,7 @@ namespace render
         void clearTerrainData();
 
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void clearWaterData();
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
