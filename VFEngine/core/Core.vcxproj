@@ -128,6 +128,7 @@
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
     <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
+    <ClInclude Include="adapters\api\PhysicsAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsColliderAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
@@ -194,6 +195,7 @@
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsColliderAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
