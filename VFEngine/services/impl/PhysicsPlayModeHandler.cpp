@@ -372,6 +372,7 @@ namespace services
         }
 
         activePhysicsBodies.clear();
+        rootMotionLastSyncPos.clear();
         physicsActive = false;
 
         vfLogInfo("Physics play mode stopped");
@@ -422,16 +423,30 @@ namespace services
 
             auto& transform = registry.get<components::TransformComponent>(entity);
 
-            // Root motion entities: entity position drives physics body (not the other way)
+            // Root motion entities: combine physics delta (gravity/collisions) with root motion
             if (registry.all_of<components::AnimatorComponent>(entity))
             {
                 const auto& animComp = registry.get<components::AnimatorComponent>(entity);
                 if (animComp.applyRootMotion)
                 {
+                    glm::vec3 physPos = physicsProvider->getPosition(handle);
+
+                    auto it = rootMotionLastSyncPos.find(handle);
+                    if (it != rootMotionLastSyncPos.end())
+                    {
+                        // Physics delta = how physics moved the body (gravity, collisions)
+                        glm::vec3 physicsDelta = physPos - it->second;
+                        transform.position += physicsDelta;
+                    }
+
+                    // Sync entity position (with root motion) back to physics body
+                    rootMotionLastSyncPos[handle] = transform.position;
                     physicsProvider->setPosition(handle, transform.position);
+
                     glm::vec3 eulerRad = glm::radians(transform.rotation);
                     glm::quat rotQuat = glm::quat(eulerRad);
                     physicsProvider->setRotation(handle, rotQuat);
+
                     transform.isDirty = true;
                     continue;
                 }
