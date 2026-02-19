@@ -3,7 +3,6 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp"
 #include "types/PhysicsTypes.hpp"
-#include "types/PhysicsAnimationTypes.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/RenderSettings.hpp"
 #include <optional>

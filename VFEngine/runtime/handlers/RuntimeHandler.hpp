@@ -45,14 +45,11 @@ namespace handlers {
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
         events::SubscriptionToken resizeSubscription;
-        events::SubscriptionToken minimizeSubscription;
-        events::SubscriptionToken restoreSubscription;
 
     public:
         explicit RuntimeHandler();
         ~RuntimeHandler();
 
-        // Non-copyable
         RuntimeHandler(const RuntimeHandler&) = delete;
         RuntimeHandler& operator=(const RuntimeHandler&) = delete;
 

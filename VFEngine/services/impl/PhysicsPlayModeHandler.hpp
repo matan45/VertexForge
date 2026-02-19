@@ -43,6 +43,8 @@ namespace services
         void enterPlayMode();
         void exitPlayMode();
         void syncTransformsFromPhysics();
+        void syncRootMotionEntity(EntityHandle handle);
+        void syncStandardPhysicsEntity(EntityHandle handle);
         void initializePhysicsAnimations();
         void cleanupPhysicsAnimations();
     };

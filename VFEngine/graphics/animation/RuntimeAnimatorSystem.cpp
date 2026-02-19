@@ -175,13 +175,6 @@ namespace animation
             {
                 vfLogWarning("[RuntimeAnimatorSystem] Entity {} has no mesh path - cannot create animator",
                              static_cast<uint32_t>(entity));
-                return;
-            }
-
-            auto cacheIt = skeletonDataCache.find(meshPath);
-            if (cacheIt != skeletonDataCache.end() && !cacheIt->second)
-            {
-                return;
             }
             return;
         }

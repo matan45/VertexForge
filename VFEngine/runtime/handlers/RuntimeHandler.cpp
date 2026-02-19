@@ -68,7 +68,6 @@ namespace handlers {
     void RuntimeHandler::cleanUp() {
         cleanupEventSubscriptions();
 
-        // Exit physics play mode before cleanup
         if (physicsPlayModeHandler)
         {
             auto& dispatcher = events::EventDispatcher::instance();
@@ -91,7 +90,6 @@ namespace handlers {
         windowStateService.reset();
         inputService.reset();
 
-        // Clean up via bootstrap
         bootstrap->cleanUp();
     }
 
@@ -130,7 +128,6 @@ namespace handlers {
             return false;
         }
 
-        // Trigger physics play mode after scene is loaded
         // PhysicsPlayModeHandler listens for EditorModeChangedNotification
         if (physicsPlayModeHandler)
         {
@@ -144,7 +141,6 @@ namespace handlers {
     }
 
     void RuntimeHandler::initializeServices() {
-        // Create service implementations using providers from bootstrap
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
             bootstrap->getAnimatorProvider()
@@ -165,7 +161,6 @@ namespace handlers {
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
-        // Create water service and wire to render adapter
         auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
         waterService = waterServiceImpl;
         waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
@@ -174,7 +169,6 @@ namespace handlers {
             waterAdapter->setWaterService(waterServiceImpl.get());
         }
 
-        // Create physics services
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
@@ -184,7 +178,6 @@ namespace handlers {
             physicsPlayModeHandler->subscribeToEvents();
         }
 
-        // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -207,22 +200,9 @@ namespace handlers {
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Subscribe to window resize events
         resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
             [this](const events::application::WindowResizedNotification&) {
                 bootstrap->triggerResize();
-            });
-
-        // Subscribe to window minimize events (pause game when minimized)
-        minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
-            [](const events::application::WindowMinimizedNotification&) {
-                // Could pause game loop or reduce update frequency here
-            });
-
-        // Subscribe to window restore events
-        restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
-            [](const events::application::WindowRestoredNotification&) {
-                // Could resume game loop here
             });
     }
 
@@ -233,14 +213,6 @@ namespace handlers {
         if (resizeSubscription.isValid()) {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
-        }
-        if (minimizeSubscription.isValid()) {
-            dispatcher.unsubscribe(minimizeSubscription);
-            minimizeSubscription = {};
-        }
-        if (restoreSubscription.isValid()) {
-            dispatcher.unsubscribe(restoreSubscription);
-            restoreSubscription = {};
         }
     }
 

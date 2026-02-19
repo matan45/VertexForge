@@ -4,7 +4,6 @@
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {
@@ -19,7 +18,6 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Commands
         dispatcher.registerCommandHandler<events::physicsAnimation::ActivateRagdollCommand>(
             [this](const auto& cmd) {
                 activateRagdoll(cmd.entity, cmd.impulse, cmd.impulseAnimBoneIndex);
@@ -58,7 +56,6 @@ namespace services
                 applyRagdollBoneImpulse(cmd.entity, cmd.animBoneIndex, cmd.impulse);
             });
 
-        // Queries
         dispatcher.registerQueryHandler<events::physicsAnimation::IsRagdollActiveQuery>(
             [this](const auto& query) {
                 return isRagdollActive(query.entity);
@@ -82,7 +79,6 @@ namespace services
 
         physicsProvider->activateRagdoll(entity);
 
-        // Update ECS component state
         auto enttEntity = internal::fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
         if (registry.valid(enttEntity) && registry.all_of<components::PhysicsAnimationComponent>(enttEntity))
@@ -91,7 +87,6 @@ namespace services
             physAnimComp.currentMode = types::PhysicsAnimationMode::Ragdoll;
         }
 
-        // Apply optional impulse
         if (glm::length(impulse) > 0.001f)
         {
             if (impulseAnimBoneIndex >= 0)
@@ -100,7 +95,6 @@ namespace services
                 physicsProvider->applyRagdollImpulse(entity, impulse);
         }
 
-        // Publish notification
         events::physicsAnimation::RagdollActivatedNotification notification;
         notification.entity = entity;
         ::events::EventDispatcher::instance().publish(notification);

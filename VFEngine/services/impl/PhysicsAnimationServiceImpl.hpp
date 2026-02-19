@@ -7,6 +7,8 @@ namespace services
 {
     class PhysicsAnimationServiceImpl : public IPhysicsAnimationService
     {
+    private:
+        IPhysicsProvider* physicsProvider;
     public:
         explicit PhysicsAnimationServiceImpl(IPhysicsProvider* physicsProvider);
         ~PhysicsAnimationServiceImpl() override;
@@ -23,7 +25,6 @@ namespace services
         void applyRagdollBoneImpulse(EntityHandle entity, int animBoneIndex,
                                       const glm::vec3& impulse) override;
 
-    private:
-        IPhysicsProvider* physicsProvider;
+    
     };
 }

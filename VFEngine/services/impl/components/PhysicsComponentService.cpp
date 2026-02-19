@@ -1,5 +1,4 @@
 #include "PhysicsComponentService.hpp"
-#include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"

@@ -1,9 +1,6 @@
 #include "PhysicsPlayModeHandler.hpp"
 #include "scene/WaterService.hpp"
 #include "../events/EditorModeEvents.hpp"
-#include "../events/PhysicsEvents.hpp"
-#include "../events/SceneEvents.hpp"
-#include "../data/EditorMode.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -284,7 +281,6 @@ namespace services
                 entityName = registry.get<components::NameComponent>(entity).name;
             }
 
-            // Create a static rigid body for standalone colliders
             RigidBodyData rbData;
             rbData.type = RigidBodyData::Type::Static;
             rbData.mass = 0.0f;
@@ -404,78 +400,86 @@ namespace services
             auto entity = internal::fromHandle(handle);
 
             if (!registry.valid(entity))
-            {
                 continue;
-            }
 
-            // Skip entities without RigidBodyComponent (standalone colliders are static)
+            // Standalone colliders (no RigidBody) are static — nothing to sync
             if (!registry.all_of<components::RigidBodyComponent>(entity))
-            {
                 continue;
-            }
 
-            auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
-
+            const auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
             if (rigidBody.type == components::RigidBodyType::Static)
-            {
                 continue;
-            }
 
-            auto& transform = registry.get<components::TransformComponent>(entity);
-
-            // Root motion entities: combine physics delta (gravity/collisions) with root motion
             if (registry.all_of<components::AnimatorComponent>(entity))
             {
                 const auto& animComp = registry.get<components::AnimatorComponent>(entity);
                 if (animComp.applyRootMotion)
                 {
-                    glm::vec3 physPos = physicsProvider->getPosition(handle);
-
-                    auto it = rootMotionLastSyncPos.find(handle);
-                    if (it != rootMotionLastSyncPos.end())
-                    {
-                        // Physics delta = how physics moved the body (gravity, collisions)
-                        glm::vec3 physicsDelta = physPos - it->second;
-                        transform.position += physicsDelta;
-                    }
-
-                    // Sync entity position (with root motion) back to physics body
-                    rootMotionLastSyncPos[handle] = transform.position;
-                    physicsProvider->setPosition(handle, transform.position);
-
-                    glm::vec3 eulerRad = glm::radians(transform.rotation);
-                    glm::quat rotQuat = glm::quat(eulerRad);
-                    physicsProvider->setRotation(handle, rotQuat);
-
-                    transform.isDirty = true;
+                    syncRootMotionEntity(handle);
                     continue;
                 }
             }
 
-            bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
-            bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
-
-            if (!allPositionFrozen)
-            {
-                glm::vec3 physPos = physicsProvider->getPosition(handle);
-
-                if (rigidBody.freezePositionX) physPos.x = transform.position.x;
-                if (rigidBody.freezePositionY) physPos.y = transform.position.y;
-                if (rigidBody.freezePositionZ) physPos.z = transform.position.z;
-
-                transform.position = physPos;
-            }
-
-            if (!allRotationFrozen)
-            {
-                glm::quat physRot = physicsProvider->getRotation(handle);
-                glm::vec3 eulerRad = glm::eulerAngles(physRot);
-                glm::vec3 eulerDeg = glm::degrees(eulerRad);
-                transform.rotation = eulerDeg;
-            }
-
-            transform.isDirty = true;
+            syncStandardPhysicsEntity(handle);
         }
+    }
+
+    void PhysicsPlayModeHandler::syncRootMotionEntity(EntityHandle handle)
+    {
+        auto entity = internal::fromHandle(handle);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& transform = registry.get<components::TransformComponent>(entity);
+
+        glm::vec3 physPos = physicsProvider->getPosition(handle);
+
+        auto it = rootMotionLastSyncPos.find(handle);
+        if (it != rootMotionLastSyncPos.end())
+        {
+            // Physics delta = how physics moved the body (gravity, collisions)
+            glm::vec3 physicsDelta = physPos - it->second;
+            transform.position += physicsDelta;
+        }
+
+        rootMotionLastSyncPos[handle] = transform.position;
+        physicsProvider->setPosition(handle, transform.position);
+
+        glm::vec3 eulerRad = glm::radians(transform.rotation);
+        glm::quat rotQuat = glm::quat(eulerRad);
+        physicsProvider->setRotation(handle, rotQuat);
+
+        transform.isDirty = true;
+    }
+
+    void PhysicsPlayModeHandler::syncStandardPhysicsEntity(EntityHandle handle)
+    {
+        auto entity = internal::fromHandle(handle);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& transform = registry.get<components::TransformComponent>(entity);
+        const auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
+
+        bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
+        bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
+
+        if (!allPositionFrozen)
+        {
+            glm::vec3 physPos = physicsProvider->getPosition(handle);
+
+            if (rigidBody.freezePositionX) physPos.x = transform.position.x;
+            if (rigidBody.freezePositionY) physPos.y = transform.position.y;
+            if (rigidBody.freezePositionZ) physPos.z = transform.position.z;
+
+            transform.position = physPos;
+        }
+
+        if (!allRotationFrozen)
+        {
+            glm::quat physRot = physicsProvider->getRotation(handle);
+            glm::vec3 eulerRad = glm::eulerAngles(physRot);
+            glm::vec3 eulerDeg = glm::degrees(eulerRad);
+            transform.rotation = eulerDeg;
+        }
+
+        transform.isDirty = true;
     }
 
     void PhysicsPlayModeHandler::initializePhysicsAnimations()
