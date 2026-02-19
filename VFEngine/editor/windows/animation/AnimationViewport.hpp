@@ -1,9 +1,13 @@
 #pragma once
 
 #include "providers/IAnimationPreviewProvider.hpp"
+#include "ColliderOverlayRenderer.hpp"
+#include "types/PhysicsAnimationTypes.hpp"
 #include <glm/glm.hpp>
 #include <imgui.h>
 #include <vector>
+#include <string>
+#include <unordered_map>
 
 namespace editor { class OrbitCamera; }
 namespace services { struct PreviewInstanceId; }
@@ -22,7 +26,10 @@ namespace windows::animation
                   int selectedChannel,
                   bool showBoneVisualization,
                   const services::PreviewInstanceId& instanceId,
-                  bool& isDraggingPreview);
+                  bool& isDraggingPreview,
+                  bool showColliderOverlay = false,
+                  const types::PhysicsAnimationConfig* physicsConfig = nullptr,
+                  const std::unordered_map<std::string, size_t>* boneNameToIndex = nullptr);
 
     private:
         void handlePreviewInput(editor::OrbitCamera* camera, bool& isDraggingPreview);
@@ -33,5 +40,7 @@ namespace windows::animation
         void drawPlaceholder(const ImVec2& windowPos, const ImVec2& availSize);
         ImVec2 worldToScreen(const glm::vec3& worldPos, const ImVec2& viewportPos,
                              const ImVec2& viewportSize, const editor::OrbitCamera* camera) const;
+
+        ColliderOverlayRenderer colliderOverlay;
     };
 }

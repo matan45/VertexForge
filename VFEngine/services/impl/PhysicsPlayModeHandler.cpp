@@ -1,12 +1,11 @@
 #include "PhysicsPlayModeHandler.hpp"
 #include "scene/WaterService.hpp"
 #include "../events/EditorModeEvents.hpp"
-#include "../events/PhysicsEvents.hpp"
-#include "../events/SceneEvents.hpp"
-#include "../data/EditorMode.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/PhysicsAnimationComponent.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
 
@@ -14,6 +13,39 @@ namespace services
 {
     namespace
     {
+        void applyScaleToCollider(ColliderData& colData, const glm::vec3& scale)
+        {
+            // Use absolute scale to handle negative scaling
+            glm::vec3 absScale = glm::abs(scale);
+
+            switch (colData.shape)
+            {
+            case ColliderData::Shape::Box:
+                colData.size *= absScale;
+                break;
+            case ColliderData::Shape::Sphere:
+            {
+                float uniformScale = glm::max(absScale.x, glm::max(absScale.y, absScale.z));
+                colData.size.x *= uniformScale;
+                break;
+            }
+            case ColliderData::Shape::Capsule:
+            {
+                // Capsule is vertical: radius scales by horizontal, height by vertical
+                float horizontalScale = glm::max(absScale.x, absScale.z);
+                colData.size.x *= horizontalScale;
+                colData.height *= absScale.y;
+                break;
+            }
+            case ColliderData::Shape::ConvexMesh:
+            case ColliderData::Shape::TriangleMesh:
+                colData.size *= absScale;
+                break;
+            }
+
+            colData.offset *= absScale;
+        }
+
         std::string validateCollider(const components::ColliderComponent& collider,
                                      const components::RigidBodyComponent& rigidBody,
                                      const std::string& entityName)
@@ -220,6 +252,8 @@ namespace services
                 colData.size = glm::vec3(1.0f);
             }
 
+            applyScaleToCollider(colData, transform.scale);
+
             EntityHandle handle = internal::toHandle(entity);
 
             physicsProvider->addRigidBody(handle, rbData, colData);
@@ -247,7 +281,6 @@ namespace services
                 entityName = registry.get<components::NameComponent>(entity).name;
             }
 
-            // Create a static rigid body for standalone colliders
             RigidBodyData rbData;
             rbData.type = RigidBodyData::Type::Static;
             rbData.mass = 0.0f;
@@ -295,6 +328,8 @@ namespace services
             colData.offset = collider.offset;
             colData.collisionLayer = collider.collisionLayer;
 
+            applyScaleToCollider(colData, transform.scale);
+
             EntityHandle handle = internal::toHandle(entity);
 
             physicsProvider->addRigidBody(handle, rbData, colData);
@@ -307,6 +342,8 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
+        initializePhysicsAnimations();
+
         physicsActive = true;
         vfLogInfo("Physics play mode started with {} bodies", activePhysicsBodies.size());
     }
@@ -317,6 +354,8 @@ namespace services
         {
             return;
         }
+
+        cleanupPhysicsAnimations();
 
         if (waterService)
         {
@@ -329,6 +368,7 @@ namespace services
         }
 
         activePhysicsBodies.clear();
+        rootMotionLastSyncPos.clear();
         physicsActive = false;
 
         vfLogInfo("Physics play mode stopped");
@@ -347,6 +387,7 @@ namespace services
         }
 
         physicsProvider->update(deltaTime);
+        physicsProvider->updatePhysicsAnimations(deltaTime);
         syncTransformsFromPhysics();
     }
 
@@ -359,48 +400,177 @@ namespace services
             auto entity = internal::fromHandle(handle);
 
             if (!registry.valid(entity))
-            {
                 continue;
-            }
 
-            // Skip entities without RigidBodyComponent (standalone colliders are static)
+            // Standalone colliders (no RigidBody) are static — nothing to sync
             if (!registry.all_of<components::RigidBodyComponent>(entity))
-            {
                 continue;
-            }
 
-            auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
-
+            const auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
             if (rigidBody.type == components::RigidBodyType::Static)
+                continue;
+
+            if (registry.all_of<components::AnimatorComponent>(entity))
+            {
+                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+                if (animComp.applyRootMotion)
+                {
+                    syncRootMotionEntity(handle);
+                    continue;
+                }
+            }
+
+            syncStandardPhysicsEntity(handle);
+        }
+    }
+
+    void PhysicsPlayModeHandler::syncRootMotionEntity(EntityHandle handle)
+    {
+        auto entity = internal::fromHandle(handle);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& transform = registry.get<components::TransformComponent>(entity);
+
+        glm::vec3 physPos = physicsProvider->getPosition(handle);
+
+        auto it = rootMotionLastSyncPos.find(handle);
+        if (it != rootMotionLastSyncPos.end())
+        {
+            // Physics delta = how physics moved the body (gravity, collisions)
+            glm::vec3 physicsDelta = physPos - it->second;
+            transform.position += physicsDelta;
+        }
+
+        rootMotionLastSyncPos[handle] = transform.position;
+        physicsProvider->setPosition(handle, transform.position);
+
+        glm::vec3 eulerRad = glm::radians(transform.rotation);
+        glm::quat rotQuat = glm::quat(eulerRad);
+        physicsProvider->setRotation(handle, rotQuat);
+
+        transform.isDirty = true;
+    }
+
+    void PhysicsPlayModeHandler::syncStandardPhysicsEntity(EntityHandle handle)
+    {
+        auto entity = internal::fromHandle(handle);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& transform = registry.get<components::TransformComponent>(entity);
+        const auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
+
+        bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
+        bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
+
+        if (!allPositionFrozen)
+        {
+            glm::vec3 physPos = physicsProvider->getPosition(handle);
+
+            if (rigidBody.freezePositionX) physPos.x = transform.position.x;
+            if (rigidBody.freezePositionY) physPos.y = transform.position.y;
+            if (rigidBody.freezePositionZ) physPos.z = transform.position.z;
+
+            transform.position = physPos;
+        }
+
+        if (!allRotationFrozen)
+        {
+            glm::quat physRot = physicsProvider->getRotation(handle);
+            glm::vec3 eulerRad = glm::eulerAngles(physRot);
+            glm::vec3 eulerDeg = glm::degrees(eulerRad);
+            transform.rotation = eulerDeg;
+        }
+
+        transform.isDirty = true;
+    }
+
+    void PhysicsPlayModeHandler::initializePhysicsAnimations()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::PhysicsAnimationComponent,
+                                   components::MeshComponent,
+                                   components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& meshComp = view.get<components::MeshComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            auto& physAnimComp = view.get<components::PhysicsAnimationComponent>(entity);
+
+            if (meshComp.meshPath.empty() || meshComp.animatorPath.empty())
             {
                 continue;
             }
 
-            bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
-            bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
-
-            auto& transform = registry.get<components::TransformComponent>(entity);
-
-            if (!allPositionFrozen)
+            auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+            if (!stream || !stream->hasSkeletonData())
             {
-                glm::vec3 physPos = physicsProvider->getPosition(handle);
-
-                if (rigidBody.freezePositionX) physPos.x = transform.position.x;
-                if (rigidBody.freezePositionY) physPos.y = transform.position.y;
-                if (rigidBody.freezePositionZ) physPos.z = transform.position.z;
-
-                transform.position = physPos;
+                continue;
             }
 
-            if (!allRotationFrozen)
+            resource::SkeletonData skeletonData;
+            if (!stream->readSkeleton(skeletonData) || skeletonData.bones.empty())
             {
-                glm::quat physRot = physicsProvider->getRotation(handle);
-                glm::vec3 eulerRad = glm::eulerAngles(physRot);
-                glm::vec3 eulerDeg = glm::degrees(eulerRad);
-                transform.rotation = eulerDeg;
+                continue;
             }
 
-            transform.isDirty = true;
+            EntityHandle handle = internal::toHandle(entity);
+
+            glm::vec3 eulerRad = glm::radians(transform.rotation);
+            glm::quat rotQuat = glm::quat(eulerRad);
+
+            bool created = physicsProvider->createPhysicsAnimation(
+                handle, physAnimComp.config, skeletonData, transform.position, rotQuat);
+
+            if (!created)
+            {
+                std::string entityName = "Unknown";
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    entityName = registry.get<components::NameComponent>(entity).name;
+                }
+                vfLogWarning("Failed to create physics animation for entity '{}'", entityName);
+                continue;
+            }
+
+            if (physAnimComp.config.defaultMode == types::PhysicsAnimationMode::Ragdoll)
+            {
+                physicsProvider->activateRagdoll(handle);
+                physAnimComp.currentMode = types::PhysicsAnimationMode::Ragdoll;
+            }
+            else
+            {
+                physicsProvider->createKinematicBones(handle, transform.position);
+                physAnimComp.currentMode = physAnimComp.config.defaultMode;
+            }
+
+            physAnimComp.isInitialized = true;
+            activePhysicsAnimationEntities.insert(handle);
         }
+
+        if (!activePhysicsAnimationEntities.empty())
+        {
+            vfLogInfo("Initialized {} physics animation entities", activePhysicsAnimationEntities.size());
+        }
+    }
+
+    void PhysicsPlayModeHandler::cleanupPhysicsAnimations()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& handle : activePhysicsAnimationEntities)
+        {
+            physicsProvider->destroyPhysicsAnimation(handle);
+
+            auto entity = internal::fromHandle(handle);
+            if (registry.valid(entity) && registry.all_of<components::PhysicsAnimationComponent>(entity))
+            {
+                auto& physAnimComp = registry.get<components::PhysicsAnimationComponent>(entity);
+                physAnimComp.isInitialized = false;
+                physAnimComp.currentMode = types::PhysicsAnimationMode::Animated;
+                physAnimComp.overrideBoneMatrices.clear();
+                physAnimComp.transitionProgress = 0.0f;
+            }
+        }
+
+        activePhysicsAnimationEntities.clear();
     }
 }

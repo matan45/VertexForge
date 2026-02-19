@@ -2,7 +2,6 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include "resource/Types.hpp"
 #include <vector>
 #include <string>
@@ -37,6 +36,7 @@ namespace animation
         void clear();
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
+        std::vector<glm::mat4> evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
 

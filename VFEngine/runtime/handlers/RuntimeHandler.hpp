@@ -9,6 +9,8 @@
 #include "interfaces/IScriptingService.hpp"
 #include "interfaces/IProjectService.hpp"
 #include "interfaces/IWaterService.hpp"
+#include "interfaces/IPhysicsService.hpp"
+#include "interfaces/IPhysicsAnimationService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core::audio {
@@ -17,6 +19,10 @@ namespace core::audio {
 
 namespace core {
     class RuntimeBootstrap;
+}
+
+namespace services {
+    class PhysicsPlayModeHandler;
 }
 
 namespace handlers {
@@ -33,17 +39,17 @@ namespace handlers {
         std::shared_ptr<services::IScriptingService> scriptingService;
         std::shared_ptr<services::IProjectService> projectService;
         std::shared_ptr<services::IWaterService> waterService;
+        std::shared_ptr<services::IPhysicsService> physicsService;
+        std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
+        std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
         events::SubscriptionToken resizeSubscription;
-        events::SubscriptionToken minimizeSubscription;
-        events::SubscriptionToken restoreSubscription;
 
     public:
         explicit RuntimeHandler();
         ~RuntimeHandler();
 
-        // Non-copyable
         RuntimeHandler(const RuntimeHandler&) = delete;
         RuntimeHandler& operator=(const RuntimeHandler&) = delete;
 

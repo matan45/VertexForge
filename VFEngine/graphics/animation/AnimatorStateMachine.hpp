@@ -45,6 +45,13 @@ namespace animation
         std::vector<glm::mat4> currentBoneMatrices;
 
         bool initialized = false;
+
+        // Root motion state
+        bool rootMotionEnabled = false;
+        bool rootMotionFirstFrame = true;
+        glm::vec3 previousRootPosition{0.0f};
+        glm::vec3 rootMotionDelta{0.0f};
+        uint32_t lastLoopCount = 0;
     public:
        explicit AnimatorStateMachine();
         ~AnimatorStateMachine();
@@ -83,6 +90,9 @@ namespace animation
         void forceTransitionTo(const std::string& stateName, float blendDuration = 0.25f);
 
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }
+
+        void setRootMotionEnabled(bool enabled);
+        glm::vec3 consumeRootMotionDelta();
 
     private:
         void evaluateTransitions();

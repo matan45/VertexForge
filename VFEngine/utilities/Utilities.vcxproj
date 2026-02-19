@@ -98,6 +98,7 @@
     <ClInclude Include="components\CoreComponents.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />
+    <ClInclude Include="components\PhysicsAnimationComponent.hpp" />
     <ClInclude Include="components\PhysicsComponents.hpp" />
     <ClInclude Include="components\TerrainComponents.hpp" />
     <ClInclude Include="components\UIComponents.hpp" />
@@ -117,6 +118,7 @@
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="math\TransformUtils.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
+    <ClInclude Include="physics\PhysicsAnimationAsset.hpp" />
     <ClInclude Include="postprocess\PostProcessTypes.hpp" />
     <ClInclude Include="print\EditorLogger.hpp" />
     <ClInclude Include="print\LogEntry.hpp" />
@@ -166,6 +168,7 @@
     <ClInclude Include="time\Timer.hpp" />
     <ClInclude Include="types\AudioTypes.hpp" />
     <ClInclude Include="types\CameraTypes.hpp" />
+    <ClInclude Include="types\PhysicsAnimationTypes.hpp" />
     <ClInclude Include="types\PhysicsTypes.hpp" />
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
@@ -193,6 +196,7 @@
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
+    <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
     <ClCompile Include="resource\FontResource.cpp" />

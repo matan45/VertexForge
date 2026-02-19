@@ -117,6 +117,7 @@
     <ClInclude Include="events\MaterialEvents.hpp" />
     <ClInclude Include="events\PaintBrushEvents.hpp" />
     <ClInclude Include="events\PaintModeEvents.hpp" />
+    <ClInclude Include="events\PhysicsAnimationEvents.hpp" />
     <ClInclude Include="events\PhysicsEvents.hpp" />
     <ClInclude Include="events\PhysicsSettingsEvents.hpp" />
     <ClInclude Include="events\PostProcessEvents.hpp" />
@@ -152,6 +153,7 @@
     <ClInclude Include="impl\InputServiceImpl.hpp" />
     <ClInclude Include="impl\PaintBrushServiceImpl.hpp" />
     <ClInclude Include="impl\PaintModeServiceImpl.hpp" />
+    <ClInclude Include="impl\PhysicsAnimationServiceImpl.hpp" />
     <ClInclude Include="impl\PhysicsPlayModeHandler.hpp" />
     <ClInclude Include="impl\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
@@ -193,6 +195,7 @@
     <ClInclude Include="interfaces\IInputService.hpp" />
     <ClInclude Include="interfaces\IPaintBrushService.hpp" />
     <ClInclude Include="interfaces\IPaintModeService.hpp" />
+    <ClInclude Include="interfaces\IPhysicsAnimationService.hpp" />
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
     <ClInclude Include="interfaces\IPreviewService.hpp" />
     <ClInclude Include="interfaces\IProjectService.hpp" />
@@ -234,6 +237,7 @@
     <ClCompile Include="impl\InputServiceImpl.cpp" />
     <ClCompile Include="impl\PaintBrushServiceImpl.cpp" />
     <ClCompile Include="impl\PaintModeServiceImpl.cpp" />
+    <ClCompile Include="impl\PhysicsAnimationServiceImpl.cpp" />
     <ClCompile Include="impl\PhysicsPlayModeHandler.cpp" />
     <ClCompile Include="impl\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />

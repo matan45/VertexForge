@@ -9,6 +9,7 @@
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
 #include "components/Components.hpp"
+#include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
@@ -179,6 +180,18 @@ namespace render::gpudriven
         for (auto entity : entityView)
         {
             const auto& meshComp = entityView.get<components::MeshComponent>(entity);
+
+            if (registry.all_of<components::PhysicsAnimationComponent>(entity))
+            {
+                const auto& physAnimComp = registry.get<components::PhysicsAnimationComponent>(entity);
+                if (!physAnimComp.overrideBoneMatrices.empty())
+                {
+                    uint32_t boneCount = static_cast<uint32_t>(physAnimComp.overrideBoneMatrices.size());
+                    boneMatrixManager->allocate(entity, boneCount);
+                    boneMatrixManager->updateBoneMatrices(entity, physAnimComp.overrideBoneMatrices);
+                    continue;
+                }
+            }
 
             if (meshComp.animatorPath.empty())
             {

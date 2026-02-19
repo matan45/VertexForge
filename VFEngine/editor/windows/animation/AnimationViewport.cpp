@@ -18,9 +18,35 @@ namespace windows::animation
                                   int selectedChannel,
                                   bool showBoneVisualization,
                                   const services::PreviewInstanceId& instanceId,
-                                  bool& isDraggingPreview)
+                                  bool& isDraggingPreview,
+                                  bool showColliderOverlay,
+                                  const types::PhysicsAnimationConfig* physicsConfig,
+                                  const std::unordered_map<std::string, size_t>* boneNameToIndex)
     {
         ImGui::Text("3D Preview");
+        ImGui::SameLine();
+
+        float panStep = camera ? camera->distance * 0.1f : 0.5f;
+        if (ImGui::ArrowButton("##CamUp", ImGuiDir_Up))
+        {
+            if (camera)
+            {
+                camera->target.y += panStep;
+                camera->updateMatrices();
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera up");
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##CamDown", ImGuiDir_Down))
+        {
+            if (camera)
+            {
+                camera->target.y -= panStep;
+                camera->updateMatrices();
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera down");
+
         ImGui::Separator();
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();
@@ -77,6 +103,13 @@ namespace windows::animation
             if (showBoneVisualization && !evaluatedBones.empty())
             {
                 drawBoneVisualization(viewportPos, availSize, evaluatedBones, selectedChannel, camera);
+            }
+
+            if (showColliderOverlay && physicsConfig && boneNameToIndex && !evaluatedBones.empty())
+            {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                colliderOverlay.draw(drawList, viewportPos, availSize, camera,
+                                     evaluatedBones, *physicsConfig, *boneNameToIndex, selectedChannel);
             }
         }
         else
@@ -231,7 +264,7 @@ namespace windows::animation
         glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
 
         float screenX = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
-        float screenY = viewportPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y;
+        float screenY = viewportPos.y + (ndc.y * 0.5f + 0.5f) * viewportSize.y;
 
         return ImVec2(screenX, screenY);
     }

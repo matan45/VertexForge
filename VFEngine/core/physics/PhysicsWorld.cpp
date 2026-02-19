@@ -6,6 +6,10 @@
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include "print/Logger.hpp"
@@ -159,6 +163,26 @@ namespace core::physics
         if (!initialized) return;
 
         auto& bodyInterface = physicsSystem->GetBodyInterface();
+
+        for (auto& [entityId, ragdollData] : entityRagdolls)
+        {
+            if (ragdollData.ragdoll)
+            {
+                ragdollData.ragdoll->RemoveFromPhysicsSystem();
+            }
+        }
+        entityRagdolls.clear();
+
+        for (auto& [entityId, boneBodies] : entityBoneBodies)
+        {
+            for (auto& bodyId : boneBodies)
+            {
+                removeAndDestroyBody(bodyInterface, bodyId);
+            }
+        }
+        entityBoneBodies.clear();
+        bodyToBoneIndex.clear();
+
         for (auto& [entityId, bodyId] : entityToBody)
             removeAndDestroyBody(bodyInterface, bodyId);
         entityToBody.clear();
@@ -214,6 +238,12 @@ namespace core::physics
         JPH::Ref<JPH::Shape> shape = PhysicsShapeFactory::createShape(colliderInfo);
         if (!shape) return JPH::BodyID();
 
+        if (colliderInfo.offset.x != 0.0f || colliderInfo.offset.y != 0.0f || colliderInfo.offset.z != 0.0f)
+        {
+            shape = new JPH::RotatedTranslatedShape(
+                toJolt(colliderInfo.offset), JPH::Quat::sIdentity(), shape);
+        }
+
         auto settings = buildRigidBodySettings(shape, bodyInfo, colliderInfo, entityId);
 
         auto& bodyInterface = physicsSystem->GetBodyInterface();
@@ -246,6 +276,9 @@ namespace core::physics
 
     void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
     {
+        destroyKinematicBoneBodies(entityId);
+        destroyRagdoll(entityId);
+
         auto it = entityToBody.find(entityId);
         if (it != entityToBody.end()) removeRigidBody(it->second);
     }
@@ -517,4 +550,5 @@ namespace core::physics
         auto it = terrainBodies.find(entityId);
         return it != terrainBodies.end() && !it->second.empty();
     }
+
 }

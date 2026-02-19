@@ -150,6 +150,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // Physics Animation Component Events
+    // ============================================
+
+    struct AddPhysicsAnimationComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddPhysicsAnimationComponent"; }
+    };
+
+    struct RemovePhysicsAnimationComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemovePhysicsAnimationComponent"; }
+    };
+
+    struct SetPhysicsAnimationDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::PhysicsAnimationComponentData data;
+
+        std::string_view getName() const override { return "SetPhysicsAnimationData"; }
+    };
+
+    struct HasPhysicsAnimationComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasPhysicsAnimationComponent"; }
+    };
+
+    struct GetPhysicsAnimationDataQuery : IQuery<std::optional<services::PhysicsAnimationComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetPhysicsAnimationData"; }
+    };
+
+    // ============================================
     // Light Component Events (Directional)
     // ============================================
 

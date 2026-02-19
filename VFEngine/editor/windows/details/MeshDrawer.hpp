@@ -15,6 +15,7 @@ namespace windows::details
         void drawSelectMeshButton(services::EntityHandle handle, const services::MeshData& currentData);
         void drawAnimatorPath(const std::string& animatorPath);
         void drawAnimatorButtons(services::EntityHandle handle, const services::MeshData& currentData);
+        void drawRootMotionCheckbox(services::EntityHandle handle, const services::MeshData& currentData);
         void drawBoundingBoxCheckbox(services::EntityHandle handle, const services::MeshData& currentData);
     };
 }

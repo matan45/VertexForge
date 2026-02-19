@@ -50,6 +50,11 @@ namespace windows::details
             drawAnimatorPath(meshOpt->animatorPath);
             drawAnimatorButtons(handle, *meshOpt);
 
+            if (!meshOpt->animatorPath.empty())
+            {
+                drawRootMotionCheckbox(handle, *meshOpt);
+            }
+
             ImGui::Spacing();
 
             drawBoundingBoxCheckbox(handle, *meshOpt);
@@ -133,6 +138,7 @@ namespace windows::details
             cmd.meshData.meshPath = path;
             cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             dispatcher.execute(cmd);
         }
         else
@@ -179,6 +185,7 @@ namespace windows::details
                     cmd.meshData.meshPath = currentData.meshPath;
                     cmd.meshData.animatorPath = path;
                     cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+                    cmd.meshData.applyRootMotion = currentData.applyRootMotion;
                     dispatcher.execute(cmd);
                 }
                 else
@@ -199,8 +206,25 @@ namespace windows::details
                 cmd.meshData.meshPath = currentData.meshPath;
                 cmd.meshData.animatorPath = "";  // Clear animator
                 cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+                cmd.meshData.applyRootMotion = false;  // Reset when clearing animator
                 dispatcher.execute(cmd);
             }
+        }
+    }
+
+    void MeshDrawer::drawRootMotionCheckbox(services::EntityHandle handle, const services::MeshData& currentData)
+    {
+        bool applyRootMotion = currentData.applyRootMotion;
+        if (ImGui::Checkbox("Apply Root Motion", &applyRootMotion))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SetMeshDataCommand cmd;
+            cmd.entity = handle;
+            cmd.meshData.meshPath = currentData.meshPath;
+            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+            cmd.meshData.applyRootMotion = applyRootMotion;
+            dispatcher.execute(cmd);
         }
     }
 
@@ -215,6 +239,7 @@ namespace windows::details
             cmd.meshData.meshPath = currentData.meshPath;
             cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = showBoundingBox;
+            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             dispatcher.execute(cmd);
         }
     }

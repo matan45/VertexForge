@@ -8,6 +8,7 @@
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include "print/Logger.hpp"
+#include <algorithm>
 
 namespace core::physics
 {
@@ -16,7 +17,9 @@ namespace core::physics
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::makeBoxFallback(const glm::vec3& halfExtents)
     {
         glm::vec3 safeExtents = glm::max(halfExtents, glm::vec3(MIN_DIMENSION));
-        return new JPH::BoxShape(toJolt(safeExtents));
+        float minExtent = std::min({safeExtents.x, safeExtents.y, safeExtents.z});
+        float convexRadius = std::min(JPH::cDefaultConvexRadius, minExtent);
+        return new JPH::BoxShape(toJolt(safeExtents), convexRadius);
     }
 
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::createShape(const ColliderCreateInfo& info)
@@ -32,7 +35,9 @@ namespace core::physics
                                   info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
                                   safeExtents.x, safeExtents.y, safeExtents.z);
                 }
-                return new JPH::BoxShape(toJolt(safeExtents));
+                float minExtent = std::min({safeExtents.x, safeExtents.y, safeExtents.z});
+                float convexRadius = std::min(JPH::cDefaultConvexRadius, minExtent);
+                return new JPH::BoxShape(toJolt(safeExtents), convexRadius);
             }
 
         case ColliderShape::Sphere:
@@ -48,9 +53,12 @@ namespace core::physics
         case ColliderShape::Capsule:
             {
                 float safeRadius = std::max(info.radius, MIN_DIMENSION);
-                float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
-                if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius))
+                float halfHeight = info.height * 0.5f - safeRadius;
+                if (halfHeight < MIN_DIMENSION)
                 {
+                    // Radius exceeds half-height: shrink radius to fit a valid capsule
+                    halfHeight = MIN_DIMENSION;
+                    safeRadius = std::max(MIN_DIMENSION, info.height * 0.5f - MIN_DIMENSION);
                     loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
                                   info.radius, safeRadius, halfHeight, info.height);
                 }

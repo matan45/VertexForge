@@ -463,5 +463,59 @@ namespace core::api
 
                                                 return value::Value(dispatcher.execute(cmd));
                                             });
+
+        // ============================================================
+        // ROOT MOTION
+        // ============================================================
+
+        // _native_animator_setRootMotion(entityId, enabled) -> void
+        interpreter->registerNativeFunction("_native_animator_setRootMotion",
+                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                                            {
+                                                if (args.size() < 2)
+                                                {
+                                                    vfLogError(
+                                                        "[Script] Animator.setRootMotion: missing arguments (expected entityId, enabled)");
+                                                    return value::Value(std::monostate{});
+                                                }
+
+                                                int64_t entityId = extractInt64(args[0], "Animator.setRootMotion");
+                                                if (entityId < 0)
+                                                {
+                                                    return value::Value(std::monostate{});
+                                                }
+
+                                                bool enabled = std::get<bool>(args[1]);
+
+                                                services::events::animator::SetEntityRootMotionCommand cmd;
+                                                cmd.entity = intToEntity(entityId);
+                                                cmd.enabled = enabled;
+                                                dispatcher.execute(cmd);
+
+                                                return value::Value(std::monostate{});
+                                            });
+
+        // _native_animator_getRootMotion(entityId) -> bool
+        interpreter->registerNativeFunction("_native_animator_getRootMotion",
+                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                                            {
+                                                if (args.empty())
+                                                {
+                                                    vfLogError(
+                                                        "[Script] Animator.getRootMotion: missing entityId argument");
+                                                    return value::Value(false);
+                                                }
+
+                                                int64_t entityId = extractInt64(args[0], "Animator.getRootMotion");
+                                                if (entityId < 0)
+                                                {
+                                                    return value::Value(false);
+                                                }
+
+                                                services::events::animator::GetEntityRootMotionQuery query;
+                                                query.entity = intToEntity(entityId);
+
+                                                return value::Value(dispatcher.query(query));
+                                            });
     }
 }

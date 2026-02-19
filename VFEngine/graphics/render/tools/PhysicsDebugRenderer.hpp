@@ -19,7 +19,7 @@ namespace render::mesh
     {
         glm::mat4 worldMatrix;
         types::ColliderShape shape = types::ColliderShape::Box;
-        glm::vec3 size{1.0f}; // Box half-extents
+        glm::vec3 size{1.0f}; // Box full size (renderer converts to half-extents)
         float radius = 0.5f;
         float height = 2.0f;
         uint8_t bodyType = 1; // 0=Static, 1=Dynamic, 2=Kinematic

@@ -10,7 +10,8 @@ namespace windows::animation
                                        int& selectedChannel,
                                        bool& showBoneVisualization,
                                        bool meshLoadedInPreview,
-                                       editor::OrbitCamera* camera)
+                                       editor::OrbitCamera* camera,
+                                       const std::unordered_set<std::string>* mappedBoneNames)
     {
         ImGui::Text("Skeleton Hierarchy");
         ImGui::Separator();
@@ -51,7 +52,7 @@ namespace windows::animation
         {
             for (size_t idx : rootIt->second)
             {
-                drawBoneNode(idx, evaluatedBones, boneChildrenMap, selectedChannel);
+                drawBoneNode(idx, evaluatedBones, boneChildrenMap, selectedChannel, mappedBoneNames);
             }
         }
     }
@@ -59,7 +60,8 @@ namespace windows::animation
     void AnimationSkeletonPanel::drawBoneNode(size_t index,
                                                const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                                const std::unordered_map<int32_t, std::vector<size_t>>& boneChildrenMap,
-                                               int& selectedChannel)
+                                               int& selectedChannel,
+                                               const std::unordered_set<std::string>* mappedBoneNames)
     {
         const auto& bone = evaluatedBones[index];
 
@@ -71,7 +73,13 @@ namespace windows::animation
         bool hasChildren = (childIt != boneChildrenMap.end() && !childIt->second.empty());
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
-        bool nodeOpen = ImGui::TreeNodeEx(bone.name.c_str(), flags);
+        bool hasMappedBody = mappedBoneNames && mappedBoneNames->count(bone.name) > 0;
+
+        std::string label = hasMappedBody
+            ? bone.name + " [P]"
+            : bone.name;
+
+        bool nodeOpen = ImGui::TreeNodeEx(label.c_str(), flags);
 
         if (ImGui::IsItemClicked())
             selectedChannel = static_cast<int>(index);
@@ -94,7 +102,7 @@ namespace windows::animation
             {
                 for (size_t childIdx : childIt->second)
                 {
-                    drawBoneNode(childIdx, evaluatedBones, boneChildrenMap, selectedChannel);
+                    drawBoneNode(childIdx, evaluatedBones, boneChildrenMap, selectedChannel, mappedBoneNames);
                 }
             }
             ImGui::TreePop();

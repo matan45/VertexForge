@@ -128,6 +128,7 @@
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
     <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
+    <ClInclude Include="adapters\api\PhysicsAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsColliderAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
@@ -162,7 +163,9 @@
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
     <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
+    <ClInclude Include="physics\PhysicsSkeletonConverter.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
+    <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="adapters\AnimationPreviewAdapter.cpp" />
@@ -174,6 +177,7 @@
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
+    <ClCompile Include="adapters\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\PostProcessAdapter.cpp" />
     <ClCompile Include="adapters\ScriptPhysicsEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
@@ -192,6 +196,7 @@
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsColliderAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
@@ -223,7 +228,10 @@
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
     <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
     <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
+    <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
+    <ClCompile Include="physics\PhysicsWorldRagdollOps.cpp" />
+    <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\graphics\Graphics.vcxproj">

@@ -3,6 +3,7 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/PhysicsAnimationComponent.hpp"
 #include "math/TransformUtils.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -108,6 +109,7 @@ namespace services
             COLLECT_CASE(Script, ScriptComponent);
             COLLECT_CASE(Collider, ColliderComponent);
             COLLECT_CASE(RigidBody, RigidBodyComponent);
+            COLLECT_CASE(PhysicsAnimation, PhysicsAnimationComponent);
             COLLECT_CASE(Animator, AnimatorComponent);
             COLLECT_CASE(VFX, VFXComponent);
             COLLECT_CASE(Text, TextComponent);
@@ -171,6 +173,7 @@ namespace services
             HAS_CASE(Script, ScriptComponent);
             HAS_CASE(Collider, ColliderComponent);
             HAS_CASE(RigidBody, RigidBodyComponent);
+            HAS_CASE(PhysicsAnimation, PhysicsAnimationComponent);
             HAS_CASE(Animator, AnimatorComponent);
             HAS_CASE(VFX, VFXComponent);
             HAS_CASE(Text, TextComponent);
@@ -222,6 +225,7 @@ namespace services
         CHECK_COMP(Script, ScriptComponent);
         CHECK_COMP(Collider, ColliderComponent);
         CHECK_COMP(RigidBody, RigidBodyComponent);
+        CHECK_COMP(PhysicsAnimation, PhysicsAnimationComponent);
         CHECK_COMP(Animator, AnimatorComponent);
         CHECK_COMP(VFX, VFXComponent);
         CHECK_COMP(Text, TextComponent);

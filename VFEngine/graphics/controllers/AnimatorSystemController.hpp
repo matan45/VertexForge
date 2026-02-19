@@ -32,5 +32,8 @@ namespace controllers
         [[nodiscard]] bool hasAnimator(entt::entity entity) const;
 
         bool forceTransitionTo(entt::entity entity, const std::string& stateName, float blendDuration);
+
+        void setRootMotion(entt::entity entity, bool enabled);
+        [[nodiscard]] bool getRootMotion(entt::entity entity) const;
     };
 }

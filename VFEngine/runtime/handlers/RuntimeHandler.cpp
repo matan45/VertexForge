@@ -8,10 +8,14 @@
 #include "impl/ScriptingServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "impl/scene/WaterService.hpp"
+#include "impl/PhysicsServiceImpl.hpp"
+#include "impl/PhysicsAnimationServiceImpl.hpp"
+#include "impl/PhysicsPlayModeHandler.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/EditorModeEvents.hpp"
 #include "events/ProjectEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -37,12 +41,18 @@ namespace handlers {
             if (windowStateService) {
                 windowStateService->update();
             }
-            // Update scripts every frame in runtime
+
+            float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+
+            // Update order: Physics → Scripts → Audio
+            if (physicsPlayModeHandler) {
+                physicsPlayModeHandler->update(deltaTime);
+            }
+
             if (scriptingService) {
-                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
                 scriptingService->updateScripts(deltaTime);
             }
-            // Update audio listener from primary camera
+
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
@@ -58,6 +68,18 @@ namespace handlers {
     void RuntimeHandler::cleanUp() {
         cleanupEventSubscriptions();
 
+        if (physicsPlayModeHandler)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::editor::EditorModeChangedNotification notification;
+            notification.previousMode = services::EditorMode::Play;
+            notification.currentMode = services::EditorMode::Edit;
+            dispatcher.publish(notification);
+        }
+
+        physicsPlayModeHandler.reset();
+        physicsAnimationService.reset();
+        physicsService.reset();
         waterService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
@@ -68,7 +90,6 @@ namespace handlers {
         windowStateService.reset();
         inputService.reset();
 
-        // Clean up via bootstrap
         bootstrap->cleanUp();
     }
 
@@ -107,11 +128,19 @@ namespace handlers {
             return false;
         }
 
+        // PhysicsPlayModeHandler listens for EditorModeChangedNotification
+        if (physicsPlayModeHandler)
+        {
+            events::editor::EditorModeChangedNotification notification;
+            notification.previousMode = services::EditorMode::Edit;
+            notification.currentMode = services::EditorMode::Play;
+            dispatcher.publish(notification);
+        }
+
         return true;
     }
 
     void RuntimeHandler::initializeServices() {
-        // Create service implementations using providers from bootstrap
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
             bootstrap->getAnimatorProvider()
@@ -132,7 +161,6 @@ namespace handlers {
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
-        // Create water service and wire to render adapter
         auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
         waterService = waterServiceImpl;
         waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
@@ -141,7 +169,15 @@ namespace handlers {
             waterAdapter->setWaterService(waterServiceImpl.get());
         }
 
-        // Register event handlers for command/query pattern
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
+            physicsAnimationService = std::make_shared<services::PhysicsAnimationServiceImpl>(physicsProvider);
+            physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
+            physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
+            physicsPlayModeHandler->subscribeToEvents();
+        }
+
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -150,28 +186,23 @@ namespace handlers {
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
         waterService->registerEventHandlers();
+        if (physicsService)
+        {
+            physicsService->registerEventHandlers();
+        }
+        if (physicsAnimationService)
+        {
+            physicsAnimationService->registerEventHandlers();
+        }
     }
 
     void RuntimeHandler::setupEventSubscriptions()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Subscribe to window resize events
         resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
             [this](const events::application::WindowResizedNotification&) {
                 bootstrap->triggerResize();
-            });
-
-        // Subscribe to window minimize events (pause game when minimized)
-        minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
-            [](const events::application::WindowMinimizedNotification&) {
-                // Could pause game loop or reduce update frequency here
-            });
-
-        // Subscribe to window restore events
-        restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
-            [](const events::application::WindowRestoredNotification&) {
-                // Could resume game loop here
             });
     }
 
@@ -182,14 +213,6 @@ namespace handlers {
         if (resizeSubscription.isValid()) {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
-        }
-        if (minimizeSubscription.isValid()) {
-            dispatcher.unsubscribe(minimizeSubscription);
-            minimizeSubscription = {};
-        }
-        if (restoreSubscription.isValid()) {
-            dispatcher.unsubscribe(restoreSubscription);
-            restoreSubscription = {};
         }
     }
 

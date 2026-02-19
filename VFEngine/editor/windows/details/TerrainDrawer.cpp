@@ -3,6 +3,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/TerrainEvents.hpp"
 #include "events/PhysicsEvents.hpp"
+#include "events/PhysicsSettingsEvents.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <chrono>
@@ -168,6 +170,70 @@ namespace windows::details {
                     events::physics::RemoveTerrainColliderCommand cmd;
                     cmd.terrainEntity = handle;
                     dispatcher.execute(cmd);
+                }
+
+                std::vector<types::CollisionLayer> layers;
+                try
+                {
+                    events::physics::GetCollisionLayersQuery layersQuery;
+                    layers = dispatcher.query(layersQuery);
+                }
+                catch (...) {}
+
+                if (layers.empty())
+                    layers = types::PhysicsSettings::createDefault().layers;
+
+                if (!layers.empty())
+                {
+                    std::vector<std::string> layerLabels;
+                    int currentIndex = 0;
+                    for (size_t i = 0; i < layers.size(); ++i)
+                    {
+                        layerLabels.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
+                        if (layers[i].index == terrain.colliderCollisionLayer)
+                            currentIndex = static_cast<int>(i);
+                    }
+
+                    if (ImGui::BeginCombo("Collision Layer", layerLabels[currentIndex].c_str()))
+                    {
+                        for (size_t i = 0; i < layers.size(); ++i)
+                        {
+                            bool isSelected = (layers[i].index == terrain.colliderCollisionLayer);
+                            if (ImGui::Selectable(layerLabels[i].c_str(), isSelected))
+                            {
+                                events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                                propCmd.entity = handle;
+                                propCmd.collisionLayer = layers[i].index;
+                                propCmd.friction = terrain.colliderFriction;
+                                propCmd.restitution = terrain.colliderRestitution;
+                                dispatcher.execute(propCmd);
+                            }
+                            if (isSelected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+
+                float friction = terrain.colliderFriction;
+                if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
+                {
+                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                    propCmd.entity = handle;
+                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                    propCmd.friction = friction;
+                    propCmd.restitution = terrain.colliderRestitution;
+                    dispatcher.execute(propCmd);
+                }
+
+                float restitution = terrain.colliderRestitution;
+                if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
+                {
+                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                    propCmd.entity = handle;
+                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                    propCmd.friction = terrain.colliderFriction;
+                    propCmd.restitution = restitution;
+                    dispatcher.execute(propCmd);
                 }
             }
 

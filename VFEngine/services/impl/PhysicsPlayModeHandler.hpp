@@ -5,6 +5,8 @@
 #include "../events/EventDispatcher.hpp"
 #include "../providers/IPhysicsProvider.hpp"
 #include <unordered_set>
+#include <unordered_map>
+#include <glm/glm.hpp>
 
 namespace services
 {
@@ -34,9 +36,16 @@ namespace services
         void update(float deltaTime);
 
     private:
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsAnimationEntities;
+        std::unordered_map<EntityHandle, glm::vec3, EntityHandle::Hash> rootMotionLastSyncPos;
+
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
         void enterPlayMode();
         void exitPlayMode();
         void syncTransformsFromPhysics();
+        void syncRootMotionEntity(EntityHandle handle);
+        void syncStandardPhysicsEntity(EntityHandle handle);
+        void initializePhysicsAnimations();
+        void cleanupPhysicsAnimations();
     };
 }

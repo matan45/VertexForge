@@ -241,6 +241,8 @@ namespace animation
             return;
         }
 
+        glm::vec3 currentRootPosition{0.0f};
+
         if (state.isBlending)
         {
             auto itPrev = loadedAnimations.find(state.previousStateId);
@@ -255,16 +257,29 @@ namespace animation
                 float prevTimeInTicks = previousEvaluator.secondsToTicks(state.previousStateTime);
                 float currTimeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
 
-                std::vector<glm::mat4> prevPose = previousEvaluator.evaluatePose(prevTimeInTicks);
-                std::vector<glm::mat4> currPose = currentEvaluator.evaluatePose(currTimeInTicks);
-
-                currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+                if (rootMotionEnabled)
+                {
+                    glm::vec3 prevRoot, currRoot;
+                    std::vector<glm::mat4> prevPose = previousEvaluator.evaluatePose(prevTimeInTicks, prevRoot);
+                    std::vector<glm::mat4> currPose = currentEvaluator.evaluatePose(currTimeInTicks, currRoot);
+                    currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+                    currentRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
+                }
+                else
+                {
+                    std::vector<glm::mat4> prevPose = previousEvaluator.evaluatePose(prevTimeInTicks);
+                    std::vector<glm::mat4> currPose = currentEvaluator.evaluatePose(currTimeInTicks);
+                    currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+                }
             }
             else if (itCurr != loadedAnimations.end() && itCurr->second)
             {
                 currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-                currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
+                if (rootMotionEnabled)
+                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks, currentRootPosition);
+                else
+                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
             }
         }
         else
@@ -274,13 +289,37 @@ namespace animation
             {
                 currentEvaluator.loadAnimation(*it->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-                currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
+                if (rootMotionEnabled)
+                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks, currentRootPosition);
+                else
+                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
             }
             else
             {
                 vfLogWarning("[AnimatorStateMachine] Animation not found for state {} (loaded={})",
                              state.currentStateId, it != loadedAnimations.end());
             }
+        }
+
+        if (rootMotionEnabled)
+        {
+            if (rootMotionFirstFrame)
+            {
+                rootMotionDelta = glm::vec3(0.0f);
+                rootMotionFirstFrame = false;
+            }
+            else if (state.currentLoopCount != lastLoopCount)
+            {
+                // Animation looped — zero the delta to avoid jump
+                rootMotionDelta = glm::vec3(0.0f);
+            }
+            else
+            {
+                rootMotionDelta = currentRootPosition - previousRootPosition;
+            }
+
+            previousRootPosition = currentRootPosition;
+            lastLoopCount = state.currentLoopCount;
         }
     }
 
@@ -442,6 +481,22 @@ namespace animation
         tempTransition.blendDuration = blendDuration;
 
         startTransition(tempTransition);
+    }
+
+    void AnimatorStateMachine::setRootMotionEnabled(bool enabled)
+    {
+        rootMotionEnabled = enabled;
+        rootMotionFirstFrame = true;
+        previousRootPosition = glm::vec3(0.0f);
+        rootMotionDelta = glm::vec3(0.0f);
+        lastLoopCount = 0;
+    }
+
+    glm::vec3 AnimatorStateMachine::consumeRootMotionDelta()
+    {
+        glm::vec3 delta = rootMotionDelta;
+        rootMotionDelta = glm::vec3(0.0f);
+        return delta;
     }
 
     void AnimatorStateMachine::forceTransitionTo(const std::string& stateName, float blendDuration)

@@ -1,8 +1,8 @@
 #include "PhysicsComponentService.hpp"
-#include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/PhysicsAnimationComponent.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
@@ -222,6 +222,101 @@ namespace services
         return true;
     }
 
+    // ========== PHYSICS ANIMATION COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addPhysicsAnimationComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            sceneEntity.addComponent<components::PhysicsAnimationComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removePhysicsAnimationComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            sceneEntity.removeComponent<components::PhysicsAnimationComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasPhysicsAnimationComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::PhysicsAnimationComponent>();
+    }
+
+    std::optional<PhysicsAnimationComponentData> PhysicsComponentService::getPhysicsAnimationData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
+        PhysicsAnimationComponentData data;
+        data.physicsAnimationPath = comp.physicsAnimationPath;
+        data.defaultMode = comp.config.defaultMode;
+        data.collisionLayer = comp.config.collisionLayer;
+        data.boneBodyMappings = comp.config.boneBodyMappings;
+        data.jointLimits = comp.config.jointLimits;
+        return data;
+    }
+
+    bool PhysicsComponentService::setPhysicsAnimationData(EntityHandle entity, const PhysicsAnimationComponentData& data)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::PhysicsAnimationComponent>())
+        {
+            sceneEntity.addComponent<components::PhysicsAnimationComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
+        comp.physicsAnimationPath = data.physicsAnimationPath;
+        comp.config.defaultMode = data.defaultMode;
+        comp.config.collisionLayer = data.collisionLayer;
+        comp.config.boneBodyMappings = data.boneBodyMappings;
+        comp.config.jointLimits = data.jointLimits;
+        return true;
+    }
+
     // ========== EVENT HANDLER REGISTRATION ==========
 
     void PhysicsComponentService::registerEventHandlers(events::EventDispatcher& dispatcher)
@@ -286,6 +381,37 @@ namespace services
             [this](const events::scene::GetRigidBodyDataQuery& query)
             {
                 return getRigidBodyData(query.entity);
+            });
+
+        // PhysicsAnimation component handlers
+        dispatcher.registerCommandHandler<events::scene::AddPhysicsAnimationComponentCommand>(
+            [this](const events::scene::AddPhysicsAnimationComponentCommand& cmd)
+            {
+                return addPhysicsAnimationComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemovePhysicsAnimationComponentCommand>(
+            [this](const events::scene::RemovePhysicsAnimationComponentCommand& cmd)
+            {
+                return removePhysicsAnimationComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetPhysicsAnimationDataCommand>(
+            [this](const events::scene::SetPhysicsAnimationDataCommand& cmd)
+            {
+                return setPhysicsAnimationData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasPhysicsAnimationComponentQuery>(
+            [this](const events::scene::HasPhysicsAnimationComponentQuery& query)
+            {
+                return hasPhysicsAnimationComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetPhysicsAnimationDataQuery>(
+            [this](const events::scene::GetPhysicsAnimationDataQuery& query)
+            {
+                return getPhysicsAnimationData(query.entity);
             });
     }
 }

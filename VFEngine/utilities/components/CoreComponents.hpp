@@ -149,6 +149,7 @@ namespace components
         std::string meshPath;
         std::string animatorPath;
         bool showBoundingBox = false;
+        bool applyRootMotion = false;
     };
 
     struct MaterialComponent

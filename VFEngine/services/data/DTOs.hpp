@@ -1,6 +1,7 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/PhysicsAnimationTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -45,6 +46,7 @@ namespace services
         std::string meshPath;
         std::string animatorPath; // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
+        bool applyRootMotion = false;
     };
 
     struct MeshBoundingBox
@@ -196,6 +198,15 @@ namespace services
         bool freezeRotationX = false;
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
+    };
+
+    struct PhysicsAnimationComponentData
+    {
+        std::string physicsAnimationPath;
+        types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
+        uint8_t collisionLayer = 1;
+        std::vector<types::BoneBodyMapping> boneBodyMappings;
+        std::vector<types::JointConstraintLimits> jointLimits;
     };
 
     struct VFXData

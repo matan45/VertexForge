@@ -1,6 +1,8 @@
 #include "AnimatorSystemController.hpp"
 #include "../animation/RuntimeAnimatorSystem.hpp"
 #include "../animation/AnimatorStateMachine.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 
 namespace controllers
 {
@@ -143,6 +145,34 @@ namespace controllers
         {
             animator->forceTransitionTo(stateName, blendDuration);
             return true;
+        }
+        return false;
+    }
+
+    void AnimatorSystemController::setRootMotion(entt::entity entity, bool enabled)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
+        {
+            registry.get<components::AnimatorComponent>(entity).applyRootMotion = enabled;
+        }
+        if (registry.valid(entity) && registry.all_of<components::MeshComponent>(entity))
+        {
+            registry.get<components::MeshComponent>(entity).applyRootMotion = enabled;
+        }
+        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(entity);
+        if (animator)
+        {
+            animator->setRootMotionEnabled(enabled);
+        }
+    }
+
+    bool AnimatorSystemController::getRootMotion(entt::entity entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
+        {
+            return registry.get<components::AnimatorComponent>(entity).applyRootMotion;
         }
         return false;
     }

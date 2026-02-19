@@ -287,7 +287,7 @@ namespace render::mesh
 
         const float pi = 3.14159265358979323846f;
         const int segments = SPHERE_SEGMENTS;
-        const float halfHeight = 0.5f;
+        const float halfHeight = 1.0f;
 
         // Top hemisphere
         int baseIndex = 0;

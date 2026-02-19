@@ -79,6 +79,7 @@ namespace windows
         
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
+        bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
         bool hasBillboard = billboardDrawer.draw(handle);
         bool hasText = textDrawer.draw(handle);
@@ -107,7 +108,7 @@ namespace windows
         bool hasUIProgressBar = uiProgressBarDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody, hasVFX, hasBillboard,
+                               hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
                                hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
                                hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
                                hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,

@@ -22,6 +22,7 @@
 #include "interfaces/IPaintModeService.hpp"
 #include "interfaces/IPaintBrushService.hpp"
 #include "interfaces/ITerrainRaycastService.hpp"
+#include "interfaces/IPhysicsAnimationService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -66,6 +67,7 @@ namespace handlers {
 		std::shared_ptr<services::IPaintModeService> paintModeService;
 		std::shared_ptr<services::IPaintBrushService> paintBrushService;
 	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
+		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;

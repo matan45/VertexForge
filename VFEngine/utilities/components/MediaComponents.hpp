@@ -147,6 +147,7 @@ namespace components
         void* stateMachine = nullptr;
         std::string animatorPath;
         bool isInitialized = false;
+        bool applyRootMotion = false;
     };
 
     struct VFXComponent

@@ -142,13 +142,13 @@ namespace windows::details
         {
         case types::ColliderShape::Box:
             ImGui::Text("Box Dimensions:");
-            if (ImGui::DragFloat3("Size (Half Extents)", &colliderData.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
+            if (ImGui::DragFloat3("Size", &colliderData.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
             {
                 changed = true;
             }
             if (ImGui::IsItemHovered())
             {
-                ImGui::SetTooltip("Half-extents of the box collider");
+                ImGui::SetTooltip("Full size of the box collider (half-extents = size / 2)");
             }
             break;
 

@@ -114,6 +114,7 @@ namespace core
 
     void PhysicsAdapter::cleanUp()
     {
+        physicsAnimationEntities.clear();
         if (physicsWorld)
             physicsWorld->cleanUp();
         fixedTimestep->reset();
