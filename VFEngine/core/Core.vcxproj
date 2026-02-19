@@ -177,6 +177,7 @@
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
+    <ClCompile Include="adapters\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\PostProcessAdapter.cpp" />
     <ClCompile Include="adapters\ScriptPhysicsEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
@@ -229,6 +230,7 @@
     <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
+    <ClCompile Include="physics\PhysicsWorldRagdollOps.cpp" />
     <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
   </ItemGroup>
   <ItemGroup>

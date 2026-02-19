@@ -7,7 +7,6 @@
 #include "physics/PhysicsAnimationAsset.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
-#include <fstream>
 
 namespace windows::details
 {
@@ -100,7 +99,6 @@ namespace windows::details
                                                  services::PhysicsAnimationComponentData& data,
                                                  bool& changed)
     {
-        // Display current file path
         if (!data.physicsAnimationPath.empty())
         {
             std::string filename = data.physicsAnimationPath;
@@ -120,7 +118,6 @@ namespace windows::details
             ImGui::TextDisabled("No physics animation config selected");
         }
 
-        // Browse button
         if (ImGui::Button("Select Config"))
         {
             nfd::FileDialog fileDialog;
@@ -147,7 +144,6 @@ namespace windows::details
             }
         }
 
-        // Clear button
         if (!data.physicsAnimationPath.empty())
         {
             ImGui::SameLine();
@@ -169,7 +165,6 @@ namespace windows::details
         {
             ImGui::Indent(10.0f);
 
-            // Default mode
             const char* modeStr = "Animated";
             switch (data.defaultMode)
             {
@@ -182,7 +177,6 @@ namespace windows::details
             ImGui::Text("Bone Mappings: %zu", data.boneBodyMappings.size());
             ImGui::Text("Joint Limits: %zu", data.jointLimits.size());
 
-            // List mapped bones
             if (!data.boneBodyMappings.empty() && ImGui::TreeNode("Mapped Bones"))
             {
                 for (const auto& mapping : data.boneBodyMappings)

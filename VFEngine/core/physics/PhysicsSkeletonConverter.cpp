@@ -1,8 +1,5 @@
 #include "PhysicsSkeletonConverter.hpp"
 #include "JoltConversions.hpp"
-#include <glm/gtc/matrix_transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
 
 namespace core::physics
@@ -18,7 +15,6 @@ namespace core::physics
             return result;
         }
 
-        // Build set of animation bone indices that are mapped
         std::unordered_map<int, int> animBoneToMappingOrder;
         for (size_t i = 0; i < config.boneBodyMappings.size(); ++i)
         {
@@ -43,7 +39,6 @@ namespace core::physics
         }
         std::sort(sortedAnimIndices.begin(), sortedAnimIndices.end());
 
-        // Build physics skeleton
         result.physicsSkeleton = new JPH::Skeleton();
         result.physicsToAnimBoneIndex.reserve(sortedAnimIndices.size());
 
@@ -51,7 +46,6 @@ namespace core::physics
         {
             const auto& bone = skeletonData.bones[animIdx];
 
-            // Find nearest mapped ancestor
             int physicsParentIndex = -1;
             int parentAnimIdx = bone.parentIndex;
             while (parentAnimIdx >= 0)
@@ -114,7 +108,6 @@ namespace core::physics
             }
         }
 
-        // Compute local-space joint states from world matrices
         pose.CalculateJointStates();
 
         return pose;
@@ -138,7 +131,6 @@ namespace core::physics
             auto it = conversion.animToPhysicsBoneIndex.find(static_cast<int>(i));
             if (it != conversion.animToPhysicsBoneIndex.end())
             {
-                // This bone is mapped to a physics body — use ragdoll transform
                 int physicsIdx = it->second;
                 if (physicsIdx >= 0 && physicsIdx < static_cast<int>(ragdollJointMatrices.size()))
                 {
@@ -151,7 +143,6 @@ namespace core::physics
             }
             else
             {
-                // Unmapped bone — use fallback animated transform
                 worldTransform = fallbackAnimWorldTransforms[i];
             }
 
@@ -165,7 +156,6 @@ namespace core::physics
     glm::mat4 PhysicsSkeletonConverter::toGlmMat4(const JPH::Mat44& m)
     {
         glm::mat4 result;
-        // JPH::Mat44 stores columns; GetColumn4 returns (x, y, z, w) for that column
         auto c0 = m.GetColumn4(0);
         auto c1 = m.GetColumn4(1);
         auto c2 = m.GetColumn4(2);

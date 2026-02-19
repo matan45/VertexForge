@@ -301,7 +301,6 @@ namespace animation
             }
         }
 
-        // Compute root motion delta
         if (rootMotionEnabled)
         {
             if (rootMotionFirstFrame)

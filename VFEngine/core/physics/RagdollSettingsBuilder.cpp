@@ -1,13 +1,10 @@
 #include "RagdollSettingsBuilder.hpp"
 #include "JoltConversions.hpp"
-#include "PhysicsShapeFactory.hpp"
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <glm/gtc/matrix_transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
 
 namespace core::physics
@@ -32,7 +29,6 @@ namespace core::physics
             return result;
         }
 
-        // Convert engine skeleton to physics skeleton (subset of mapped bones)
         result.skeletonConversion = PhysicsSkeletonConverter::convertToPhysicsSkeleton(skeletonData, config);
         if (!result.skeletonConversion.isValid())
         {
@@ -40,17 +36,14 @@ namespace core::physics
             return result;
         }
 
-        // Build entity world transform matrix
         glm::mat4 entityTransform = glm::translate(glm::mat4(1.0f), entityWorldPosition) * glm::mat4_cast(entityWorldRotation);
 
-        // Create RagdollSettings
         result.settings = new JPH::RagdollSettings();
         result.settings->mSkeleton = result.skeletonConversion.physicsSkeleton;
 
         int jointCount = result.skeletonConversion.physicsSkeleton->GetJointCount();
         result.settings->mParts.resize(jointCount);
 
-        // Compute world-space bone transforms for bind pose
         std::vector<JPH::Mat44> boneWorldMatrices(jointCount);
 
         for (int p = 0; p < jointCount; ++p)
@@ -58,7 +51,6 @@ namespace core::physics
             int animBoneIdx = result.skeletonConversion.physicsToAnimBoneIndex[p];
             const auto& bone = skeletonData.bones[animBoneIdx];
 
-            // Get bone body mapping
             const types::BoneBodyMapping* mapping = config.findMapping(bone.name);
             if (!mapping)
             {
@@ -66,17 +58,14 @@ namespace core::physics
                 return result;
             }
 
-            // Compute bone world transform from bind pose
             // bindPoses[i] is the bone's world-space transform at bind time
             glm::mat4 boneWorld = entityTransform * skeletonData.bindPoses[animBoneIdx];
             JPH::Mat44 joltBoneWorld = PhysicsSkeletonConverter::toJoltMat44(boneWorld);
             boneWorldMatrices[p] = joltBoneWorld;
 
-            // Decompose bone world transform for position/rotation
             glm::vec3 bonePos = glm::vec3(boneWorld[3]);
             glm::quat boneRot = glm::normalize(glm::quat_cast(boneWorld));
 
-            // Create shape for this bone body
             JPH::Ref<JPH::Shape> shape = createBoneShape(*mapping);
             if (shape == nullptr)
             {
@@ -84,7 +73,6 @@ namespace core::physics
                 return result;
             }
 
-            // Apply offset if needed
             bool hasOffset = glm::length(mapping->offset) > 0.001f;
             bool hasRotOffset = glm::abs(mapping->rotationOffset.w - 1.0f) > 0.001f ||
                                 glm::length(glm::vec3(mapping->rotationOffset.x, mapping->rotationOffset.y, mapping->rotationOffset.z)) > 0.001f;
@@ -102,7 +90,6 @@ namespace core::physics
                 }
             }
 
-            // Configure the part (inherits BodyCreationSettings)
             auto& part = result.settings->mParts[p];
             part.SetShape(shape);
             part.mPosition = toJoltR(bonePos);
@@ -117,7 +104,6 @@ namespace core::physics
             part.mLinearDamping = 0.1f;
             part.mAngularDamping = 0.1f;
 
-            // Create joint constraint to parent
             int physicsParentIdx = result.skeletonConversion.physicsSkeleton->GetJoint(p).mParentJointIndex;
             if (physicsParentIdx >= 0)
             {
@@ -126,13 +112,8 @@ namespace core::physics
             }
         }
 
-        // Stabilize ragdoll
         result.settings->Stabilize();
-
-        // Disable parent-child collisions using bind pose joint matrices
         result.settings->DisableParentChildCollisions(boneWorldMatrices.data(), 0.0f);
-
-        // Build lookup tables
         result.settings->CalculateBodyIndexToConstraintIndex();
 
         result.success = true;
@@ -212,7 +193,6 @@ namespace core::physics
         constraint->mPlaneAxis1 = planeAxis;
         constraint->mPlaneAxis2 = planeAxis;
 
-        // Apply limits
         if (limits)
         {
             constraint->mNormalHalfConeAngle = limits->swingNormalHalfAngle;
@@ -223,7 +203,6 @@ namespace core::physics
         }
         else
         {
-            // Default limits
             constraint->mNormalHalfConeAngle = 0.7854f;
             constraint->mPlaneHalfConeAngle = 0.7854f;
             constraint->mTwistMinAngle = -0.7854f;

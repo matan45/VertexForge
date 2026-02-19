@@ -1,7 +1,6 @@
 #include "AnimationPhysicsPanel.hpp"
 #include "physics/PhysicsAnimationAsset.hpp"
 #include "nfd/FileDialog.hpp"
-#include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PhysicsSettingsEvents.hpp"
 #include <imgui.h>

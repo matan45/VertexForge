@@ -1,7 +1,6 @@
 #include "ColliderOverlayRenderer.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include <glm/gtc/quaternion.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
 namespace windows::animation
@@ -163,7 +162,6 @@ namespace windows::animation
 
         constexpr int segments = 24;
 
-        // Top and bottom circles
         drawCircle(drawList, topCenter, axisX, axisZ, radius, segments, viewportPos, viewportSize, camera, color, thickness);
         drawCircle(drawList, botCenter, axisX, axisZ, radius, segments, viewportPos, viewportSize, camera, color, thickness);
 
