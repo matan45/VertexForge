@@ -50,8 +50,11 @@ namespace windows::animation
                                viewportPos, viewportSize, camera, color, thickness);
                 break;
             case types::ColliderShape::Capsule:
-                drawWireCapsule(drawList, colliderCenter, mapping.size.x, mapping.size.y, colliderRot,
+            {
+                float capsuleHalfHeight = glm::max(mapping.size.y - mapping.size.x, 0.001f);
+                drawWireCapsule(drawList, colliderCenter, mapping.size.x, capsuleHalfHeight, colliderRot,
                                 viewportPos, viewportSize, camera, color, thickness);
+            }
                 break;
             default:
                 break;
