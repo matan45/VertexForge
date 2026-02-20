@@ -169,6 +169,7 @@ namespace components
         std::string socketName;
         int32_t cachedSocketIndex = -1;
         bool isActive = true;
+        bool needsParentResolution = false; // Set true on deserialization/mode change
     };
 
     struct SocketOverrideComponent

@@ -62,6 +62,13 @@ namespace resource
         filePath.clear();
     }
 
+    std::streampos MeshStreamHandle::getSocketDataOffset()
+    {
+        if (!hasSkeleton || socketDataOffset == std::streampos(0))
+            return 0;
+        return socketDataOffset;
+    }
+
     bool MeshStreamHandle::readLODLevel(uint32_t submeshIdx, uint32_t lodLevel,
                                         std::vector<Vertex>& outVertices,
                                         std::vector<uint32_t>& outIndices)

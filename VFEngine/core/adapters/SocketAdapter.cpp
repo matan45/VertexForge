@@ -5,7 +5,6 @@
 #include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -40,24 +39,7 @@ namespace core
             if (meshComp.meshPath.empty())
                 return nullptr;
 
-            auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
-            if (!stream || !stream->hasSkeletonData())
-                return nullptr;
-
-            // Use RuntimeAnimatorSystem's cached skeleton if available
-            auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(entity);
-            if (animator)
-            {
-                // The skeleton is stored in the system's cache — we can look it up
-                // via the public loadSkeleton which is private... We'll read it fresh.
-            }
-
-            // Read skeleton data - this is a cached call in MeshStreamResource
-            static thread_local resource::SkeletonData tempSkeleton;
-            if (!stream->readSkeleton(tempSkeleton))
-                return nullptr;
-
-            return &tempSkeleton;
+            return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshPath);
         }
     }
 
@@ -267,6 +249,39 @@ namespace core
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             return registry.all_of<components::SocketAttachmentComponent>(e);
+        });
+    }
+
+    bool SocketAdapter::addSocketOverrideComponent(services::EntityHandle entity)
+    {
+        return withEntityOr<bool>(entity, false, [](entt::entity e)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.all_of<components::SocketOverrideComponent>(e))
+                return false;
+            registry.emplace<components::SocketOverrideComponent>(e);
+            return true;
+        });
+    }
+
+    bool SocketAdapter::removeSocketOverrideComponent(services::EntityHandle entity)
+    {
+        return withEntityOr<bool>(entity, false, [](entt::entity e)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (!registry.all_of<components::SocketOverrideComponent>(e))
+                return false;
+            registry.remove<components::SocketOverrideComponent>(e);
+            return true;
+        });
+    }
+
+    bool SocketAdapter::hasSocketOverrideComponent(services::EntityHandle entity) const
+    {
+        return withEntityOr<bool>(entity, false, [](entt::entity e)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            return registry.all_of<components::SocketOverrideComponent>(e);
         });
     }
 

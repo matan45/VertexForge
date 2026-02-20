@@ -57,6 +57,15 @@ namespace animation
                 clearAnimatorInstances();
                 skeletonDataCache.clear();
                 pendingCacheCleanup = true;
+
+                // Flag all socket attachments for parent re-resolution (entity handles are now stale)
+                auto& reg = scene::EntityRegistry::getRegistry();
+                auto view = reg.view<components::SocketAttachmentComponent>();
+                for (auto entity : view)
+                {
+                    reg.get<components::SocketAttachmentComponent>(entity).needsParentResolution = true;
+                }
+
                 vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
                           notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
             });
@@ -195,10 +204,10 @@ namespace animation
         {
             auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
 
-            // Resolve parent entity by name if needed (after scene load/mode change/prefab instantiate)
-            if ((attachment.parentEntity == entt::null || !registry.valid(attachment.parentEntity))
-                && !attachment.parentEntityName.empty())
+            // Resolve parent entity by name (only when flagged, not every frame)
+            if (attachment.needsParentResolution && !attachment.parentEntityName.empty())
             {
+                attachment.needsParentResolution = false;
                 attachment.parentEntity = entt::null;
                 attachment.cachedSocketIndex = -1;
 

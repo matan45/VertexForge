@@ -21,6 +21,10 @@ namespace services
         virtual bool addSocketAttachmentComponent(EntityHandle entity) = 0;
         virtual bool removeSocketAttachmentComponent(EntityHandle entity) = 0;
 
+        virtual bool addSocketOverrideComponent(EntityHandle entity) = 0;
+        virtual bool removeSocketOverrideComponent(EntityHandle entity) = 0;
+        [[nodiscard]] virtual bool hasSocketOverrideComponent(EntityHandle entity) const = 0;
+
         [[nodiscard]] virtual std::vector<std::string> getSocketNames(EntityHandle entity) const = 0;
         [[nodiscard]] virtual bool hasSocket(EntityHandle entity, const std::string& socketName) const = 0;
         [[nodiscard]] virtual bool isAttached(EntityHandle entity) const = 0;

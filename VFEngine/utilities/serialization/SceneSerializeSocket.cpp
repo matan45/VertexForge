@@ -15,10 +15,11 @@ namespace serialization
     void SceneSerialization::deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment)
     {
         attachment.parentEntityName = j.value("parentEntityName", std::string(""));
-        attachment.parentEntity = entt::null; // Will be resolved by name at runtime
+        attachment.parentEntity = entt::null;
         attachment.socketName = j.value("socketName", "");
         attachment.isActive = j.value("isActive", true);
         attachment.cachedSocketIndex = -1;
+        attachment.needsParentResolution = !attachment.parentEntityName.empty();
     }
 
     json SceneSerialization::serializeSocketOverride(const components::SocketOverrideComponent& override)

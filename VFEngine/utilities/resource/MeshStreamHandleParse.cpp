@@ -326,7 +326,8 @@ namespace resource
         }
 
         // Try to read socket data (appended after skeleton)
-        std::streampos beforeSockets = file.tellg();
+        socketDataOffset = file.tellg();
+        std::streampos beforeSockets = socketDataOffset;
         uint32_t socketCount = endian::readLE<uint32_t>(file);
         if (!file.fail() && socketCount < 256)
         {

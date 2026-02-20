@@ -56,6 +56,21 @@ namespace services
         return socketProvider->hasSocketAttachmentComponent(entity);
     }
 
+    bool SocketComponentService::addSocketOverrideComponent(EntityHandle entity)
+    {
+        return socketProvider->addSocketOverrideComponent(entity);
+    }
+
+    bool SocketComponentService::removeSocketOverrideComponent(EntityHandle entity)
+    {
+        return socketProvider->removeSocketOverrideComponent(entity);
+    }
+
+    bool SocketComponentService::hasSocketOverrideComponent(EntityHandle entity) const
+    {
+        return socketProvider->hasSocketOverrideComponent(entity);
+    }
+
     std::optional<::events::socket::SocketAttachmentData>
     SocketComponentService::getSocketAttachmentData(EntityHandle entity) const
     {
@@ -146,6 +161,24 @@ namespace services
             [this](const ::events::socket::GetSocketAttachmentDataQuery& query)
             {
                 return getSocketAttachmentData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<::events::socket::AddSocketOverrideComponentCommand>(
+            [this](const ::events::socket::AddSocketOverrideComponentCommand& cmd)
+            {
+                return addSocketOverrideComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<::events::socket::RemoveSocketOverrideComponentCommand>(
+            [this](const ::events::socket::RemoveSocketOverrideComponentCommand& cmd)
+            {
+                return removeSocketOverrideComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<::events::socket::HasSocketOverrideComponentQuery>(
+            [this](const ::events::socket::HasSocketOverrideComponentQuery& query)
+            {
+                return hasSocketOverrideComponent(query.entity);
             });
     }
 }

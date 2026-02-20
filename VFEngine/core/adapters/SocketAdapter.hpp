@@ -17,6 +17,10 @@ namespace core
         bool addSocketAttachmentComponent(services::EntityHandle entity) override;
         bool removeSocketAttachmentComponent(services::EntityHandle entity) override;
 
+        bool addSocketOverrideComponent(services::EntityHandle entity) override;
+        bool removeSocketOverrideComponent(services::EntityHandle entity) override;
+        [[nodiscard]] bool hasSocketOverrideComponent(services::EntityHandle entity) const override;
+
         [[nodiscard]] std::vector<std::string> getSocketNames(services::EntityHandle entity) const override;
         [[nodiscard]] bool hasSocket(services::EntityHandle entity, const std::string& socketName) const override;
         [[nodiscard]] bool isAttached(services::EntityHandle entity) const override;

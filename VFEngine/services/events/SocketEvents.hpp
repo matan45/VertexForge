@@ -55,6 +55,18 @@ namespace events::socket
         std::string_view getName() const override { return "RemoveSocketAttachmentComponent"; }
     };
 
+    struct AddSocketOverrideComponentCommand : ::events::ICommand<bool>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "AddSocketOverrideComponent"; }
+    };
+
+    struct RemoveSocketOverrideComponentCommand : ::events::ICommand<bool>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "RemoveSocketOverrideComponent"; }
+    };
+
     // ========== QUERIES ==========
 
     struct GetSocketNamesQuery : ::events::IQuery<std::vector<std::string>>
@@ -86,6 +98,12 @@ namespace events::socket
     {
         ::services::EntityHandle entity;
         std::string_view getName() const override { return "GetSocketAttachmentData"; }
+    };
+
+    struct HasSocketOverrideComponentQuery : ::events::IQuery<bool>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "HasSocketOverrideComponent"; }
     };
 
     struct GetSocketWorldPositionQuery : ::events::IQuery<glm::vec3>

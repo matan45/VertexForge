@@ -78,6 +78,7 @@ namespace core::api
                 {services::ComponentTypeId::UISlider, makeAddFn<events::ui::AddUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeAddFn<events::ui::AddUIProgressBarComponentCommand>()},
                 {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
             };
             return map;
         }
@@ -107,6 +108,7 @@ namespace core::api
                 {services::ComponentTypeId::UISlider, makeRemoveFn<events::ui::RemoveUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeRemoveFn<events::ui::RemoveUIProgressBarComponentCommand>()},
                 {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
             };
             return map;
         }

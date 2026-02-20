@@ -107,7 +107,7 @@ namespace animation
         float currentNormalized = std::fmod(state.stateTime / duration, 1.0f);
         float prevNormalized = state.previousNormalizedTime;
 
-        bool looped = (state.currentLoopCount != lastLoopCount) || (currentNormalized < prevNormalized);
+        bool looped = (state.currentLoopCount != eventLastLoopCount) || (currentNormalized < prevNormalized);
 
         for (const auto& event : currentState->events)
         {
@@ -131,6 +131,8 @@ namespace animation
                 firedEventsThisFrame.push_back(&event);
             }
         }
+
+        eventLastLoopCount = state.currentLoopCount;
     }
 
     bool AnimatorStateMachine::shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
@@ -354,7 +356,7 @@ namespace animation
                 rootMotionDelta = glm::vec3(0.0f);
                 rootMotionFirstFrame = false;
             }
-            else if (state.currentLoopCount != lastLoopCount)
+            else if (state.currentLoopCount != rootMotionLastLoopCount)
             {
                 // Animation looped — zero the delta to avoid jump
                 rootMotionDelta = glm::vec3(0.0f);
@@ -365,7 +367,7 @@ namespace animation
             }
 
             previousRootPosition = currentRootPosition;
-            lastLoopCount = state.currentLoopCount;
+            rootMotionLastLoopCount = state.currentLoopCount;
         }
     }
 
@@ -535,7 +537,7 @@ namespace animation
         rootMotionFirstFrame = true;
         previousRootPosition = glm::vec3(0.0f);
         rootMotionDelta = glm::vec3(0.0f);
-        lastLoopCount = 0;
+        rootMotionLastLoopCount = 0;
     }
 
     glm::vec3 AnimatorStateMachine::consumeRootMotionDelta()

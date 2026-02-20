@@ -1,5 +1,6 @@
 #include "AnimationEventWriter.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/AnimationResource.hpp"
 #include "print/EditorLogger.hpp"
 
 #include <fstream>
@@ -8,18 +9,6 @@
 
 namespace
 {
-    std::string readString(std::ifstream& file)
-    {
-        uint32_t length = resource::endian::readLE<uint32_t>(file);
-        if (length == 0 || length > 10000)
-        {
-            return "";
-        }
-        std::string str(length, '\0');
-        file.read(str.data(), length);
-        return str;
-    }
-
     void writeString(std::ofstream& file, const std::string& str)
     {
         resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(str.size()));
@@ -32,70 +21,6 @@ namespace
 
 namespace types
 {
-    std::streampos AnimationEventWriter::findEventDataOffset(const std::string& animPath)
-    {
-        std::ifstream file(animPath, std::ios::binary);
-        if (!file.is_open())
-        {
-            vfLogError("AnimationEventWriter: Cannot open file: {}", animPath);
-            return 0;
-        }
-
-        // Parse header
-        uint8_t fileType = resource::endian::readLE<uint8_t>(file);
-        uint32_t majorVersion = resource::endian::readLE<uint32_t>(file);
-        uint32_t minorVersion = resource::endian::readLE<uint32_t>(file);
-        uint32_t patchVersion = resource::endian::readLE<uint32_t>(file);
-
-        if (patchVersion < 8)
-        {
-            vfLogError("AnimationEventWriter: Unsupported version {}.{}.{}", majorVersion, minorVersion, patchVersion);
-            return 0;
-        }
-
-        // Skip name
-        readString(file);
-
-        // Skip duration + ticksPerSecond
-        resource::endian::readLE<float>(file);
-        resource::endian::readLE<float>(file);
-
-        // Skip all channels
-        uint32_t numChannels = resource::endian::readLE<uint32_t>(file);
-        if (numChannels > 1000)
-        {
-            vfLogError("AnimationEventWriter: Invalid channel count {}", numChannels);
-            return 0;
-        }
-
-        for (uint32_t c = 0; c < numChannels; ++c)
-        {
-            // Skip bone name
-            readString(file);
-
-            // Skip position keys
-            uint32_t numPosKeys = resource::endian::readLE<uint32_t>(file);
-            file.seekg(static_cast<std::streamoff>(numPosKeys) * 4 * sizeof(float), std::ios::cur); // time + xyz
-
-            // Skip rotation keys
-            uint32_t numRotKeys = resource::endian::readLE<uint32_t>(file);
-            file.seekg(static_cast<std::streamoff>(numRotKeys) * 5 * sizeof(float), std::ios::cur); // time + xyzw
-
-            // Skip scale keys
-            uint32_t numScaleKeys = resource::endian::readLE<uint32_t>(file);
-            file.seekg(static_cast<std::streamoff>(numScaleKeys) * 4 * sizeof(float), std::ios::cur); // time + xyz
-
-            if (file.fail())
-            {
-                vfLogError("AnimationEventWriter: Failed parsing channel {}", c);
-                return 0;
-            }
-        }
-
-        // This is where event data starts (or should start)
-        return file.tellg();
-    }
-
     bool AnimationEventWriter::saveEventsToAnimation(const std::string& animPath,
                                                       const std::vector<animator::AnimationEvent>& events)
     {
@@ -105,10 +30,11 @@ namespace types
             return false;
         }
 
-        // Find where event data should be written
-        std::streampos eventOffset = findEventDataOffset(animPath);
+        // Use the canonical reader to find event data offset
+        std::streampos eventOffset = resource::AnimationResource::getEventDataOffset(animPath);
         if (eventOffset == std::streampos(0))
         {
+            vfLogError("AnimationEventWriter: Failed to get event data offset");
             return false;
         }
 

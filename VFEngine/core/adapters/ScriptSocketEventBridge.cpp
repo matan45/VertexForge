@@ -63,11 +63,10 @@ namespace core
 
         for (const auto& targetEntity : targetEntities)
         {
-            if (!registry.valid(static_cast<entt::entity>(targetEntity.id))) continue;
-
-            auto* scriptComp = registry.try_get<components::ScriptComponent>(
-                static_cast<entt::entity>(targetEntity.id));
-            if (!scriptComp) continue;
+            auto entity = static_cast<entt::entity>(targetEntity.id);
+            if (!registry.valid(entity) ||
+                !registry.all_of<components::ScriptComponent>(entity))
+                continue;
 
             for (const auto& [instanceId, entityHandle] : instanceToEntity)
             {

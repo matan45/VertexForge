@@ -49,6 +49,8 @@ namespace animation
         void clearAnimatorInstances();
         void cleanupUnusedCaches();
 
+        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+
     private:
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
@@ -56,6 +58,5 @@ namespace animation
         RuntimeAnimatorSystem& operator=(const RuntimeAnimatorSystem&) = delete;
 
         const resource::AnimationData* loadAnimation(const std::string& path);
-        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
     };
 }

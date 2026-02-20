@@ -177,7 +177,10 @@ namespace windows::animation
             }
 
             if (!canCreate) ImGui::BeginDisabled();
-            if (ImGui::Button("Add Socket"))
+            bool addClicked = ImGui::Button("Add Socket");
+            if (!canCreate) ImGui::EndDisabled();
+
+            if (addClicked)
             {
                 animator::SocketDefinition newSocket;
                 newSocket.name = newSocketName;
@@ -189,10 +192,8 @@ namespace windows::animation
                 selectedSocketIndex = static_cast<int>(sockets.size()) - 1;
 
                 ImGui::Unindent(10.0f);
-                if (!canCreate) ImGui::EndDisabled();
                 return true;
             }
-            if (!canCreate) ImGui::EndDisabled();
 
             ImGui::Unindent(10.0f);
         }

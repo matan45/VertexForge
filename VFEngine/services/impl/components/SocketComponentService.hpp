@@ -28,6 +28,10 @@ namespace services
         bool addSocketAttachmentComponent(EntityHandle entity);
         bool removeSocketAttachmentComponent(EntityHandle entity);
 
+        bool addSocketOverrideComponent(EntityHandle entity);
+        bool removeSocketOverrideComponent(EntityHandle entity);
+        bool hasSocketOverrideComponent(EntityHandle entity) const;
+
         std::vector<std::string> getSocketNames(EntityHandle entity) const;
         bool hasSocket(EntityHandle entity, const std::string& socketName) const;
         bool isAttached(EntityHandle entity) const;
