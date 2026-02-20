@@ -332,6 +332,13 @@ namespace resource
             return false;
         }
 
+        // Compute bind poses (inverse of inverse bind poses = bone world transform at rest)
+        outSkeleton.bindPoses.resize(boneCount);
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            outSkeleton.bindPoses[b] = glm::inverse(outSkeleton.inverseBindPoses[b]);
+        }
+
         // Read socket data if present
         if (hasSockets)
         {

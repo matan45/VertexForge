@@ -99,6 +99,30 @@ namespace core
         attachment.cachedSocketIndex = socketIdx;
         attachment.isActive = true;
 
+        // Update child's transform position to the socket's world position
+        if (registry.all_of<components::TransformComponent>(child))
+        {
+            auto& transform = registry.get<components::TransformComponent>(child);
+
+            // Compute socket world position from bind pose
+            const auto& socket = skeleton->sockets[socketIdx];
+            glm::mat4 socketModel = socket.getLocalOffsetMatrix();
+            if (socket.boneIndex >= 0 &&
+                socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+            {
+                socketModel = skeleton->bindPoses[socket.boneIndex] * socketModel;
+            }
+
+            glm::mat4 parentWorld = glm::mat4(1.0f);
+            if (registry.all_of<components::WorldTransformComponent>(parent))
+            {
+                parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
+            }
+
+            transform.position = glm::vec3(parentWorld * socketModel * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            transform.isDirty = true;
+        }
+
         // Publish notification
         events::socket::SocketAttachmentChangedNotification notif;
         notif.childEntity = childEntity;

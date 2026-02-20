@@ -193,6 +193,17 @@ namespace animation
             if (socketIdx < 0 && skeleton)
             {
                 socketIdx = skeleton->getSocketIndex(attachment.socketName);
+                // If socket not found but we have a name, skeleton cache may be stale
+                if (socketIdx < 0 && !attachment.socketName.empty())
+                {
+                    const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
+                    skeletonDataCache.erase(meshComp.meshPath);
+                    skeleton = loadSkeleton(meshComp.meshPath);
+                    if (skeleton)
+                    {
+                        socketIdx = skeleton->getSocketIndex(attachment.socketName);
+                    }
+                }
                 auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
                 mutableAttachment.cachedSocketIndex = socketIdx;
             }
@@ -212,9 +223,19 @@ namespace animation
             }
             else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
             {
-                // Edit mode fallback: no animator running, use socket offset only
+                // Edit mode fallback: no animator running, use bone bind pose + socket offset
                 const auto& socket = skeleton->sockets[socketIdx];
-                socketModelTransform = socket.getLocalOffsetMatrix();
+                if (socket.boneIndex >= 0 &&
+                    socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+                {
+                    // bindPoses[i] = bone's model-space transform at rest pose
+                    socketModelTransform = skeleton->bindPoses[socket.boneIndex]
+                        * socket.getLocalOffsetMatrix();
+                }
+                else
+                {
+                    socketModelTransform = socket.getLocalOffsetMatrix();
+                }
             }
             else
             {
@@ -232,11 +253,14 @@ namespace animation
             // Entity's own rotation/scale are applied relative to the socket
             glm::mat4 socketWorld = parentWorld * socketModelTransform;
 
+            // For socket-attached entities, only apply rotation and scale (not position)
+            // Position is managed by the socket system and written back for display
             glm::mat4 entityLocal = glm::mat4(1.0f);
             if (registry.all_of<components::TransformComponent>(attachedEntity))
             {
                 const auto& transform = registry.get<components::TransformComponent>(attachedEntity);
-                entityLocal = transform.getMatrix();
+                glm::mat4 rot = glm::mat4_cast(glm::quat(glm::radians(transform.rotation)));
+                entityLocal = rot * glm::scale(glm::mat4(1.0f), transform.scale);
             }
 
             glm::mat4 finalWorld = socketWorld * entityLocal;
@@ -244,10 +268,12 @@ namespace animation
             // Write to attached entity's WorldTransformComponent
             registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = finalWorld;
 
-            // Clear dirty flag so SceneGraphSystem doesn't overwrite
+            // Update TransformComponent position to reflect socket world position
             if (registry.all_of<components::TransformComponent>(attachedEntity))
             {
-                registry.get<components::TransformComponent>(attachedEntity).isDirty = false;
+                auto& transform = registry.get<components::TransformComponent>(attachedEntity);
+                transform.position = glm::vec3(finalWorld[3]);
+                transform.isDirty = false;
             }
         }
     }
