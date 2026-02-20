@@ -249,6 +249,16 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainShadowLOD"; }
     };
 
+    struct SetShowNavmeshDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowNavmeshDebug"; }
+    };
+
+    struct GetShowNavmeshDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowNavmeshDebug"; }
+    };
+
     struct SetUIViewportOffsetCommand : ICommand<> {
         glm::vec2 offset{0.0f, 0.0f};
         glm::vec2 panelSize{0.0f, 0.0f};

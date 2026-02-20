@@ -20,6 +20,7 @@ namespace windows
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
         menuBar.setWaterEditorWindow(&waterEditorWindow);
+        menuBar.setNavmeshWindow(&navmeshWindow);
 
         subscribeToEvents();
     }

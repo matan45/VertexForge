@@ -10,6 +10,7 @@
 #include "interfaces/IProjectService.hpp"
 #include "interfaces/IWaterService.hpp"
 #include "interfaces/IPhysicsService.hpp"
+#include "interfaces/INavmeshService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
 #include "events/EventTypes.hpp"
 
@@ -41,6 +42,7 @@ namespace handlers {
         std::shared_ptr<services::IWaterService> waterService;
         std::shared_ptr<services::IPhysicsService> physicsService;
         std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
+        std::shared_ptr<services::INavmeshService> navmeshService;
         std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 

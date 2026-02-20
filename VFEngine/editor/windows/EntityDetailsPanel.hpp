@@ -35,6 +35,7 @@
 #include "details/UISliderDrawer.hpp"
 #include "details/UIProgressBarDrawer.hpp"
 #include "details/SocketAttachmentDrawer.hpp"
+#include "details/NavmeshAgentDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -77,6 +78,7 @@ namespace windows
         details::UISliderDrawer uiSliderDrawer;
         details::UIProgressBarDrawer uiProgressBarDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;
+        details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

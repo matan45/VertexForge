@@ -210,6 +210,12 @@ namespace serialization
                 entity.getComponent<components::SocketOverrideComponent>());
         }
 
+        if (entity.hasComponent<components::NavmeshAgentComponent>())
+        {
+            componentsJson["navmeshAgent"] = serializeNavmeshAgent(
+                entity.getComponent<components::NavmeshAgentComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -461,6 +467,12 @@ namespace serialization
         {
             auto& override = entity.addOrReplaceComponent<components::SocketOverrideComponent>();
             deserializeSocketOverride(componentsJson["socketOverride"], override);
+        }
+
+        if (componentsJson.contains("navmeshAgent"))
+        {
+            auto& agentComp = entity.addOrReplaceComponent<components::NavmeshAgentComponent>();
+            deserializeNavmeshAgent(componentsJson["navmeshAgent"], agentComp);
         }
     }
 

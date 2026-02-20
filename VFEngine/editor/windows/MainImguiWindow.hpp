@@ -11,6 +11,7 @@
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
+#include "NavmeshWindow.hpp"
 #include "SculptToolPanel.hpp"
 #include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
@@ -40,6 +41,7 @@ namespace windows
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
+        NavmeshWindow navmeshWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         MainMenuBar menuBar;

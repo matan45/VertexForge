@@ -161,6 +161,7 @@ namespace core::api
         if (type == "UIProgressBar") return services::ComponentTypeId::UIProgressBar;
         if (type == "SocketAttachment") return services::ComponentTypeId::SocketAttachment;
         if (type == "SocketOverride") return services::ComponentTypeId::SocketOverride;
+        if (type == "NavmeshAgent") return services::ComponentTypeId::NavmeshAgent;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -206,6 +207,7 @@ namespace core::api
         case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
         case services::ComponentTypeId::SocketAttachment: return "SocketAttachment";
         case services::ComponentTypeId::SocketOverride: return "SocketOverride";
+        case services::ComponentTypeId::NavmeshAgent: return "NavmeshAgent";
         default: return "Unknown";
         }
     }

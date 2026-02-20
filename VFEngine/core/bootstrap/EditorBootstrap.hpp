@@ -14,6 +14,7 @@ namespace services
     class IAudioProvider;
     class IScriptingProvider;
     class IPhysicsProvider;
+    class INavmeshProvider;
     class IAnimatorProvider;
     class ISocketProvider;
     class ITerrainRenderProvider;
@@ -51,6 +52,7 @@ namespace core
     class AudioAdapter;
     class ScriptingAdapter;
     class PhysicsAdapter;
+    class NavmeshAdapter;
     class AnimatorAdapter;
     class SocketAdapter;
     class TerrainRenderAdapter;
@@ -75,6 +77,7 @@ namespace core
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
+        std::unique_ptr<NavmeshAdapter> navmeshAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<SocketAdapter> socketAdapter;
         std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
@@ -116,6 +119,8 @@ namespace core
         services::IScriptingProvider* getScriptingProvider();
 
         services::IPhysicsProvider* getPhysicsProvider();
+
+        services::INavmeshProvider* getNavmeshProvider();
 
         services::IAnimatorProvider* getAnimatorProvider();
 

@@ -124,6 +124,12 @@ namespace services
             {
                 return getTerrainTileData(query.entity);
             });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainGeometryQuery>(
+            [this](const events::terrain::GetTerrainGeometryQuery&)
+            {
+                return getTerrainGeometryForNavmesh();
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)
@@ -500,5 +506,51 @@ namespace services
 
         terrain::TerrainGrid* grid = gridIt->second.get();
         grid->updateWeightMapLayerCount(layerCount);
+    }
+
+    events::terrain::TerrainGeometryResult TerrainService::getTerrainGeometryForNavmesh() const
+    {
+        events::terrain::TerrainGeometryResult result;
+
+        for (const auto& [entityId, grid] : terrainGrids)
+        {
+            auto allTiles = grid->getAllTiles();
+            for (const auto* tile : allTiles)
+            {
+                if (!tile || !tile->hasLODData(0))
+                    continue;
+
+                const auto& lod0 = tile->lodLevels[0];
+                int baseVertex = static_cast<int>(result.vertices.size() / 3);
+
+                for (const auto& vertex : lod0.vertices)
+                {
+                    const auto& pos = vertex.position;
+                    result.vertices.push_back(pos.x);
+                    result.vertices.push_back(pos.y);
+                    result.vertices.push_back(pos.z);
+
+                    if (result.vertices.size() == 3)
+                    {
+                        result.boundsMin = pos;
+                        result.boundsMax = pos;
+                    }
+                    else
+                    {
+                        result.boundsMin = glm::min(result.boundsMin, pos);
+                        result.boundsMax = glm::max(result.boundsMax, pos);
+                    }
+                }
+
+                for (size_t i = 0; i < lod0.indices.size(); i += 3)
+                {
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i]));
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i + 1]));
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i + 2]));
+                }
+            }
+        }
+
+        return result;
     }
 }

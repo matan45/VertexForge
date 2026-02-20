@@ -18,7 +18,8 @@ namespace windows::details
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
                                  bool hasUITabs, bool hasUISlider, bool hasUIProgressBar,
-                                 bool hasSocketAttachment)
+                                 bool hasSocketAttachment,
+                                 bool hasNavmeshAgent)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -202,6 +203,20 @@ namespace windows::details
                 if (ImGui::IsItemHovered())
                 {
                     ImGui::SetTooltip("Ragdoll and kinematic bone physics for animated meshes");
+                }
+            }
+
+            if (!hasNavmeshAgent)
+            {
+                if (ImGui::Selectable("  Navmesh Agent"))
+                {
+                    events::scene::AddNavmeshAgentComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
                 }
             }
 
@@ -465,7 +480,8 @@ namespace windows::details
                            hasSocketAttachment && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
                            hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
-                           hasUITabs && hasUISlider && hasUIProgressBar;
+                           hasUITabs && hasUISlider && hasUIProgressBar &&
+                           hasNavmeshAgent;
             if (allAdded)
             {
                 ImGui::Spacing();

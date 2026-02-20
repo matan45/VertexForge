@@ -465,4 +465,52 @@ namespace serialization
         vfx.runtimeInstanceId = 0;
         vfx.isPlaying = false;
     }
+
+    json SceneSerialization::serializeNavmeshAgent(const components::NavmeshAgentComponent& agent)
+    {
+        json j;
+        j["radius"] = agent.radius;
+        j["height"] = agent.height;
+        j["maxSpeed"] = agent.maxSpeed;
+        j["maxAcceleration"] = agent.maxAcceleration;
+        j["stoppingDistance"] = agent.stoppingDistance;
+        j["avoidanceQuality"] = agent.avoidanceQuality;
+        j["separationWeight"] = agent.separationWeight;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent)
+    {
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+        {
+            agent.radius = it->get<float>();
+        }
+        if (auto it = j.find("height"); it != j.end() && it->is_number())
+        {
+            agent.height = it->get<float>();
+        }
+        if (auto it = j.find("maxSpeed"); it != j.end() && it->is_number())
+        {
+            agent.maxSpeed = it->get<float>();
+        }
+        if (auto it = j.find("maxAcceleration"); it != j.end() && it->is_number())
+        {
+            agent.maxAcceleration = it->get<float>();
+        }
+        if (auto it = j.find("stoppingDistance"); it != j.end() && it->is_number())
+        {
+            agent.stoppingDistance = it->get<float>();
+        }
+        if (auto it = j.find("avoidanceQuality"); it != j.end() && it->is_number_unsigned())
+        {
+            agent.avoidanceQuality = std::min(it->get<uint8_t>(), static_cast<uint8_t>(3));
+        }
+        if (auto it = j.find("separationWeight"); it != j.end() && it->is_number())
+        {
+            agent.separationWeight = it->get<float>();
+        }
+        // Reset runtime state
+        agent.isActive = false;
+        agent.crowdAgentIndex = -1;
+    }
 }

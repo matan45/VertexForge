@@ -7,6 +7,7 @@
 #include "TerrainComponents.hpp"
 #include "WaterComponents.hpp"
 #include "UIComponents.hpp"
+#include "NavmeshComponents.hpp"
 
 namespace components
 {
@@ -21,5 +22,6 @@ namespace components
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
-                                               SocketAttachmentComponent, SocketOverrideComponent>;
+                                               SocketAttachmentComponent, SocketOverrideComponent,
+                                               NavmeshAgentComponent>;
 }

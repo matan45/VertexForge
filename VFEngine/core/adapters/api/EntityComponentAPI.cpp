@@ -79,6 +79,7 @@ namespace core::api
                 {services::ComponentTypeId::UIProgressBar, makeAddFn<events::ui::AddUIProgressBarComponentCommand>()},
                 {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
+                {services::ComponentTypeId::NavmeshAgent, makeAddFn<events::scene::AddNavmeshAgentComponentCommand>()},
             };
             return map;
         }
@@ -109,6 +110,7 @@ namespace core::api
                 {services::ComponentTypeId::UIProgressBar, makeRemoveFn<events::ui::RemoveUIProgressBarComponentCommand>()},
                 {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
+                {services::ComponentTypeId::NavmeshAgent, makeRemoveFn<events::scene::RemoveNavmeshAgentComponentCommand>()},
             };
             return map;
         }

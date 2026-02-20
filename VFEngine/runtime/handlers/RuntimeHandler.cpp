@@ -10,6 +10,7 @@
 #include "impl/scene/WaterService.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsAnimationServiceImpl.hpp"
+#include "impl/NavmeshServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
@@ -80,6 +81,7 @@ namespace handlers {
         physicsPlayModeHandler.reset();
         physicsAnimationService.reset();
         physicsService.reset();
+        navmeshService.reset();
         waterService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
@@ -178,6 +180,11 @@ namespace handlers {
             physicsPlayModeHandler->subscribeToEvents();
         }
 
+        if (auto* navmeshProvider = bootstrap->getNavmeshProvider())
+        {
+            navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
+        }
+
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -193,6 +200,10 @@ namespace handlers {
         if (physicsAnimationService)
         {
             physicsAnimationService->registerEventHandlers();
+        }
+        if (navmeshService)
+        {
+            navmeshService->registerEventHandlers();
         }
     }
 

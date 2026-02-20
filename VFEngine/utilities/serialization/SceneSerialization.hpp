@@ -5,6 +5,7 @@
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
+#include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
 
@@ -198,6 +199,9 @@ namespace serialization
 
         static json serializeSocketOverride(const components::SocketOverrideComponent& override);
         static void deserializeSocketOverride(const json& j, components::SocketOverrideComponent& override);
+
+        static json serializeNavmeshAgent(const components::NavmeshAgentComponent& agent);
+        static void deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent);
 
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);

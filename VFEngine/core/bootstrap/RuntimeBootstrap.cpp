@@ -5,6 +5,7 @@
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/NavmeshAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
@@ -30,6 +31,7 @@ namespace core
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
+        navmeshAdapter = std::make_unique<NavmeshAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
@@ -39,6 +41,7 @@ namespace core
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
+        navmeshAdapter->init();
 
         // Wire VFX runtime provider to offscreen renderer
         // This allows VFX to be rendered as part of the scene
@@ -81,6 +84,11 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        if (navmeshAdapter)
+        {
+            navmeshAdapter->cleanUp();
+        }
+
         postProcessAdapter.reset();
         waterRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
@@ -88,6 +96,7 @@ namespace core
         audioAdapter.reset();
         scriptingAdapter.reset();
         physicsAdapter.reset();
+        navmeshAdapter.reset();
         animatorAdapter.reset();
 
         if (coreInterface)
@@ -114,6 +123,11 @@ namespace core
     services::IPhysicsProvider* RuntimeBootstrap::getPhysicsProvider()
     {
         return physicsAdapter.get();
+    }
+
+    services::INavmeshProvider* RuntimeBootstrap::getNavmeshProvider()
+    {
+        return navmeshAdapter.get();
     }
 
     services::IAnimatorProvider* RuntimeBootstrap::getAnimatorProvider()

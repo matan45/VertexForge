@@ -14,7 +14,8 @@ namespace windows::details {
                   bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                   bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
                   bool hasUITabs, bool hasUISlider, bool hasUIProgressBar,
-                  bool hasSocketAttachment);
+                  bool hasSocketAttachment,
+                  bool hasNavmeshAgent = false);
     };
 
 }

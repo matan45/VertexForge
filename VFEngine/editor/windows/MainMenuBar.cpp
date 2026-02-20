@@ -10,6 +10,7 @@
 #include "TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "PostProcessConfigWindow.hpp"
+#include "NavmeshWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -161,6 +162,13 @@ namespace windows
                     postProcessConfigWindow->show();
                 }
             }
+            else if (ImGui::MenuItem("Navigation"))
+            {
+                if (navmeshWindow)
+                {
+                    navmeshWindow->show();
+                }
+            }
             ImGui::EndMenu();
         }
     }
@@ -224,6 +232,14 @@ namespace windows
             {
                 events::render::SetShowPhysicsDebugCommand cmd;
                 cmd.show = !showPhysicsDebug;
+                dispatcher.execute(cmd);
+            }
+
+            bool showNavmeshDebug = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
+            if (ImGui::MenuItem("Show Navmesh", nullptr, showNavmeshDebug))
+            {
+                events::render::SetShowNavmeshDebugCommand cmd;
+                cmd.show = !showNavmeshDebug;
                 dispatcher.execute(cmd);
             }
 

@@ -43,6 +43,10 @@ namespace services {
         bool hasPhysicsAnimationComponent(EntityHandle entity) const;
         std::optional<PhysicsAnimationComponentData> getPhysicsAnimationData(EntityHandle entity) const;
         bool setPhysicsAnimationData(EntityHandle entity, const PhysicsAnimationComponentData& data);
+
+        // NavmeshAgent Component Operations
+        bool addNavmeshAgentComponent(EntityHandle entity);
+        bool removeNavmeshAgentComponent(EntityHandle entity);
     };
 
 }

@@ -95,6 +95,8 @@ namespace services
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
 
+        events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh() const;
+
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerBrushHandlers(::events::EventDispatcher& dispatcher);

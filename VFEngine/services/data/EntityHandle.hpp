@@ -68,6 +68,7 @@ namespace services {
         UIProgressBar,
         SocketAttachment,
         SocketOverride,
+        NavmeshAgent,
     };
 
 }
