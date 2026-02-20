@@ -72,7 +72,8 @@ namespace render::mesh
         config.pushConstantSize = sizeof(NavmeshDebugPushConstants);
         config.pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         config.cullMode = vk::CullModeFlagBits::eNone;
-        config.depthTestEnable = false;
+        config.depthTestEnable = true;
+        config.depthCompareOp = vk::CompareOp::eLessOrEqual;
         config.depthWriteEnable = false;
         config.blendEnable = true;
 
