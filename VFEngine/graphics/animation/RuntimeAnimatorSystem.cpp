@@ -212,22 +212,9 @@ namespace animation
             }
             else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
             {
-                // Edit mode fallback: compute bind-pose socket transform
+                // Edit mode fallback: no animator running, use socket offset only
                 const auto& socket = skeleton->sockets[socketIdx];
-                glm::mat4 globalTransform = glm::inverse(skeleton->globalInverseTransform);
-
-                if (socket.boneIndex >= 0 &&
-                    socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
-                {
-                    // In bind pose, bone matrices are identity so: globalTransform * I * bindPose * socketOffset
-                    socketModelTransform = globalTransform
-                        * skeleton->bindPoses[socket.boneIndex]
-                        * socket.getLocalOffsetMatrix();
-                }
-                else
-                {
-                    socketModelTransform = globalTransform * socket.getLocalOffsetMatrix();
-                }
+                socketModelTransform = socket.getLocalOffsetMatrix();
             }
             else
             {
@@ -241,20 +228,18 @@ namespace animation
                 parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
             }
 
-            // Socket provides position only; rotation/scale come from entity's own transform
+            // Socket world = parent world transform * socket offset (in model space)
+            // Entity's own rotation/scale are applied relative to the socket
             glm::mat4 socketWorld = parentWorld * socketModelTransform;
-            glm::vec3 socketWorldPos = glm::vec3(socketWorld[3]);
 
             glm::mat4 entityLocal = glm::mat4(1.0f);
             if (registry.all_of<components::TransformComponent>(attachedEntity))
             {
                 const auto& transform = registry.get<components::TransformComponent>(attachedEntity);
-                glm::mat4 rotation = glm::mat4_cast(glm::quat(glm::radians(transform.rotation)));
-                glm::mat4 scale = glm::scale(glm::mat4(1.0f), transform.scale);
-                entityLocal = rotation * scale;
+                entityLocal = transform.getMatrix();
             }
 
-            glm::mat4 finalWorld = glm::translate(glm::mat4(1.0f), socketWorldPos) * entityLocal;
+            glm::mat4 finalWorld = socketWorld * entityLocal;
 
             // Write to attached entity's WorldTransformComponent
             registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = finalWorld;
