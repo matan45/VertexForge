@@ -164,6 +164,11 @@ namespace controllers
         bool getShowShadowDebug() const { return showShadowDebug; }
         void prepareFrameShadowDebug();
 
+        void setShowNavmeshDebug(bool show);
+        bool getShowNavmeshDebug() const;
+        void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
+        void clearNavmeshDebugMesh();
+
         void prepareFrameUICanvasOutlines();
         void prepareFrameUIImages();
 

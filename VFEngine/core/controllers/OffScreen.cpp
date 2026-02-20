@@ -230,6 +230,27 @@ namespace controllers {
 		offScreenController->prepareFrameShadowDebug();
 	}
 
+	void OffScreen::setShowNavmeshDebug(bool show)
+	{
+		offScreenController->setShowNavmeshDebug(show);
+	}
+
+	bool OffScreen::getShowNavmeshDebug() const
+	{
+		return offScreenController->getShowNavmeshDebug();
+	}
+
+	void OffScreen::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
+	                                        const std::vector<uint32_t>& indices)
+	{
+		offScreenController->updateNavmeshDebugMesh(vertices, indices);
+	}
+
+	void OffScreen::clearNavmeshDebugMesh()
+	{
+		offScreenController->clearNavmeshDebugMesh();
+	}
+
 	void OffScreen::prepareFrameUICanvasOutlines()
 	{
 		offScreenController->prepareFrameUICanvasOutlines();

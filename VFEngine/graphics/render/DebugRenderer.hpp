@@ -25,6 +25,7 @@ namespace render::mesh
     class ShadowDebugRenderer;
     class UICanvasDebugRenderer;
     class UICanvasImageRenderer;
+    class NavmeshDebugRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
@@ -55,6 +56,7 @@ namespace render
         std::unique_ptr<mesh::ShadowDebugRenderer> shadowDebugRenderer;
         std::unique_ptr<mesh::UICanvasDebugRenderer> uiCanvasRenderer;
         std::unique_ptr<mesh::UICanvasImageRenderer> uiCanvasImageRenderer;
+        std::unique_ptr<mesh::NavmeshDebugRenderer> navmeshDebugRenderer;
 
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
@@ -76,6 +78,7 @@ namespace render
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
         bool showShadowDebug = false;
+        bool showNavmeshDebug = false;
         bool hasBoundingBoxesToRender = false;
 
     public:
@@ -106,6 +109,11 @@ namespace render
         void setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images);
         void setShowShadowDebug(bool show) { showShadowDebug = show; }
         bool getShowShadowDebug() const { return showShadowDebug; }
+
+        void setShowNavmeshDebug(bool show) { showNavmeshDebug = show; }
+        bool getShowNavmeshDebug() const { return showNavmeshDebug; }
+        void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
+        void clearNavmeshDebugMesh();
 
         void render(const vk::CommandBuffer& commandBuffer,
                     const std::vector<mesh::MeshRenderData>& meshDrawList,

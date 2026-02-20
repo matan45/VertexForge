@@ -98,6 +98,17 @@ namespace events::navmesh
         std::string_view getName() const override { return "GetNavmeshSettings"; }
     };
 
+    struct NavmeshDebugMeshResult
+    {
+        std::vector<glm::vec3> vertices;
+        std::vector<uint32_t> indices;
+    };
+
+    struct GetNavmeshDebugMeshQuery : IQuery<NavmeshDebugMeshResult>
+    {
+        std::string_view getName() const override { return "GetNavmeshDebugMesh"; }
+    };
+
     // === Notifications ===
 
     struct NavmeshBakeCompleteNotification : INotification

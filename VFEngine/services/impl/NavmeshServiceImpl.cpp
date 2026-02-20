@@ -1,6 +1,7 @@
 #include "NavmeshServiceImpl.hpp"
 #include "../events/NavmeshEvents.hpp"
 #include "../events/TerrainEvents.hpp"
+#include "../events/RenderEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -112,6 +113,14 @@ namespace services
             {
                 return lastBakeSettings;
             });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshDebugMeshQuery>(
+            [this](const events::navmesh::GetNavmeshDebugMeshQuery&)
+            {
+                events::navmesh::NavmeshDebugMeshResult result;
+                getNavmeshDebugMesh(result.vertices, result.indices);
+                return result;
+            });
     }
 
     // === Baking ===
@@ -190,7 +199,18 @@ namespace services
         }
 
         lastBakeSettings = header.settings;
-        return navmeshProvider->deserializeNavmesh(header, tiles);
+        bool success = navmeshProvider->deserializeNavmesh(header, tiles);
+
+        if (success)
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            events::navmesh::NavmeshBakeCompleteNotification notification;
+            notification.success = true;
+            notification.message = "Navmesh loaded from file";
+            dispatcher.publish(notification);
+        }
+
+        return success;
     }
 
     bool NavmeshServiceImpl::hasNavmesh() const
@@ -202,6 +222,11 @@ namespace services
     {
         navmeshProvider->clearNavmesh();
         entityToAgentIndex.clear();
+
+        // Clear debug visualization
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        events::render::ClearNavmeshDebugMeshCommand clearCmd;
+        dispatcher.execute(clearCmd);
     }
 
     // === Pathfinding ===

@@ -429,6 +429,40 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowPhysicsDebug() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowNavmeshDebugCommand>(
+            [this](const events::render::SetShowNavmeshDebugCommand& cmd)
+            {
+                showNavmeshDebug = cmd.show;
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowNavmeshDebug(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowNavmeshDebugQuery>(
+            [this](const events::render::GetShowNavmeshDebugQuery&)
+            {
+                return showNavmeshDebug;
+            });
+
+        dispatcher.registerCommandHandler<events::render::UpdateNavmeshDebugMeshCommand>(
+            [this](const events::render::UpdateNavmeshDebugMeshCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->updateNavmeshDebugMesh(cmd.vertices, cmd.indices);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::ClearNavmeshDebugMeshCommand>(
+            [this](const events::render::ClearNavmeshDebugMeshCommand&)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->clearNavmeshDebugMesh();
+                }
+            });
+
         dispatcher.registerCommandHandler<events::render::SetViewModeCommand>(
             [this](const events::render::SetViewModeCommand& cmd)
             {

@@ -92,6 +92,7 @@ namespace windows
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
             waterEditorWindow.draw();
+            navmeshWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
 

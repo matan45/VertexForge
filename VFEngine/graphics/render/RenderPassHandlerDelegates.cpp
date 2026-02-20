@@ -342,6 +342,40 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setShowNavmeshDebug(bool show)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setShowNavmeshDebug(show);
+        }
+    }
+
+    bool RenderPassHandler::getShowNavmeshDebug() const
+    {
+        if (debugRenderer)
+        {
+            return debugRenderer->getShowNavmeshDebug();
+        }
+        return false;
+    }
+
+    void RenderPassHandler::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
+                                                    const std::vector<uint32_t>& indices)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->updateNavmeshDebugMesh(vertices, indices);
+        }
+    }
+
+    void RenderPassHandler::clearNavmeshDebugMesh()
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->clearNavmeshDebugMesh();
+        }
+    }
+
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         currentView = view;

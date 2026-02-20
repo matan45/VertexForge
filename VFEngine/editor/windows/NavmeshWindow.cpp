@@ -7,6 +7,58 @@
 
 namespace windows
 {
+    NavmeshWindow::NavmeshWindow()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        bakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
+            [this](const events::navmesh::NavmeshBakeCompleteNotification&)
+            {
+                auto& d = events::EventDispatcher::instance();
+                bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
+                if (showNavmesh)
+                {
+                    pushNavmeshDebugMesh();
+                }
+            });
+    }
+
+    NavmeshWindow::~NavmeshWindow()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (bakeCompleteToken.isValid())
+        {
+            dispatcher.unsubscribe(bakeCompleteToken);
+        }
+        if (navmeshClearedToken.isValid())
+        {
+            dispatcher.unsubscribe(navmeshClearedToken);
+        }
+    }
+
+    void NavmeshWindow::pushNavmeshDebugMesh()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+        if (!hasNavmesh)
+        {
+            events::render::ClearNavmeshDebugMeshCommand clearCmd;
+            dispatcher.execute(clearCmd);
+            return;
+        }
+
+        events::navmesh::GetNavmeshDebugMeshQuery meshQuery;
+        auto debugMesh = dispatcher.query(meshQuery);
+
+        if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
+        {
+            events::render::UpdateNavmeshDebugMeshCommand updateCmd;
+            updateCmd.vertices = std::move(debugMesh.vertices);
+            updateCmd.indices = std::move(debugMesh.indices);
+            dispatcher.execute(updateCmd);
+        }
+    }
+
     void NavmeshWindow::show()
     {
         visible = true;
@@ -196,6 +248,16 @@ namespace windows
                 events::render::SetShowNavmeshDebugCommand cmd;
                 cmd.show = showNavmesh;
                 dispatcher.execute(cmd);
+
+                if (showNavmesh)
+                {
+                    pushNavmeshDebugMesh();
+                }
+                else
+                {
+                    events::render::ClearNavmeshDebugMeshCommand clearCmd;
+                    dispatcher.execute(clearCmd);
+                }
             }
 
             ImGui::Unindent();

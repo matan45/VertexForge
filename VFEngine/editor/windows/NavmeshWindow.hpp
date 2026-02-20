@@ -2,6 +2,7 @@
 
 #include "imguiHandler/ImguiWindow.hpp"
 #include "types/NavmeshTypes.hpp"
+#include "../../services/events/EventTypes.hpp"
 
 namespace windows
 {
@@ -10,6 +11,8 @@ namespace windows
     private:
         bool visible = false;
         types::NavmeshBakeSettings settings;
+        events::SubscriptionToken bakeCompleteToken;
+        events::SubscriptionToken navmeshClearedToken;
 
         void drawBakeSettings();
         void drawAgentSection();
@@ -19,7 +22,12 @@ namespace windows
         void drawActions();
         void drawDebugSection();
 
+        void pushNavmeshDebugMesh();
+
     public:
+        NavmeshWindow();
+        ~NavmeshWindow();
+
         void draw() override;
         void show();
     };
