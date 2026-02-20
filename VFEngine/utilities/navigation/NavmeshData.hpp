@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <cstdint>
-#include "types/NavmeshTypes.hpp"
+#include "../types/NavmeshTypes.hpp"
 
 namespace navigation
 {

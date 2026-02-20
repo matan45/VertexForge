@@ -1,10 +1,11 @@
 #pragma once
 
+#include "imguiHandler/ImguiWindow.hpp"
 #include "types/NavmeshTypes.hpp"
 
 namespace windows
 {
-    class NavmeshWindow
+    class NavmeshWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
         bool visible = false;
@@ -19,7 +20,7 @@ namespace windows
         void drawDebugSection();
 
     public:
-        void draw();
+        void draw() override;
         void show();
     };
 }

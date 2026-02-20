@@ -51,5 +51,7 @@ namespace services
         void collectSceneGeometry(const types::NavmeshBakeSettings& settings,
                                    navigation::NavmeshInputGeometry& outGeometry);
         void collectTerrainGeometry(navigation::NavmeshInputGeometry& outGeometry);
+        void collectStaticMeshGeometry(navigation::NavmeshInputGeometry& outGeometry);
+        void collectColliderGeometry(navigation::NavmeshInputGeometry& outGeometry);
     };
 }

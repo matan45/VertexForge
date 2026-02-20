@@ -350,9 +350,10 @@ namespace core
         if (!navMesh)
             return result;
 
-        for (int i = 0; i < navMesh->getMaxTiles(); ++i)
+        const dtNavMesh* mesh = navMesh;
+        for (int i = 0; i < mesh->getMaxTiles(); ++i)
         {
-            const dtMeshTile* tile = navMesh->getTile(i);
+            const dtMeshTile* tile = mesh->getTile(i);
             if (!tile || !tile->header || !tile->dataSize)
                 continue;
 
@@ -665,9 +666,10 @@ namespace core
         if (!navMesh)
             return;
 
-        for (int i = 0; i < navMesh->getMaxTiles(); ++i)
+        const dtNavMesh* mesh = navMesh;
+        for (int i = 0; i < mesh->getMaxTiles(); ++i)
         {
-            const dtMeshTile* tile = navMesh->getTile(i);
+            const dtMeshTile* tile = mesh->getTile(i);
             if (!tile || !tile->header)
                 continue;
 

@@ -1,5 +1,5 @@
 #include "NavmeshSerializer.hpp"
-#include "print/EditorLogger.hpp"
+#include "../print/EditorLogger.hpp"
 #include <fstream>
 
 namespace navigation
