@@ -52,6 +52,7 @@ project "Editor"
 	  "VFEngine/core/controllers",        -- For ImguiWindow base class
 	  "dependencies/IconFontCppHeaders",
 	  "VFEngine/import/controllers",
+	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services"                 -- Services layer interfaces
    }
 
@@ -149,7 +150,8 @@ project "Import"
 	  "dependencies/glm",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
-	  "dependencies/freetype/include"    -- FreeType headers
+	  "dependencies/freetype/include",   -- FreeType headers
+	  "dependencies/json/single_include" -- nlohmann/json for AnimationEventIO
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

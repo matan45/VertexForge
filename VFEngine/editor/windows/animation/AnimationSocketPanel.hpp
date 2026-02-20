@@ -15,7 +15,8 @@ namespace windows::animation
                   int& selectedChannel,
                   const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                   const std::unordered_map<std::string, size_t>& boneNameToIndex,
-                  bool& showSocketVisualization);
+                  bool& showSocketVisualization,
+                  const std::string& meshPath = "");
 
     private:
         void drawSocketList(std::vector<animator::SocketDefinition>& sockets, int& selectedSocket);
@@ -25,8 +26,12 @@ namespace windows::animation
         bool drawNewSocketCreation(std::vector<animator::SocketDefinition>& sockets,
                                    const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                    int selectedChannel);
+        void drawSaveButton(const std::vector<animator::SocketDefinition>& sockets,
+                            const std::string& meshPath);
 
         int selectedSocketIndex = -1;
         char newSocketName[128] = "";
+        bool saveSuccess = false;
+        float saveMessageTimer = 0.0f;
     };
 }

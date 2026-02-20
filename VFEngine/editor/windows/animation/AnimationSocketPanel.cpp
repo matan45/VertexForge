@@ -1,4 +1,5 @@
 #include "AnimationSocketPanel.hpp"
+#include "MeshSocketWriter.hpp"
 #include "imgui.h"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
@@ -9,7 +10,8 @@ namespace windows::animation
                                      int& selectedChannel,
                                      const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                      const std::unordered_map<std::string, size_t>& boneNameToIndex,
-                                     bool& showSocketVisualization)
+                                     bool& showSocketVisualization,
+                                     const std::string& meshPath)
     {
         ImGui::Text("Sockets");
         ImGui::Separator();
@@ -56,6 +58,10 @@ namespace windows::animation
             }
             ImGui::PopStyleColor(2);
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        drawSaveButton(sockets, meshPath);
 
         return changed;
     }
@@ -210,5 +216,52 @@ namespace windows::animation
         }
 
         return false;
+    }
+
+    void AnimationSocketPanel::drawSaveButton(const std::vector<animator::SocketDefinition>& sockets,
+                                               const std::string& meshPath)
+    {
+        // Decrease save message timer
+        if (saveMessageTimer > 0.0f)
+        {
+            saveMessageTimer -= ImGui::GetIO().DeltaTime;
+        }
+
+        bool canSave = !meshPath.empty() && !sockets.empty();
+
+        if (!canSave) ImGui::BeginDisabled();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.5f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.65f, 0.2f, 1.0f));
+        if (ImGui::Button("Save Sockets to Mesh"))
+        {
+            saveSuccess = types::MeshSocketWriter::saveSocketsToMesh(meshPath, sockets);
+            saveMessageTimer = 3.0f;
+        }
+        ImGui::PopStyleColor(2);
+
+        if (!canSave) ImGui::EndDisabled();
+
+        if (meshPath.empty())
+        {
+            ImGui::TextDisabled("Load a mesh first to save sockets");
+        }
+        else if (sockets.empty())
+        {
+            ImGui::TextDisabled("No sockets to save");
+        }
+
+        // Show save status message
+        if (saveMessageTimer > 0.0f)
+        {
+            if (saveSuccess)
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Sockets saved!");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Save failed! Check log.");
+            }
+        }
     }
 }

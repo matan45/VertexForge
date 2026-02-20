@@ -1,5 +1,6 @@
 #include "AnimationPreviewWindow.hpp"
 #include "../../camera/OrbitCamera.hpp"
+#include "AnimationEventIO.hpp"
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
@@ -111,7 +112,8 @@ namespace windows
 
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
                     timelinePanel.draw(currentFrame, selectedChannel, sequencerExpanded, firstFrame,
-                                       &animationData, getPreviewInstanceId(), &animationEvents);
+                                       &animationData, getPreviewInstanceId(), &animationEvents,
+                                       animationPath);
                     ImGui::EndChild();
                 }
 
@@ -158,7 +160,8 @@ namespace windows
                     if (panelState.animationLoaded)
                     {
                         socketPanel.draw(socketDefinitions, selectedChannel, evaluatedBones,
-                                         boneNameToIndex, showSocketVisualization);
+                                         boneNameToIndex, showSocketVisualization,
+                                         panelState.meshPath);
                     }
                     else
                     {
@@ -262,6 +265,9 @@ namespace windows
                         panelState.animationLoaded = true;
                         panelState.animationData = &animationData;
                         loadAnimationForPreview();
+
+                        // Load saved animation events if they exist
+                        animationEvents = types::AnimationEventIO::loadEvents(animationPath);
                     }
                     else
                     {

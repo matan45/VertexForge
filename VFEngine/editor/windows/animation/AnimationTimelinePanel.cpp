@@ -1,4 +1,5 @@
 #include "AnimationTimelinePanel.hpp"
+#include "AnimationEventIO.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "providers/PreviewInstanceId.hpp"
@@ -95,7 +96,8 @@ namespace windows::animation
     void AnimationTimelinePanel::draw(int& currentFrame, int& selectedChannel, bool& sequencerExpanded,
                                        int& firstFrame, const resource::AnimationData* animationData,
                                        const services::PreviewInstanceId& instanceId,
-                                       std::vector<animator::AnimationEvent>* events)
+                                       std::vector<animator::AnimationEvent>* events,
+                                       const std::string& animationPath)
     {
         ImGui::Text("Timeline");
         ImGui::Separator();
@@ -124,7 +126,7 @@ namespace windows::animation
         if (events)
         {
             ImGui::Spacing();
-            drawEventEditor(*events, animationData->duration);
+            drawEventEditor(*events, animationData->duration, animationPath);
         }
     }
 
@@ -174,11 +176,62 @@ namespace windows::animation
     }
 
     void AnimationTimelinePanel::drawEventEditor(std::vector<animator::AnimationEvent>& events,
-                                                   float duration)
+                                                   float duration,
+                                                   const std::string& animationPath)
     {
         if (ImGui::CollapsingHeader("Animation Events"))
         {
             ImGui::Indent(10.0f);
+
+            // Save/Load buttons
+            if (!animationPath.empty())
+            {
+                // Decrease save message timer
+                if (eventSaveMessageTimer > 0.0f)
+                {
+                    eventSaveMessageTimer -= ImGui::GetIO().DeltaTime;
+                }
+
+                bool canSave = !events.empty();
+                if (!canSave) ImGui::BeginDisabled();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.5f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.65f, 0.2f, 1.0f));
+                if (ImGui::Button("Save Events"))
+                {
+                    eventSaveSuccess = types::AnimationEventIO::saveEvents(animationPath, events);
+                    eventSaveMessageTimer = 3.0f;
+                }
+                ImGui::PopStyleColor(2);
+                if (!canSave) ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Load Events"))
+                {
+                    auto loaded = types::AnimationEventIO::loadEvents(animationPath);
+                    if (!loaded.empty())
+                    {
+                        events = std::move(loaded);
+                        selectedEventIndex = -1;
+                    }
+                }
+
+                if (eventSaveMessageTimer > 0.0f)
+                {
+                    if (eventSaveSuccess)
+                    {
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Saved!");
+                    }
+                    else
+                    {
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Save failed!");
+                    }
+                }
+
+                ImGui::Separator();
+            }
 
             // Event list
             if (!events.empty())

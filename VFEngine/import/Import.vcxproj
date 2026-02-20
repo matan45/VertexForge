@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\json\single_include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -81,7 +81,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\json\single_include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -113,6 +113,7 @@
     <ClInclude Include="pipeline\stages\FileValidationStage.hpp" />
     <ClInclude Include="pipeline\stages\HeaderReadingStage.hpp" />
     <ClInclude Include="types\Animation.hpp" />
+    <ClInclude Include="types\AnimationEventIO.hpp" />
     <ClInclude Include="types\Audio.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\FontAtlasGenerator.hpp" />
@@ -120,6 +121,7 @@
     <ClInclude Include="types\Mesh.hpp" />
     <ClInclude Include="types\MeshLODGenerator.hpp" />
     <ClInclude Include="types\MeshSerializer.hpp" />
+    <ClInclude Include="types\MeshSocketWriter.hpp" />
     <ClInclude Include="types\SDFGenerator.hpp" />
     <ClInclude Include="types\Texture.hpp" />
     <ClInclude Include="types\VHACDCallback.hpp" />
@@ -133,6 +135,7 @@
     <ClCompile Include="pipeline\stages\FileValidationStage.cpp" />
     <ClCompile Include="pipeline\stages\HeaderReadingStage.cpp" />
     <ClCompile Include="types\Animation.cpp" />
+    <ClCompile Include="types\AnimationEventIO.cpp" />
     <ClCompile Include="types\Audio.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\FontAtlasGenerator.cpp" />
@@ -140,6 +143,7 @@
     <ClCompile Include="types\Mesh.cpp" />
     <ClCompile Include="types\MeshLODGenerator.cpp" />
     <ClCompile Include="types\MeshSerializer.cpp" />
+    <ClCompile Include="types\MeshSocketWriter.cpp" />
     <ClCompile Include="types\SDFGenerator.cpp" />
     <ClCompile Include="types\Texture.cpp" />
   </ItemGroup>
