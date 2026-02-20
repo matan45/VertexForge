@@ -556,7 +556,6 @@ namespace animation
         }
 
         outSocketModelTransforms.resize(sockets.size());
-        glm::mat4 globalTransform = glm::inverse(skeletonData->globalInverseTransform);
 
         for (size_t i = 0; i < sockets.size(); ++i)
         {
@@ -565,10 +564,15 @@ namespace animation
                 socket.boneIndex < static_cast<int32_t>(currentBoneMatrices.size()) &&
                 socket.boneIndex < static_cast<int32_t>(skeletonData->bindPoses.size()))
             {
-                outSocketModelTransforms[i] = globalTransform
-                    * currentBoneMatrices[socket.boneIndex]
+                // Extract bone position in mesh space (matches preview: globalInv * boneWorldPos)
+                glm::vec3 boneMeshPos = glm::vec3(
+                    currentBoneMatrices[socket.boneIndex]
                     * skeletonData->bindPoses[socket.boneIndex]
-                    * socket.getLocalOffsetMatrix();
+                    * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+                // Socket position = bone position + offset (simple addition, no bone rotation)
+                outSocketModelTransforms[i] = glm::translate(glm::mat4(1.0f),
+                    boneMeshPos + socket.localPosition);
             }
             else
             {

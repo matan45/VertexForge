@@ -289,19 +289,20 @@ namespace animation
             }
             else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
             {
-                // Edit mode fallback: no animator running, use bone bind pose + socket offset
+                // Edit mode fallback: bone position + socket offset (matches preview)
                 const auto& socket = skeleton->sockets[socketIdx];
+                glm::vec3 boneMeshPos(0.0f);
                 if (socket.boneIndex >= 0 &&
                     socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
                 {
-                    // bindPoses[i] = bone's model-space transform at rest pose
-                    socketModelTransform = skeleton->bindPoses[socket.boneIndex]
-                        * socket.getLocalOffsetMatrix();
+                    // Bone position in mesh space = globalInv * bindPose position
+                    boneMeshPos = glm::vec3(
+                        skeleton->globalInverseTransform
+                        * skeleton->bindPoses[socket.boneIndex]
+                        * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
                 }
-                else
-                {
-                    socketModelTransform = socket.getLocalOffsetMatrix();
-                }
+                socketModelTransform = glm::translate(glm::mat4(1.0f),
+                    boneMeshPos + socket.localPosition);
             }
             else
             {
