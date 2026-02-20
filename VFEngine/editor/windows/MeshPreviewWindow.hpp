@@ -2,6 +2,8 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/DTOs.hpp"
 #include "data/AsyncLoadingTypes.hpp"
+#include "animator/SocketTypes.hpp"
+#include "resource/Types.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -40,6 +42,11 @@ namespace windows
         // Async loading state
         services::MeshLoadingProgress loadingProgress;
 
+        // Skeleton & socket data (read-only display)
+        bool hasSkeleton = false;
+        std::vector<std::string> boneNames;
+        std::vector<animator::SocketDefinition> sockets;
+
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
         ~MeshPreviewWindow() override;
@@ -54,8 +61,10 @@ namespace windows
         void updateAsyncLoading();
         void drawViewport(float width, float height);
         void drawSubMeshPanel();
+        void drawSocketPanel();
         void drawLoadingIndicator(float width, float height);
         void onLoadingComplete();
+        void loadSkeletonData();
         void handlePreviewInput();
     };
 }

@@ -1,10 +1,12 @@
 #include "MeshPreviewWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
 #include <filesystem>
+#include <glm/gtc/quaternion.hpp>
 
 namespace windows
 {
@@ -149,6 +151,39 @@ namespace windows
         services::events::preview::GetPreviewMeshLODInfoQuery lodQuery;
         lodQuery.instanceId = services::PreviewInstanceId(this);
         lodLevels = events::EventDispatcher::instance().query(lodQuery);
+
+        // Load skeleton and socket data from the .vfMesh file
+        loadSkeletonData();
+    }
+
+    void MeshPreviewWindow::loadSkeletonData()
+    {
+        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        if (!streamHandle || !streamHandle->hasSkeletonData())
+        {
+            hasSkeleton = false;
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (!streamHandle->readSkeleton(skeleton))
+        {
+            hasSkeleton = false;
+            return;
+        }
+
+        hasSkeleton = true;
+
+        // Extract bone names
+        boneNames.clear();
+        boneNames.reserve(skeleton.bones.size());
+        for (const auto& bone : skeleton.bones)
+        {
+            boneNames.push_back(bone.name);
+        }
+
+        // Load existing sockets
+        sockets = skeleton.sockets;
     }
 
     void MeshPreviewWindow::handlePreviewInput()
@@ -362,6 +397,46 @@ namespace windows
             if (ImGui::Button("Fit to Mesh", ImVec2(-1, 0)))
             {
                 camera->fitToBounds(meshBounds);
+            }
+        }
+
+        // Socket panel for skeletal meshes
+        if (hasSkeleton)
+        {
+            ImGui::Separator();
+            drawSocketPanel();
+        }
+    }
+
+    void MeshPreviewWindow::drawSocketPanel()
+    {
+        if (ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Text("Bones: %zu", boneNames.size());
+
+            if (sockets.empty())
+            {
+                ImGui::TextDisabled("No sockets defined");
+                ImGui::TextDisabled("(Edit in Animation Preview)");
+                return;
+            }
+
+            ImGui::Text("Sockets: %zu", sockets.size());
+            ImGui::Separator();
+
+            for (const auto& socket : sockets)
+            {
+                if (ImGui::TreeNode(socket.name.c_str()))
+                {
+                    ImGui::TextDisabled("Bone: %s", socket.targetBoneName.c_str());
+                    ImGui::TextDisabled("Pos: %.2f, %.2f, %.2f",
+                                        socket.localPosition.x, socket.localPosition.y, socket.localPosition.z);
+                    glm::vec3 euler = glm::degrees(glm::eulerAngles(socket.localRotation));
+                    ImGui::TextDisabled("Rot: %.1f, %.1f, %.1f", euler.x, euler.y, euler.z);
+                    ImGui::TextDisabled("Scl: %.2f, %.2f, %.2f",
+                                        socket.localScale.x, socket.localScale.y, socket.localScale.z);
+                    ImGui::TreePop();
+                }
             }
         }
     }
