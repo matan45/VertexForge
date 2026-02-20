@@ -84,7 +84,53 @@ namespace animation
             evaluateTransitions();
         }
 
+        fireTriggeredEvents();
+
         evaluateCurrentPose();
+    }
+
+    void AnimatorStateMachine::fireTriggeredEvents()
+    {
+        firedEventsThisFrame.clear();
+
+        if (!animatorData)
+            return;
+
+        const animator::AnimatorState* currentState = getCurrentAnimatorState();
+        if (!currentState || currentState->events.empty())
+            return;
+
+        float duration = getAnimationDuration(state.currentStateId);
+        if (duration <= 0.0f)
+            return;
+
+        float currentNormalized = std::fmod(state.stateTime / duration, 1.0f);
+        float prevNormalized = state.previousNormalizedTime;
+
+        bool looped = (state.currentLoopCount != lastLoopCount) || (currentNormalized < prevNormalized);
+
+        for (const auto& event : currentState->events)
+        {
+            bool shouldFire = false;
+
+            if (looped)
+            {
+                // Loop wrap: fire if event is after prev OR before/at current
+                shouldFire = (event.normalizedTime > prevNormalized) ||
+                             (event.normalizedTime <= currentNormalized);
+            }
+            else
+            {
+                // Normal: fire if prev < eventTime <= current
+                shouldFire = (event.normalizedTime > prevNormalized) &&
+                             (event.normalizedTime <= currentNormalized);
+            }
+
+            if (shouldFire)
+            {
+                firedEventsThisFrame.push_back(&event);
+            }
+        }
     }
 
     bool AnimatorStateMachine::shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
@@ -497,6 +543,38 @@ namespace animation
         glm::vec3 delta = rootMotionDelta;
         rootMotionDelta = glm::vec3(0.0f);
         return delta;
+    }
+
+    void AnimatorStateMachine::computeSocketTransforms(
+        const std::vector<animator::SocketDefinition>& sockets,
+        std::vector<glm::mat4>& outSocketModelTransforms) const
+    {
+        if (!skeletonData || currentBoneMatrices.empty() || sockets.empty())
+        {
+            outSocketModelTransforms.clear();
+            return;
+        }
+
+        outSocketModelTransforms.resize(sockets.size());
+        glm::mat4 globalTransform = glm::inverse(skeletonData->globalInverseTransform);
+
+        for (size_t i = 0; i < sockets.size(); ++i)
+        {
+            const auto& socket = sockets[i];
+            if (socket.boneIndex >= 0 &&
+                socket.boneIndex < static_cast<int32_t>(currentBoneMatrices.size()) &&
+                socket.boneIndex < static_cast<int32_t>(skeletonData->bindPoses.size()))
+            {
+                outSocketModelTransforms[i] = globalTransform
+                    * currentBoneMatrices[socket.boneIndex]
+                    * skeletonData->bindPoses[socket.boneIndex]
+                    * socket.getLocalOffsetMatrix();
+            }
+            else
+            {
+                outSocketModelTransforms[i] = glm::mat4(1.0f);
+            }
+        }
     }
 
     void AnimatorStateMachine::forceTransitionTo(const std::string& stateName, float blendDuration)

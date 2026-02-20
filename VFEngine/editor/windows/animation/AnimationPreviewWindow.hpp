@@ -6,6 +6,7 @@
 #include "AnimationTimelinePanel.hpp"
 #include "AnimationSkeletonPanel.hpp"
 #include "AnimationPhysicsPanel.hpp"
+#include "AnimationSocketPanel.hpp"
 #include "resource/Types.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include "providers/IAnimationPreviewProvider.hpp"
@@ -80,11 +81,16 @@ namespace windows
         animation::AnimationTimelinePanel timelinePanel;
         animation::AnimationSkeletonPanel skeletonPanel;
         animation::AnimationPhysicsPanel physicsPanel;
+        animation::AnimationSocketPanel socketPanel;
 
         types::PhysicsAnimationConfig physicsConfig;
         bool showPhysicsPanel = false;
+        bool showSocketPanel = false;
         bool showColliderOverlay = true;
+        bool showSocketVisualization = true;
         std::string physicsConfigPath;
+
+        std::vector<animator::SocketDefinition> socketDefinitions;
 
         void buildMappedBoneNames();
         std::unordered_set<std::string> mappedBoneNames;

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include "../config/Config.hpp"
+#include "../animator/SocketTypes.hpp"
 
 namespace resource
 {
@@ -189,6 +190,8 @@ namespace resource
         std::vector<glm::mat4> inverseBindPoses;
         glm::mat4 globalInverseTransform{1.0f};
 
+        std::vector<animator::SocketDefinition> sockets;
+
         bool hasBones() const { return !bones.empty(); }
         size_t boneCount() const { return bones.size(); }
 
@@ -200,6 +203,22 @@ namespace resource
                     return static_cast<int32_t>(i);
             }
             return -1;
+        }
+
+        int32_t getSocketIndex(const std::string& socketName) const
+        {
+            for (size_t i = 0; i < sockets.size(); ++i)
+            {
+                if (sockets[i].name == socketName)
+                    return static_cast<int32_t>(i);
+            }
+            return -1;
+        }
+
+        const animator::SocketDefinition* getSocketByName(const std::string& socketName) const
+        {
+            int32_t idx = getSocketIndex(socketName);
+            return idx >= 0 ? &sockets[idx] : nullptr;
         }
     };
 

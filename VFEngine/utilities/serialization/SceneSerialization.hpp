@@ -193,6 +193,12 @@ namespace serialization
         static json serializeUIProgressBar(const components::UIProgressBarComponent& progressBar);
         static void deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& progressBar);
 
+        static json serializeSocketAttachment(const components::SocketAttachmentComponent& attachment);
+        static void deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment);
+
+        static json serializeSocketOverride(const components::SocketOverrideComponent& override);
+        static void deserializeSocketOverride(const json& j, components::SocketOverrideComponent& override);
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

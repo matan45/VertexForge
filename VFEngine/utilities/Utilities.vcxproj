@@ -91,8 +91,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="animator\AnimationEventTypes.hpp" />
     <ClInclude Include="animator\AnimatorAsset.hpp" />
     <ClInclude Include="animator\AnimatorTypes.hpp" />
+    <ClInclude Include="animator\SocketTypes.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
@@ -220,6 +222,7 @@
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
     <ClCompile Include="serialization\SceneSerializeRender.cpp" />
     <ClCompile Include="serialization\SceneSerializeSettings.cpp" />
+    <ClCompile Include="serialization\SceneSerializeSocket.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
     <ClCompile Include="serialization\SceneSerializeWater.cpp" />

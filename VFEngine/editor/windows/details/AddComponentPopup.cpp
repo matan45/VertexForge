@@ -4,6 +4,7 @@
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "events/ScriptingEvents.hpp"
 #include "events/UIEvents.hpp"
+#include "events/SocketEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -16,7 +17,8 @@ namespace windows::details
                                  bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                                  bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                                  bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
-                                 bool hasUITabs, bool hasUISlider, bool hasUIProgressBar)
+                                 bool hasUITabs, bool hasUISlider, bool hasUIProgressBar,
+                                 bool hasSocketAttachment)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -200,6 +202,25 @@ namespace windows::details
                 if (ImGui::IsItemHovered())
                 {
                     ImGui::SetTooltip("Ragdoll and kinematic bone physics for animated meshes");
+                }
+            }
+
+            // Animation section
+            ImGui::Spacing();
+            ImGui::TextDisabled("Animation");
+            ImGui::Separator();
+
+            if (!hasSocketAttachment)
+            {
+                if (ImGui::Selectable("  Socket Attachment"))
+                {
+                    services::events::socket::AddSocketAttachmentComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Attach this entity to an animation socket on a parent skeleton");
                 }
             }
 
@@ -440,7 +461,8 @@ namespace windows::details
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
                            hasCollider && hasRigidBody && hasPhysicsAnimation &&
                            hasVFX && hasBillboard && hasText &&
-                           hasDirectionalLight && hasPointLight && hasSpotLight && hasUICanvas &&
+                           hasDirectionalLight && hasPointLight && hasSpotLight &&
+                           hasSocketAttachment && hasUICanvas &&
                            hasUIRect && hasUIImage && hasUILabel && hasUIScroll && hasUILayoutGroup &&
                            hasUIButton && hasUITextInput && hasUICheckbox && hasUIDropdown &&
                            hasUITabs && hasUISlider && hasUIProgressBar;

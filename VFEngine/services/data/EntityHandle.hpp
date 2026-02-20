@@ -66,6 +66,8 @@ namespace services {
         UITabs,
         UISlider,
         UIProgressBar,
+        SocketAttachment,
+        SocketOverride,
     };
 
 }

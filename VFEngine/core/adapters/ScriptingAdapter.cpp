@@ -6,6 +6,8 @@
 #include "ScriptingAdapter.hpp"
 #include "ScriptUIEventBridge.hpp"
 #include "ScriptPhysicsEventBridge.hpp"
+#include "ScriptAnimationEventBridge.hpp"
+#include "ScriptSocketEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <filesystem>
 #include <fstream>
@@ -57,8 +59,16 @@ namespace core
             physicsEventBridge = std::make_unique<ScriptPhysicsEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            animationEventBridge = std::make_unique<ScriptAnimationEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
+            socketEventBridge = std::make_unique<ScriptSocketEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
+            animationEventBridge->subscribeAll();
+            socketEventBridge->subscribeAll();
 
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
@@ -77,6 +87,8 @@ namespace core
     {
         if (!initialized) return;
 
+        if (socketEventBridge) socketEventBridge->unsubscribeAll();
+        if (animationEventBridge) animationEventBridge->unsubscribeAll();
         if (physicsEventBridge) physicsEventBridge->unsubscribeAll();
         if (uiEventBridge) uiEventBridge->unsubscribeAll();
 
@@ -285,11 +297,13 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 9> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 11> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
-                "IUIProgressBarListener"
+                "IUIProgressBarListener",
+                "IAnimationEventListener",
+                "ISocketAttachmentListener"
             };
 
             std::unordered_set<std::string> interfaces;

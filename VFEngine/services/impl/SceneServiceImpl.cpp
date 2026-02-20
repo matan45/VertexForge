@@ -6,6 +6,7 @@
 #include "components/IBLComponentService.hpp"
 #include "components/PhysicsComponentService.hpp"
 #include "components/AnimatorComponentService.hpp"
+#include "components/SocketComponentService.hpp"
 #include "components/VFXComponentService.hpp"
 #include "components/BillboardComponentService.hpp"
 #include "components/TextComponentService.hpp"
@@ -22,7 +23,8 @@
 namespace services
 {
     SceneServiceImpl::SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                                         IAnimatorProvider* animatorProvider)
+                                         IAnimatorProvider* animatorProvider,
+                                         ISocketProvider* socketProvider)
         : sceneGraph(sceneGraph)
         // Existing component services
         , cameraService(std::make_unique<CameraComponentService>(sceneGraph))
@@ -32,6 +34,7 @@ namespace services
         , iblService(std::make_unique<IBLComponentService>(sceneGraph))
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
+        , socketService(socketProvider ? std::make_unique<SocketComponentService>(socketProvider) : nullptr)
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
         , billboardService(std::make_unique<BillboardComponentService>(sceneGraph))
         , textService(std::make_unique<TextComponentService>(sceneGraph))
@@ -60,6 +63,7 @@ namespace services
         iblService->registerEventHandlers(dispatcher);
         physicsService->registerEventHandlers(dispatcher);
         animatorService->registerEventHandlers(dispatcher);
+        if (socketService) socketService->registerEventHandlers(dispatcher);
         vfxService->registerEventHandlers(dispatcher);
         billboardService->registerEventHandlers(dispatcher);
         textService->registerEventHandlers(dispatcher);

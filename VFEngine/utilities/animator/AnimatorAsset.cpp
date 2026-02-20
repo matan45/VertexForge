@@ -79,6 +79,24 @@ namespace animator
         j["playbackSpeed"] = state.playbackSpeed;
         j["loop"] = state.loop;
         j["position"] = json::array({state.position.x, state.position.y});
+
+        if (!state.events.empty())
+        {
+            json eventsJson = json::array();
+            for (const auto& event : state.events)
+            {
+                json eventJ;
+                eventJ["name"] = event.name;
+                eventJ["normalizedTime"] = event.normalizedTime;
+                if (!event.payload.empty())
+                {
+                    eventJ["payload"] = event.payload;
+                }
+                eventsJson.push_back(eventJ);
+            }
+            j["events"] = eventsJson;
+        }
+
         return j;
     }
 
@@ -95,6 +113,18 @@ namespace animator
         {
             state.position.x = j["position"][0].get<float>();
             state.position.y = j["position"][1].get<float>();
+        }
+
+        if (j.contains("events") && j["events"].is_array())
+        {
+            for (const auto& eventJson : j["events"])
+            {
+                AnimationEvent event;
+                event.name = eventJson.value("name", "");
+                event.normalizedTime = eventJson.value("normalizedTime", 0.0f);
+                event.payload = eventJson.value("payload", "");
+                state.events.push_back(std::move(event));
+            }
         }
 
         return state;

@@ -12,6 +12,7 @@
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
+#include "../adapters/SocketAdapter.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/TerrainBrushComputeAdapter.hpp"
@@ -46,6 +47,7 @@ namespace core
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
+        socketAdapter = std::make_unique<SocketAdapter>();
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
@@ -116,6 +118,7 @@ namespace core
         scriptingAdapter.reset();
         physicsAdapter.reset();
         animatorAdapter.reset();
+        socketAdapter.reset();
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
@@ -180,6 +183,11 @@ namespace core
     services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
     {
         return animatorAdapter.get();
+    }
+
+    services::ISocketProvider* EditorBootstrap::getSocketProvider()
+    {
+        return socketAdapter.get();
     }
 
     TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()

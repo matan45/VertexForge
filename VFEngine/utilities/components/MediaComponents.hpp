@@ -4,7 +4,9 @@
 #include <vector>
 #include <cstdint>
 #include <algorithm>
+#include <entt/entt.hpp>
 #include "../../services/data/ScriptTypes.hpp"
+#include "../animator/SocketTypes.hpp"
 
 namespace components
 {
@@ -158,5 +160,19 @@ namespace components
 
         uint32_t runtimeInstanceId = 0;
         bool isPlaying = false;
+    };
+
+    struct SocketAttachmentComponent
+    {
+        entt::entity parentEntity = entt::null;
+        std::string socketName;
+        int32_t cachedSocketIndex = -1;
+        bool isActive = true;
+    };
+
+    struct SocketOverrideComponent
+    {
+        std::vector<animator::SocketDefinition> additionalSockets;
+        std::vector<animator::SocketDefinition> overriddenSockets;
     };
 }

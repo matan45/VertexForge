@@ -153,6 +153,7 @@
     <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationSkeletonPanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationSocketPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
     <ClInclude Include="windows\animation\AnimationViewport.hpp" />
     <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
@@ -178,6 +179,7 @@
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
+    <ClInclude Include="windows\details\SocketAttachmentDrawer.hpp" />
     <ClInclude Include="windows\details\SpotLightDrawer.hpp" />
     <ClInclude Include="windows\details\TerrainDrawer.hpp" />
     <ClInclude Include="windows\details\TerrainTileDrawer.hpp" />
@@ -259,6 +261,7 @@
     <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationSkeletonPanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationSocketPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
     <ClCompile Include="windows\animation\AnimationViewport.cpp" />
     <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
@@ -283,6 +286,7 @@
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
+    <ClCompile Include="windows\details\SocketAttachmentDrawer.cpp" />
     <ClCompile Include="windows\details\SpotLightDrawer.cpp" />
     <ClCompile Include="windows\details\TerrainDrawer.cpp" />
     <ClCompile Include="windows\details\TerrainTileDrawer.cpp" />

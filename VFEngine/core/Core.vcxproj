@@ -110,9 +110,12 @@
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\PostProcessAdapter.hpp" />
+    <ClInclude Include="adapters\ScriptAnimationEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptPhysicsEventBridge.hpp" />
+    <ClInclude Include="adapters\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptUIEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
+    <ClInclude Include="adapters\SocketAdapter.hpp" />
     <ClInclude Include="adapters\TerrainBrushComputeAdapter.hpp" />
     <ClInclude Include="adapters\TerrainRaycastAdapter.hpp" />
     <ClInclude Include="adapters\TerrainRenderAdapter.hpp" />
@@ -133,6 +136,7 @@
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
+    <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />
@@ -179,9 +183,12 @@
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\PostProcessAdapter.cpp" />
+    <ClCompile Include="adapters\ScriptAnimationEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptPhysicsEventBridge.cpp" />
+    <ClCompile Include="adapters\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
+    <ClCompile Include="adapters\SocketAdapter.cpp" />
     <ClCompile Include="adapters\TerrainBrushComputeAdapter.cpp" />
     <ClCompile Include="adapters\TerrainRaycastAdapter.cpp" />
     <ClCompile Include="adapters\TerrainRenderAdapter.cpp" />
@@ -201,6 +208,7 @@
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
+    <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />

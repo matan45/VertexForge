@@ -1,7 +1,9 @@
 #pragma once
 
 #include "resource/Types.hpp"
+#include "animator/AnimationEventTypes.hpp"
 #include <memory>
+#include <vector>
 
 namespace ImSequencer { struct SequenceInterface; }
 namespace services { struct PreviewInstanceId; }
@@ -17,15 +19,23 @@ namespace windows::animation
         void setAnimationData(const resource::AnimationData* data);
         void draw(int& currentFrame, int& selectedChannel, bool& sequencerExpanded, int& firstFrame,
                   const resource::AnimationData* animationData,
-                  const services::PreviewInstanceId& instanceId);
+                  const services::PreviewInstanceId& instanceId,
+                  std::vector<animator::AnimationEvent>* events = nullptr);
 
     private:
         void seekToTime(float timeInTicks, const resource::AnimationData* animationData,
                         const services::PreviewInstanceId& instanceId);
+        void drawEventMarkers(const std::vector<animator::AnimationEvent>& events,
+                              float duration, int firstFrame);
+        void drawEventEditor(std::vector<animator::AnimationEvent>& events, float duration);
         int timeToFrame(float timeInTicks) const;
         float frameToTime(int frame) const;
 
         class AnimationSequence;
         std::unique_ptr<AnimationSequence> sequenceAdapter;
+
+        int selectedEventIndex = -1;
+        char newEventName[128] = "";
+        char newEventPayload[256] = "";
     };
 }

@@ -102,6 +102,7 @@
     <ClInclude Include="data\UndoTypes.hpp" />
     <ClInclude Include="data\VFXTypes.hpp" />
     <ClInclude Include="data\WaterData.hpp" />
+    <ClInclude Include="events\AnimationEventEvents.hpp" />
     <ClInclude Include="events\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\AnimatorEvents.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
@@ -128,6 +129,7 @@
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
     <ClInclude Include="events\SculptModeEvents.hpp" />
+    <ClInclude Include="events\SocketEvents.hpp" />
     <ClInclude Include="events\TerrainEvents.hpp" />
     <ClInclude Include="events\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\UIEvents.hpp" />
@@ -176,6 +178,7 @@
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
     <ClInclude Include="impl\components\PhysicsComponentService.hpp" />
+    <ClInclude Include="impl\components\SocketComponentService.hpp" />
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
@@ -219,6 +222,7 @@
     <ClInclude Include="providers\IPostProcessProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ISocketProvider.hpp" />
     <ClInclude Include="providers\ITerrainBrushComputeProvider.hpp" />
     <ClInclude Include="providers\ITerrainRaycastProvider.hpp" />
     <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
@@ -260,6 +264,7 @@
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
     <ClCompile Include="impl\components\PhysicsComponentService.cpp" />
+    <ClCompile Include="impl\components\SocketComponentService.cpp" />
     <ClCompile Include="impl\components\TextComponentService.cpp" />
     <ClCompile Include="impl\components\UICanvasRectImageOps.cpp" />
     <ClCompile Include="impl\components\UIComponentService.cpp" />

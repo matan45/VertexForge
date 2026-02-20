@@ -6,6 +6,7 @@
 #include "print/EditorLogger.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
+#include "../../services/events/AnimationEventEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
@@ -93,6 +94,25 @@ namespace animation
 
             animator->update(deltaTime);
 
+            // Publish fired animation events
+            const auto& firedEvents = animator->getFiredEvents();
+            if (!firedEvents.empty())
+            {
+                const animator::AnimatorState* currentState = animator->getCurrentAnimatorState();
+                std::string stateName = currentState ? currentState->name : "";
+                auto entityHandle = services::internal::toHandle(entity);
+
+                for (const auto* event : firedEvents)
+                {
+                    events::animation::AnimationEventFiredNotification notification;
+                    notification.entity = entityHandle;
+                    notification.eventName = event->name;
+                    notification.stateName = stateName;
+                    notification.payload = event->payload;
+                    events::EventDispatcher::instance().publish(notification);
+                }
+            }
+
             // Apply root motion delta to entity transform
             if (registry.valid(entity) &&
                 registry.all_of<components::AnimatorComponent, components::TransformComponent>(entity))
@@ -111,6 +131,97 @@ namespace animation
                         transform.isDirty = true;
                     }
                 }
+            }
+        }
+    }
+
+    void RuntimeAnimatorSystem::updateSocketAttachments()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Pass 1: Compute socket model-space transforms for all entities with animators and sockets
+        socketTransformCache.clear();
+        for (auto& [entity, animator] : animators)
+        {
+            if (!animator || !animator->isInitialized())
+                continue;
+
+            if (!registry.valid(entity))
+                continue;
+
+            // Get skeleton from cache to check for sockets
+            const resource::SkeletonData* skeleton = nullptr;
+            if (registry.all_of<components::MeshComponent>(entity))
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty())
+                {
+                    skeleton = loadSkeleton(meshComp.meshPath);
+                }
+            }
+
+            if (!skeleton || skeleton->sockets.empty())
+                continue;
+
+            auto& transforms = socketTransformCache[entity];
+            animator->computeSocketTransforms(skeleton->sockets, transforms);
+        }
+
+        // Pass 2: Apply socket transforms to attached entities
+        auto attachmentView = registry.view<components::SocketAttachmentComponent>();
+        for (auto attachedEntity : attachmentView)
+        {
+            const auto& attachment = attachmentView.get<components::SocketAttachmentComponent>(attachedEntity);
+            if (!attachment.isActive || attachment.parentEntity == entt::null)
+                continue;
+
+            if (!registry.valid(attachment.parentEntity))
+                continue;
+
+            // Find parent's cached socket transforms
+            auto cacheIt = socketTransformCache.find(attachment.parentEntity);
+            if (cacheIt == socketTransformCache.end() || cacheIt->second.empty())
+                continue;
+
+            // Resolve socket index if not cached
+            int32_t socketIdx = attachment.cachedSocketIndex;
+            if (socketIdx < 0)
+            {
+                // Look up by name
+                const resource::SkeletonData* skeleton = nullptr;
+                if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
+                {
+                    const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
+                    skeleton = loadSkeleton(meshComp.meshPath);
+                }
+                if (skeleton)
+                {
+                    socketIdx = skeleton->getSocketIndex(attachment.socketName);
+                    // Cache it for future frames
+                    auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+                    mutableAttachment.cachedSocketIndex = socketIdx;
+                }
+            }
+
+            if (socketIdx < 0 || socketIdx >= static_cast<int32_t>(cacheIt->second.size()))
+                continue;
+
+            // Get parent world transform
+            glm::mat4 parentWorld = glm::mat4(1.0f);
+            if (registry.all_of<components::WorldTransformComponent>(attachment.parentEntity))
+            {
+                parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
+            }
+
+            glm::mat4 socketWorld = parentWorld * cacheIt->second[socketIdx];
+
+            // Write to attached entity's WorldTransformComponent
+            registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = socketWorld;
+
+            // Clear dirty flag so SceneGraphSystem doesn't overwrite
+            if (registry.all_of<components::TransformComponent>(attachedEntity))
+            {
+                registry.get<components::TransformComponent>(attachedEntity).isDirty = false;
             }
         }
     }

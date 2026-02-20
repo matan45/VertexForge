@@ -79,6 +79,7 @@ namespace controllers::offscreen
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
             animatorSystem.syncWithRegistry();
             animatorSystem.updateAll(ctx.deltaTime);
+            animatorSystem.updateSocketAttachments();
         }
 
         auto* cameraManager = renderHandler->getCameraOcclusionManager();

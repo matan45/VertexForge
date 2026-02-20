@@ -6,6 +6,7 @@
 #include <variant>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "AnimationEventTypes.hpp"
 
 namespace animator
 {
@@ -53,6 +54,9 @@ namespace animator
 
         // Node graph editor position
         glm::vec2 position{0.0f, 0.0f};
+
+        // Animation events triggered at specific normalized times
+        std::vector<AnimationEvent> events;
     };
 
     struct AnimatorTransition

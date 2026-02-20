@@ -13,7 +13,8 @@ namespace windows::details {
                   bool hasUICanvas, bool hasUIRect, bool hasUIImage, bool hasUILabel,
                   bool hasUIScroll, bool hasUILayoutGroup, bool hasUIButton,
                   bool hasUITextInput, bool hasUICheckbox, bool hasUIDropdown,
-                  bool hasUITabs, bool hasUISlider, bool hasUIProgressBar);
+                  bool hasUITabs, bool hasUISlider, bool hasUIProgressBar,
+                  bool hasSocketAttachment);
     };
 
 }

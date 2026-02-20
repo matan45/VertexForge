@@ -21,7 +21,9 @@ namespace windows::animation
                                   bool& isDraggingPreview,
                                   bool showColliderOverlay,
                                   const types::PhysicsAnimationConfig* physicsConfig,
-                                  const std::unordered_map<std::string, size_t>* boneNameToIndex)
+                                  const std::unordered_map<std::string, size_t>* boneNameToIndex,
+                                  bool showSocketVisualization,
+                                  const std::vector<animator::SocketDefinition>* socketDefinitions)
     {
         ImGui::Text("3D Preview");
         ImGui::SameLine();
@@ -110,6 +112,11 @@ namespace windows::animation
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
                 colliderOverlay.draw(drawList, viewportPos, availSize, camera,
                                      evaluatedBones, *physicsConfig, *boneNameToIndex, selectedChannel);
+            }
+
+            if (showSocketVisualization && socketDefinitions && !socketDefinitions->empty() && !evaluatedBones.empty())
+            {
+                drawSocketVisualization(viewportPos, availSize, *socketDefinitions, evaluatedBones, camera);
             }
         }
         else
@@ -248,6 +255,50 @@ namespace windows::animation
                 snprintf(label, sizeof(label), "%zu", i);
                 drawList->AddText(ImVec2(screenPos.x + 8, screenPos.y - 8), IM_COL32(255, 255, 255, 255), label);
             }
+        }
+    }
+
+    void AnimationViewport::drawSocketVisualization(const ImVec2& viewportPos, const ImVec2& viewportSize,
+                                                     const std::vector<animator::SocketDefinition>& sockets,
+                                                     const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                                                     const editor::OrbitCamera* camera)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        ImU32 socketColor = IM_COL32(0, 200, 100, 255);
+        ImU32 socketOutline = IM_COL32(255, 255, 255, 200);
+
+        for (const auto& socket : sockets)
+        {
+            int32_t boneIdx = socket.boneIndex;
+            if (boneIdx < 0 || boneIdx >= static_cast<int32_t>(evaluatedBones.size()))
+                continue;
+
+            // Socket position approximated at bone position + local offset
+            glm::vec3 bonePos = evaluatedBones[boneIdx].skinnedPosition;
+            glm::vec3 socketPos = bonePos + socket.localPosition;
+
+            ImVec2 screenPos = worldToScreen(socketPos, viewportPos, viewportSize, camera);
+
+            if (screenPos.x < viewportPos.x - 100 || screenPos.x > viewportPos.x + viewportSize.x + 100 ||
+                screenPos.y < viewportPos.y - 100 || screenPos.y > viewportPos.y + viewportSize.y + 100)
+            {
+                continue;
+            }
+
+            // Draw diamond shape for sockets
+            float size = 6.0f;
+            ImVec2 top(screenPos.x, screenPos.y - size);
+            ImVec2 right(screenPos.x + size, screenPos.y);
+            ImVec2 bottom(screenPos.x, screenPos.y + size);
+            ImVec2 left(screenPos.x - size, screenPos.y);
+
+            drawList->AddQuadFilled(top, right, bottom, left, socketColor);
+            drawList->AddQuad(top, right, bottom, left, socketOutline, 1.5f);
+
+            // Label
+            drawList->AddText(ImVec2(screenPos.x + 10, screenPos.y - 8),
+                              IM_COL32(0, 220, 120, 255), socket.name.c_str());
         }
     }
 

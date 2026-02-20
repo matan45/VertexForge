@@ -72,6 +72,7 @@ namespace resource
         bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
         bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
         bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
+        bool hasSockets = false;        // True if file has socket data after skeleton
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:

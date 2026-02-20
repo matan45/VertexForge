@@ -332,6 +332,64 @@ namespace resource
             return false;
         }
 
+        // Read socket data if present
+        if (hasSockets)
+        {
+            uint32_t socketCount = endian::readLE<uint32_t>(file);
+            if (!file.fail() && socketCount < 256)
+            {
+                outSkeleton.sockets.resize(socketCount);
+                for (uint32_t s = 0; s < socketCount; ++s)
+                {
+                    auto& socket = outSkeleton.sockets[s];
+
+                    // Socket name
+                    uint32_t nameLength = endian::readLE<uint32_t>(file);
+                    if (nameLength > 0 && nameLength < 1024)
+                    {
+                        socket.name.resize(nameLength);
+                        file.read(socket.name.data(), nameLength);
+                    }
+
+                    // Bone name
+                    uint32_t boneNameLength = endian::readLE<uint32_t>(file);
+                    if (boneNameLength > 0 && boneNameLength < 1024)
+                    {
+                        socket.targetBoneName.resize(boneNameLength);
+                        file.read(socket.targetBoneName.data(), boneNameLength);
+                    }
+
+                    // Local position
+                    socket.localPosition.x = endian::readLE<float>(file);
+                    socket.localPosition.y = endian::readLE<float>(file);
+                    socket.localPosition.z = endian::readLE<float>(file);
+
+                    // Local rotation (w,x,y,z)
+                    socket.localRotation.w = endian::readLE<float>(file);
+                    socket.localRotation.x = endian::readLE<float>(file);
+                    socket.localRotation.y = endian::readLE<float>(file);
+                    socket.localRotation.z = endian::readLE<float>(file);
+
+                    // Local scale
+                    socket.localScale.x = endian::readLE<float>(file);
+                    socket.localScale.y = endian::readLE<float>(file);
+                    socket.localScale.z = endian::readLE<float>(file);
+
+                    // Resolve bone index from name
+                    socket.boneIndex = outSkeleton.getBoneIndex(socket.targetBoneName);
+
+                    if (file.fail())
+                    {
+                        vfLogError("MeshStreamHandle: Failed to read socket {}", s);
+                        outSkeleton.sockets.clear();
+                        return false;
+                    }
+                }
+
+                vfLogInfo("MeshStreamHandle: Loaded {} sockets", socketCount);
+            }
+        }
+
         vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
         return true;
     }

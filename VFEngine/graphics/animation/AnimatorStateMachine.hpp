@@ -1,6 +1,8 @@
 #pragma once
 
 #include "animator/AnimatorTypes.hpp"
+#include "animator/AnimationEventTypes.hpp"
+#include "animator/SocketTypes.hpp"
 #include "AnimationBlender.hpp"
 #include "AnimationEvaluator.hpp"
 #include "resource/Types.hpp"
@@ -62,6 +64,9 @@ namespace animation
 
         const std::vector<glm::mat4>& getBoneMatrices() const { return currentBoneMatrices; }
 
+        void computeSocketTransforms(const std::vector<animator::SocketDefinition>& sockets,
+                                     std::vector<glm::mat4>& outSocketModelTransforms) const;
+
         void setFloat(const std::string& name, float value);
         void setInt(const std::string& name, int32_t value);
         void setBool(const std::string& name, bool value);
@@ -91,6 +96,8 @@ namespace animation
 
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }
 
+        const std::vector<const animator::AnimationEvent*>& getFiredEvents() const { return firedEventsThisFrame; }
+
         void setRootMotionEnabled(bool enabled);
         glm::vec3 consumeRootMotionDelta();
 
@@ -104,5 +111,8 @@ namespace animation
 
         bool shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
                                     float normalizedTime, bool isLooping) const;
+
+        void fireTriggeredEvents();
+        std::vector<const animator::AnimationEvent*> firedEventsThisFrame;
     };
 }

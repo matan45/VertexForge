@@ -186,6 +186,50 @@ namespace types
 
         writeMatrix(outFile, skeleton.globalInverseTransform);
 
-        vfLogInfo("Written full skeleton data: {} bones with hierarchy", boneCount);
+        // Write socket data after skeleton
+        writeSocketData(outFile, skeleton.sockets);
+
+        vfLogInfo("Written full skeleton data: {} bones with hierarchy, {} sockets", boneCount, skeleton.sockets.size());
+    }
+
+    void MeshSerializer::writeSocketData(std::ofstream& outFile, const std::vector<animator::SocketDefinition>& sockets) const
+    {
+        uint32_t socketCount = static_cast<uint32_t>(sockets.size());
+        resource::endian::writeLE<uint32_t>(outFile, socketCount);
+
+        for (const auto& socket : sockets)
+        {
+            // Socket name
+            uint32_t nameLength = static_cast<uint32_t>(socket.name.length());
+            resource::endian::writeLE<uint32_t>(outFile, nameLength);
+            if (nameLength > 0)
+            {
+                outFile.write(socket.name.data(), nameLength);
+            }
+
+            // Target bone name
+            uint32_t boneNameLength = static_cast<uint32_t>(socket.targetBoneName.length());
+            resource::endian::writeLE<uint32_t>(outFile, boneNameLength);
+            if (boneNameLength > 0)
+            {
+                outFile.write(socket.targetBoneName.data(), boneNameLength);
+            }
+
+            // Local position
+            resource::endian::writeLE<float>(outFile, socket.localPosition.x);
+            resource::endian::writeLE<float>(outFile, socket.localPosition.y);
+            resource::endian::writeLE<float>(outFile, socket.localPosition.z);
+
+            // Local rotation (quaternion w,x,y,z)
+            resource::endian::writeLE<float>(outFile, socket.localRotation.w);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.x);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.y);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.z);
+
+            // Local scale
+            resource::endian::writeLE<float>(outFile, socket.localScale.x);
+            resource::endian::writeLE<float>(outFile, socket.localScale.y);
+            resource::endian::writeLE<float>(outFile, socket.localScale.z);
+        }
     }
 }

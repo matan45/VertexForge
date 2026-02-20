@@ -22,6 +22,8 @@ namespace animation
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
 
+        std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
+
         bool initialized = false;
         bool pendingCacheCleanup = false;
     public:
@@ -31,6 +33,7 @@ namespace animation
         void shutdown();
 
         void updateAll(float deltaTime);
+        void updateSocketAttachments();
 
         void initializeEntityAnimator(entt::entity entity, const std::string& animatorPath);
         void destroyEntityAnimator(entt::entity entity);

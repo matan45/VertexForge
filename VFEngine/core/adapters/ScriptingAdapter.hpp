@@ -16,6 +16,8 @@ namespace core
 {
     class ScriptUIEventBridge;
     class ScriptPhysicsEventBridge;
+    class ScriptAnimationEventBridge;
+    class ScriptSocketEventBridge;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
@@ -24,6 +26,8 @@ namespace core
         std::unique_ptr<NativeAPIRegistry> apiRegistry;
         std::unique_ptr<ScriptUIEventBridge> uiEventBridge;
         std::unique_ptr<ScriptPhysicsEventBridge> physicsEventBridge;
+        std::unique_ptr<ScriptAnimationEventBridge> animationEventBridge;
+        std::unique_ptr<ScriptSocketEventBridge> socketEventBridge;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;

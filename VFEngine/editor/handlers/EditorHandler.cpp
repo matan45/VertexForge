@@ -177,7 +177,8 @@ namespace handlers
     {
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
-            bootstrap->getAnimatorProvider()
+            bootstrap->getAnimatorProvider(),
+            bootstrap->getSocketProvider()
         );
         renderService = std::make_shared<services::EditorRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),

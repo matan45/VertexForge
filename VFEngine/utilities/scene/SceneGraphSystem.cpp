@@ -1,4 +1,5 @@
 #include "SceneGraphSystem.hpp"
+#include "components/MediaComponents.hpp"
 
 namespace scene {
 	SceneGraphSystem::SceneGraphSystem() : root{ Entity("Root") }
@@ -141,6 +142,25 @@ namespace scene {
 		}
 		if (!entity.hasComponent<components::TransformComponent>()) {
 			return;
+		}
+
+		// Skip entities whose transform is driven by the socket attachment system
+		if (entity.hasComponent<components::SocketAttachmentComponent>()) {
+			const auto& attachment = entity.getComponent<components::SocketAttachmentComponent>();
+			if (attachment.isActive && attachment.parentEntity != entt::null) {
+				// Socket system already wrote WorldTransformComponent — use it as-is
+				glm::mat4 worldMatrix = parentWorldTransform;
+				if (entity.hasComponent<components::WorldTransformComponent>()) {
+					worldMatrix = entity.getComponent<components::WorldTransformComponent>().worldMatrix;
+				}
+				// Still recurse into children with socket-driven world matrix
+				for (auto& child : entity.getChildren()) {
+					if (child.isAlive()) {
+						updateChildWorldTransforms(child, worldMatrix);
+					}
+				}
+				return;
+			}
 		}
 
 		auto& transform = entity.getComponent<components::TransformComponent>();

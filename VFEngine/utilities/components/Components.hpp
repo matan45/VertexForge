@@ -20,5 +20,6 @@ namespace components
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,
-                                               UITabsComponent, UISliderComponent>;
+                                               UITabsComponent, UISliderComponent,
+                                               SocketAttachmentComponent, SocketOverrideComponent>;
 }

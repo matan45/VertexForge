@@ -17,6 +17,8 @@ namespace types
 
         void writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const;
 
+        void writeSocketData(std::ofstream& outFile, const std::vector<animator::SocketDefinition>& sockets) const;
+
     private:
         static constexpr size_t chunkSize = 256 * 1024;
     };

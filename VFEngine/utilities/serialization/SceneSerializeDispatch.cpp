@@ -198,6 +198,18 @@ namespace serialization
                 entity.getComponent<components::UIProgressBarComponent>());
         }
 
+        if (entity.hasComponent<components::SocketAttachmentComponent>())
+        {
+            componentsJson["socketAttachment"] = serializeSocketAttachment(
+                entity.getComponent<components::SocketAttachmentComponent>());
+        }
+
+        if (entity.hasComponent<components::SocketOverrideComponent>())
+        {
+            componentsJson["socketOverride"] = serializeSocketOverride(
+                entity.getComponent<components::SocketOverrideComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -437,6 +449,18 @@ namespace serialization
         {
             auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
             deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
+        }
+
+        if (componentsJson.contains("socketAttachment"))
+        {
+            auto& attachment = entity.addOrReplaceComponent<components::SocketAttachmentComponent>();
+            deserializeSocketAttachment(componentsJson["socketAttachment"], attachment);
+        }
+
+        if (componentsJson.contains("socketOverride"))
+        {
+            auto& override = entity.addOrReplaceComponent<components::SocketOverrideComponent>();
+            deserializeSocketOverride(componentsJson["socketOverride"], override);
         }
     }
 

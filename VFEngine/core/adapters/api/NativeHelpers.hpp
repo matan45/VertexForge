@@ -159,6 +159,8 @@ namespace core::api
         if (type == "UITabs") return services::ComponentTypeId::UITabs;
         if (type == "UISlider") return services::ComponentTypeId::UISlider;
         if (type == "UIProgressBar") return services::ComponentTypeId::UIProgressBar;
+        if (type == "SocketAttachment") return services::ComponentTypeId::SocketAttachment;
+        if (type == "SocketOverride") return services::ComponentTypeId::SocketOverride;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -202,6 +204,8 @@ namespace core::api
         case services::ComponentTypeId::UITabs: return "UITabs";
         case services::ComponentTypeId::UISlider: return "UISlider";
         case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
+        case services::ComponentTypeId::SocketAttachment: return "SocketAttachment";
+        case services::ComponentTypeId::SocketOverride: return "SocketOverride";
         default: return "Unknown";
         }
     }

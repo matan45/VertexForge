@@ -73,6 +73,7 @@ namespace windows
                 infoPanel.draw(panelState, getPreviewInstanceId());
                 ImGui::Spacing();
                 ImGui::Checkbox("Physics Panel", &showPhysicsPanel);
+                ImGui::Checkbox("Socket Panel", &showSocketPanel);
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -102,7 +103,9 @@ namespace windows
                                   isDraggingPreview,
                                   showPhysicsPanel && showColliderOverlay,
                                   &physicsConfig,
-                                  &boneNameToIndex);
+                                  &boneNameToIndex,
+                                  showSocketPanel && showSocketVisualization,
+                                  &socketDefinitions);
                     updateBoneTransformsFromService();
                     ImGui::EndChild();
 
@@ -118,7 +121,10 @@ namespace windows
 
                 ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), false);
 
-                float skeletonHeight = showPhysicsPanel ? contentSize.y * 0.4f : contentSize.y;
+                int activePanels = (showPhysicsPanel ? 1 : 0) + (showSocketPanel ? 1 : 0);
+                float skeletonHeight = activePanels > 0
+                    ? contentSize.y * (activePanels > 1 ? 0.33f : 0.4f)
+                    : contentSize.y;
 
                 ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, skeletonHeight), true);
                 if (panelState.animationLoaded)
@@ -136,11 +142,27 @@ namespace windows
 
                 if (showPhysicsPanel)
                 {
-                    ImGui::BeginChild("PhysicsPanel", ImVec2(rightPanelWidth, 0), true);
+                    float physicsHeight = showSocketPanel ? contentSize.y * 0.33f : 0;
+                    ImGui::BeginChild("PhysicsPanel", ImVec2(rightPanelWidth, physicsHeight), true);
                     if (physicsPanel.draw(physicsConfig, selectedChannel, evaluatedBones,
                                           boneNameToIndex, showColliderOverlay, physicsConfigPath))
                     {
                         buildMappedBoneNames();
+                    }
+                    ImGui::EndChild();
+                }
+
+                if (showSocketPanel)
+                {
+                    ImGui::BeginChild("SocketPanel", ImVec2(rightPanelWidth, 0), true);
+                    if (panelState.animationLoaded)
+                    {
+                        socketPanel.draw(socketDefinitions, selectedChannel, evaluatedBones,
+                                         boneNameToIndex, showSocketVisualization);
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Loading...");
                     }
                     ImGui::EndChild();
                 }

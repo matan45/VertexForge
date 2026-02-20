@@ -14,6 +14,7 @@ namespace scene
 namespace services
 {
     class IAnimatorProvider;
+    class ISocketProvider;
 
     // Existing component services
     class CameraComponentService;
@@ -23,6 +24,7 @@ namespace services
     class IBLComponentService;
     class PhysicsComponentService;
     class AnimatorComponentService;
+    class SocketComponentService;
     class VFXComponentService;
     class BillboardComponentService;
     class TextComponentService;
@@ -49,6 +51,7 @@ namespace services
         std::unique_ptr<IBLComponentService> iblService;
         std::unique_ptr<PhysicsComponentService> physicsService;
         std::unique_ptr<AnimatorComponentService> animatorService;
+        std::unique_ptr<SocketComponentService> socketService;
         std::unique_ptr<VFXComponentService> vfxService;
         std::unique_ptr<BillboardComponentService> billboardService;
         std::unique_ptr<TextComponentService> textService;
@@ -64,7 +67,8 @@ namespace services
 
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                                  IAnimatorProvider* animatorProvider);
+                                  IAnimatorProvider* animatorProvider,
+                                  ISocketProvider* socketProvider = nullptr);
         ~SceneServiceImpl() override;
 
         void registerEventHandlers() override;
