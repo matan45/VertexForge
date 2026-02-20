@@ -205,7 +205,10 @@ namespace core
 		rasterizer.lineWidth = 1.0f;
 		rasterizer.cullMode = config.cullMode;
 		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-		rasterizer.depthBiasEnable = VK_FALSE;
+		rasterizer.depthBiasEnable = config.depthBiasEnable ? VK_TRUE : VK_FALSE;
+		rasterizer.depthBiasConstantFactor = config.depthBiasConstantFactor;
+		rasterizer.depthBiasSlopeFactor = config.depthBiasSlopeFactor;
+		rasterizer.depthBiasClamp = 0.0f;
 
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;

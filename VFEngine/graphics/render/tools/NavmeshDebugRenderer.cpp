@@ -75,6 +75,9 @@ namespace render::mesh
         config.depthTestEnable = true;
         config.depthCompareOp = vk::CompareOp::eLessOrEqual;
         config.depthWriteEnable = false;
+        config.depthBiasEnable = true;
+        config.depthBiasConstantFactor = -2.0f;
+        config.depthBiasSlopeFactor = -2.0f;
         config.blendEnable = true;
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);

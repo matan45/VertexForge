@@ -533,7 +533,9 @@ namespace services
                 const auto& lod0 = tile->lodLevels[0];
                 int baseVertex = static_cast<int>(result.vertices.size() / 3);
 
-                const glm::vec3& origin = tile->worldOrigin;
+                // Use only X/Z from worldOrigin (Y=0) to match GPU terrain rendering,
+                // which translates by (worldOrigin.x, 0, worldOrigin.z)
+                const glm::vec3 origin(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z);
                 for (const auto& vertex : lod0.vertices)
                 {
                     glm::vec3 worldPos = origin + vertex.position;
