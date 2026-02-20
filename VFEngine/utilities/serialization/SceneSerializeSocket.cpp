@@ -6,9 +6,8 @@ namespace serialization
     json SceneSerialization::serializeSocketAttachment(const components::SocketAttachmentComponent& attachment)
     {
         json j;
-        // Store parent entity UUID rather than raw entt handle for scene persistence
-        // The parent entity's UUID will be resolved during deserialization
-        j["parentEntityId"] = static_cast<uint64_t>(attachment.parentEntity);
+        // Store parent entity's UUID for persistence across scene loads
+        j["parentEntityUUID"] = attachment.parentEntityUUID;
         j["socketName"] = attachment.socketName;
         j["isActive"] = attachment.isActive;
         return j;
@@ -16,11 +15,12 @@ namespace serialization
 
     void SceneSerialization::deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment)
     {
-        // Store the raw entity ID - will be resolved after all entities are loaded
-        attachment.parentEntity = static_cast<entt::entity>(j.value("parentEntityId", static_cast<uint64_t>(entt::null)));
+        // Store UUID - will be resolved to entt::entity at runtime
+        attachment.parentEntityUUID = j.value("parentEntityUUID", static_cast<uint64_t>(0));
+        attachment.parentEntity = entt::null; // Will be resolved from UUID
         attachment.socketName = j.value("socketName", "");
         attachment.isActive = j.value("isActive", true);
-        attachment.cachedSocketIndex = -1; // Will be resolved at runtime
+        attachment.cachedSocketIndex = -1;
     }
 
     json SceneSerialization::serializeSocketOverride(const components::SocketOverrideComponent& override)

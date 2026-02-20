@@ -170,7 +170,25 @@ namespace animation
         auto attachmentView = registry.view<components::SocketAttachmentComponent>();
         for (auto attachedEntity : attachmentView)
         {
-            const auto& attachment = attachmentView.get<components::SocketAttachmentComponent>(attachedEntity);
+            auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+
+            // Resolve parent entity from UUID if needed (after scene load/mode change)
+            if ((attachment.parentEntity == entt::null || !registry.valid(attachment.parentEntity))
+                && attachment.parentEntityUUID != 0)
+            {
+                attachment.parentEntity = entt::null;
+                attachment.cachedSocketIndex = -1;
+                auto uuidView = registry.view<components::UUIDComponent>();
+                for (auto candidate : uuidView)
+                {
+                    if (uuidView.get<components::UUIDComponent>(candidate).id.getValue() == attachment.parentEntityUUID)
+                    {
+                        attachment.parentEntity = candidate;
+                        break;
+                    }
+                }
+            }
+
             if (!attachment.isActive || attachment.parentEntity == entt::null)
                 continue;
 
