@@ -91,6 +91,7 @@ namespace windows
         std::string physicsConfigPath;
 
         std::vector<animator::SocketDefinition> socketDefinitions;
+        std::vector<animator::AnimationEvent> animationEvents;
 
         void buildMappedBoneNames();
         std::unordered_set<std::string> mappedBoneNames;

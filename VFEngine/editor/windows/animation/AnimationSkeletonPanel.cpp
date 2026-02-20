@@ -47,6 +47,7 @@ namespace windows::animation
         ImGui::Text("Bones");
         ImGui::Separator();
 
+        ImGui::BeginChild("##BoneList", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
         auto rootIt = boneChildrenMap.find(-1);
         if (rootIt != boneChildrenMap.end())
         {
@@ -55,6 +56,7 @@ namespace windows::animation
                 drawBoneNode(idx, evaluatedBones, boneChildrenMap, selectedChannel, mappedBoneNames);
             }
         }
+        ImGui::EndChild();
     }
 
     void AnimationSkeletonPanel::drawBoneNode(size_t index,

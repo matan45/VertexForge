@@ -58,14 +58,14 @@ namespace windows
             updatePlayback(deltaTime);
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(1200, 750), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
             {
                 float leftPanelWidth = 220.0f;
-                float rightPanelWidth = 220.0f;
+                float rightPanelWidth = 300.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
                 float spacing = ImGui::GetStyle().ItemSpacing.x;
 
@@ -111,7 +111,7 @@ namespace windows
 
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
                     timelinePanel.draw(currentFrame, selectedChannel, sequencerExpanded, firstFrame,
-                                       &animationData, getPreviewInstanceId());
+                                       &animationData, getPreviewInstanceId(), &animationEvents);
                     ImGui::EndChild();
                 }
 
