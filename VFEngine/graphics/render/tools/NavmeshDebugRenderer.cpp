@@ -56,7 +56,8 @@ namespace render::mesh
             .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
             .pushConstantSize = sizeof(NavmeshDebugPushConstants),
-            .shaderStages = wireframeShader->getShaderStages()
+            .shaderStages = wireframeShader->getShaderStages(),
+            .disableDepthTest = true
         };
 
         auto result = core::PipelineUtilities::createWireframePipeline(config);
@@ -183,7 +184,7 @@ namespace render::mesh
 
         NavmeshDebugPushConstants pushConstants{};
         pushConstants.mvp = projection * view; // World-space vertices, identity model
-        pushConstants.color = glm::vec4(0.0f, 0.8f, 0.4f, 1.0f); // Green tint
+        pushConstants.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f); // Red
 
         commandBuffer.pushConstants(wireframePipelineLayout,
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

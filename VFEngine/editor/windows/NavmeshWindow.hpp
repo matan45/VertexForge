@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "types/NavmeshTypes.hpp"
 #include "../../services/events/EventTypes.hpp"
+#include "nfd/FileDialog.hpp"
 
 namespace windows
 {
@@ -13,6 +14,7 @@ namespace windows
         types::NavmeshBakeSettings settings;
         events::SubscriptionToken bakeCompleteToken;
         events::SubscriptionToken navmeshClearedToken;
+        nfd::FileDialog fileDialog;
 
         void drawBakeSettings();
         void drawAgentSection();

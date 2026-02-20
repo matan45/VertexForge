@@ -508,37 +508,48 @@ namespace services
         grid->updateWeightMapLayerCount(layerCount);
     }
 
-    events::terrain::TerrainGeometryResult TerrainService::getTerrainGeometryForNavmesh() const
+    events::terrain::TerrainGeometryResult TerrainService::getTerrainGeometryForNavmesh()
     {
         events::terrain::TerrainGeometryResult result;
 
-        for (const auto& [entityId, grid] : terrainGrids)
+        for (auto& [entityId, grid] : terrainGrids)
         {
+            auto& generator = grid->getGenerator();
+            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+                return grid->getTile(coord);
+            };
+
             auto allTiles = grid->getAllTiles();
-            for (const auto* tile : allTiles)
+            for (auto* tile : allTiles)
             {
-                if (!tile || !tile->hasLODData(0))
+                if (!tile || !tile->hasHeightData())
                     continue;
+
+                if (!tile->hasLODData(0))
+                {
+                    generator.regenerateLOD(*tile, 0, getTile);
+                }
 
                 const auto& lod0 = tile->lodLevels[0];
                 int baseVertex = static_cast<int>(result.vertices.size() / 3);
 
+                const glm::vec3& origin = tile->worldOrigin;
                 for (const auto& vertex : lod0.vertices)
                 {
-                    const auto& pos = vertex.position;
-                    result.vertices.push_back(pos.x);
-                    result.vertices.push_back(pos.y);
-                    result.vertices.push_back(pos.z);
+                    glm::vec3 worldPos = origin + vertex.position;
+                    result.vertices.push_back(worldPos.x);
+                    result.vertices.push_back(worldPos.y);
+                    result.vertices.push_back(worldPos.z);
 
                     if (result.vertices.size() == 3)
                     {
-                        result.boundsMin = pos;
-                        result.boundsMax = pos;
+                        result.boundsMin = worldPos;
+                        result.boundsMax = worldPos;
                     }
                     else
                     {
-                        result.boundsMin = glm::min(result.boundsMin, pos);
-                        result.boundsMax = glm::max(result.boundsMax, pos);
+                        result.boundsMin = glm::min(result.boundsMin, worldPos);
+                        result.boundsMax = glm::max(result.boundsMax, worldPos);
                     }
                 }
 

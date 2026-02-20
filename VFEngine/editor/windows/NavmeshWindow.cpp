@@ -216,18 +216,32 @@ namespace windows
 
             if (ImGui::Button("Save Navmesh...", ImVec2(-1, 0)))
             {
-                events::navmesh::SaveNavmeshCommand cmd;
-                cmd.filePath = "navmesh.vfNavmesh";
-                dispatcher.execute(cmd);
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
+                };
+                std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfNavmesh");
+                if (!savePath.empty())
+                {
+                    events::navmesh::SaveNavmeshCommand cmd;
+                    cmd.filePath = savePath;
+                    dispatcher.execute(cmd);
+                }
             }
 
             ImGui::EndDisabled();
 
             if (ImGui::Button("Load Navmesh...", ImVec2(-1, 0)))
             {
-                events::navmesh::LoadNavmeshCommand cmd;
-                cmd.filePath = "navmesh.vfNavmesh";
-                dispatcher.execute(cmd);
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
+                };
+                std::string loadPath = fileDialog.openFileDialog(fileTypes);
+                if (!loadPath.empty())
+                {
+                    events::navmesh::LoadNavmeshCommand cmd;
+                    cmd.filePath = loadPath;
+                    dispatcher.execute(cmd);
+                }
             }
 
             ImGui::Unindent();
