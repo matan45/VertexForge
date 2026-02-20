@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include "../config/Config.hpp"
 #include "../animator/SocketTypes.hpp"
+#include "../animator/AnimationEventTypes.hpp"
 
 namespace resource
 {
@@ -158,6 +159,7 @@ namespace resource
         float duration = 0.0f;
         float ticksPerSecond = 24.0f;
         std::vector<BoneAnimation> channels;
+        std::vector<animator::AnimationEvent> events;
     };
 
     struct AudioData

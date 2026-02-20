@@ -150,8 +150,7 @@ project "Import"
 	  "dependencies/glm",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
-	  "dependencies/freetype/include",   -- FreeType headers
-	  "dependencies/json/single_include" -- nlohmann/json for AnimationEventIO
+	  "dependencies/freetype/include"    -- FreeType headers
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

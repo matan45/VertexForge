@@ -1,5 +1,5 @@
 #include "AnimationTimelinePanel.hpp"
-#include "AnimationEventIO.hpp"
+#include "AnimationEventWriter.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "providers/PreviewInstanceId.hpp"
@@ -198,23 +198,11 @@ namespace windows::animation
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.65f, 0.2f, 1.0f));
                 if (ImGui::Button("Save Events"))
                 {
-                    eventSaveSuccess = types::AnimationEventIO::saveEvents(animationPath, events);
+                    eventSaveSuccess = types::AnimationEventWriter::saveEventsToAnimation(animationPath, events);
                     eventSaveMessageTimer = 3.0f;
                 }
                 ImGui::PopStyleColor(2);
                 if (!canSave) ImGui::EndDisabled();
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Load Events"))
-                {
-                    auto loaded = types::AnimationEventIO::loadEvents(animationPath);
-                    if (!loaded.empty())
-                    {
-                        events = std::move(loaded);
-                        selectedEventIndex = -1;
-                    }
-                }
 
                 if (eventSaveMessageTimer > 0.0f)
                 {

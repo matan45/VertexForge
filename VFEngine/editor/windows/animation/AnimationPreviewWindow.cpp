@@ -1,6 +1,5 @@
 #include "AnimationPreviewWindow.hpp"
 #include "../../camera/OrbitCamera.hpp"
-#include "AnimationEventIO.hpp"
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
@@ -266,8 +265,8 @@ namespace windows
                         panelState.animationData = &animationData;
                         loadAnimationForPreview();
 
-                        // Load saved animation events if they exist
-                        animationEvents = types::AnimationEventIO::loadEvents(animationPath);
+                        // Load saved animation events from the .vfAnim file
+                        animationEvents = animationData.events;
                     }
                     else
                     {

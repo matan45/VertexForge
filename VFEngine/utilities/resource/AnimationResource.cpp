@@ -87,6 +87,37 @@ namespace resource
 
         data.headerFileType = FileType::ANIMATION;
 
+        // Try to read animation events after channels (backward compatible)
+        std::streampos beforeEvents = file.tellg();
+        uint32_t numEvents = endian::readLE<uint32_t>(file);
+        if (!file.fail() && numEvents < 256)
+        {
+            data.events.resize(numEvents);
+            for (uint32_t e = 0; e < numEvents; ++e)
+            {
+                auto& event = data.events[e];
+                event.name = readString(file);
+                event.normalizedTime = endian::readLE<float>(file);
+                event.payload = readString(file);
+
+                if (file.fail())
+                {
+                    data.events.clear();
+                    break;
+                }
+            }
+
+            if (!data.events.empty())
+            {
+                vfLogInfo("Loaded {} animation events", data.events.size());
+            }
+        }
+        else
+        {
+            // No event data or EOF — backward compatible with old files
+            file.clear();
+        }
+
         vfLogInfo("Loaded animation '{}' - {} channels, duration: {:.2f}s",
                   data.name, data.channels.size(), data.duration / data.ticksPerSecond);
 
