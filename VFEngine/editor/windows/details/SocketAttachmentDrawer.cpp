@@ -2,6 +2,7 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SocketEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -38,10 +39,11 @@ namespace windows::details
             ImGui::Indent(10.0f);
 
             auto data = *dataOpt;
+            bool isAttached = data.parentEntity.isValid() && !data.socketName.empty();
 
-            // Parent entity info
-            if (data.parentEntity.isValid())
+            if (isAttached)
             {
+                // Already attached - show current attachment info
                 if (!data.parentEntityName.empty())
                 {
                     ImGui::Text("Parent: %s", data.parentEntityName.c_str());
@@ -50,39 +52,123 @@ namespace windows::details
                 {
                     ImGui::Text("Parent: Entity #%llu", static_cast<unsigned long long>(data.parentEntity.id));
                 }
-            }
-            else
-            {
-                ImGui::TextDisabled("Parent: Not attached");
-            }
 
-            // Socket name
-            ImGui::Text("Socket: %s", data.socketName.empty() ? "(none)" : data.socketName.c_str());
+                ImGui::Text("Socket: %s", data.socketName.c_str());
 
-            // Active toggle
-            bool isActive = data.isActive;
-            if (ImGui::Checkbox("Active", &isActive))
-            {
-                events::socket::SetSocketActiveCommand cmd;
-                cmd.entity = handle;
-                cmd.active = isActive;
-                dispatcher.execute(cmd);
-            }
+                // Active toggle
+                bool isActive = data.isActive;
+                if (ImGui::Checkbox("Active", &isActive))
+                {
+                    events::socket::SetSocketActiveCommand cmd;
+                    cmd.entity = handle;
+                    cmd.active = isActive;
+                    dispatcher.execute(cmd);
+                }
 
-            // Detach button
-            if (data.parentEntity.isValid() && !data.socketName.empty())
-            {
+                // Detach button
                 ImGui::Spacing();
                 if (ImGui::Button("Detach"))
                 {
                     events::socket::DetachFromSocketCommand cmd;
                     cmd.childEntity = handle;
                     dispatcher.execute(cmd);
+                    needsRefresh = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
                     ImGui::SetTooltip("Remove socket attachment and restore normal transform");
                 }
+            }
+            else
+            {
+                // Not attached - show parent entity picker and socket selector
+                if (needsRefresh)
+                {
+                    refreshCandidateParents();
+                    needsRefresh = false;
+                }
+
+                if (ImGui::Button("Refresh"))
+                {
+                    refreshCandidateParents();
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%zu entities with skeleton)", candidateParents.size());
+
+                // Parent entity combo
+                const char* parentPreview = selectedParentIdx >= 0 && selectedParentIdx < static_cast<int>(candidateNames.size())
+                    ? candidateNames[selectedParentIdx].c_str()
+                    : "Select Parent Entity...";
+
+                if (ImGui::BeginCombo("Parent##SocketParent", parentPreview))
+                {
+                    for (int i = 0; i < static_cast<int>(candidateParents.size()); ++i)
+                    {
+                        bool isSelected = (i == selectedParentIdx);
+                        if (ImGui::Selectable(candidateNames[i].c_str(), isSelected))
+                        {
+                            selectedParentIdx = i;
+                            selectedParent = candidateParents[i];
+                            selectedSocketIdx = -1;
+                            refreshSocketNames(selectedParent);
+                        }
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // Socket name combo (only if parent is selected)
+                if (selectedParentIdx >= 0 && !socketNames.empty())
+                {
+                    const char* socketPreview = selectedSocketIdx >= 0 && selectedSocketIdx < static_cast<int>(socketNames.size())
+                        ? socketNames[selectedSocketIdx].c_str()
+                        : "Select Socket...";
+
+                    if (ImGui::BeginCombo("Socket##SocketName", socketPreview))
+                    {
+                        for (int i = 0; i < static_cast<int>(socketNames.size()); ++i)
+                        {
+                            bool isSelected = (i == selectedSocketIdx);
+                            if (ImGui::Selectable(socketNames[i].c_str(), isSelected))
+                            {
+                                selectedSocketIdx = i;
+                            }
+                            if (isSelected)
+                            {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                else if (selectedParentIdx >= 0 && socketNames.empty())
+                {
+                    ImGui::TextDisabled("No sockets found on parent");
+                }
+
+                // Attach button
+                bool canAttach = selectedParentIdx >= 0 && selectedSocketIdx >= 0;
+                if (!canAttach) ImGui::BeginDisabled();
+
+                ImGui::Spacing();
+                if (ImGui::Button("Attach"))
+                {
+                    events::socket::AttachToSocketCommand cmd;
+                    cmd.childEntity = handle;
+                    cmd.parentEntity = selectedParent;
+                    cmd.socketName = socketNames[selectedSocketIdx];
+                    dispatcher.execute(cmd);
+
+                    // Reset selection state
+                    selectedParentIdx = -1;
+                    selectedSocketIdx = -1;
+                    needsRefresh = true;
+                }
+
+                if (!canAttach) ImGui::EndDisabled();
             }
 
             ImGui::Unindent(10.0f);
@@ -118,5 +204,50 @@ namespace windows::details
         EntityDetailsPanel::popComponentHeaderStyle();
 
         return isOpen;
+    }
+
+    void SocketAttachmentDrawer::refreshCandidateParents()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        candidateParents.clear();
+        candidateNames.clear();
+        selectedParentIdx = -1;
+        selectedSocketIdx = -1;
+        socketNames.clear();
+
+        // Get all entities with Animator component (these have skeletons with sockets)
+        events::scene::GetEntitiesWithComponentQuery compQuery;
+        compQuery.componentType = services::ComponentTypeId::Animator;
+        candidateParents = dispatcher.query(compQuery);
+
+        // Get names for each candidate
+        for (const auto& parent : candidateParents)
+        {
+            events::scene::GetEntityQuery entityQuery;
+            entityQuery.entity = parent;
+            auto entityDataOpt = dispatcher.query(entityQuery);
+
+            if (entityDataOpt.has_value() && !entityDataOpt->name.empty())
+            {
+                candidateNames.push_back(entityDataOpt->name);
+            }
+            else
+            {
+                candidateNames.push_back("Entity #" + std::to_string(parent.id));
+            }
+        }
+    }
+
+    void SocketAttachmentDrawer::refreshSocketNames(services::EntityHandle parentEntity)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        socketNames.clear();
+        selectedSocketIdx = -1;
+
+        events::socket::GetSocketNamesQuery query;
+        query.entity = parentEntity;
+        socketNames = dispatcher.query(query);
     }
 }
