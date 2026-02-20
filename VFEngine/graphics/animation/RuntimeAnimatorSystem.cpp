@@ -7,6 +7,7 @@
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
 #include "../../services/events/AnimationEventEvents.hpp"
+#include "../../services/events/SocketEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
@@ -54,9 +55,25 @@ namespace animation
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
                 clearAnimatorInstances();
+                skeletonDataCache.clear();
                 pendingCacheCleanup = true;
                 vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
                           notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
+            });
+
+        socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
+            [this](const events::socket::SocketDataSavedNotification& notification)
+            {
+                skeletonDataCache.erase(notification.meshPath);
+                // Also reset cached socket indices for attached entities
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::SocketAttachmentComponent>();
+                for (auto entity : view)
+                {
+                    auto& attachment = registry.get<components::SocketAttachmentComponent>(entity);
+                    attachment.cachedSocketIndex = -1;
+                }
+                vfLogInfo("[RuntimeAnimatorSystem] Skeleton cache invalidated for: {}", notification.meshPath);
             });
 
         vfLogInfo("[RuntimeAnimatorSystem] Initialized");
@@ -76,6 +93,12 @@ namespace animation
         {
             dispatcher.unsubscribe(editorModeChangedToken);
             editorModeChangedToken = {};
+        }
+
+        if (socketDataSavedToken.isValid())
+        {
+            dispatcher.unsubscribe(socketDataSavedToken);
+            socketDataSavedToken = {};
         }
 
         clearAll();

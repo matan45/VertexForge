@@ -21,6 +21,7 @@ namespace animation
 
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
+        events::SubscriptionToken socketDataSavedToken;
 
         std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
 

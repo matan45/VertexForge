@@ -112,4 +112,10 @@ namespace events::socket
         bool attached; // true = attached, false = detached
         std::string_view getName() const override { return "SocketAttachmentChanged"; }
     };
+
+    struct SocketDataSavedNotification : ::events::INotification
+    {
+        std::string meshPath;
+        std::string_view getName() const override { return "SocketDataSaved"; }
+    };
 }

@@ -1,5 +1,7 @@
 #include "AnimationSocketPanel.hpp"
 #include "MeshSocketWriter.hpp"
+#include "../../../services/events/SocketEvents.hpp"
+#include "../../../services/events/EventDispatcher.hpp"
 #include "imgui.h"
 #include <algorithm>
 
@@ -217,6 +219,12 @@ namespace windows::animation
         {
             saveSuccess = types::MeshSocketWriter::saveSocketsToMesh(meshPath, sockets);
             saveMessageTimer = 3.0f;
+            if (saveSuccess)
+            {
+                events::socket::SocketDataSavedNotification notif;
+                notif.meshPath = meshPath;
+                events::EventDispatcher::instance().publish(notif);
+            }
         }
         ImGui::PopStyleColor(2);
 
