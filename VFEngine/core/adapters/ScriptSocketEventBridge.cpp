@@ -26,8 +26,8 @@ namespace core
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        tokens.push_back(dispatcher.subscribe<::services::events::socket::SocketAttachmentChangedNotification>(
-            [this](const ::services::events::socket::SocketAttachmentChangedNotification& notif)
+        tokens.push_back(dispatcher.subscribe<::events::socket::SocketAttachmentChangedNotification>(
+            [this](const ::events::socket::SocketAttachmentChangedNotification& notif)
             {
                 dispatchSocketEvent(notif.childEntity, notif.parentEntity,
                                     notif.socketName, notif.attached);

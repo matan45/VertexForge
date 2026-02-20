@@ -56,7 +56,7 @@ namespace services
         return socketProvider->hasSocketAttachmentComponent(entity);
     }
 
-    std::optional<events::socket::SocketAttachmentData>
+    std::optional<::events::socket::SocketAttachmentData>
     SocketComponentService::getSocketAttachmentData(EntityHandle entity) const
     {
         return socketProvider->getSocketAttachmentData(entity);
@@ -76,74 +76,74 @@ namespace services
 
     void SocketComponentService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
-        dispatcher.registerCommandHandler<events::socket::AttachToSocketCommand>(
-            [this](const events::socket::AttachToSocketCommand& cmd)
+        dispatcher.registerCommandHandler<::events::socket::AttachToSocketCommand>(
+            [this](const ::events::socket::AttachToSocketCommand& cmd)
             {
                 return attachToSocket(cmd.childEntity, cmd.parentEntity, cmd.socketName);
             });
 
-        dispatcher.registerCommandHandler<events::socket::DetachFromSocketCommand>(
-            [this](const events::socket::DetachFromSocketCommand& cmd)
+        dispatcher.registerCommandHandler<::events::socket::DetachFromSocketCommand>(
+            [this](const ::events::socket::DetachFromSocketCommand& cmd)
             {
                 detachFromSocket(cmd.childEntity);
             });
 
-        dispatcher.registerCommandHandler<events::socket::SetSocketActiveCommand>(
-            [this](const events::socket::SetSocketActiveCommand& cmd)
+        dispatcher.registerCommandHandler<::events::socket::SetSocketActiveCommand>(
+            [this](const ::events::socket::SetSocketActiveCommand& cmd)
             {
                 setSocketActive(cmd.entity, cmd.active);
             });
 
-        dispatcher.registerQueryHandler<events::socket::GetSocketNamesQuery>(
-            [this](const events::socket::GetSocketNamesQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::GetSocketNamesQuery>(
+            [this](const ::events::socket::GetSocketNamesQuery& query)
             {
                 return getSocketNames(query.entity);
             });
 
-        dispatcher.registerQueryHandler<events::socket::HasSocketQuery>(
-            [this](const events::socket::HasSocketQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::HasSocketQuery>(
+            [this](const ::events::socket::HasSocketQuery& query)
             {
                 return hasSocket(query.entity, query.socketName);
             });
 
-        dispatcher.registerQueryHandler<events::socket::IsAttachedQuery>(
-            [this](const events::socket::IsAttachedQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::IsAttachedQuery>(
+            [this](const ::events::socket::IsAttachedQuery& query)
             {
                 return isAttached(query.entity);
             });
 
-        dispatcher.registerQueryHandler<events::socket::GetSocketWorldPositionQuery>(
-            [this](const events::socket::GetSocketWorldPositionQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::GetSocketWorldPositionQuery>(
+            [this](const ::events::socket::GetSocketWorldPositionQuery& query)
             {
                 return getSocketWorldPosition(query.parentEntity, query.socketName);
             });
 
-        dispatcher.registerQueryHandler<events::socket::GetSocketWorldTransformQuery>(
-            [this](const events::socket::GetSocketWorldTransformQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::GetSocketWorldTransformQuery>(
+            [this](const ::events::socket::GetSocketWorldTransformQuery& query)
             {
                 return getSocketWorldTransform(query.parentEntity, query.socketName);
             });
 
-        dispatcher.registerCommandHandler<events::socket::AddSocketAttachmentComponentCommand>(
-            [this](const events::socket::AddSocketAttachmentComponentCommand& cmd)
+        dispatcher.registerCommandHandler<::events::socket::AddSocketAttachmentComponentCommand>(
+            [this](const ::events::socket::AddSocketAttachmentComponentCommand& cmd)
             {
                 return addSocketAttachmentComponent(cmd.entity);
             });
 
-        dispatcher.registerCommandHandler<events::socket::RemoveSocketAttachmentComponentCommand>(
-            [this](const events::socket::RemoveSocketAttachmentComponentCommand& cmd)
+        dispatcher.registerCommandHandler<::events::socket::RemoveSocketAttachmentComponentCommand>(
+            [this](const ::events::socket::RemoveSocketAttachmentComponentCommand& cmd)
             {
                 return removeSocketAttachmentComponent(cmd.entity);
             });
 
-        dispatcher.registerQueryHandler<events::socket::HasSocketAttachmentComponentQuery>(
-            [this](const events::socket::HasSocketAttachmentComponentQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::HasSocketAttachmentComponentQuery>(
+            [this](const ::events::socket::HasSocketAttachmentComponentQuery& query)
             {
                 return hasSocketAttachmentComponent(query.entity);
             });
 
-        dispatcher.registerQueryHandler<events::socket::GetSocketAttachmentDataQuery>(
-            [this](const events::socket::GetSocketAttachmentDataQuery& query)
+        dispatcher.registerQueryHandler<::events::socket::GetSocketAttachmentDataQuery>(
+            [this](const ::events::socket::GetSocketAttachmentDataQuery& query)
             {
                 return getSocketAttachmentData(query.entity);
             });

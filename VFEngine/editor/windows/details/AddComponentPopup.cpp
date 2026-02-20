@@ -214,7 +214,7 @@ namespace windows::details
             {
                 if (ImGui::Selectable("  Socket Attachment"))
                 {
-                    services::events::socket::AddSocketAttachmentComponentCommand cmd;
+                    events::socket::AddSocketAttachmentComponentCommand cmd;
                     cmd.entity = handle;
                     dispatcher.execute(cmd);
                 }

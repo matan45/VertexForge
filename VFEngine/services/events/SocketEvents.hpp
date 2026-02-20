@@ -8,7 +8,7 @@
 #include <vector>
 #include <optional>
 
-namespace services::events::socket
+namespace events::socket
 {
     // ========== DATA ==========
 

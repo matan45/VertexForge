@@ -10,7 +10,7 @@ namespace windows::details
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        services::events::socket::HasSocketAttachmentComponentQuery hasQuery;
+        events::socket::HasSocketAttachmentComponentQuery hasQuery;
         hasQuery.entity = handle;
         bool hasComponent = dispatcher.query(hasQuery);
 
@@ -19,7 +19,7 @@ namespace windows::details
             return false;
         }
 
-        services::events::socket::GetSocketAttachmentDataQuery dataQuery;
+        events::socket::GetSocketAttachmentDataQuery dataQuery;
         dataQuery.entity = handle;
         auto dataOpt = dispatcher.query(dataQuery);
 
@@ -63,7 +63,7 @@ namespace windows::details
             bool isActive = data.isActive;
             if (ImGui::Checkbox("Active", &isActive))
             {
-                services::events::socket::SetSocketActiveCommand cmd;
+                events::socket::SetSocketActiveCommand cmd;
                 cmd.entity = handle;
                 cmd.active = isActive;
                 dispatcher.execute(cmd);
@@ -75,7 +75,7 @@ namespace windows::details
                 ImGui::Spacing();
                 if (ImGui::Button("Detach"))
                 {
-                    services::events::socket::DetachFromSocketCommand cmd;
+                    events::socket::DetachFromSocketCommand cmd;
                     cmd.childEntity = handle;
                     dispatcher.execute(cmd);
                 }
@@ -92,7 +92,7 @@ namespace windows::details
 
         if (removeComponent)
         {
-            services::events::socket::RemoveSocketAttachmentComponentCommand cmd;
+            events::socket::RemoveSocketAttachmentComponentCommand cmd;
             cmd.entity = handle;
             dispatcher.execute(cmd);
         }

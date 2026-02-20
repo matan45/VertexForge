@@ -21,7 +21,7 @@ namespace core
         [[nodiscard]] bool hasSocket(services::EntityHandle entity, const std::string& socketName) const override;
         [[nodiscard]] bool isAttached(services::EntityHandle entity) const override;
         [[nodiscard]] bool hasSocketAttachmentComponent(services::EntityHandle entity) const override;
-        [[nodiscard]] std::optional<services::events::socket::SocketAttachmentData>
+        [[nodiscard]] std::optional<events::socket::SocketAttachmentData>
             getSocketAttachmentData(services::EntityHandle entity) const override;
         [[nodiscard]] glm::vec3 getSocketWorldPosition(services::EntityHandle parentEntity,
                                                         const std::string& socketName) const override;

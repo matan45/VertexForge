@@ -77,7 +77,7 @@ namespace core::api
                 {services::ComponentTypeId::UITabs, makeAddFn<events::ui::AddUITabsComponentCommand>()},
                 {services::ComponentTypeId::UISlider, makeAddFn<events::ui::AddUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeAddFn<events::ui::AddUIProgressBarComponentCommand>()},
-                {services::ComponentTypeId::SocketAttachment, makeAddFn<services::events::socket::AddSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
             };
             return map;
         }
@@ -106,7 +106,7 @@ namespace core::api
                 {services::ComponentTypeId::UITabs, makeRemoveFn<events::ui::RemoveUITabsComponentCommand>()},
                 {services::ComponentTypeId::UISlider, makeRemoveFn<events::ui::RemoveUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeRemoveFn<events::ui::RemoveUIProgressBarComponentCommand>()},
-                {services::ComponentTypeId::SocketAttachment, makeRemoveFn<services::events::socket::RemoveSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
             };
             return map;
         }

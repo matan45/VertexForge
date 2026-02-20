@@ -25,7 +25,7 @@ namespace services
         [[nodiscard]] virtual bool hasSocket(EntityHandle entity, const std::string& socketName) const = 0;
         [[nodiscard]] virtual bool isAttached(EntityHandle entity) const = 0;
         [[nodiscard]] virtual bool hasSocketAttachmentComponent(EntityHandle entity) const = 0;
-        [[nodiscard]] virtual std::optional<events::socket::SocketAttachmentData>
+        [[nodiscard]] virtual std::optional<::events::socket::SocketAttachmentData>
             getSocketAttachmentData(EntityHandle entity) const = 0;
         [[nodiscard]] virtual glm::vec3 getSocketWorldPosition(EntityHandle parentEntity,
                                                                 const std::string& socketName) const = 0;

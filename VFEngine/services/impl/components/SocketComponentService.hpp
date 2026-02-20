@@ -32,7 +32,7 @@ namespace services
         bool hasSocket(EntityHandle entity, const std::string& socketName) const;
         bool isAttached(EntityHandle entity) const;
         bool hasSocketAttachmentComponent(EntityHandle entity) const;
-        std::optional<events::socket::SocketAttachmentData> getSocketAttachmentData(EntityHandle entity) const;
+        std::optional<::events::socket::SocketAttachmentData> getSocketAttachmentData(EntityHandle entity) const;
         glm::vec3 getSocketWorldPosition(EntityHandle parentEntity, const std::string& socketName) const;
         glm::mat4 getSocketWorldTransform(EntityHandle parentEntity, const std::string& socketName) const;
 

@@ -30,7 +30,7 @@ namespace core::api
                 if (childId < 0 || parentId < 0)
                     return value::Value(false);
 
-                services::events::socket::AttachToSocketCommand cmd;
+                events::socket::AttachToSocketCommand cmd;
                 cmd.childEntity = intToEntity(childId);
                 cmd.parentEntity = intToEntity(parentId);
                 cmd.socketName = socketName;
@@ -51,7 +51,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::DetachFromSocketCommand cmd;
+                events::socket::DetachFromSocketCommand cmd;
                 cmd.childEntity = intToEntity(entityId);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
@@ -73,7 +73,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::SetSocketActiveCommand cmd;
+                events::socket::SetSocketActiveCommand cmd;
                 cmd.entity = intToEntity(entityId);
                 cmd.active = active;
                 dispatcher.execute(cmd);
@@ -91,7 +91,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(false);
 
-                services::events::socket::IsAttachedQuery query;
+                events::socket::IsAttachedQuery query;
                 query.entity = intToEntity(entityId);
                 return value::Value(dispatcher.query(query));
             });
@@ -109,7 +109,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(false);
 
-                services::events::socket::HasSocketQuery query;
+                events::socket::HasSocketQuery query;
                 query.entity = intToEntity(entityId);
                 query.socketName = socketName;
                 return value::Value(dispatcher.query(query));
@@ -128,7 +128,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::GetSocketWorldPositionQuery query;
+                events::socket::GetSocketWorldPositionQuery query;
                 query.parentEntity = intToEntity(entityId);
                 query.socketName = socketName;
                 glm::vec3 pos = dispatcher.query(query);
@@ -148,7 +148,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::GetSocketWorldTransformQuery query;
+                events::socket::GetSocketWorldTransformQuery query;
                 query.parentEntity = intToEntity(entityId);
                 query.socketName = socketName;
                 glm::mat4 mat = dispatcher.query(query);
@@ -173,7 +173,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::GetSocketNamesQuery query;
+                events::socket::GetSocketNamesQuery query;
                 query.entity = intToEntity(entityId);
                 auto names = dispatcher.query(query);
 
@@ -199,7 +199,7 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(std::monostate{});
 
-                services::events::socket::GetSocketWorldTransformQuery query;
+                events::socket::GetSocketWorldTransformQuery query;
                 query.parentEntity = intToEntity(entityId);
                 query.socketName = socketName;
                 glm::mat4 mat = dispatcher.query(query);

@@ -1,5 +1,5 @@
 #include "SceneGraphSystem.hpp"
-#include "components/MediaComponents.hpp"
+#include "../components/MediaComponents.hpp"
 
 namespace scene {
 	SceneGraphSystem::SceneGraphSystem() : root{ Entity("Root") }

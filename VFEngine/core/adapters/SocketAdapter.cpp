@@ -100,7 +100,7 @@ namespace core
         attachment.isActive = true;
 
         // Publish notification
-        services::events::socket::SocketAttachmentChangedNotification notif;
+        events::socket::SocketAttachmentChangedNotification notif;
         notif.childEntity = childEntity;
         notif.parentEntity = parentEntity;
         notif.socketName = socketName;
@@ -128,7 +128,7 @@ namespace core
                     registry.get<components::TransformComponent>(child).isDirty = true;
                 }
 
-                services::events::socket::SocketAttachmentChangedNotification notif;
+                events::socket::SocketAttachmentChangedNotification notif;
                 notif.childEntity = childEntity;
                 notif.parentEntity = parentHandle;
                 notif.attached = false;
@@ -222,7 +222,7 @@ namespace core
                 registry.get<components::TransformComponent>(e).isDirty = true;
             }
 
-            services::events::socket::SocketAttachmentChangedNotification notif;
+            events::socket::SocketAttachmentChangedNotification notif;
             notif.childEntity = entity;
             notif.parentEntity = parentHandle;
             notif.attached = false;
@@ -240,19 +240,19 @@ namespace core
         });
     }
 
-    std::optional<services::events::socket::SocketAttachmentData>
+    std::optional<events::socket::SocketAttachmentData>
     SocketAdapter::getSocketAttachmentData(services::EntityHandle entity) const
     {
-        return withEntityOr<std::optional<services::events::socket::SocketAttachmentData>>(
+        return withEntityOr<std::optional<events::socket::SocketAttachmentData>>(
             entity, std::nullopt, [](entt::entity e)
-            -> std::optional<services::events::socket::SocketAttachmentData>
+            -> std::optional<events::socket::SocketAttachmentData>
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             if (!registry.all_of<components::SocketAttachmentComponent>(e))
                 return std::nullopt;
 
             const auto& attachment = registry.get<components::SocketAttachmentComponent>(e);
-            services::events::socket::SocketAttachmentData data;
+            events::socket::SocketAttachmentData data;
             data.parentEntity = services::internal::toHandle(attachment.parentEntity);
             data.socketName = attachment.socketName;
             data.isActive = attachment.isActive;
