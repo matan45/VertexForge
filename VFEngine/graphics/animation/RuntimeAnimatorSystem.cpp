@@ -172,19 +172,44 @@ namespace animation
         {
             auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
 
-            // Resolve parent entity from UUID if needed (after scene load/mode change)
+            // Resolve parent entity by name if needed (after scene load/mode change/prefab instantiate)
             if ((attachment.parentEntity == entt::null || !registry.valid(attachment.parentEntity))
-                && attachment.parentEntityUUID != 0)
+                && !attachment.parentEntityName.empty())
             {
                 attachment.parentEntity = entt::null;
                 attachment.cachedSocketIndex = -1;
-                auto uuidView = registry.view<components::UUIDComponent>();
-                for (auto candidate : uuidView)
+
+                // First: search ancestors in hierarchy (handles prefab instances correctly)
+                entt::entity ancestor = entt::null;
+                if (registry.all_of<components::ParentComponent>(attachedEntity))
                 {
-                    if (uuidView.get<components::UUIDComponent>(candidate).id.getValue() == attachment.parentEntityUUID)
+                    ancestor = registry.get<components::ParentComponent>(attachedEntity).parent;
+                }
+                while (ancestor != entt::null && registry.valid(ancestor))
+                {
+                    if (registry.all_of<components::NameComponent>(ancestor) &&
+                        registry.get<components::NameComponent>(ancestor).name == attachment.parentEntityName)
                     {
-                        attachment.parentEntity = candidate;
+                        attachment.parentEntity = ancestor;
                         break;
+                    }
+                    if (registry.all_of<components::ParentComponent>(ancestor))
+                        ancestor = registry.get<components::ParentComponent>(ancestor).parent;
+                    else
+                        break;
+                }
+
+                // Fallback: global search by name
+                if (attachment.parentEntity == entt::null)
+                {
+                    auto nameView = registry.view<components::NameComponent>();
+                    for (auto candidate : nameView)
+                    {
+                        if (nameView.get<components::NameComponent>(candidate).name == attachment.parentEntityName)
+                        {
+                            attachment.parentEntity = candidate;
+                            break;
+                        }
                     }
                 }
             }

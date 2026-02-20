@@ -6,8 +6,7 @@ namespace serialization
     json SceneSerialization::serializeSocketAttachment(const components::SocketAttachmentComponent& attachment)
     {
         json j;
-        // Store parent entity's UUID for persistence across scene loads
-        j["parentEntityUUID"] = attachment.parentEntityUUID;
+        j["parentEntityName"] = attachment.parentEntityName;
         j["socketName"] = attachment.socketName;
         j["isActive"] = attachment.isActive;
         return j;
@@ -15,9 +14,8 @@ namespace serialization
 
     void SceneSerialization::deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment)
     {
-        // Store UUID - will be resolved to entt::entity at runtime
-        attachment.parentEntityUUID = j.value("parentEntityUUID", static_cast<uint64_t>(0));
-        attachment.parentEntity = entt::null; // Will be resolved from UUID
+        attachment.parentEntityName = j.value("parentEntityName", std::string(""));
+        attachment.parentEntity = entt::null; // Will be resolved by name at runtime
         attachment.socketName = j.value("socketName", "");
         attachment.isActive = j.value("isActive", true);
         attachment.cachedSocketIndex = -1;

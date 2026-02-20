@@ -165,7 +165,7 @@ namespace components
     struct SocketAttachmentComponent
     {
         entt::entity parentEntity = entt::null;
-        uint64_t parentEntityUUID = 0; // For persistence across scene loads
+        std::string parentEntityName; // For persistence across scene/prefab loads
         std::string socketName;
         int32_t cachedSocketIndex = -1;
         bool isActive = true;

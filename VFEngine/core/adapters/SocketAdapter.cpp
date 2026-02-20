@@ -99,10 +99,10 @@ namespace core
         attachment.cachedSocketIndex = socketIdx;
         attachment.isActive = true;
 
-        // Store parent UUID for persistence across scene loads
-        if (registry.all_of<components::UUIDComponent>(parent))
+        // Store parent name for persistence across scene/prefab loads
+        if (registry.all_of<components::NameComponent>(parent))
         {
-            attachment.parentEntityUUID = registry.get<components::UUIDComponent>(parent).id.getValue();
+            attachment.parentEntityName = registry.get<components::NameComponent>(parent).name;
         }
 
         // Update child's transform position to the socket's world position
