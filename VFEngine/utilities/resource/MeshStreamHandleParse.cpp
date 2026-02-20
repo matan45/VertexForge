@@ -344,8 +344,8 @@ namespace resource
                 if (boneNameLength > 1024 || file.fail()) { hasSockets = false; break; }
                 file.seekg(boneNameLength, std::ios::cur);
 
-                // position(3) + rotation(4) + scale(3) = 10 floats
-                file.seekg(10 * sizeof(float), std::ios::cur);
+                // position(3) = 3 floats
+                file.seekg(3 * sizeof(float), std::ios::cur);
 
                 if (file.fail()) { hasSockets = false; break; }
             }

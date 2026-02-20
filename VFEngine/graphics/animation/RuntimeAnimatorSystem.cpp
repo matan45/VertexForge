@@ -139,7 +139,7 @@ namespace animation
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Pass 1: Compute socket model-space transforms for all entities with animators and sockets
+        // Pass 1: Compute socket model-space transforms for entities with active animators
         socketTransformCache.clear();
         for (auto& [entity, animator] : animators)
         {
@@ -149,7 +149,6 @@ namespace animation
             if (!registry.valid(entity))
                 continue;
 
-            // Get skeleton from cache to check for sockets
             const resource::SkeletonData* skeleton = nullptr;
             if (registry.all_of<components::MeshComponent>(entity))
             {
@@ -178,33 +177,62 @@ namespace animation
             if (!registry.valid(attachment.parentEntity))
                 continue;
 
-            // Find parent's cached socket transforms
-            auto cacheIt = socketTransformCache.find(attachment.parentEntity);
-            if (cacheIt == socketTransformCache.end() || cacheIt->second.empty())
-                continue;
-
-            // Resolve socket index if not cached
-            int32_t socketIdx = attachment.cachedSocketIndex;
-            if (socketIdx < 0)
+            // Get skeleton for socket resolution
+            const resource::SkeletonData* skeleton = nullptr;
+            if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
             {
-                // Look up by name
-                const resource::SkeletonData* skeleton = nullptr;
-                if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
+                const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
+                if (!meshComp.meshPath.empty())
                 {
-                    const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
                     skeleton = loadSkeleton(meshComp.meshPath);
-                }
-                if (skeleton)
-                {
-                    socketIdx = skeleton->getSocketIndex(attachment.socketName);
-                    // Cache it for future frames
-                    auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-                    mutableAttachment.cachedSocketIndex = socketIdx;
                 }
             }
 
-            if (socketIdx < 0 || socketIdx >= static_cast<int32_t>(cacheIt->second.size()))
+            // Resolve socket index if not cached
+            int32_t socketIdx = attachment.cachedSocketIndex;
+            if (socketIdx < 0 && skeleton)
+            {
+                socketIdx = skeleton->getSocketIndex(attachment.socketName);
+                auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+                mutableAttachment.cachedSocketIndex = socketIdx;
+            }
+
+            if (socketIdx < 0)
                 continue;
+
+            // Try animated transforms first, fallback to bind-pose for edit mode
+            glm::mat4 socketModelTransform = glm::mat4(1.0f);
+
+            auto cacheIt = socketTransformCache.find(attachment.parentEntity);
+            if (cacheIt != socketTransformCache.end() &&
+                socketIdx < static_cast<int32_t>(cacheIt->second.size()))
+            {
+                // Animated socket transform
+                socketModelTransform = cacheIt->second[socketIdx];
+            }
+            else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
+            {
+                // Edit mode fallback: compute bind-pose socket transform
+                const auto& socket = skeleton->sockets[socketIdx];
+                glm::mat4 globalTransform = glm::inverse(skeleton->globalInverseTransform);
+
+                if (socket.boneIndex >= 0 &&
+                    socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+                {
+                    // In bind pose, bone matrices are identity so: globalTransform * I * bindPose * socketOffset
+                    socketModelTransform = globalTransform
+                        * skeleton->bindPoses[socket.boneIndex]
+                        * socket.getLocalOffsetMatrix();
+                }
+                else
+                {
+                    socketModelTransform = globalTransform * socket.getLocalOffsetMatrix();
+                }
+            }
+            else
+            {
+                continue;
+            }
 
             // Get parent world transform
             glm::mat4 parentWorld = glm::mat4(1.0f);
@@ -213,10 +241,23 @@ namespace animation
                 parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
             }
 
-            glm::mat4 socketWorld = parentWorld * cacheIt->second[socketIdx];
+            // Socket provides position only; rotation/scale come from entity's own transform
+            glm::mat4 socketWorld = parentWorld * socketModelTransform;
+            glm::vec3 socketWorldPos = glm::vec3(socketWorld[3]);
+
+            glm::mat4 entityLocal = glm::mat4(1.0f);
+            if (registry.all_of<components::TransformComponent>(attachedEntity))
+            {
+                const auto& transform = registry.get<components::TransformComponent>(attachedEntity);
+                glm::mat4 rotation = glm::mat4_cast(glm::quat(glm::radians(transform.rotation)));
+                glm::mat4 scale = glm::scale(glm::mat4(1.0f), transform.scale);
+                entityLocal = rotation * scale;
+            }
+
+            glm::mat4 finalWorld = glm::translate(glm::mat4(1.0f), socketWorldPos) * entityLocal;
 
             // Write to attached entity's WorldTransformComponent
-            registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = socketWorld;
+            registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = finalWorld;
 
             // Clear dirty flag so SceneGraphSystem doesn't overwrite
             if (registry.all_of<components::TransformComponent>(attachedEntity))

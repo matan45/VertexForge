@@ -92,6 +92,8 @@ namespace windows
 
         std::vector<animator::SocketDefinition> socketDefinitions;
         std::vector<animator::AnimationEvent> animationEvents;
+        std::string lastLoadedMeshPath;  // Track mesh changes to reload sockets
+        void loadSocketsFromMesh();
 
         void buildMappedBoneNames();
         std::unordered_set<std::string> mappedBoneNames;

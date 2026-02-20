@@ -364,17 +364,6 @@ namespace resource
                     socket.localPosition.y = endian::readLE<float>(file);
                     socket.localPosition.z = endian::readLE<float>(file);
 
-                    // Local rotation (w,x,y,z)
-                    socket.localRotation.w = endian::readLE<float>(file);
-                    socket.localRotation.x = endian::readLE<float>(file);
-                    socket.localRotation.y = endian::readLE<float>(file);
-                    socket.localRotation.z = endian::readLE<float>(file);
-
-                    // Local scale
-                    socket.localScale.x = endian::readLE<float>(file);
-                    socket.localScale.y = endian::readLE<float>(file);
-                    socket.localScale.z = endian::readLE<float>(file);
-
                     // Resolve bone index from name
                     socket.boneIndex = outSkeleton.getBoneIndex(socket.targetBoneName);
 

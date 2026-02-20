@@ -1,7 +1,6 @@
 #include "AnimationSocketPanel.hpp"
 #include "MeshSocketWriter.hpp"
 #include "imgui.h"
-#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 
 namespace windows::animation
@@ -87,8 +86,6 @@ namespace windows::animation
                 ImGui::Text("Bone: %s", socket.targetBoneName.c_str());
                 ImGui::Text("Position: %.2f, %.2f, %.2f",
                             socket.localPosition.x, socket.localPosition.y, socket.localPosition.z);
-                glm::vec3 euler = glm::degrees(glm::eulerAngles(socket.localRotation));
-                ImGui::Text("Rotation: %.1f, %.1f, %.1f", euler.x, euler.y, euler.z);
                 ImGui::EndTooltip();
             }
 
@@ -127,28 +124,11 @@ namespace windows::animation
                 ImGui::EndCombo();
             }
 
-            // Position
+            // Position offset from bone
             float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
             if (ImGui::DragFloat3("Position", pos, 0.01f))
             {
                 socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
-                changed = true;
-            }
-
-            // Rotation (as euler degrees)
-            glm::vec3 euler = glm::degrees(glm::eulerAngles(socket.localRotation));
-            float rot[3] = {euler.x, euler.y, euler.z};
-            if (ImGui::DragFloat3("Rotation", rot, 0.5f))
-            {
-                socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
-                changed = true;
-            }
-
-            // Scale
-            float scl[3] = {socket.localScale.x, socket.localScale.y, socket.localScale.z};
-            if (ImGui::DragFloat3("Scale", scl, 0.01f, 0.01f, 100.0f))
-            {
-                socket.localScale = glm::vec3(scl[0], scl[1], scl[2]);
                 changed = true;
             }
 

@@ -236,17 +236,6 @@ namespace types
                 resource::endian::writeLE<float>(file, socket.localPosition.x);
                 resource::endian::writeLE<float>(file, socket.localPosition.y);
                 resource::endian::writeLE<float>(file, socket.localPosition.z);
-
-                // Local rotation (quaternion w,x,y,z)
-                resource::endian::writeLE<float>(file, socket.localRotation.w);
-                resource::endian::writeLE<float>(file, socket.localRotation.x);
-                resource::endian::writeLE<float>(file, socket.localRotation.y);
-                resource::endian::writeLE<float>(file, socket.localRotation.z);
-
-                // Local scale
-                resource::endian::writeLE<float>(file, socket.localScale.x);
-                resource::endian::writeLE<float>(file, socket.localScale.y);
-                resource::endian::writeLE<float>(file, socket.localScale.z);
             }
 
             if (file.fail())

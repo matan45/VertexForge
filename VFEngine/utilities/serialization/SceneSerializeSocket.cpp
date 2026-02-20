@@ -36,8 +36,6 @@ namespace serialization
                 socketJ["name"] = socket.name;
                 socketJ["targetBoneName"] = socket.targetBoneName;
                 socketJ["localPosition"] = json::array({socket.localPosition.x, socket.localPosition.y, socket.localPosition.z});
-                socketJ["localRotation"] = json::array({socket.localRotation.w, socket.localRotation.x, socket.localRotation.y, socket.localRotation.z});
-                socketJ["localScale"] = json::array({socket.localScale.x, socket.localScale.y, socket.localScale.z});
                 additionalJson.push_back(socketJ);
             }
             j["additionalSockets"] = additionalJson;
@@ -52,8 +50,6 @@ namespace serialization
                 socketJ["name"] = socket.name;
                 socketJ["targetBoneName"] = socket.targetBoneName;
                 socketJ["localPosition"] = json::array({socket.localPosition.x, socket.localPosition.y, socket.localPosition.z});
-                socketJ["localRotation"] = json::array({socket.localRotation.w, socket.localRotation.x, socket.localRotation.y, socket.localRotation.z});
-                socketJ["localScale"] = json::array({socket.localScale.x, socket.localScale.y, socket.localScale.z});
                 overriddenJson.push_back(socketJ);
             }
             j["overriddenSockets"] = overriddenJson;
@@ -75,21 +71,6 @@ namespace serialization
                 socket.localPosition.x = socketJ["localPosition"][0].get<float>();
                 socket.localPosition.y = socketJ["localPosition"][1].get<float>();
                 socket.localPosition.z = socketJ["localPosition"][2].get<float>();
-            }
-
-            if (socketJ.contains("localRotation") && socketJ["localRotation"].is_array() && socketJ["localRotation"].size() >= 4)
-            {
-                socket.localRotation.w = socketJ["localRotation"][0].get<float>();
-                socket.localRotation.x = socketJ["localRotation"][1].get<float>();
-                socket.localRotation.y = socketJ["localRotation"][2].get<float>();
-                socket.localRotation.z = socketJ["localRotation"][3].get<float>();
-            }
-
-            if (socketJ.contains("localScale") && socketJ["localScale"].is_array() && socketJ["localScale"].size() >= 3)
-            {
-                socket.localScale.x = socketJ["localScale"][0].get<float>();
-                socket.localScale.y = socketJ["localScale"][1].get<float>();
-                socket.localScale.z = socketJ["localScale"][2].get<float>();
             }
 
             return socket;

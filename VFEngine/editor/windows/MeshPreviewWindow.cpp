@@ -6,7 +6,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
 #include <filesystem>
-#include <glm/gtc/quaternion.hpp>
+
 
 namespace windows
 {
@@ -431,10 +431,6 @@ namespace windows
                     ImGui::TextDisabled("Bone: %s", socket.targetBoneName.c_str());
                     ImGui::TextDisabled("Pos: %.2f, %.2f, %.2f",
                                         socket.localPosition.x, socket.localPosition.y, socket.localPosition.z);
-                    glm::vec3 euler = glm::degrees(glm::eulerAngles(socket.localRotation));
-                    ImGui::TextDisabled("Rot: %.1f, %.1f, %.1f", euler.x, euler.y, euler.z);
-                    ImGui::TextDisabled("Scl: %.2f, %.2f, %.2f",
-                                        socket.localScale.x, socket.localScale.y, socket.localScale.z);
                     ImGui::TreePop();
                 }
             }

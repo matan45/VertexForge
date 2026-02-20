@@ -2,6 +2,7 @@
 #include "../../camera/OrbitCamera.hpp"
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -48,6 +49,13 @@ namespace windows
         }
 
         updateAsyncLoading();
+
+        // Load sockets from mesh when mesh path changes
+        if (!panelState.meshPath.empty() && panelState.meshPath != lastLoadedMeshPath)
+        {
+            loadSocketsFromMesh();
+            lastLoadedMeshPath = panelState.meshPath;
+        }
 
         float currentImGuiTime = static_cast<float>(ImGui::GetTime());
         float deltaTime = currentImGuiTime - lastFrameTime;
@@ -361,6 +369,27 @@ namespace windows
         for (const auto& mapping : physicsConfig.boneBodyMappings)
         {
             mappedBoneNames.insert(mapping.boneName);
+        }
+    }
+
+    void AnimationPreviewWindow::loadSocketsFromMesh()
+    {
+        socketDefinitions.clear();
+
+        auto stream = resource::MeshStreamResource::openStream(panelState.meshPath);
+        if (!stream || !stream->hasSkeletonData())
+        {
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (stream->readSkeleton(skeleton))
+        {
+            socketDefinitions = skeleton.sockets;
+            if (!socketDefinitions.empty())
+            {
+                vfLogInfo("Loaded {} sockets from mesh: {}", socketDefinitions.size(), panelState.meshPath);
+            }
         }
     }
 }
