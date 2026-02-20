@@ -696,7 +696,7 @@ namespace core
                         {
                             v = &tile->detailVerts[(pd->vertBase + t[l] - poly->vertCount) * 3];
                         }
-                        outVertices.emplace_back(v[0], v[1] + 0.05f, v[2]); // Slight Y offset
+                        outVertices.emplace_back(v[0], v[1] + 0.3f, v[2]); // Y offset above terrain
                     }
 
                     uint32_t idx = static_cast<uint32_t>(outVertices.size()) - 3;

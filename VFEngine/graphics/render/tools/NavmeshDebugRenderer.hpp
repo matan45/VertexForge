@@ -30,7 +30,7 @@ namespace render::mesh
         vk::DeviceMemory vertexMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexMemory;
-        uint32_t lineIndexCount = 0;
+        uint32_t indexCount = 0;
 
         bool hasData = false;
 

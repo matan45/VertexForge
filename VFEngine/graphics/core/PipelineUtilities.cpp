@@ -78,7 +78,7 @@ namespace core
 		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-		depthStencil.depthTestEnable = config.disableDepthTest ? VK_FALSE : VK_TRUE;
+		depthStencil.depthTestEnable = VK_TRUE;
 		depthStencil.depthWriteEnable = VK_FALSE;
 		depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;

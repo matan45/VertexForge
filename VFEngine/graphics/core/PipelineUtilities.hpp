@@ -13,7 +13,6 @@ namespace core
 		uint32_t pushConstantSize;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		bool enableBlending = false;
-		bool disableDepthTest = false;
 	};
 
 	struct WireframePipelineResult

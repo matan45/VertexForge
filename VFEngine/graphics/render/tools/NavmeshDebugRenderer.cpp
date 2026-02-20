@@ -4,7 +4,6 @@
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include <unordered_set>
 
 namespace render::mesh
 {
@@ -51,16 +50,33 @@ namespace render::mesh
 
     void NavmeshDebugRenderer::createPipeline(vk::RenderPass renderPass)
     {
-        core::WireframePipelineConfig config{
-            .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
-            .extent = swapChain.getSwapchainExtent(),
-            .pushConstantSize = sizeof(NavmeshDebugPushConstants),
-            .shaderStages = wireframeShader->getShaderStages(),
-            .disableDepthTest = true
-        };
+        vk::VertexInputBindingDescription binding{};
+        binding.binding = 0;
+        binding.stride = sizeof(glm::vec3);
+        binding.inputRate = vk::VertexInputRate::eVertex;
 
-        auto result = core::PipelineUtilities::createWireframePipeline(config);
+        vk::VertexInputAttributeDescription attribute{};
+        attribute.binding = 0;
+        attribute.location = 0;
+        attribute.format = vk::Format::eR32G32B32Sfloat;
+        attribute.offset = 0;
+
+        core::GraphicsPipelineConfig config{};
+        config.device = device.getLogicalDevice();
+        config.renderPass = renderPass;
+        config.extent = swapChain.getSwapchainExtent();
+        config.shaderStages = wireframeShader->getShaderStages();
+        config.vertexBindings = {binding};
+        config.vertexAttributes = {attribute};
+        config.topology = vk::PrimitiveTopology::eTriangleList;
+        config.pushConstantSize = sizeof(NavmeshDebugPushConstants);
+        config.pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        config.cullMode = vk::CullModeFlagBits::eNone;
+        config.depthTestEnable = false;
+        config.depthWriteEnable = false;
+        config.blendEnable = true;
+
+        auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         wireframePipeline = result.pipeline;
         wireframePipelineLayout = result.pipelineLayout;
     }
@@ -69,7 +85,7 @@ namespace render::mesh
     {
         destroyBufferPair(vertexBuffer, vertexMemory);
         destroyBufferPair(indexBuffer, indexMemory);
-        lineIndexCount = 0;
+        indexCount = 0;
         hasData = false;
     }
 
@@ -79,44 +95,6 @@ namespace render::mesh
         destroyMeshBuffers();
 
         if (vertices.empty() || triangleIndices.empty())
-        {
-            return;
-        }
-
-        // Convert triangle indices to line indices (deduplicated edges)
-        struct EdgeHash
-        {
-            size_t operator()(const std::pair<uint32_t, uint32_t>& e) const
-            {
-                return std::hash<uint64_t>()(static_cast<uint64_t>(e.first) << 32 | e.second);
-            }
-        };
-
-        std::unordered_set<std::pair<uint32_t, uint32_t>, EdgeHash> edgeSet;
-        std::vector<uint32_t> lineIndices;
-
-        for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
-        {
-            uint32_t a = triangleIndices[i];
-            uint32_t b = triangleIndices[i + 1];
-            uint32_t c = triangleIndices[i + 2];
-
-            auto addEdge = [&](uint32_t v0, uint32_t v1)
-            {
-                auto edge = std::make_pair(std::min(v0, v1), std::max(v0, v1));
-                if (edgeSet.insert(edge).second)
-                {
-                    lineIndices.push_back(v0);
-                    lineIndices.push_back(v1);
-                }
-            };
-
-            addEdge(a, b);
-            addEdge(b, c);
-            addEdge(c, a);
-        }
-
-        if (lineIndices.empty())
         {
             return;
         }
@@ -139,8 +117,8 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer
-        vk::DeviceSize indexBufferSize = static_cast<vk::DeviceSize>(lineIndices.size() * sizeof(uint32_t));
+        // Create index buffer (triangle indices directly)
+        vk::DeviceSize indexBufferSize = static_cast<vk::DeviceSize>(triangleIndices.size() * sizeof(uint32_t));
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
@@ -153,11 +131,11 @@ namespace render::mesh
             device.getGraphicsQueue(),
             device.getStagingCommandPool(),
             indexBuffer,
-            lineIndices.data(),
+            triangleIndices.data(),
             indexBufferSize
         );
 
-        lineIndexCount = static_cast<uint32_t>(lineIndices.size());
+        indexCount = static_cast<uint32_t>(triangleIndices.size());
         hasData = true;
     }
 
@@ -170,7 +148,7 @@ namespace render::mesh
                                        const glm::mat4& view,
                                        const glm::mat4& projection) const
     {
-        if (!initialized || !hasData || !wireframePipeline || !vertexBuffer || lineIndexCount == 0)
+        if (!initialized || !hasData || !wireframePipeline || !vertexBuffer || indexCount == 0)
         {
             return;
         }
@@ -183,13 +161,13 @@ namespace render::mesh
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
         NavmeshDebugPushConstants pushConstants{};
-        pushConstants.mvp = projection * view; // World-space vertices, identity model
-        pushConstants.color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f); // Red
+        pushConstants.mvp = projection * view;
+        pushConstants.color = glm::vec4(1.0f, 0.0f, 0.0f, 0.4f); // Semi-transparent red
 
         commandBuffer.pushConstants(wireframePipelineLayout,
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             0, sizeof(NavmeshDebugPushConstants), &pushConstants);
 
-        commandBuffer.drawIndexed(lineIndexCount, 1, 0, 0, 0);
+        commandBuffer.drawIndexed(indexCount, 1, 0, 0, 0);
     }
 }
