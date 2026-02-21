@@ -52,6 +52,8 @@ namespace animation
 
         const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
 
+        const std::vector<glm::mat4>* getCachedSocketTransforms(entt::entity entity) const;
+
     private:
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;

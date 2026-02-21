@@ -28,7 +28,7 @@ namespace windows::animation
             return false;
         }
 
-        changed |= drawNewSocketCreation(sockets, evaluatedBones, selectedChannel);
+        changed |= drawNewSocketCreation(sockets, evaluatedBones, boneNameToIndex, selectedChannel);
 
         ImGui::Spacing();
         ImGui::Text("Socket List (%zu)", sockets.size());
@@ -46,7 +46,7 @@ namespace windows::animation
         {
             ImGui::Spacing();
             ImGui::Separator();
-            changed |= drawSocketEditor(sockets[selectedSocketIndex], evaluatedBones);
+            changed |= drawSocketEditor(sockets[selectedSocketIndex], evaluatedBones, boneNameToIndex);
 
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
@@ -97,7 +97,8 @@ namespace windows::animation
     }
 
     bool AnimationSocketPanel::drawSocketEditor(animator::SocketDefinition& socket,
-                                                 const std::vector<services::EvaluatedBoneInfo>& evaluatedBones)
+                                                 const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                                                 const std::unordered_map<std::string, size_t>& boneNameToIndex)
     {
         bool changed = false;
 
@@ -115,7 +116,10 @@ namespace windows::animation
                     if (ImGui::Selectable(evaluatedBones[i].name.c_str(), isSelected))
                     {
                         socket.targetBoneName = evaluatedBones[i].name;
-                        socket.boneIndex = static_cast<int32_t>(i);
+                        auto it = boneNameToIndex.find(evaluatedBones[i].name);
+                        socket.boneIndex = (it != boneNameToIndex.end())
+                            ? static_cast<int32_t>(it->second)
+                            : -1;
                         changed = true;
                     }
                     if (isSelected)
@@ -139,6 +143,7 @@ namespace windows::animation
 
     bool AnimationSocketPanel::drawNewSocketCreation(std::vector<animator::SocketDefinition>& sockets,
                                                       const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                                                      const std::unordered_map<std::string, size_t>& boneNameToIndex,
                                                       int selectedChannel)
     {
         if (ImGui::CollapsingHeader("Create Socket", ImGuiTreeNodeFlags_DefaultOpen))
@@ -181,7 +186,10 @@ namespace windows::animation
                 animator::SocketDefinition newSocket;
                 newSocket.name = newSocketName;
                 newSocket.targetBoneName = evaluatedBones[selectedChannel].name;
-                newSocket.boneIndex = static_cast<int32_t>(selectedChannel);
+                auto it = boneNameToIndex.find(newSocket.targetBoneName);
+                newSocket.boneIndex = (it != boneNameToIndex.end())
+                    ? static_cast<int32_t>(it->second)
+                    : -1;
                 sockets.push_back(newSocket);
 
                 newSocketName[0] = '\0';

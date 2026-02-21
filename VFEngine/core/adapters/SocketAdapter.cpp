@@ -320,14 +320,22 @@ namespace core
         if (socketIdx < 0)
             return glm::mat4(1.0f);
 
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(parent);
-        if (!animator || !animator->isInitialized())
-            return glm::mat4(1.0f);
+        auto& animSystem = animation::RuntimeAnimatorSystem::instance();
 
-        std::vector<glm::mat4> socketTransforms;
-        animator->computeSocketTransforms(skeleton->sockets, socketTransforms);
+        const std::vector<glm::mat4>* socketTransforms = animSystem.getCachedSocketTransforms(parent);
 
-        if (socketIdx >= static_cast<int32_t>(socketTransforms.size()))
+        std::vector<glm::mat4> computedTransforms;
+        if (!socketTransforms)
+        {
+            auto* animator = animSystem.getAnimator(parent);
+            if (!animator || !animator->isInitialized())
+                return glm::mat4(1.0f);
+
+            animator->computeSocketTransforms(skeleton->sockets, computedTransforms);
+            socketTransforms = &computedTransforms;
+        }
+
+        if (socketIdx >= static_cast<int32_t>(socketTransforms->size()))
             return glm::mat4(1.0f);
 
         glm::mat4 parentWorld = glm::mat4(1.0f);
@@ -336,6 +344,6 @@ namespace core
             parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
         }
 
-        return parentWorld * socketTransforms[socketIdx];
+        return parentWorld * (*socketTransforms)[socketIdx];
     }
 }

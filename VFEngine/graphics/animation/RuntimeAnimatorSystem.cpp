@@ -730,4 +730,12 @@ namespace animation
 
         return skeletonData.get();
     }
+
+    const std::vector<glm::mat4>* RuntimeAnimatorSystem::getCachedSocketTransforms(entt::entity entity) const
+    {
+        auto it = socketTransformCache.find(entity);
+        if (it != socketTransformCache.end())
+            return &it->second;
+        return nullptr;
+    }
 }

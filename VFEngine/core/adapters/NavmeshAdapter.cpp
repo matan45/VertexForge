@@ -199,7 +199,7 @@ namespace core
 
             for (const auto& tile : tiles)
             {
-                if (tile.data.empty())
+                if (tile.data.empty() || tile.dataSize > tile.data.size())
                     continue;
 
                 unsigned char* data = static_cast<unsigned char*>(dtAlloc(tile.dataSize, DT_ALLOC_PERM));
@@ -263,32 +263,33 @@ namespace core
         filter.setExcludeFlags(0);
 
         dtPolyRef startRef = 0, endRef = 0;
-        float nearestStart[3], nearestEnd[3];
+        float nearestStart[3] = {0.0f, 0.0f, 0.0f};
+        float nearestEnd[3] = {0.0f, 0.0f, 0.0f};
 
-        navQuery->findNearestPoly(startPos, halfExtents, &filter, &startRef, nearestStart);
-        navQuery->findNearestPoly(endPos, halfExtents, &filter, &endRef, nearestEnd);
+        dtStatus startStatus = navQuery->findNearestPoly(startPos, halfExtents, &filter, &startRef, nearestStart);
+        dtStatus endStatus = navQuery->findNearestPoly(endPos, halfExtents, &filter, &endRef, nearestEnd);
 
-        if (!startRef || !endRef)
+        if (dtStatusFailed(startStatus) || dtStatusFailed(endStatus) || !startRef || !endRef)
         {
             return result;
         }
 
-        dtPolyRef polys[MAX_POLYS];
+        static std::vector<dtPolyRef> polys(MAX_POLYS);
         int nPolys = 0;
-        navQuery->findPath(startRef, endRef, nearestStart, nearestEnd, &filter, polys, &nPolys, MAX_POLYS);
+        navQuery->findPath(startRef, endRef, nearestStart, nearestEnd, &filter, polys.data(), &nPolys, MAX_POLYS);
 
         if (nPolys <= 0)
         {
             return result;
         }
 
-        float straightPath[MAX_POLYS * 3];
-        unsigned char straightPathFlags[MAX_POLYS];
-        dtPolyRef straightPathPolys[MAX_POLYS];
+        static std::vector<float> straightPath(MAX_POLYS * 3);
+        static std::vector<unsigned char> straightPathFlags(MAX_POLYS);
+        static std::vector<dtPolyRef> straightPathPolys(MAX_POLYS);
         int nStraightPath = 0;
 
-        navQuery->findStraightPath(nearestStart, nearestEnd, polys, nPolys,
-                                    straightPath, straightPathFlags, straightPathPolys,
+        navQuery->findStraightPath(nearestStart, nearestEnd, polys.data(), nPolys,
+                                    straightPath.data(), straightPathFlags.data(), straightPathPolys.data(),
                                     &nStraightPath, MAX_POLYS, 0);
 
         result.isValid = nStraightPath > 0;
@@ -464,6 +465,23 @@ namespace core
             return;
 
         const dtNavMesh* mesh = navMesh;
+
+        int totalTris = 0;
+        for (int i = 0; i < mesh->getMaxTiles(); ++i)
+        {
+            const dtMeshTile* tile = mesh->getTile(i);
+            if (!tile || !tile->header)
+                continue;
+            for (int j = 0; j < tile->header->polyCount; ++j)
+            {
+                if (tile->polys[j].getType() != DT_POLYTYPE_OFFMESH_CONNECTION)
+                    totalTris += tile->detailMeshes[j].triCount;
+            }
+        }
+
+        outVertices.reserve(totalTris * 3);
+        outIndices.reserve(totalTris * 3);
+
         for (int i = 0; i < mesh->getMaxTiles(); ++i)
         {
             const dtMeshTile* tile = mesh->getTile(i);
