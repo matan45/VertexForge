@@ -1,6 +1,6 @@
 """
 Creates a transparent icon atlas from individual PNG icons.
-Atlas layout: 4x4 grid, 64x64 pixels per tile, 256x256 total
+Atlas layout: 4 columns x 5 rows, 64x64 pixels per tile, 256x320 total
 
 Icon indices:
 0 - animation
@@ -13,6 +13,14 @@ Icon indices:
 7 - hdr
 8 - audio
 9 - other (file)
+10 - prefab
+11 - font
+12 - project
+13 - animator
+14 - particle
+15 - terrain
+16 - navmesh
+17 - physAnim
 
 Usage: python create_atlas.py
 """
@@ -22,8 +30,10 @@ import os
 
 # Configuration
 TILE_SIZE = 64
-GRID_SIZE = 4
-ATLAS_SIZE = TILE_SIZE * GRID_SIZE  # 256x256
+GRID_COLS = 4
+GRID_ROWS = 5
+ATLAS_WIDTH = TILE_SIZE * GRID_COLS   # 256
+ATLAS_HEIGHT = TILE_SIZE * GRID_ROWS  # 320
 
 # Icon mapping: index -> filename (without extension)
 # Update these filenames to match your actual icon files
@@ -43,7 +53,9 @@ ICON_FILES = {
     12: "project",                # other/file
     13: "animator",                # other/file
     14: "particle",                # other/file
-    15: "terrain",                # other/file
+    15: "terrain",                # terrain
+    16: "navmesh",               # navmesh
+    17: "physAnim",              # physics animation
 }
 
 def find_icon_file(base_name):
@@ -57,12 +69,12 @@ def find_icon_file(base_name):
 
 def create_atlas():
     # Create transparent atlas image (RGBA)
-    atlas = Image.new('RGBA', (ATLAS_SIZE, ATLAS_SIZE), (0, 0, 0, 0))
+    atlas = Image.new('RGBA', (ATLAS_WIDTH, ATLAS_HEIGHT), (0, 0, 0, 0))
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    print(f"Creating {ATLAS_SIZE}x{ATLAS_SIZE} atlas with {TILE_SIZE}x{TILE_SIZE} tiles...")
+    print(f"Creating {ATLAS_WIDTH}x{ATLAS_HEIGHT} atlas with {TILE_SIZE}x{TILE_SIZE} tiles...")
     print(f"Working directory: {script_dir}")
 
     for index, base_name in ICON_FILES.items():
@@ -88,8 +100,8 @@ def create_atlas():
             # icon = make_white_transparent(icon)
 
             # Calculate position in atlas
-            col = index % GRID_SIZE
-            row = index // GRID_SIZE
+            col = index % GRID_COLS
+            row = index // GRID_COLS
             x = col * TILE_SIZE
             y = row * TILE_SIZE
 

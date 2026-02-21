@@ -233,7 +233,7 @@ namespace resource
     {
         std::lock_guard<std::mutex> lock(fileMutex);
 
-        outSkeleton = SkeletonData{}; // Reset output
+        outSkeleton = SkeletonData{};
 
         if (!file.is_open())
         {
@@ -243,7 +243,7 @@ namespace resource
 
         if (!hasSkeleton)
         {
-            return true; // No skeleton data is valid
+            return true;
         }
 
         file.seekg(header.skeletonDataOffset);
@@ -263,12 +263,25 @@ namespace resource
         outSkeleton.bones.resize(boneCount);
         outSkeleton.inverseBindPoses.resize(boneCount);
 
-        // Read bone data
+        if (!readBoneHierarchy(boneCount, outSkeleton))
+            return false;
+
+        if (!readBindPoseData(boneCount, outSkeleton))
+            return false;
+
+        if (hasSockets && !readSocketDefinitions(outSkeleton))
+            return false;
+
+        vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
+        return true;
+    }
+
+    bool MeshStreamHandle::readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton)
+    {
         for (uint32_t b = 0; b < boneCount; ++b)
         {
             auto& bone = outSkeleton.bones[b];
 
-            // Read name
             uint32_t nameLength = endian::readLE<uint32_t>(file);
             if (nameLength > 0 && nameLength < 1024)
             {
@@ -276,26 +289,15 @@ namespace resource
                 file.read(bone.name.data(), nameLength);
             }
 
-            // Read parent index
             bone.parentIndex = endian::readLE<int32_t>(file);
 
-            // Read offset matrix
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     bone.offsetMatrix[col][row] = endian::readLE<float>(file);
-                }
-            }
 
-            // Read pre-transform
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     bone.preTransform[col][row] = endian::readLE<float>(file);
-                }
-            }
 
             if (file.fail())
             {
@@ -304,27 +306,22 @@ namespace resource
             }
         }
 
-        // Read inverse bind poses
+        return true;
+    }
+
+    bool MeshStreamHandle::readBindPoseData(uint32_t boneCount, SkeletonData& outSkeleton)
+    {
         for (uint32_t b = 0; b < boneCount; ++b)
         {
             auto& matrix = outSkeleton.inverseBindPoses[b];
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     matrix[col][row] = endian::readLE<float>(file);
-                }
-            }
         }
 
-        // Read global inverse transform
         for (int col = 0; col < 4; ++col)
-        {
             for (int row = 0; row < 4; ++row)
-            {
                 outSkeleton.globalInverseTransform[col][row] = endian::readLE<float>(file);
-            }
-        }
 
         if (file.fail())
         {
@@ -332,7 +329,57 @@ namespace resource
             return false;
         }
 
-        vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
+        outSkeleton.bindPoses.resize(boneCount);
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            outSkeleton.bindPoses[b] = glm::inverse(outSkeleton.inverseBindPoses[b]);
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::readSocketDefinitions(SkeletonData& outSkeleton)
+    {
+        uint32_t socketCount = endian::readLE<uint32_t>(file);
+        if (file.fail() || socketCount >= 256)
+        {
+            return true;
+        }
+
+        outSkeleton.sockets.resize(socketCount);
+        for (uint32_t s = 0; s < socketCount; ++s)
+        {
+            auto& socket = outSkeleton.sockets[s];
+
+            uint32_t nameLength = endian::readLE<uint32_t>(file);
+            if (nameLength > 0 && nameLength < 1024)
+            {
+                socket.name.resize(nameLength);
+                file.read(socket.name.data(), nameLength);
+            }
+
+            uint32_t boneNameLength = endian::readLE<uint32_t>(file);
+            if (boneNameLength > 0 && boneNameLength < 1024)
+            {
+                socket.targetBoneName.resize(boneNameLength);
+                file.read(socket.targetBoneName.data(), boneNameLength);
+            }
+
+            socket.localPosition.x = endian::readLE<float>(file);
+            socket.localPosition.y = endian::readLE<float>(file);
+            socket.localPosition.z = endian::readLE<float>(file);
+
+            socket.boneIndex = outSkeleton.getBoneIndex(socket.targetBoneName);
+
+            if (file.fail())
+            {
+                vfLogError("MeshStreamHandle: Failed to read socket {}", s);
+                outSkeleton.sockets.clear();
+                return false;
+            }
+        }
+
+        vfLogInfo("MeshStreamHandle: Loaded {} sockets", socketCount);
         return true;
     }
 }

@@ -13,6 +13,7 @@
 #include "impl/FileOperationsServiceImpl.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsAnimationServiceImpl.hpp"
+#include "impl/NavmeshServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "impl/VFXPlayModeHandler.hpp"
 #include "impl/VFXRuntimeServiceImpl.hpp"
@@ -128,6 +129,7 @@ namespace handlers
         undoRedoService.reset();
         physicsService.reset();
         physicsAnimationService.reset();
+        navmeshService.reset();
         physicsPlayModeHandler.reset();
         vfxPlayModeHandler.reset();
         vfxRuntimeService.reset();
@@ -177,7 +179,8 @@ namespace handlers
     {
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
-            bootstrap->getAnimatorProvider()
+            bootstrap->getAnimatorProvider(),
+            bootstrap->getSocketProvider()
         );
         renderService = std::make_shared<services::EditorRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
@@ -216,6 +219,11 @@ namespace handlers
             physicsAnimationService = std::make_shared<services::PhysicsAnimationServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
+        }
+
+        if (auto* navmeshProvider = bootstrap->getNavmeshProvider())
+        {
+            navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
     }
 
@@ -290,6 +298,10 @@ namespace handlers
         if (physicsAnimationService)
         {
             physicsAnimationService->registerEventHandlers();
+        }
+        if (navmeshService)
+        {
+            navmeshService->registerEventHandlers();
         }
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();

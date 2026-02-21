@@ -1,5 +1,6 @@
 #include "MeshPreviewWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
@@ -20,12 +21,10 @@ namespace windows
 
     void MeshPreviewWindow::draw()
     {
-        // Handle cleanup when window is closing - must happen BEFORE any ImGui rendering
         if (!isOpen)
         {
             if (!previewCleanedUp)
             {
-                // Cancel any ongoing async loading
                 if (loadingProgress.isLoading())
                 {
                     services::events::preview::CancelMeshLoadingCommand cancelCmd;
@@ -48,7 +47,6 @@ namespace windows
             needsInit = false;
         }
 
-        // Update async loading state
         updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -57,25 +55,21 @@ namespace windows
         {
             if (isOpen)
             {
-                // Split layout: left panel for submesh list, right for 3D viewport
                 float panelWidth = 200.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-                // Submesh panel on the left
                 ImGui::BeginChild("SubMeshPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawSubMeshPanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
-                // 3D viewport on the right
                 float viewportWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("ViewportPanel", ImVec2(viewportWidth, contentSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
                 ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
-                // Show loading indicator or viewport
                 if (loadingProgress.isLoading())
                 {
                     drawLoadingIndicator(viewportSize.x, viewportSize.y);
@@ -97,13 +91,11 @@ namespace windows
         initCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(initCmd);
 
-        // Start async loading
         services::events::preview::LoadPreviewMeshAsyncCommand loadCmd;
         loadCmd.instanceId = services::PreviewInstanceId(this);
         loadCmd.meshPath = meshPath;
         events::EventDispatcher::instance().execute(loadCmd);
 
-        // Initialize loading state
         loadingProgress.state = services::LoadingState::Pending;
         loadingProgress.progress = 0.0f;
         loadingProgress.statusMessage = "Starting load...";
@@ -116,12 +108,10 @@ namespace windows
             return;
         }
 
-        // Query current loading progress
         services::events::preview::GetMeshLoadingProgressQuery progressQuery;
         progressQuery.instanceId = services::PreviewInstanceId(this);
         loadingProgress = events::EventDispatcher::instance().query(progressQuery);
 
-        // Check if loading completed
         if (loadingProgress.state == services::LoadingState::Complete)
         {
             onLoadingComplete();
@@ -134,21 +124,48 @@ namespace windows
 
     void MeshPreviewWindow::onLoadingComplete()
     {
-        // Get mesh bounds
         services::events::preview::GetPreviewMeshBoundsQuery boundsQuery;
         boundsQuery.instanceId = services::PreviewInstanceId(this);
         meshBounds = events::EventDispatcher::instance().query(boundsQuery);
         camera->fitToBounds(meshBounds);
 
-        // Get submesh info
         services::events::preview::GetPreviewMeshSubMeshInfoQuery subMeshQuery;
         subMeshQuery.instanceId = services::PreviewInstanceId(this);
         subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
 
-        // Get LOD info
         services::events::preview::GetPreviewMeshLODInfoQuery lodQuery;
         lodQuery.instanceId = services::PreviewInstanceId(this);
         lodLevels = events::EventDispatcher::instance().query(lodQuery);
+
+        loadSkeletonData();
+    }
+
+    void MeshPreviewWindow::loadSkeletonData()
+    {
+        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        if (!streamHandle || !streamHandle->hasSkeletonData())
+        {
+            hasSkeleton = false;
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (!streamHandle->readSkeleton(skeleton))
+        {
+            hasSkeleton = false;
+            return;
+        }
+
+        hasSkeleton = true;
+
+        boneNames.clear();
+        boneNames.reserve(skeleton.bones.size());
+        for (const auto& bone : skeleton.bones)
+        {
+            boneNames.push_back(bone.name);
+        }
+
+        sockets = skeleton.sockets;
     }
 
     void MeshPreviewWindow::handlePreviewInput()
@@ -168,7 +185,6 @@ namespace windows
 
         ImGuiIO& io = ImGui::GetIO();
 
-        // Scroll to zoom
         if (io.MouseWheel != 0.0f)
         {
             float zoomFactor = 1.0f - io.MouseWheel * camera->zoomSensitivity * 0.1f;
@@ -176,7 +192,6 @@ namespace windows
             camera->updateMatrices();
         }
 
-        // Left mouse drag to orbit
         if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             ImVec2 delta = io.MouseDelta;
@@ -220,7 +235,6 @@ namespace windows
         cameraCmd.cameraPos = camera->getPosition();
         events::EventDispatcher::instance().execute(cameraCmd);
 
-        // Render via PreviewService
         services::events::preview::RenderMeshPreviewQuery renderQuery;
         renderQuery.instanceId = services::PreviewInstanceId(this);
         auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
@@ -242,7 +256,6 @@ namespace windows
             return;
         }
 
-        // "All" option
         bool allSelected = (selectedSubMesh == -1);
         if (ImGui::Selectable("All Submeshes", allSelected))
         {
@@ -251,7 +264,6 @@ namespace windows
 
         ImGui::Separator();
 
-        // Individual submeshes
         for (size_t i = 0; i < subMeshes.size(); ++i)
         {
             const auto& info = subMeshes[i];
@@ -263,7 +275,6 @@ namespace windows
                 selectedSubMesh = static_cast<int>(i);
             }
 
-            // Show tooltip with details
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
@@ -277,7 +288,6 @@ namespace windows
 
         ImGui::Separator();
 
-        // LOD Level Selection
         if (!lodLevels.empty())
         {
             ImGui::Spacing();
@@ -313,7 +323,6 @@ namespace windows
             ImGui::Separator();
         }
 
-        // Summary
         uint32_t totalVerts = 0;
         uint32_t totalIndices = 0;
         for (const auto& info : subMeshes)
@@ -346,7 +355,6 @@ namespace windows
                 camera->setDistance(dist);
             }
 
-            // Zoom buttons
             if (ImGui::Button("+", ImVec2(itemWidth / 2 - 2, 0)))
             {
                 camera->setDistance(dist * 0.9f);
@@ -364,6 +372,41 @@ namespace windows
                 camera->fitToBounds(meshBounds);
             }
         }
+
+        if (hasSkeleton)
+        {
+            ImGui::Separator();
+            drawSocketPanel();
+        }
+    }
+
+    void MeshPreviewWindow::drawSocketPanel()
+    {
+        if (ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Text("Bones: %zu", boneNames.size());
+
+            if (sockets.empty())
+            {
+                ImGui::TextDisabled("No sockets defined");
+                ImGui::TextDisabled("(Edit in Animation Preview)");
+                return;
+            }
+
+            ImGui::Text("Sockets: %zu", sockets.size());
+            ImGui::Separator();
+
+            for (const auto& socket : sockets)
+            {
+                if (ImGui::TreeNode(socket.name.c_str()))
+                {
+                    ImGui::TextDisabled("Bone: %s", socket.targetBoneName.c_str());
+                    ImGui::TextDisabled("Pos: %.2f, %.2f, %.2f",
+                                        socket.localPosition.x, socket.localPosition.y, socket.localPosition.z);
+                    ImGui::TreePop();
+                }
+            }
+        }
     }
 
     void MeshPreviewWindow::drawLoadingIndicator(float width, float height)
@@ -372,26 +415,22 @@ namespace windows
         ImVec2 windowSize(width, height);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // Semi-transparent dark overlay
         drawList->AddRectFilled(
             windowPos,
             ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y),
             IM_COL32(20, 20, 20, 200)
         );
 
-        // Center content
         float contentWidth = 250.0f;
         float contentHeight = 120.0f;
         float centerX = windowPos.x + (windowSize.x - contentWidth) * 0.5f;
         float centerY = windowPos.y + (windowSize.y - contentHeight) * 0.5f;
 
-        // Spinner animation
         float time = static_cast<float>(ImGui::GetTime());
         float spinnerRadius = 20.0f;
         float spinnerThickness = 4.0f;
         ImVec2 spinnerCenter(centerX + contentWidth * 0.5f, centerY + 30.0f);
 
-        // Draw spinner arc
         int numSegments = 30;
         float startAngle = time * 3.0f;
         float arcLength = 3.14159f * 1.2f; // About 216 degrees
@@ -404,7 +443,6 @@ namespace windows
             float angle1 = startAngle + t1 * arcLength;
             float angle2 = startAngle + t2 * arcLength;
 
-            // Fade alpha along the arc
             int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
             ImU32 segColor = IM_COL32(100, 150, 255, alpha);
 
@@ -416,19 +454,16 @@ namespace windows
             drawList->AddLine(p1, p2, segColor, spinnerThickness);
         }
 
-        // Status message
         const char* statusText = loadingProgress.statusMessage.c_str();
         ImVec2 textSize = ImGui::CalcTextSize(statusText);
         ImVec2 textPos(centerX + (contentWidth - textSize.x) * 0.5f, centerY + 60.0f);
         drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), statusText);
 
-        // Progress bar
         float progressBarY = centerY + 85.0f;
         float progressBarHeight = 8.0f;
         float progressBarWidth = contentWidth - 20.0f;
         float progressBarX = centerX + 10.0f;
 
-        // Background
         drawList->AddRectFilled(
             ImVec2(progressBarX, progressBarY),
             ImVec2(progressBarX + progressBarWidth, progressBarY + progressBarHeight),
@@ -436,7 +471,6 @@ namespace windows
             4.0f
         );
 
-        // Progress fill
         float fillWidth = progressBarWidth * loadingProgress.progress;
         if (fillWidth > 0)
         {
@@ -448,7 +482,6 @@ namespace windows
             );
         }
 
-        // Progress percentage text
         char progressText[16];
         snprintf(progressText, sizeof(progressText), "%.0f%%", loadingProgress.progress * 100.0f);
         ImVec2 progressTextSize = ImGui::CalcTextSize(progressText);

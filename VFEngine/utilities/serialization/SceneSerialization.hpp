@@ -5,6 +5,7 @@
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
+#include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
 
@@ -192,6 +193,15 @@ namespace serialization
 
         static json serializeUIProgressBar(const components::UIProgressBarComponent& progressBar);
         static void deserializeUIProgressBar(const json& j, components::UIProgressBarComponent& progressBar);
+
+        static json serializeSocketAttachment(const components::SocketAttachmentComponent& attachment);
+        static void deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment);
+
+        static json serializeSocketOverride(const components::SocketOverrideComponent& override);
+        static void deserializeSocketOverride(const json& j, components::SocketOverrideComponent& override);
+
+        static json serializeNavmeshAgent(const components::NavmeshAgentComponent& agent);
+        static void deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent);
 
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);

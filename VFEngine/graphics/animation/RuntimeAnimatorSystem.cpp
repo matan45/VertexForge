@@ -6,6 +6,8 @@
 #include "print/EditorLogger.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
+#include "../../services/events/AnimationEventEvents.hpp"
+#include "../../services/events/SocketEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
@@ -53,9 +55,32 @@ namespace animation
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
                 clearAnimatorInstances();
+                skeletonDataCache.clear();
                 pendingCacheCleanup = true;
+
+                auto& reg = scene::EntityRegistry::getRegistry();
+                auto view = reg.view<components::SocketAttachmentComponent>();
+                for (auto entity : view)
+                {
+                    reg.get<components::SocketAttachmentComponent>(entity).needsParentResolution = true;
+                }
+
                 vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
                           notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
+            });
+
+        socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
+            [this](const events::socket::SocketDataSavedNotification& notification)
+            {
+                skeletonDataCache.erase(notification.meshPath);
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::SocketAttachmentComponent>();
+                for (auto entity : view)
+                {
+                    auto& attachment = registry.get<components::SocketAttachmentComponent>(entity);
+                    attachment.cachedSocketIndex = -1;
+                }
+                vfLogInfo("[RuntimeAnimatorSystem] Skeleton cache invalidated for: {}", notification.meshPath);
             });
 
         vfLogInfo("[RuntimeAnimatorSystem] Initialized");
@@ -77,6 +102,12 @@ namespace animation
             editorModeChangedToken = {};
         }
 
+        if (socketDataSavedToken.isValid())
+        {
+            dispatcher.unsubscribe(socketDataSavedToken);
+            socketDataSavedToken = {};
+        }
+
         clearAll();
         initialized = false;
         vfLogInfo("[RuntimeAnimatorSystem] Shutdown");
@@ -93,7 +124,24 @@ namespace animation
 
             animator->update(deltaTime);
 
-            // Apply root motion delta to entity transform
+            const auto& firedEvents = animator->getFiredEvents();
+            if (!firedEvents.empty())
+            {
+                const animator::AnimatorState* currentState = animator->getCurrentAnimatorState();
+                std::string stateName = currentState ? currentState->name : "";
+                auto entityHandle = services::internal::toHandle(entity);
+
+                for (const auto* event : firedEvents)
+                {
+                    events::animation::AnimationEventFiredNotification notification;
+                    notification.entity = entityHandle;
+                    notification.eventName = event->name;
+                    notification.stateName = stateName;
+                    notification.payload = event->payload;
+                    events::EventDispatcher::instance().publish(notification);
+                }
+            }
+
             if (registry.valid(entity) &&
                 registry.all_of<components::AnimatorComponent, components::TransformComponent>(entity))
             {
@@ -104,7 +152,6 @@ namespace animation
                     if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
                     {
                         auto& transform = registry.get<components::TransformComponent>(entity);
-                        // Delta is in model space; scale by entity scale to get world space
                         delta *= transform.scale;
                         glm::quat rotation = glm::quat(glm::radians(transform.rotation));
                         transform.position += rotation * delta;
@@ -112,6 +159,193 @@ namespace animation
                     }
                 }
             }
+        }
+    }
+
+    void RuntimeAnimatorSystem::updateSocketAttachments()
+    {
+        buildSocketTransformCache();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto attachmentView = registry.view<components::SocketAttachmentComponent>();
+        for (auto attachedEntity : attachmentView)
+        {
+            resolveAttachmentParent(attachedEntity);
+            applyAttachmentTransform(attachedEntity);
+        }
+    }
+
+    void RuntimeAnimatorSystem::buildSocketTransformCache()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        socketTransformCache.clear();
+        for (auto& [entity, animator] : animators)
+        {
+            if (!animator || !animator->isInitialized())
+                continue;
+
+            if (!registry.valid(entity))
+                continue;
+
+            const resource::SkeletonData* skeleton = nullptr;
+            if (registry.all_of<components::MeshComponent>(entity))
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty())
+                {
+                    skeleton = loadSkeleton(meshComp.meshPath);
+                }
+            }
+
+            if (!skeleton || skeleton->sockets.empty())
+                continue;
+
+            auto& transforms = socketTransformCache[entity];
+            animator->computeSocketTransforms(skeleton->sockets, transforms);
+        }
+    }
+
+    void RuntimeAnimatorSystem::resolveAttachmentParent(entt::entity attachedEntity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+
+        if (!attachment.needsParentResolution || attachment.parentEntityName.empty())
+            return;
+
+        attachment.needsParentResolution = false;
+        attachment.parentEntity = entt::null;
+        attachment.cachedSocketIndex = -1;
+
+        entt::entity ancestor = entt::null;
+        if (registry.all_of<components::ParentComponent>(attachedEntity))
+        {
+            ancestor = registry.get<components::ParentComponent>(attachedEntity).parent;
+        }
+        while (ancestor != entt::null && registry.valid(ancestor))
+        {
+            if (registry.all_of<components::NameComponent>(ancestor) &&
+                registry.get<components::NameComponent>(ancestor).name == attachment.parentEntityName)
+            {
+                attachment.parentEntity = ancestor;
+                break;
+            }
+            if (registry.all_of<components::ParentComponent>(ancestor))
+                ancestor = registry.get<components::ParentComponent>(ancestor).parent;
+            else
+                break;
+        }
+
+        if (attachment.parentEntity == entt::null)
+        {
+            auto nameView = registry.view<components::NameComponent>();
+            for (auto candidate : nameView)
+            {
+                if (nameView.get<components::NameComponent>(candidate).name == attachment.parentEntityName)
+                {
+                    attachment.parentEntity = candidate;
+                    break;
+                }
+            }
+        }
+    }
+
+    void RuntimeAnimatorSystem::applyAttachmentTransform(entt::entity attachedEntity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+
+        if (!attachment.isActive || attachment.parentEntity == entt::null)
+            return;
+
+        if (!registry.valid(attachment.parentEntity))
+            return;
+
+        const resource::SkeletonData* skeleton = nullptr;
+        if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
+        {
+            const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
+            if (!meshComp.meshPath.empty())
+            {
+                skeleton = loadSkeleton(meshComp.meshPath);
+            }
+        }
+
+        int32_t socketIdx = attachment.cachedSocketIndex;
+        if (socketIdx < 0 && skeleton)
+        {
+            socketIdx = skeleton->getSocketIndex(attachment.socketName);
+            if (socketIdx < 0 && !attachment.socketName.empty())
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
+                skeletonDataCache.erase(meshComp.meshPath);
+                skeleton = loadSkeleton(meshComp.meshPath);
+                if (skeleton)
+                {
+                    socketIdx = skeleton->getSocketIndex(attachment.socketName);
+                }
+            }
+            auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
+            mutableAttachment.cachedSocketIndex = socketIdx;
+        }
+
+        if (socketIdx < 0)
+            return;
+
+        glm::mat4 socketModelTransform = glm::mat4(1.0f);
+
+        auto cacheIt = socketTransformCache.find(attachment.parentEntity);
+        if (cacheIt != socketTransformCache.end() &&
+            socketIdx < static_cast<int32_t>(cacheIt->second.size()))
+        {
+            socketModelTransform = cacheIt->second[socketIdx];
+        }
+        else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
+        {
+            const auto& socket = skeleton->sockets[socketIdx];
+            glm::vec3 boneMeshPos(0.0f);
+            if (socket.boneIndex >= 0 &&
+                socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+            {
+                boneMeshPos = glm::vec3(
+                    skeleton->globalInverseTransform
+                    * skeleton->bindPoses[socket.boneIndex]
+                    * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            }
+            socketModelTransform = glm::translate(glm::mat4(1.0f),
+                boneMeshPos + socket.localPosition);
+        }
+        else
+        {
+            return;
+        }
+
+        glm::mat4 parentWorld = glm::mat4(1.0f);
+        if (registry.all_of<components::WorldTransformComponent>(attachment.parentEntity))
+        {
+            parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
+        }
+
+        glm::mat4 socketWorld = parentWorld * socketModelTransform;
+
+        glm::mat4 entityLocal = glm::mat4(1.0f);
+        if (registry.all_of<components::TransformComponent>(attachedEntity))
+        {
+            const auto& transform = registry.get<components::TransformComponent>(attachedEntity);
+            glm::mat4 rot = glm::mat4_cast(glm::quat(glm::radians(transform.rotation)));
+            entityLocal = rot * glm::scale(glm::mat4(1.0f), transform.scale);
+        }
+
+        glm::mat4 finalWorld = socketWorld * entityLocal;
+
+        registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = finalWorld;
+
+        if (registry.all_of<components::TransformComponent>(attachedEntity))
+        {
+            auto& transform = registry.get<components::TransformComponent>(attachedEntity);
+            transform.position = glm::vec3(finalWorld[3]);
+            transform.isDirty = false;
         }
     }
 
@@ -199,7 +433,6 @@ namespace animation
         animComp.animatorPath = animatorPath;
         animComp.isInitialized = true;
 
-        // Sync root motion flag from MeshComponent (persistent storage)
         if (registry.all_of<components::MeshComponent>(entity))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(entity);

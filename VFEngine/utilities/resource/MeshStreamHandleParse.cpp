@@ -325,6 +325,40 @@ namespace resource
             return false;
         }
 
+        // Try to read socket data (appended after skeleton)
+        socketDataOffset = file.tellg();
+        std::streampos beforeSockets = socketDataOffset;
+        uint32_t socketCount = endian::readLE<uint32_t>(file);
+        if (!file.fail() && socketCount < 256)
+        {
+            hasSockets = true;
+            // Skip socket data for header parsing
+            for (uint32_t s = 0; s < socketCount; ++s)
+            {
+                // Socket name
+                uint32_t nameLength = endian::readLE<uint32_t>(file);
+                if (nameLength > 1024 || file.fail()) { hasSockets = false; break; }
+                file.seekg(nameLength, std::ios::cur);
+
+                // Bone name
+                uint32_t boneNameLength = endian::readLE<uint32_t>(file);
+                if (boneNameLength > 1024 || file.fail()) { hasSockets = false; break; }
+                file.seekg(boneNameLength, std::ios::cur);
+
+                // position(3) = 3 floats
+                file.seekg(3 * sizeof(float), std::ios::cur);
+
+                if (file.fail()) { hasSockets = false; break; }
+            }
+        }
+        else
+        {
+            // No socket data or EOF — backward compatible
+            file.clear();
+            file.seekg(beforeSockets);
+            hasSockets = false;
+        }
+
         return true;
     }
 }

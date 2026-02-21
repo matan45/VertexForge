@@ -1,0 +1,45 @@
+#pragma once
+#include "navigation/NavmeshData.hpp"
+#include "types/NavmeshTypes.hpp"
+#include <glm/glm.hpp>
+#include <vector>
+
+namespace services
+{
+    class INavmeshProvider
+    {
+    public:
+        virtual ~INavmeshProvider() = default;
+
+        virtual bool init() = 0;
+        virtual void cleanUp() = 0;
+        virtual bool isInitialized() const = 0;
+
+        virtual bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
+                                   const types::NavmeshBakeSettings& settings) = 0;
+        virtual types::NavmeshBakeProgress getBuildProgress() const = 0;
+
+        virtual std::vector<navigation::NavmeshTileData> serializeNavmesh() const = 0;
+        virtual bool deserializeNavmesh(const navigation::NavmeshFileHeader& header,
+                                         const std::vector<navigation::NavmeshTileData>& tiles) = 0;
+        virtual bool hasNavmesh() const = 0;
+        virtual void clearNavmesh() = 0;
+
+        virtual navigation::NavPath findPath(const glm::vec3& start, const glm::vec3& end,
+                                              float agentRadius, float agentHeight) = 0;
+        virtual glm::vec3 getClosestPoint(const glm::vec3& point, float searchRadius) = 0;
+        virtual bool isPointOnNavmesh(const glm::vec3& point, float tolerance) = 0;
+
+        virtual int addCrowdAgent(const glm::vec3& position, float radius, float height,
+                                   float maxSpeed, float maxAcceleration) = 0;
+        virtual void removeCrowdAgent(int agentIndex) = 0;
+        virtual void setCrowdAgentTarget(int agentIndex, const glm::vec3& target) = 0;
+        virtual void stopCrowdAgent(int agentIndex) = 0;
+        virtual glm::vec3 getCrowdAgentPosition(int agentIndex) const = 0;
+        virtual glm::vec3 getCrowdAgentVelocity(int agentIndex) const = 0;
+        virtual void updateCrowd(float deltaTime) = 0;
+
+        virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,
+                                   std::vector<uint32_t>& outIndices) const = 0;
+    };
+}

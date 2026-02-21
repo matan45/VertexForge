@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace events::render {
 
@@ -247,6 +248,27 @@ namespace events::render {
         uint32_t lod;
 
         std::string_view getName() const override { return "SetTerrainShadowLOD"; }
+    };
+
+    struct SetShowNavmeshDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowNavmeshDebug"; }
+    };
+
+    struct GetShowNavmeshDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowNavmeshDebug"; }
+    };
+
+    struct UpdateNavmeshDebugMeshCommand : ICommand<> {
+        std::vector<glm::vec3> vertices;
+        std::vector<uint32_t> indices;
+
+        std::string_view getName() const override { return "UpdateNavmeshDebugMesh"; }
+    };
+
+    struct ClearNavmeshDebugMeshCommand : ICommand<> {
+        std::string_view getName() const override { return "ClearNavmeshDebugMesh"; }
     };
 
     struct SetUIViewportOffsetCommand : ICommand<> {

@@ -14,6 +14,7 @@ namespace windows
     class TerrainCreationWindow;
     class PostProcessConfigWindow;
     class WaterEditorWindow;
+    class NavmeshWindow;
 
     class MainMenuBar
     {
@@ -31,6 +32,7 @@ namespace windows
         TerrainCreationWindow* terrainCreationWindow = nullptr;
         WaterEditorWindow* waterEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
+        NavmeshWindow* navmeshWindow = nullptr;
 
     public:
         void draw();
@@ -67,6 +69,11 @@ namespace windows
         void setPostProcessConfigWindow(PostProcessConfigWindow* window)
         {
             postProcessConfigWindow = window;
+        }
+
+        void setNavmeshWindow(NavmeshWindow* window)
+        {
+            navmeshWindow = window;
         }
 
     private:

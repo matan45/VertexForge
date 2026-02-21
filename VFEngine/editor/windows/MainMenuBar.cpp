@@ -10,9 +10,11 @@
 #include "TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "PostProcessConfigWindow.hpp"
+#include "NavmeshWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
+#include "events/NavmeshEvents.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/ScriptingEvents.hpp"
@@ -161,6 +163,13 @@ namespace windows
                     postProcessConfigWindow->show();
                 }
             }
+            else if (ImGui::MenuItem("Navigation"))
+            {
+                if (navmeshWindow)
+                {
+                    navmeshWindow->show();
+                }
+            }
             ImGui::EndMenu();
         }
     }
@@ -225,6 +234,36 @@ namespace windows
                 events::render::SetShowPhysicsDebugCommand cmd;
                 cmd.show = !showPhysicsDebug;
                 dispatcher.execute(cmd);
+            }
+
+            bool showNavmeshDebug = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
+            if (ImGui::MenuItem("Show Navmesh", nullptr, showNavmeshDebug))
+            {
+                bool newState = !showNavmeshDebug;
+                events::render::SetShowNavmeshDebugCommand cmd;
+                cmd.show = newState;
+                dispatcher.execute(cmd);
+
+                if (newState)
+                {
+                    bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+                    if (hasNavmesh)
+                    {
+                        auto debugMesh = dispatcher.query(events::navmesh::GetNavmeshDebugMeshQuery{});
+                        if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
+                        {
+                            events::render::UpdateNavmeshDebugMeshCommand updateCmd;
+                            updateCmd.vertices = std::move(debugMesh.vertices);
+                            updateCmd.indices = std::move(debugMesh.indices);
+                            dispatcher.execute(updateCmd);
+                        }
+                    }
+                }
+                else
+                {
+                    events::render::ClearNavmeshDebugMeshCommand clearCmd;
+                    dispatcher.execute(clearCmd);
+                }
             }
 
             bool cullingVisible = cullingStatsWindow ? cullingStatsWindow->isVisible() : false;

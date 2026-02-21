@@ -389,6 +389,60 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setShowNavmeshDebug(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            if (show && renderHandler->isMeshPipelineInitialized() && !renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->setShowNavmeshDebug(show);
+            }
+        }
+    }
+
+    bool OffScreenController::getShowNavmeshDebug() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler && renderHandler->isDebugRendererInitialized())
+        {
+            return renderHandler->getShowNavmeshDebug();
+        }
+        return false;
+    }
+
+    void OffScreenController::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
+                                                      const std::vector<uint32_t>& indices)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            if (renderHandler->isMeshPipelineInitialized() && !renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->updateNavmeshDebugMesh(vertices, indices);
+            }
+        }
+    }
+
+    void OffScreenController::clearNavmeshDebugMesh()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler && renderHandler->isDebugRendererInitialized())
+        {
+            renderHandler->clearNavmeshDebugMesh();
+        }
+    }
+
     void OffScreenController::setPlayMode(bool playMode)
     {
         playModeActive = playMode;

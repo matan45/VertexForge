@@ -2,47 +2,34 @@
 #include "../../camera/OrbitCamera.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
-#include "providers/PreviewInstanceId.hpp"
 #include "imgui.h"
 #include <glm/gtc/quaternion.hpp>
 #include <cmath>
 
 namespace windows::animation
 {
-    void AnimationViewport::draw(float width, float height,
-                                  bool meshLoadedInPreview,
-                                  bool animationLoadedInPreview,
-                                  bool isPlaying,
-                                  editor::OrbitCamera* camera,
-                                  const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
-                                  int selectedChannel,
-                                  bool showBoneVisualization,
-                                  const services::PreviewInstanceId& instanceId,
-                                  bool& isDraggingPreview,
-                                  bool showColliderOverlay,
-                                  const types::PhysicsAnimationConfig* physicsConfig,
-                                  const std::unordered_map<std::string, size_t>* boneNameToIndex)
+    void AnimationViewport::draw(const ViewportDrawContext& ctx)
     {
         ImGui::Text("3D Preview");
         ImGui::SameLine();
 
-        float panStep = camera ? camera->distance * 0.1f : 0.5f;
+        float panStep = ctx.camera ? ctx.camera->distance * 0.1f : 0.5f;
         if (ImGui::ArrowButton("##CamUp", ImGuiDir_Up))
         {
-            if (camera)
+            if (ctx.camera)
             {
-                camera->target.y += panStep;
-                camera->updateMatrices();
+                ctx.camera->target.y += panStep;
+                ctx.camera->updateMatrices();
             }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera up");
         ImGui::SameLine();
         if (ImGui::ArrowButton("##CamDown", ImGuiDir_Down))
         {
-            if (camera)
+            if (ctx.camera)
             {
-                camera->target.y -= panStep;
-                camera->updateMatrices();
+                ctx.camera->target.y -= panStep;
+                ctx.camera->updateMatrices();
             }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera down");
@@ -51,7 +38,7 @@ namespace windows::animation
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();
 
-        if (!meshLoadedInPreview || !animationLoadedInPreview)
+        if (!ctx.meshLoadedInPreview || !ctx.animationLoadedInPreview)
         {
             ImVec2 windowPos = ImGui::GetCursorScreenPos();
             drawPlaceholder(windowPos, availSize);
@@ -60,14 +47,14 @@ namespace windows::animation
 
         if (availSize.x <= 0 || availSize.y <= 0) return;
 
-        camera->setAspectRatio(availSize.x / availSize.y);
-        handlePreviewInput(camera, isDraggingPreview);
+        ctx.camera->setAspectRatio(availSize.x / availSize.y);
+        handlePreviewInput(ctx.camera, ctx.isDraggingPreview);
 
-        if (isPlaying)
+        if (ctx.isPlaying)
         {
             float deltaTime = static_cast<float>(ImGui::GetIO().DeltaTime);
             services::events::animpreview::UpdateAnimationPreviewCommand updateCmd;
-            updateCmd.instanceId = instanceId;
+            updateCmd.instanceId = ctx.instanceId;
             updateCmd.deltaTime = deltaTime;
             events::EventDispatcher::instance().execute(updateCmd);
         }
@@ -80,19 +67,19 @@ namespace windows::animation
         params.roughness = 0.5f;
 
         services::events::animpreview::SetAnimationPreviewParamsCommand paramsCmd;
-        paramsCmd.instanceId = instanceId;
+        paramsCmd.instanceId = ctx.instanceId;
         paramsCmd.params = params;
         events::EventDispatcher::instance().execute(paramsCmd);
 
         services::events::animpreview::UpdateAnimationCameraCommand cameraCmd;
-        cameraCmd.instanceId = instanceId;
-        cameraCmd.view = camera->getViewMatrix();
-        cameraCmd.projection = camera->getProjectionMatrix();
-        cameraCmd.cameraPos = camera->getPosition();
+        cameraCmd.instanceId = ctx.instanceId;
+        cameraCmd.view = ctx.camera->getViewMatrix();
+        cameraCmd.projection = ctx.camera->getProjectionMatrix();
+        cameraCmd.cameraPos = ctx.camera->getPosition();
         events::EventDispatcher::instance().execute(cameraCmd);
 
         services::events::animpreview::RenderAnimationPreviewQuery renderQuery;
-        renderQuery.instanceId = instanceId;
+        renderQuery.instanceId = ctx.instanceId;
         auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
 
         if (textureHandle.imguiDescriptorSet)
@@ -100,16 +87,21 @@ namespace windows::animation
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
             ImGui::Image(textureHandle.imguiDescriptorSet, availSize);
 
-            if (showBoneVisualization && !evaluatedBones.empty())
+            if (ctx.showBoneVisualization && !ctx.evaluatedBones.empty())
             {
-                drawBoneVisualization(viewportPos, availSize, evaluatedBones, selectedChannel, camera);
+                drawBoneVisualization(viewportPos, availSize, ctx.evaluatedBones, ctx.selectedChannel, ctx.camera);
             }
 
-            if (showColliderOverlay && physicsConfig && boneNameToIndex && !evaluatedBones.empty())
+            if (ctx.showColliderOverlay && ctx.physicsConfig && ctx.boneNameToIndex && !ctx.evaluatedBones.empty())
             {
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
-                colliderOverlay.draw(drawList, viewportPos, availSize, camera,
-                                     evaluatedBones, *physicsConfig, *boneNameToIndex, selectedChannel);
+                colliderOverlay.draw(drawList, viewportPos, availSize, ctx.camera,
+                                     ctx.evaluatedBones, *ctx.physicsConfig, *ctx.boneNameToIndex, ctx.selectedChannel);
+            }
+
+            if (ctx.showSocketVisualization && ctx.socketDefinitions && !ctx.socketDefinitions->empty() && !ctx.evaluatedBones.empty())
+            {
+                drawSocketVisualization(viewportPos, availSize, ctx);
             }
         }
         else
@@ -248,6 +240,47 @@ namespace windows::animation
                 snprintf(label, sizeof(label), "%zu", i);
                 drawList->AddText(ImVec2(screenPos.x + 8, screenPos.y - 8), IM_COL32(255, 255, 255, 255), label);
             }
+        }
+    }
+
+    void AnimationViewport::drawSocketVisualization(const ImVec2& viewportPos, const ImVec2& viewportSize,
+                                                     const ViewportDrawContext& ctx)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        ImU32 socketColor = IM_COL32(0, 200, 100, 255);
+        ImU32 socketOutline = IM_COL32(255, 255, 255, 200);
+
+        for (const auto& socket : *ctx.socketDefinitions)
+        {
+            int32_t boneIdx = socket.boneIndex;
+            if (boneIdx < 0 || boneIdx >= static_cast<int32_t>(ctx.evaluatedBones.size()))
+                continue;
+
+            glm::vec3 bonePos = ctx.evaluatedBones[boneIdx].skinnedPosition;
+            glm::vec3 socketPos = bonePos + socket.localPosition;
+
+            ImVec2 screenPos = worldToScreen(socketPos, viewportPos, viewportSize, ctx.camera);
+
+            if (screenPos.x < viewportPos.x - 100 || screenPos.x > viewportPos.x + viewportSize.x + 100 ||
+                screenPos.y < viewportPos.y - 100 || screenPos.y > viewportPos.y + viewportSize.y + 100)
+            {
+                continue;
+            }
+
+            // Draw diamond shape for sockets
+            float size = 6.0f;
+            ImVec2 top(screenPos.x, screenPos.y - size);
+            ImVec2 right(screenPos.x + size, screenPos.y);
+            ImVec2 bottom(screenPos.x, screenPos.y + size);
+            ImVec2 left(screenPos.x - size, screenPos.y);
+
+            drawList->AddQuadFilled(top, right, bottom, left, socketColor);
+            drawList->AddQuad(top, right, bottom, left, socketOutline, 1.5f);
+
+            // Label
+            drawList->AddText(ImVec2(screenPos.x + 10, screenPos.y - 8),
+                              IM_COL32(0, 220, 120, 255), socket.name.c_str());
         }
     }
 

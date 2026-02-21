@@ -21,9 +21,13 @@ namespace animation
 
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
+        events::SubscriptionToken socketDataSavedToken;
+
+        std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
 
         bool initialized = false;
         bool pendingCacheCleanup = false;
+
     public:
         static RuntimeAnimatorSystem& instance();
 
@@ -31,6 +35,7 @@ namespace animation
         void shutdown();
 
         void updateAll(float deltaTime);
+        void updateSocketAttachments();
 
         void initializeEntityAnimator(entt::entity entity, const std::string& animatorPath);
         void destroyEntityAnimator(entt::entity entity);
@@ -45,6 +50,8 @@ namespace animation
         void clearAnimatorInstances();
         void cleanupUnusedCaches();
 
+        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+
     private:
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
@@ -52,6 +59,9 @@ namespace animation
         RuntimeAnimatorSystem& operator=(const RuntimeAnimatorSystem&) = delete;
 
         const resource::AnimationData* loadAnimation(const std::string& path);
-        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+
+        void buildSocketTransformCache();
+        void resolveAttachmentParent(entt::entity attachedEntity);
+        void applyAttachmentTransform(entt::entity attachedEntity);
     };
 }

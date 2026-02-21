@@ -88,6 +88,9 @@ namespace windows
         bool hasPointLight = pointLightDrawer.draw(handle);
         bool hasSpotLight = spotLightDrawer.draw(handle);
 
+        bool hasSocketAttachment = socketAttachmentDrawer.draw(handle);
+        bool hasNavmeshAgent = navmeshAgentDrawer.draw(handle);
+
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
@@ -107,13 +110,13 @@ namespace windows
         bool hasUISlider = uiSliderDrawer.draw(handle);
         bool hasUIProgressBar = uiProgressBarDrawer.draw(handle);
 
-        addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
-                               hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
-                               hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
-                               hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
-                               hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
-                               hasUIProgressBar);
+        addComponentPopup.draw({handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
+                                hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
+                                hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
+                                hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
+                                hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
+                                hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
+                                hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

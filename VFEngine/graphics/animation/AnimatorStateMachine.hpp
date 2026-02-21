@@ -1,6 +1,8 @@
 #pragma once
 
 #include "animator/AnimatorTypes.hpp"
+#include "animator/AnimationEventTypes.hpp"
+#include "animator/SocketTypes.hpp"
 #include "AnimationBlender.hpp"
 #include "AnimationEvaluator.hpp"
 #include "resource/Types.hpp"
@@ -46,12 +48,13 @@ namespace animation
 
         bool initialized = false;
 
-        // Root motion state
         bool rootMotionEnabled = false;
         bool rootMotionFirstFrame = true;
         glm::vec3 previousRootPosition{0.0f};
         glm::vec3 rootMotionDelta{0.0f};
-        uint32_t lastLoopCount = 0;
+        uint32_t rootMotionLastLoopCount = 0;
+
+        uint32_t eventLastLoopCount = 0;
     public:
        explicit AnimatorStateMachine();
         ~AnimatorStateMachine();
@@ -61,6 +64,9 @@ namespace animation
         void update(float deltaTime);
 
         const std::vector<glm::mat4>& getBoneMatrices() const { return currentBoneMatrices; }
+
+        void computeSocketTransforms(const std::vector<animator::SocketDefinition>& sockets,
+                                     std::vector<glm::mat4>& outSocketModelTransforms) const;
 
         void setFloat(const std::string& name, float value);
         void setInt(const std::string& name, int32_t value);
@@ -91,6 +97,8 @@ namespace animation
 
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }
 
+        const std::vector<const animator::AnimationEvent*>& getFiredEvents() const { return firedEventsThisFrame; }
+
         void setRootMotionEnabled(bool enabled);
         glm::vec3 consumeRootMotionDelta();
 
@@ -104,5 +112,8 @@ namespace animation
 
         bool shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
                                     float normalizedTime, bool isLooping) const;
+
+        void fireTriggeredEvents();
+        std::vector<const animator::AnimationEvent*> firedEventsThisFrame;
     };
 }

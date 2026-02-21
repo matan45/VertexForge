@@ -59,7 +59,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -80,7 +80,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -134,6 +134,7 @@
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
+    <ClInclude Include="windows\NavmeshWindow.hpp" />
     <ClInclude Include="windows\PaintToolPanel.hpp" />
     <ClInclude Include="windows\PhysicsConfigWindow.hpp" />
     <ClInclude Include="windows\PostProcessConfigWindow.hpp" />
@@ -153,6 +154,7 @@
     <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationSkeletonPanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationSocketPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
     <ClInclude Include="windows\animation\AnimationViewport.hpp" />
     <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
@@ -174,10 +176,12 @@
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
+    <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
+    <ClInclude Include="windows\details\SocketAttachmentDrawer.hpp" />
     <ClInclude Include="windows\details\SpotLightDrawer.hpp" />
     <ClInclude Include="windows\details\TerrainDrawer.hpp" />
     <ClInclude Include="windows\details\TerrainTileDrawer.hpp" />
@@ -239,6 +243,7 @@
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
+    <ClCompile Include="windows\NavmeshWindow.cpp" />
     <ClCompile Include="windows\PaintToolPanel.cpp" />
     <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\PostProcessConfigWindow.cpp" />
@@ -259,6 +264,7 @@
     <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationSkeletonPanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationSocketPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
     <ClCompile Include="windows\animation\AnimationViewport.cpp" />
     <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
@@ -279,10 +285,12 @@
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
+    <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
+    <ClCompile Include="windows\details\SocketAttachmentDrawer.cpp" />
     <ClCompile Include="windows\details\SpotLightDrawer.cpp" />
     <ClCompile Include="windows\details\TerrainDrawer.cpp" />
     <ClCompile Include="windows\details\TerrainTileDrawer.cpp" />

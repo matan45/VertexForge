@@ -1,0 +1,265 @@
+#include "NavmeshWindow.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/NavmeshEvents.hpp"
+#include "../../services/events/RenderEvents.hpp"
+#include "print/EditorLogger.hpp"
+#include <imgui.h>
+
+namespace windows
+{
+    NavmeshWindow::NavmeshWindow()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        bakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
+            [this](const events::navmesh::NavmeshBakeCompleteNotification&)
+            {
+                auto& d = events::EventDispatcher::instance();
+                bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
+                if (showNavmesh)
+                {
+                    pushNavmeshDebugMesh();
+                }
+            });
+    }
+
+    NavmeshWindow::~NavmeshWindow()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (bakeCompleteToken.isValid())
+        {
+            dispatcher.unsubscribe(bakeCompleteToken);
+        }
+    }
+
+    void NavmeshWindow::pushNavmeshDebugMesh()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+        if (!hasNavmesh)
+        {
+            events::render::ClearNavmeshDebugMeshCommand clearCmd;
+            dispatcher.execute(clearCmd);
+            return;
+        }
+
+        events::navmesh::GetNavmeshDebugMeshQuery meshQuery;
+        auto debugMesh = dispatcher.query(meshQuery);
+
+        if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
+        {
+            events::render::UpdateNavmeshDebugMeshCommand updateCmd;
+            updateCmd.vertices = std::move(debugMesh.vertices);
+            updateCmd.indices = std::move(debugMesh.indices);
+            dispatcher.execute(updateCmd);
+        }
+    }
+
+    void NavmeshWindow::show()
+    {
+        visible = true;
+    }
+
+    void NavmeshWindow::draw()
+    {
+        if (!visible)
+        {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(400, 550), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Navigation", &visible))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+
+            if (hasNavmesh)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Navmesh: Built");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Navmesh: Not Built");
+            }
+
+            ImGui::Separator();
+
+            drawBakeSettings();
+            ImGui::Spacing();
+            drawActions();
+
+
+        }
+        ImGui::End();
+    }
+
+    void NavmeshWindow::drawBakeSettings()
+    {
+        if (ImGui::CollapsingHeader("Bake Settings", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            drawAgentSection();
+            ImGui::Spacing();
+            drawRegionSection();
+            ImGui::Spacing();
+            drawPolygonSection();
+            ImGui::Spacing();
+            drawFilterSection();
+
+            ImGui::Unindent();
+        }
+    }
+
+    void NavmeshWindow::drawAgentSection()
+    {
+        ImGui::Text("Agent");
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(-1);
+        ImGui::Text("Radius");
+        ImGui::DragFloat("##AgentRadius", &settings.agentRadius, 0.01f, 0.1f, 5.0f, "%.2f");
+
+        ImGui::Text("Height");
+        ImGui::DragFloat("##AgentHeight", &settings.agentHeight, 0.1f, 0.5f, 10.0f, "%.1f");
+
+        ImGui::Text("Max Climb");
+        ImGui::DragFloat("##AgentMaxClimb", &settings.agentMaxClimb, 0.01f, 0.0f, 5.0f, "%.2f");
+
+        ImGui::Text("Max Slope");
+        ImGui::DragFloat("##AgentMaxSlope", &settings.agentMaxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
+        ImGui::PopItemWidth();
+    }
+
+    void NavmeshWindow::drawRegionSection()
+    {
+        ImGui::Text("Voxelization");
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(-1);
+        ImGui::Text("Cell Size");
+        ImGui::DragFloat("##CellSize", &settings.cellSize, 0.01f, 0.05f, 2.0f, "%.2f");
+
+        ImGui::Text("Cell Height");
+        ImGui::DragFloat("##CellHeight", &settings.cellHeight, 0.01f, 0.05f, 2.0f, "%.2f");
+
+        ImGui::Text("Min Region Size");
+        ImGui::DragInt("##RegionMinSize", &settings.regionMinSize, 1, 0, 150);
+
+        ImGui::Text("Region Merge Size");
+        ImGui::DragInt("##RegionMergeSize", &settings.regionMergeSize, 1, 0, 150);
+        ImGui::PopItemWidth();
+    }
+
+    void NavmeshWindow::drawPolygonSection()
+    {
+        ImGui::Text("Polygonization");
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(-1);
+        ImGui::Text("Edge Max Length");
+        ImGui::DragFloat("##EdgeMaxLen", &settings.edgeMaxLen, 0.1f, 0.0f, 50.0f, "%.1f");
+
+        ImGui::Text("Edge Max Error");
+        ImGui::DragFloat("##EdgeMaxError", &settings.edgeMaxError, 0.1f, 0.1f, 3.0f, "%.1f");
+
+        ImGui::Text("Verts Per Poly");
+        ImGui::DragInt("##VertsPerPoly", &settings.vertsPerPoly, 1, 3, 6);
+
+        ImGui::Text("Detail Sample Distance");
+        ImGui::DragFloat("##DetailSampleDist", &settings.detailSampleDist, 0.1f, 0.0f, 16.0f, "%.1f");
+
+        ImGui::Text("Detail Sample Max Error");
+        ImGui::DragFloat("##DetailSampleMaxError", &settings.detailSampleMaxError, 0.1f, 0.0f, 16.0f, "%.1f");
+        ImGui::PopItemWidth();
+    }
+
+    void NavmeshWindow::drawFilterSection()
+    {
+        ImGui::Text("Input Filter");
+        ImGui::Separator();
+
+        ImGui::Checkbox("Include Terrain", &settings.includeTerrain);
+        ImGui::Checkbox("Include Static Meshes", &settings.includeStaticMeshes);
+        ImGui::Checkbox("Include Colliders", &settings.includeColliders);
+    }
+
+    void NavmeshWindow::drawActions()
+    {
+        if (ImGui::CollapsingHeader("Actions", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            auto bakeProgress = dispatcher.query(events::navmesh::GetBakeProgressQuery{});
+            bool isBaking = bakeProgress.status == types::NavmeshBakeStatus::Collecting ||
+                            bakeProgress.status == types::NavmeshBakeStatus::Voxelizing ||
+                            bakeProgress.status == types::NavmeshBakeStatus::Building;
+
+            if (isBaking)
+            {
+                ImGui::ProgressBar(bakeProgress.progress, ImVec2(-1, 0));
+                if (!bakeProgress.currentStage.empty())
+                {
+                    ImGui::TextWrapped("%s", bakeProgress.currentStage.c_str());
+                }
+            }
+
+            bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+
+            ImGui::BeginDisabled(isBaking);
+
+            if (ImGui::Button("Bake Navmesh", ImVec2(-1, 30)))
+            {
+                events::navmesh::BakeNavmeshCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::BeginDisabled(!hasNavmesh);
+
+            if (ImGui::Button("Clear Navmesh", ImVec2(-1, 0)))
+            {
+                events::navmesh::ClearNavmeshCommand cmd;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Button("Save Navmesh...", ImVec2(-1, 0)))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
+                };
+                std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfNavmesh");
+                if (!savePath.empty())
+                {
+                    events::navmesh::SaveNavmeshCommand cmd;
+                    cmd.filePath = savePath;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            ImGui::EndDisabled();
+
+            if (ImGui::Button("Load Navmesh...", ImVec2(-1, 0)))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
+                };
+                std::string loadPath = fileDialog.openFileDialog(fileTypes);
+                if (!loadPath.empty())
+                {
+                    events::navmesh::LoadNavmeshCommand cmd;
+                    cmd.filePath = loadPath;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            ImGui::EndDisabled();
+
+            ImGui::Unindent();
+        }
+    }
+
+}

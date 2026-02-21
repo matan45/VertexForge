@@ -11,6 +11,8 @@
 #include "api/PostProcessAPI.hpp"
 #include "api/UIAPI.hpp"
 #include "api/WaterAPI.hpp"
+#include "api/SocketAPI.hpp"
+#include "api/NavmeshAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -44,6 +46,8 @@ namespace core
         api::PostProcessAPI::registerAPI(interpreter);
         api::UIAPI::registerAPI(interpreter);
         api::WaterAPI::registerAPI(interpreter);
+        api::SocketAPI::registerAPI(interpreter);
+        api::NavmeshAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }
@@ -51,5 +55,6 @@ namespace core
     void NativeAPIRegistry::beginFrame()
     {
         api::PhysicsAPI::beginFrame();
+        api::NavmeshAPI::beginFrame();
     }
 }

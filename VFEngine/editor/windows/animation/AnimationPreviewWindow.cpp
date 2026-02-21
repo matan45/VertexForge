@@ -2,6 +2,7 @@
 #include "../../camera/OrbitCamera.hpp"
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -49,6 +50,13 @@ namespace windows
 
         updateAsyncLoading();
 
+        // Load sockets from mesh when mesh path changes
+        if (!panelState.meshPath.empty() && panelState.meshPath != lastLoadedMeshPath)
+        {
+            loadSocketsFromMesh();
+            lastLoadedMeshPath = panelState.meshPath;
+        }
+
         float currentImGuiTime = static_cast<float>(ImGui::GetTime());
         float deltaTime = currentImGuiTime - lastFrameTime;
         lastFrameTime = currentImGuiTime;
@@ -58,14 +66,14 @@ namespace windows
             updatePlayback(deltaTime);
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(1200, 750), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
             {
                 float leftPanelWidth = 220.0f;
-                float rightPanelWidth = 220.0f;
+                float rightPanelWidth = 300.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
                 float spacing = ImGui::GetStyle().ItemSpacing.x;
 
@@ -73,6 +81,7 @@ namespace windows
                 infoPanel.draw(panelState, getPreviewInstanceId());
                 ImGui::Spacing();
                 ImGui::Checkbox("Physics Panel", &showPhysicsPanel);
+                ImGui::Checkbox("Socket Panel", &showSocketPanel);
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -90,25 +99,28 @@ namespace windows
                     ImGui::BeginChild("3DViewportPanel", ImVec2(middleWidth - 5, previewHeight), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-                    viewport.draw(viewportSize.x, viewportSize.y,
-                                  panelState.meshLoadedInPreview,
-                                  panelState.animationLoadedInPreview,
-                                  panelState.isPlaying,
-                                  camera.get(),
-                                  evaluatedBones,
-                                  selectedChannel,
-                                  showBoneVisualization,
-                                  getPreviewInstanceId(),
-                                  isDraggingPreview,
-                                  showPhysicsPanel && showColliderOverlay,
-                                  &physicsConfig,
-                                  &boneNameToIndex);
+                    viewport.draw({viewportSize.x, viewportSize.y,
+                                   panelState.meshLoadedInPreview,
+                                   panelState.animationLoadedInPreview,
+                                   panelState.isPlaying,
+                                   camera.get(),
+                                   evaluatedBones,
+                                   selectedChannel,
+                                   showBoneVisualization,
+                                   getPreviewInstanceId(),
+                                   isDraggingPreview,
+                                   showPhysicsPanel && showColliderOverlay,
+                                   &physicsConfig,
+                                   &boneNameToIndex,
+                                   showSocketPanel && showSocketVisualization,
+                                   &socketDefinitions});
                     updateBoneTransformsFromService();
                     ImGui::EndChild();
 
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
-                    timelinePanel.draw(currentFrame, selectedChannel, sequencerExpanded, firstFrame,
-                                       &animationData, getPreviewInstanceId());
+                    timelinePanel.draw({currentFrame, selectedChannel, sequencerExpanded, firstFrame,
+                                       &animationData, getPreviewInstanceId(), &animationEvents,
+                                       animationPath});
                     ImGui::EndChild();
                 }
 
@@ -118,7 +130,10 @@ namespace windows
 
                 ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), false);
 
-                float skeletonHeight = showPhysicsPanel ? contentSize.y * 0.4f : contentSize.y;
+                int activePanels = (showPhysicsPanel ? 1 : 0) + (showSocketPanel ? 1 : 0);
+                float skeletonHeight = activePanels > 0
+                    ? contentSize.y * (activePanels > 1 ? 0.33f : 0.4f)
+                    : contentSize.y;
 
                 ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, skeletonHeight), true);
                 if (panelState.animationLoaded)
@@ -136,11 +151,28 @@ namespace windows
 
                 if (showPhysicsPanel)
                 {
-                    ImGui::BeginChild("PhysicsPanel", ImVec2(rightPanelWidth, 0), true);
+                    float physicsHeight = showSocketPanel ? contentSize.y * 0.33f : 0;
+                    ImGui::BeginChild("PhysicsPanel", ImVec2(rightPanelWidth, physicsHeight), true);
                     if (physicsPanel.draw(physicsConfig, selectedChannel, evaluatedBones,
                                           boneNameToIndex, showColliderOverlay, physicsConfigPath))
                     {
                         buildMappedBoneNames();
+                    }
+                    ImGui::EndChild();
+                }
+
+                if (showSocketPanel)
+                {
+                    ImGui::BeginChild("SocketPanel", ImVec2(rightPanelWidth, 0), true);
+                    if (panelState.animationLoaded)
+                    {
+                        socketPanel.draw(socketDefinitions, selectedChannel, evaluatedBones,
+                                         boneNameToIndex, showSocketVisualization,
+                                         panelState.meshPath);
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Loading...");
                     }
                     ImGui::EndChild();
                 }
@@ -240,6 +272,9 @@ namespace windows
                         panelState.animationLoaded = true;
                         panelState.animationData = &animationData;
                         loadAnimationForPreview();
+
+                        // Load saved animation events from the .vfAnim file
+                        animationEvents = animationData.events;
                     }
                     else
                     {
@@ -334,6 +369,27 @@ namespace windows
         for (const auto& mapping : physicsConfig.boneBodyMappings)
         {
             mappedBoneNames.insert(mapping.boneName);
+        }
+    }
+
+    void AnimationPreviewWindow::loadSocketsFromMesh()
+    {
+        socketDefinitions.clear();
+
+        auto stream = resource::MeshStreamResource::openStream(panelState.meshPath);
+        if (!stream || !stream->hasSkeletonData())
+        {
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (stream->readSkeleton(skeleton))
+        {
+            socketDefinitions = skeleton.sockets;
+            if (!socketDefinitions.empty())
+            {
+                vfLogInfo("Loaded {} sockets from mesh: {}", socketDefinitions.size(), panelState.meshPath);
+            }
         }
     }
 }

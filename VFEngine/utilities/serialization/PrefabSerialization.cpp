@@ -103,6 +103,18 @@ namespace serialization
             out["spotLight"] = SceneSerialization::serializeSpotLight(
                 entity.getComponent<components::SpotLightComponent>());
         }
+
+        if (entity.hasComponent<components::SocketAttachmentComponent>())
+        {
+            out["socketAttachment"] = SceneSerialization::serializeSocketAttachment(
+                entity.getComponent<components::SocketAttachmentComponent>());
+        }
+
+        if (entity.hasComponent<components::SocketOverrideComponent>())
+        {
+            out["socketOverride"] = SceneSerialization::serializeSocketOverride(
+                entity.getComponent<components::SocketOverrideComponent>());
+        }
     }
 
     json PrefabSerialization::serializeEntityTreeComponents(const scene::Entity& entity)
@@ -208,6 +220,18 @@ namespace serialization
         {
             auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();
             SceneSerialization::deserializePhysicsAnimation(componentsJson["physicsAnimation"], physAnimComp);
+        }
+
+        if (componentsJson.contains("socketAttachment"))
+        {
+            auto& attachment = entity.addOrReplaceComponent<components::SocketAttachmentComponent>();
+            SceneSerialization::deserializeSocketAttachment(componentsJson["socketAttachment"], attachment);
+        }
+
+        if (componentsJson.contains("socketOverride"))
+        {
+            auto& socketOverride = entity.addOrReplaceComponent<components::SocketOverrideComponent>();
+            SceneSerialization::deserializeSocketOverride(componentsJson["socketOverride"], socketOverride);
         }
     }
 

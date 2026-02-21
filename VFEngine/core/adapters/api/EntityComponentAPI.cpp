@@ -9,6 +9,7 @@
 #include "../../../services/events/MaterialEvents.hpp"
 #include "../../../services/events/ScriptingEvents.hpp"
 #include "../../../services/events/UIEvents.hpp"
+#include "../../../services/events/SocketEvents.hpp"
 
 namespace core::api
 {
@@ -76,6 +77,9 @@ namespace core::api
                 {services::ComponentTypeId::UITabs, makeAddFn<events::ui::AddUITabsComponentCommand>()},
                 {services::ComponentTypeId::UISlider, makeAddFn<events::ui::AddUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeAddFn<events::ui::AddUIProgressBarComponentCommand>()},
+                {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
+                {services::ComponentTypeId::NavmeshAgent, makeAddFn<events::scene::AddNavmeshAgentComponentCommand>()},
             };
             return map;
         }
@@ -104,6 +108,9 @@ namespace core::api
                 {services::ComponentTypeId::UITabs, makeRemoveFn<events::ui::RemoveUITabsComponentCommand>()},
                 {services::ComponentTypeId::UISlider, makeRemoveFn<events::ui::RemoveUISliderComponentCommand>()},
                 {services::ComponentTypeId::UIProgressBar, makeRemoveFn<events::ui::RemoveUIProgressBarComponentCommand>()},
+                {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
+                {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
+                {services::ComponentTypeId::NavmeshAgent, makeRemoveFn<events::scene::RemoveNavmeshAgentComponentCommand>()},
             };
             return map;
         }

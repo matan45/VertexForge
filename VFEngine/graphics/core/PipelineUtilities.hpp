@@ -46,6 +46,10 @@ namespace core
 		bool depthWriteEnable = false;
 		vk::CompareOp depthCompareOp = vk::CompareOp::eLess;
 		
+		bool depthBiasEnable = false;
+		float depthBiasConstantFactor = 0.0f;
+		float depthBiasSlopeFactor = 0.0f;
+
 		bool blendEnable = false;
 		vk::BlendFactor srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 		vk::BlendFactor dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;

@@ -32,6 +32,14 @@ public class ComponentType {
     // Animation and effects
     public static final string ANIMATOR = "Animator";
     public static final string VFX = "VFX";
+    public static final string PHYSICS_ANIMATION = "PhysicsAnimation";
+
+    // Navigation
+    public static final string NAVMESH_AGENT = "NavmeshAgent";
+
+    // Socket attachment
+    public static final string SOCKET_ATTACHMENT = "SocketAttachment";
+    public static final string SOCKET_OVERRIDE = "SocketOverride";
 
     // Editor/rendering components
     public static final string IBL = "IBL";

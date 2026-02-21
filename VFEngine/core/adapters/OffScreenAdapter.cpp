@@ -223,6 +223,29 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setShowNavmeshDebug(bool show) {
+        if (offScreen) {
+            offScreen->setShowNavmeshDebug(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowNavmeshDebug() const {
+        return offScreen ? offScreen->getShowNavmeshDebug() : false;
+    }
+
+    void OffScreenAdapter::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
+                                                   const std::vector<uint32_t>& indices) {
+        if (offScreen) {
+            offScreen->updateNavmeshDebugMesh(vertices, indices);
+        }
+    }
+
+    void OffScreenAdapter::clearNavmeshDebugMesh() {
+        if (offScreen) {
+            offScreen->clearNavmeshDebugMesh();
+        }
+    }
+
     void OffScreenAdapter::prepareFrameUICanvasOutlines() {
         if (offScreen) {
             offScreen->prepareFrameUICanvasOutlines();

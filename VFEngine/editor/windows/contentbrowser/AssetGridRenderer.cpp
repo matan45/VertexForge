@@ -29,21 +29,23 @@ namespace windows
     std::pair<ImVec2, ImVec2> AssetGridRenderer::getAtlasUV(AtlasIcon icon)
     {
         uint32_t index = static_cast<uint32_t>(icon);
-        constexpr uint32_t maxIndex = ATLAS_GRID_SIZE * ATLAS_GRID_SIZE;
+        constexpr uint32_t maxIndex = ATLAS_COLS * ATLAS_ROWS;
 
         if (index >= maxIndex)
         {
             index = static_cast<uint32_t>(AtlasIcon::File);
         }
 
-        float gridSize = static_cast<float>(ATLAS_GRID_SIZE);
-        float tileSize = 1.0f / gridSize;
+        float cols = static_cast<float>(ATLAS_COLS);
+        float rows = static_cast<float>(ATLAS_ROWS);
+        float tileW = 1.0f / cols;
+        float tileH = 1.0f / rows;
 
-        float col = static_cast<float>(index % ATLAS_GRID_SIZE);
-        float row = static_cast<float>(index / ATLAS_GRID_SIZE);
+        float col = static_cast<float>(index % ATLAS_COLS);
+        float row = static_cast<float>(index / ATLAS_COLS);
 
-        ImVec2 uv0(col * tileSize, row * tileSize);
-        ImVec2 uv1((col + 1.0f) * tileSize, (row + 1.0f) * tileSize);
+        ImVec2 uv0(col * tileW, row * tileH);
+        ImVec2 uv1((col + 1.0f) * tileW, (row + 1.0f) * tileH);
 
         return {uv0, uv1};
     }
@@ -201,6 +203,12 @@ namespace windows
             break;
         case Terrain:
             icon = AtlasIcon::Terrain;
+            break;
+        case Navmesh:
+            icon = AtlasIcon::Navmesh;
+            break;
+        case PhysAnim:
+            icon = AtlasIcon::PhysAnim;
             break;
         case Other:
             if (fs::is_directory(asset.path))

@@ -11,7 +11,9 @@
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/NavmeshAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
+#include "../adapters/SocketAdapter.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/TerrainBrushComputeAdapter.hpp"
@@ -45,7 +47,9 @@ namespace core
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
+        navmeshAdapter = std::make_unique<NavmeshAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
+        socketAdapter = std::make_unique<SocketAdapter>();
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
@@ -56,6 +60,7 @@ namespace core
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
+        navmeshAdapter->init();
 
         // Wire VFX runtime provider to offscreen renderer
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
@@ -105,6 +110,11 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        if (navmeshAdapter)
+        {
+            navmeshAdapter->cleanUp();
+        }
+
         vfxRuntimeAdapter.reset();
         vfxPreviewAdapter.reset();
         animationPreviewAdapter.reset();
@@ -115,7 +125,9 @@ namespace core
         audioAdapter.reset();
         scriptingAdapter.reset();
         physicsAdapter.reset();
+        navmeshAdapter.reset();
         animatorAdapter.reset();
+        socketAdapter.reset();
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
@@ -177,9 +189,19 @@ namespace core
         return physicsAdapter.get();
     }
 
+    services::INavmeshProvider* EditorBootstrap::getNavmeshProvider()
+    {
+        return navmeshAdapter.get();
+    }
+
     services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
     {
         return animatorAdapter.get();
+    }
+
+    services::ISocketProvider* EditorBootstrap::getSocketProvider()
+    {
+        return socketAdapter.get();
     }
 
     TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()

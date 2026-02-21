@@ -2,7 +2,9 @@
 #include "EventTypes.hpp"
 #include "../data/EntityHandle.hpp"
 #include "../data/TerrainData.hpp"
+#include <glm/glm.hpp>
 #include <optional>
+#include <vector>
 
 namespace events::terrain
 {
@@ -136,5 +138,18 @@ namespace events::terrain
         std::string path;
 
         std::string_view getName() const override { return "TerrainLoaded"; }
+    };
+
+    // Returns combined LOD 0 terrain geometry for navmesh baking
+    struct TerrainGeometryResult
+    {
+        std::vector<float> vertices;   // Flat: x,y,z,x,y,z,...
+        std::vector<int> triangles;    // Index triplets
+        glm::vec3 boundsMin{0.0f};
+        glm::vec3 boundsMax{0.0f};
+    };
+
+    struct GetTerrainGeometryQuery : IQuery<TerrainGeometryResult> {
+        std::string_view getName() const override { return "GetTerrainGeometry"; }
     };
 }

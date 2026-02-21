@@ -3,6 +3,7 @@
 #include "nfd/FileDialog.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PhysicsSettingsEvents.hpp"
+#include "events/ResourceEvents.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -86,6 +87,9 @@ namespace windows::animation
             if (!configPath.empty())
             {
                 physics::PhysicsAnimationAsset::save(configPath, config);
+                events::resource::AssetSavedNotification notif;
+                notif.filePath = configPath;
+                events::EventDispatcher::instance().publish(notif);
             }
         }
 
@@ -102,6 +106,9 @@ namespace windows::animation
             {
                 configPath = selectedPath;
                 physics::PhysicsAnimationAsset::save(configPath, config);
+                events::resource::AssetSavedNotification notif;
+                notif.filePath = configPath;
+                events::EventDispatcher::instance().publish(notif);
             }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save As...");

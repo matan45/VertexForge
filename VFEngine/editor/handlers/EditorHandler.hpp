@@ -14,6 +14,7 @@
 #include "interfaces/IUndoRedoService.hpp"
 #include "interfaces/IFileOperationsService.hpp"
 #include "interfaces/IPhysicsService.hpp"
+#include "interfaces/INavmeshService.hpp"
 #include "interfaces/IProjectService.hpp"
 #include "interfaces/ITerrainService.hpp"
 #include "interfaces/IWaterService.hpp"
@@ -68,6 +69,7 @@ namespace handlers {
 		std::shared_ptr<services::IPaintBrushService> paintBrushService;
 	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
+		std::shared_ptr<services::INavmeshService> navmeshService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;

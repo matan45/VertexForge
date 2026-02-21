@@ -74,11 +74,14 @@ namespace controllers::offscreen
             return;
         }
 
-        if (ctx.playModeActive)
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
-            animatorSystem.syncWithRegistry();
-            animatorSystem.updateAll(ctx.deltaTime);
+            if (ctx.playModeActive)
+            {
+                animatorSystem.syncWithRegistry();
+                animatorSystem.updateAll(ctx.deltaTime);
+            }
+            animatorSystem.updateSocketAttachments();
         }
 
         auto* cameraManager = renderHandler->getCameraOcclusionManager();

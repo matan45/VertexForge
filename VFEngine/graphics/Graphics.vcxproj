@@ -234,6 +234,7 @@
     <ClInclude Include="render\tools\FrustumDebugRenderer.hpp" />
     <ClInclude Include="render\tools\GridRenderer.hpp" />
     <ClInclude Include="render\tools\LightGizmoDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\NavmeshDebugRenderer.hpp" />
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasDebugRenderer.hpp" />
@@ -268,6 +269,7 @@
     <ClCompile Include="animation\AnimationBlender.cpp" />
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
     <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
@@ -403,6 +405,7 @@
     <ClCompile Include="render\tools\FrustumDebugRenderer.cpp" />
     <ClCompile Include="render\tools\GridRenderer.cpp" />
     <ClCompile Include="render\tools\LightGizmoDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\NavmeshDebugRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRendererRender.cpp" />
     <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />

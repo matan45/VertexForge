@@ -31,4 +31,10 @@ namespace events::resource {
         std::string_view getName() const override { return "ImportCompleted"; }
     };
 
+    struct AssetSavedNotification : INotification {
+        std::string filePath;
+
+        std::string_view getName() const override { return "AssetSaved"; }
+    };
+
 }

@@ -14,7 +14,9 @@ namespace services
     class IAudioProvider;
     class IScriptingProvider;
     class IPhysicsProvider;
+    class INavmeshProvider;
     class IAnimatorProvider;
+    class ISocketProvider;
     class ITerrainRenderProvider;
     class ITerrainRaycastProvider;
     class ITerrainBrushComputeProvider;
@@ -50,7 +52,9 @@ namespace core
     class AudioAdapter;
     class ScriptingAdapter;
     class PhysicsAdapter;
+    class NavmeshAdapter;
     class AnimatorAdapter;
+    class SocketAdapter;
     class TerrainRenderAdapter;
     class TerrainRaycastAdapter;
     class TerrainBrushComputeAdapter;
@@ -73,7 +77,9 @@ namespace core
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
+        std::unique_ptr<NavmeshAdapter> navmeshAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
+        std::unique_ptr<SocketAdapter> socketAdapter;
         std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
         std::unique_ptr<TerrainRaycastAdapter> terrainRaycastAdapter;
         std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
@@ -114,7 +120,11 @@ namespace core
 
         services::IPhysicsProvider* getPhysicsProvider();
 
+        services::INavmeshProvider* getNavmeshProvider();
+
         services::IAnimatorProvider* getAnimatorProvider();
+
+        services::ISocketProvider* getSocketProvider();
 
         // For late binding - allows EditorHandler to connect TerrainService
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();

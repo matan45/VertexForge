@@ -29,6 +29,7 @@ namespace types
         std::vector<glm::mat4> inverseBindPoses;
         glm::mat4 globalInverseTransform{1.0f};
         std::unordered_map<std::string, uint32_t> boneNameToIndex;
+        std::vector<animator::SocketDefinition> sockets;
     };
 
 

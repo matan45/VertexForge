@@ -22,6 +22,8 @@ namespace windows
         Project,
         TerrainMaterial,
         Terrain,
+        Navmesh,
+        PhysAnim,
         Other
     };
 
@@ -42,7 +44,9 @@ namespace windows
         Project = 12,
         Animator = 13,
         VFX = 14,
-        Terrain = 15
+        Terrain = 15,
+        Navmesh = 16,
+        PhysAnim = 17
     };
 
     struct Asset

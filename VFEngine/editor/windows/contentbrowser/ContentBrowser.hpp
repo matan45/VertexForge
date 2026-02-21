@@ -40,6 +40,7 @@ namespace windows
         bool isEditingPath = false;
 
         events::SubscriptionToken importCompletedToken;
+        events::SubscriptionToken assetSavedToken;
         events::SubscriptionToken fileMovedToken;
         events::SubscriptionToken fileDeletedToken;
         events::SubscriptionToken folderSelectedToken;

@@ -84,7 +84,53 @@ namespace animation
             evaluateTransitions();
         }
 
+        fireTriggeredEvents();
+
         evaluateCurrentPose();
+    }
+
+    void AnimatorStateMachine::fireTriggeredEvents()
+    {
+        firedEventsThisFrame.clear();
+
+        if (!animatorData)
+            return;
+
+        const animator::AnimatorState* currentState = getCurrentAnimatorState();
+        if (!currentState || currentState->events.empty())
+            return;
+
+        float duration = getAnimationDuration(state.currentStateId);
+        if (duration <= 0.0f)
+            return;
+
+        float currentNormalized = std::fmod(state.stateTime / duration, 1.0f);
+        float prevNormalized = state.previousNormalizedTime;
+
+        bool looped = (state.currentLoopCount != eventLastLoopCount) || (currentNormalized < prevNormalized);
+
+        for (const auto& event : currentState->events)
+        {
+            bool shouldFire = false;
+
+            if (looped)
+            {
+                shouldFire = (event.normalizedTime > prevNormalized) ||
+                             (event.normalizedTime <= currentNormalized);
+            }
+            else
+            {
+                shouldFire = (event.normalizedTime > prevNormalized) &&
+                             (event.normalizedTime <= currentNormalized);
+            }
+
+            if (shouldFire)
+            {
+                firedEventsThisFrame.push_back(&event);
+            }
+        }
+
+        eventLastLoopCount = state.currentLoopCount;
     }
 
     bool AnimatorStateMachine::shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
@@ -308,9 +354,8 @@ namespace animation
                 rootMotionDelta = glm::vec3(0.0f);
                 rootMotionFirstFrame = false;
             }
-            else if (state.currentLoopCount != lastLoopCount)
+            else if (state.currentLoopCount != rootMotionLastLoopCount)
             {
-                // Animation looped — zero the delta to avoid jump
                 rootMotionDelta = glm::vec3(0.0f);
             }
             else
@@ -319,7 +364,7 @@ namespace animation
             }
 
             previousRootPosition = currentRootPosition;
-            lastLoopCount = state.currentLoopCount;
+            rootMotionLastLoopCount = state.currentLoopCount;
         }
     }
 
@@ -364,152 +409,5 @@ namespace animation
             return it->second->duration / tps;
         }
         return 0.0f;
-    }
-
-    float AnimatorStateMachine::getCurrentStateDuration() const
-    {
-        return getAnimationDuration(state.currentStateId);
-    }
-
-    float AnimatorStateMachine::getNormalizedStateTime() const
-    {
-        float duration = getCurrentStateDuration();
-        if (duration > 0.0f)
-        {
-            return std::fmod(state.stateTime / duration, 1.0f);
-        }
-        return 0.0f;
-    }
-
-    const animator::AnimatorState* AnimatorStateMachine::getCurrentAnimatorState() const
-    {
-        if (!animatorData)
-            return nullptr;
-        return animatorData->graph.findStateById(state.currentStateId);
-    }
-
-    const animator::AnimatorState* AnimatorStateMachine::getPreviousAnimatorState() const
-    {
-        if (!animatorData)
-            return nullptr;
-        return animatorData->graph.findStateById(state.previousStateId);
-    }
-
-    void AnimatorStateMachine::setFloat(const std::string& name, float value)
-    {
-        parameters.setFloat(name, value);
-    }
-
-    void AnimatorStateMachine::setInt(const std::string& name, int32_t value)
-    {
-        parameters.setInt(name, value);
-    }
-
-    void AnimatorStateMachine::setBool(const std::string& name, bool value)
-    {
-        parameters.setBool(name, value);
-    }
-
-    void AnimatorStateMachine::setTrigger(const std::string& name)
-    {
-        parameters.setTrigger(name);
-    }
-
-    float AnimatorStateMachine::getFloat(const std::string& name) const
-    {
-        return parameters.getFloat(name);
-    }
-
-    int32_t AnimatorStateMachine::getInt(const std::string& name) const
-    {
-        return parameters.getInt(name);
-    }
-
-    bool AnimatorStateMachine::getBool(const std::string& name) const
-    {
-        return parameters.getBool(name);
-    }
-
-    void AnimatorStateMachine::play()
-    {
-        state.isPlaying = true;
-    }
-
-    void AnimatorStateMachine::pause()
-    {
-        state.isPlaying = false;
-    }
-
-    void AnimatorStateMachine::stop()
-    {
-        state.isPlaying = false;
-        state.stateTime = 0.0f;
-        state.isBlending = false;
-        state.blendWeight = 0.0f;
-        state.blendDuration = 0.0f;
-        state.blendElapsed = 0.0f;
-    }
-
-    void AnimatorStateMachine::reset()
-    {
-        if (!animatorData)
-            return;
-
-        state = AnimatorStateMachineState{};
-        state.currentStateId = animatorData->graph.defaultStateId;
-        state.isPlaying = true;
-
-        parameters.initializeFromGraph(animatorData->graph);
-
-        loadAnimationForState(state.currentStateId);
-    }
-
-    void AnimatorStateMachine::forceTransitionTo(uint32_t stateId, float blendDuration)
-    {
-        if (!animatorData)
-            return;
-
-        const animator::AnimatorState* targetState = animatorData->graph.findStateById(stateId);
-        if (!targetState)
-        {
-            return;
-        }
-
-        animator::AnimatorTransition tempTransition;
-        tempTransition.sourceStateId = state.currentStateId;
-        tempTransition.targetStateId = stateId;
-        tempTransition.blendDuration = blendDuration;
-
-        startTransition(tempTransition);
-    }
-
-    void AnimatorStateMachine::setRootMotionEnabled(bool enabled)
-    {
-        rootMotionEnabled = enabled;
-        rootMotionFirstFrame = true;
-        previousRootPosition = glm::vec3(0.0f);
-        rootMotionDelta = glm::vec3(0.0f);
-        lastLoopCount = 0;
-    }
-
-    glm::vec3 AnimatorStateMachine::consumeRootMotionDelta()
-    {
-        glm::vec3 delta = rootMotionDelta;
-        rootMotionDelta = glm::vec3(0.0f);
-        return delta;
-    }
-
-    void AnimatorStateMachine::forceTransitionTo(const std::string& stateName, float blendDuration)
-    {
-        if (!animatorData)
-            return;
-
-        const animator::AnimatorState* targetState = animatorData->graph.findStateByName(stateName);
-        if (!targetState)
-        {
-            return;
-        }
-
-        forceTransitionTo(targetState->id, blendDuration);
     }
 }

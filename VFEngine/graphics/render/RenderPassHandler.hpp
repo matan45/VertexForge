@@ -201,6 +201,11 @@ namespace render
         void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
         void setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines);
         void setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images);
+        void setShowNavmeshDebug(bool show);
+        bool getShowNavmeshDebug() const;
+        void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
+        void clearNavmeshDebugMesh();
+
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }

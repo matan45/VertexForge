@@ -49,3 +49,6 @@
 [submodule "dependencies/freetype"]
 	path = dependencies/freetype
 	url = https://github.com/freetype/freetype.git
+[submodule "dependencies/recastnavigation"]
+	path = dependencies/recastnavigation
+	url = https://github.com/recastnavigation/recastnavigation.git

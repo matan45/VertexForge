@@ -52,6 +52,7 @@ project "Editor"
 	  "VFEngine/core/controllers",        -- For ImguiWindow base class
 	  "dependencies/IconFontCppHeaders",
 	  "VFEngine/import/controllers",
+	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services"                 -- Services layer interfaces
    }
 
@@ -110,10 +111,13 @@ project "Core"
 	  "dependencies/openal-soft/include", -- OpenAL headers
 	  "dependencies/mtype/mType",         -- mType scripting language
 	  vulkanLibPath.."/Include",
-	  "dependencies/JoltPhysics"          -- Jolt Physics headers
+	  "dependencies/JoltPhysics",          -- Jolt Physics headers
+	  "dependencies/recastnavigation/Recast/Include",   -- Recast navmesh generation
+	  "dependencies/recastnavigation/Detour/Include",   -- Detour pathfinding
+	  "dependencies/recastnavigation/DetourCrowd/Include" -- DetourCrowd agent steering
    }
 
-   links { "Graphics", "mType", "jolt" }  -- Link against Graphics, mType, jolt (Services is a higher layer, no link needed)
+   links { "Graphics", "mType", "jolt", "recast" }  -- Link against Graphics, mType, jolt, recast (Services is a higher layer, no link needed)
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM" }
 
    filter "configurations:Debug"
@@ -578,6 +582,39 @@ project "meshoptimizer"
 
    includedirs {
       "dependencies/meshoptimizer/src"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: Recast Navigation (Navmesh generation + pathfinding)
+project "recast"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/recastnavigation/Recast/Include/**.h",
+      "dependencies/recastnavigation/Recast/Source/**.cpp",
+      "dependencies/recastnavigation/Detour/Include/**.h",
+      "dependencies/recastnavigation/Detour/Source/**.cpp",
+      "dependencies/recastnavigation/DetourCrowd/Include/**.h",
+      "dependencies/recastnavigation/DetourCrowd/Source/**.cpp"
+   }
+
+   includedirs {
+      "dependencies/recastnavigation/Recast/Include",
+      "dependencies/recastnavigation/Detour/Include",
+      "dependencies/recastnavigation/DetourCrowd/Include"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

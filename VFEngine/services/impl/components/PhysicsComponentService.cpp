@@ -317,6 +317,42 @@ namespace services
         return true;
     }
 
+    // ========== NAVMESH AGENT COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addNavmeshAgentComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavmeshAgentComponent>())
+        {
+            sceneEntity.addComponent<components::NavmeshAgentComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavmeshAgentComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavmeshAgentComponent>())
+        {
+            sceneEntity.removeComponent<components::NavmeshAgentComponent>();
+            return true;
+        }
+        return false;
+    }
+
     // ========== EVENT HANDLER REGISTRATION ==========
 
     void PhysicsComponentService::registerEventHandlers(events::EventDispatcher& dispatcher)
@@ -412,6 +448,19 @@ namespace services
             [this](const events::scene::GetPhysicsAnimationDataQuery& query)
             {
                 return getPhysicsAnimationData(query.entity);
+            });
+
+        // NavmeshAgent component handlers
+        dispatcher.registerCommandHandler<events::scene::AddNavmeshAgentComponentCommand>(
+            [this](const events::scene::AddNavmeshAgentComponentCommand& cmd)
+            {
+                return addNavmeshAgentComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavmeshAgentComponentCommand>(
+            [this](const events::scene::RemoveNavmeshAgentComponentCommand& cmd)
+            {
+                return removeNavmeshAgentComponent(cmd.entity);
             });
     }
 }

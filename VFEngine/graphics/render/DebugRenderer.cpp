@@ -9,6 +9,7 @@
 #include "tools/ShadowDebugRenderer.hpp"
 #include "tools/UICanvasDebugRenderer.hpp"
 #include "tools/UICanvasImageRenderer.hpp"
+#include "tools/NavmeshDebugRenderer.hpp"
 
 namespace render
 {
@@ -25,6 +26,7 @@ namespace render
         shadowDebugRenderer = std::make_unique<mesh::ShadowDebugRenderer>(device, swapChain);
         uiCanvasRenderer = std::make_unique<mesh::UICanvasDebugRenderer>(device, swapChain);
         uiCanvasImageRenderer = std::make_unique<mesh::UICanvasImageRenderer>(device, swapChain);
+        navmeshDebugRenderer = std::make_unique<mesh::NavmeshDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -41,6 +43,7 @@ namespace render
         shadowDebugRenderer->init(renderPass);
         uiCanvasRenderer->init(renderPass);
         uiCanvasImageRenderer->init(renderPass);
+        navmeshDebugRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -56,6 +59,7 @@ namespace render
         shadowDebugRenderer->recreate(renderPass);
         uiCanvasRenderer->recreate(renderPass);
         uiCanvasImageRenderer->recreate(renderPass);
+        navmeshDebugRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -99,6 +103,10 @@ namespace render
         if (uiCanvasImageRenderer)
         {
             uiCanvasImageRenderer->cleanUp();
+        }
+        if (navmeshDebugRenderer)
+        {
+            navmeshDebugRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -144,6 +152,10 @@ namespace render
         if (uiCanvasImageRenderer)
         {
             uiCanvasImageRenderer->cleanUpShader();
+        }
+        if (navmeshDebugRenderer)
+        {
+            navmeshDebugRenderer->cleanUpShader();
         }
     }
 
@@ -251,6 +263,11 @@ namespace render
         {
             uiCanvasImageRenderer->render(commandBuffer, uiCanvasImageDrawList, view, projection);
         }
+
+        if (navmeshDebugRenderer && showNavmeshDebug)
+        {
+            navmeshDebugRenderer->render(commandBuffer, view, projection);
+        }
     }
 
     bool DebugRenderer::hasItemsToRender() const
@@ -259,7 +276,8 @@ namespace render
             hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty()) ||
             !lightGizmoDrawList.empty() || (showClusterDebug && clusterDebugData) ||
             (showShadowDebug && !shadowFrustumDrawList.empty()) ||
-            !uiCanvasDrawList.empty() || !uiCanvasImageDrawList.empty();
+            !uiCanvasDrawList.empty() || !uiCanvasImageDrawList.empty() ||
+            (showNavmeshDebug && navmeshDebugRenderer && navmeshDebugRenderer->hasMeshData());
     }
 
     void DebugRenderer::setShowGrid(bool show)
@@ -268,6 +286,23 @@ namespace render
         if (gridRenderer)
         {
             gridRenderer->setVisible(show);
+        }
+    }
+
+    void DebugRenderer::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
+                                                const std::vector<uint32_t>& indices)
+    {
+        if (navmeshDebugRenderer)
+        {
+            navmeshDebugRenderer->updateMesh(vertices, indices);
+        }
+    }
+
+    void DebugRenderer::clearNavmeshDebugMesh()
+    {
+        if (navmeshDebugRenderer)
+        {
+            navmeshDebugRenderer->clearMesh();
         }
     }
 }

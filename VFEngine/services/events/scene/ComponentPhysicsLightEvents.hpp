@@ -185,6 +185,22 @@ namespace events::scene {
     };
 
     // ============================================
+    // Navmesh Agent Component Events
+    // ============================================
+
+    struct AddNavmeshAgentComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavmeshAgentComponent"; }
+    };
+
+    struct RemoveNavmeshAgentComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavmeshAgentComponent"; }
+    };
+
+    // ============================================
     // Light Component Events (Directional)
     // ============================================
 

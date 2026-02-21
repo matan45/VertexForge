@@ -87,10 +87,91 @@ namespace resource
 
         data.headerFileType = FileType::ANIMATION;
 
+        // Try to read animation events after channels (backward compatible)
+        std::streampos beforeEvents = file.tellg();
+        uint32_t numEvents = endian::readLE<uint32_t>(file);
+        if (!file.fail() && numEvents < 256)
+        {
+            data.events.resize(numEvents);
+            for (uint32_t e = 0; e < numEvents; ++e)
+            {
+                auto& event = data.events[e];
+                event.name = readString(file);
+                event.normalizedTime = endian::readLE<float>(file);
+                event.payload = readString(file);
+
+                if (file.fail())
+                {
+                    data.events.clear();
+                    break;
+                }
+            }
+
+            if (!data.events.empty())
+            {
+                vfLogInfo("Loaded {} animation events", data.events.size());
+            }
+        }
+        else
+        {
+            // No event data or EOF — backward compatible with old files
+            file.clear();
+        }
+
         vfLogInfo("Loaded animation '{}' - {} channels, duration: {:.2f}s",
                   data.name, data.channels.size(), data.duration / data.ticksPerSecond);
 
         return data;
+    }
+
+    std::streampos AnimationResource::getEventDataOffset(std::string_view path)
+    {
+        std::ifstream file(path.data(), std::ios::binary);
+        if (!file)
+        {
+            vfLogError("AnimationResource: Failed to open for offset query: {}", path);
+            return 0;
+        }
+
+        uint8_t fileType = endian::readLE<uint8_t>(file);
+        if (static_cast<FileType>(fileType) != FileType::ANIMATION)
+            return 0;
+
+        uint32_t major = endian::readLE<uint32_t>(file);
+        uint32_t minor = endian::readLE<uint32_t>(file);
+        uint32_t patch = endian::readLE<uint32_t>(file);
+
+        if (patch < 8)
+            return 0;
+
+        // Skip name, duration, ticksPerSecond
+        skipString(file);
+        endian::readLE<float>(file);
+        endian::readLE<float>(file);
+
+        // Skip all channels
+        uint32_t numChannels = endian::readLE<uint32_t>(file);
+        if (numChannels > 1000)
+            return 0;
+
+        for (uint32_t c = 0; c < numChannels; ++c)
+        {
+            skipString(file); // bone name
+
+            uint32_t numPosKeys = endian::readLE<uint32_t>(file);
+            file.seekg(static_cast<std::streamoff>(numPosKeys) * 4 * sizeof(float), std::ios::cur);
+
+            uint32_t numRotKeys = endian::readLE<uint32_t>(file);
+            file.seekg(static_cast<std::streamoff>(numRotKeys) * 5 * sizeof(float), std::ios::cur);
+
+            uint32_t numScaleKeys = endian::readLE<uint32_t>(file);
+            file.seekg(static_cast<std::streamoff>(numScaleKeys) * 4 * sizeof(float), std::ios::cur);
+
+            if (file.fail())
+                return 0;
+        }
+
+        return file.tellg();
     }
 
     std::string AnimationResource::readString(std::ifstream& file)
@@ -109,5 +190,14 @@ namespace resource
         std::string str(length, '\0');
         file.read(str.data(), length);
         return str;
+    }
+
+    void AnimationResource::skipString(std::ifstream& file)
+    {
+        uint32_t length = endian::readLE<uint32_t>(file);
+        if (length > 0 && length <= 10000)
+        {
+            file.seekg(length, std::ios::cur);
+        }
     }
 }
