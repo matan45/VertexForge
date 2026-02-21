@@ -99,28 +99,28 @@ namespace windows
                     ImGui::BeginChild("3DViewportPanel", ImVec2(middleWidth - 5, previewHeight), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-                    viewport.draw(viewportSize.x, viewportSize.y,
-                                  panelState.meshLoadedInPreview,
-                                  panelState.animationLoadedInPreview,
-                                  panelState.isPlaying,
-                                  camera.get(),
-                                  evaluatedBones,
-                                  selectedChannel,
-                                  showBoneVisualization,
-                                  getPreviewInstanceId(),
-                                  isDraggingPreview,
-                                  showPhysicsPanel && showColliderOverlay,
-                                  &physicsConfig,
-                                  &boneNameToIndex,
-                                  showSocketPanel && showSocketVisualization,
-                                  &socketDefinitions);
+                    viewport.draw({viewportSize.x, viewportSize.y,
+                                   panelState.meshLoadedInPreview,
+                                   panelState.animationLoadedInPreview,
+                                   panelState.isPlaying,
+                                   camera.get(),
+                                   evaluatedBones,
+                                   selectedChannel,
+                                   showBoneVisualization,
+                                   getPreviewInstanceId(),
+                                   isDraggingPreview,
+                                   showPhysicsPanel && showColliderOverlay,
+                                   &physicsConfig,
+                                   &boneNameToIndex,
+                                   showSocketPanel && showSocketVisualization,
+                                   &socketDefinitions});
                     updateBoneTransformsFromService();
                     ImGui::EndChild();
 
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
-                    timelinePanel.draw(currentFrame, selectedChannel, sequencerExpanded, firstFrame,
+                    timelinePanel.draw({currentFrame, selectedChannel, sequencerExpanded, firstFrame,
                                        &animationData, getPreviewInstanceId(), &animationEvents,
-                                       animationPath);
+                                       animationPath});
                     ImGui::EndChild();
                 }
 

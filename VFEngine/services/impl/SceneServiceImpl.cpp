@@ -26,7 +26,6 @@ namespace services
                                          IAnimatorProvider* animatorProvider,
                                          ISocketProvider* socketProvider)
         : sceneGraph(sceneGraph)
-        // Existing component services
         , cameraService(std::make_unique<CameraComponentService>(sceneGraph))
         , meshService(std::make_unique<MeshComponentService>(sceneGraph))
         , materialService(std::make_unique<MaterialComponentService>(sceneGraph))
@@ -40,7 +39,6 @@ namespace services
         , textService(std::make_unique<TextComponentService>(sceneGraph))
         , lightService(std::make_unique<LightComponentService>())
         , uiService(std::make_unique<UIComponentService>(sceneGraph))
-        // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
         , transformService(std::make_unique<TransformComponentService>(sceneGraph))

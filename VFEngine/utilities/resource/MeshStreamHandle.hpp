@@ -122,6 +122,10 @@ namespace resource
         bool parseConvexHeaders(uint32_t meshIdx);
 
         bool parseSkeletonHeader();
+
+        bool readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton);
+        bool readBindPoseData(uint32_t boneCount, SkeletonData& outSkeleton);
+        bool readSocketDefinitions(SkeletonData& outSkeleton);
     };
 
     class MeshStreamResource

@@ -191,7 +191,23 @@ namespace windows
             ImGui::Indent();
 
             auto& dispatcher = events::EventDispatcher::instance();
+            auto bakeProgress = dispatcher.query(events::navmesh::GetBakeProgressQuery{});
+            bool isBaking = bakeProgress.status == types::NavmeshBakeStatus::Collecting ||
+                            bakeProgress.status == types::NavmeshBakeStatus::Voxelizing ||
+                            bakeProgress.status == types::NavmeshBakeStatus::Building;
+
+            if (isBaking)
+            {
+                ImGui::ProgressBar(bakeProgress.progress, ImVec2(-1, 0));
+                if (!bakeProgress.currentStage.empty())
+                {
+                    ImGui::TextWrapped("%s", bakeProgress.currentStage.c_str());
+                }
+            }
+
             bool hasNavmesh = dispatcher.query(events::navmesh::HasNavmeshQuery{});
+
+            ImGui::BeginDisabled(isBaking);
 
             if (ImGui::Button("Bake Navmesh", ImVec2(-1, 30)))
             {
@@ -239,6 +255,8 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
             }
+
+            ImGui::EndDisabled();
 
             ImGui::Unindent();
         }

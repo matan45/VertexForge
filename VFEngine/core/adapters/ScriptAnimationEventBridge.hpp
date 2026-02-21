@@ -17,6 +17,13 @@ namespace core
 {
     class ScriptAnimationEventBridge
     {
+    private:
+        ::services::ScriptInterpreter* interpreter;
+        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
+        const std::unordered_map<uint64_t, std::any>& instanceToObject;
+        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
+
+        std::vector<::events::SubscriptionToken> tokens;
     public:
         ScriptAnimationEventBridge(
             ::services::ScriptInterpreter* interpreter,
@@ -32,12 +39,5 @@ namespace core
                                     const std::string& eventName,
                                     const std::string& stateName,
                                     const std::string& payload);
-
-        ::services::ScriptInterpreter* interpreter;
-        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
-        const std::unordered_map<uint64_t, std::any>& instanceToObject;
-        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
-
-        std::vector<::events::SubscriptionToken> tokens;
     };
 }

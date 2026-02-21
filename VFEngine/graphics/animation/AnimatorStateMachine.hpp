@@ -48,14 +48,12 @@ namespace animation
 
         bool initialized = false;
 
-        // Root motion state
         bool rootMotionEnabled = false;
         bool rootMotionFirstFrame = true;
         glm::vec3 previousRootPosition{0.0f};
         glm::vec3 rootMotionDelta{0.0f};
         uint32_t rootMotionLastLoopCount = 0;
 
-        // Event firing state
         uint32_t eventLastLoopCount = 0;
     public:
        explicit AnimatorStateMachine();

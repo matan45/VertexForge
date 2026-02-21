@@ -10,6 +10,12 @@ namespace windows::animation
 {
     class AnimationSocketPanel
     {
+    private:
+        int selectedSocketIndex = -1;
+        char newSocketName[128] = "";
+        bool saveSuccess = false;
+        float saveMessageTimer = 0.0f;
+        
     public:
         bool draw(std::vector<animator::SocketDefinition>& sockets,
                   int& selectedChannel,
@@ -27,10 +33,5 @@ namespace windows::animation
                                    int selectedChannel);
         void drawSaveButton(const std::vector<animator::SocketDefinition>& sockets,
                             const std::string& meshPath);
-
-        int selectedSocketIndex = -1;
-        char newSocketName[128] = "";
-        bool saveSuccess = false;
-        float saveMessageTimer = 0.0f;
     };
 }

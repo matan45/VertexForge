@@ -14,7 +14,7 @@ namespace scene {
 		}
 
 		parent.addChildren(child);
-		markTransformDirty(child);  // Mark child's transform as dirty
+		markTransformDirty(child);
 
 		return child.getHandle();
 	}
@@ -26,7 +26,6 @@ namespace scene {
 			return;
 		}
 
-		// Recursively remove children (copy list since it's modified during iteration)
 		auto children = entity.getChildren();
 		for (auto& child : children) {
 			if (child.isAlive()) {
@@ -34,13 +33,11 @@ namespace scene {
 			}
 		}
 
-		// Remove from parent's children list
 		Entity parent = entity.getParent();
 		if (parent.isAlive()) {
 			parent.removeChildren(entity);
 		}
 
-		// Destroy entity in the registry
 		EntityRegistry::getRegistry().destroy(entity.getHandle());
 	}
 
@@ -51,7 +48,6 @@ namespace scene {
 			return;
 		}
 
-		// Remove all children of root recursively
 		auto children = root.getChildren();
 		for (auto& child : children) {
 			removeEntity(child);
@@ -69,26 +65,25 @@ namespace scene {
 			return;
 		}
 
-		// Remove from old parent and add to new parent
 		Entity oldParent = entity.getParent();
 		if (oldParent.isValid()) {
 			oldParent.removeChildren(entity);
 		}
 
 		newParent.addChildren(entity);
-		markTransformDirty(entity);  // Mark the entity's transform as dirty
+		markTransformDirty(entity);
 	}
 
 	std::vector<scene::Entity> SceneGraphSystem::findAllEntitiesByName(std::string_view name) const
 	{
 		std::vector<Entity> foundEntities;
 
-		auto view = EntityRegistry::getRegistry().view<components::NameComponent>(); // Create a view of entities with a Name component
+		auto view = EntityRegistry::getRegistry().view<components::NameComponent>();
 
 		for (auto entityHandle : view) {
 			const auto& entityName = view.get<components::NameComponent>(entityHandle).name;
 			if (entityName == name) {
-				foundEntities.emplace_back(entityHandle); // Wrap the entt::entity handle in an Entity object
+				foundEntities.emplace_back(entityHandle);
 			}
 		}
 
@@ -100,8 +95,8 @@ namespace scene {
 		if (!root.isAlive()) {
 			return;
 		}
-		glm::mat4 identityMatrix(1.0f); // Start with an identity matrix for the root
-		updateChildWorldTransforms(root, identityMatrix); // Begin updating from the root entity
+		glm::mat4 identityMatrix(1.0f);
+		updateChildWorldTransforms(root, identityMatrix);
 	}
 
 	void SceneGraphSystem::updateCamera() const
@@ -148,12 +143,10 @@ namespace scene {
 		if (entity.hasComponent<components::SocketAttachmentComponent>()) {
 			const auto& attachment = entity.getComponent<components::SocketAttachmentComponent>();
 			if (attachment.isActive && attachment.parentEntity != entt::null) {
-				// Socket system already wrote WorldTransformComponent — use it as-is
 				glm::mat4 worldMatrix = parentWorldTransform;
 				if (entity.hasComponent<components::WorldTransformComponent>()) {
 					worldMatrix = entity.getComponent<components::WorldTransformComponent>().worldMatrix;
 				}
-				// Still recurse into children with socket-driven world matrix
 				for (auto& child : entity.getChildren()) {
 					if (child.isAlive()) {
 						updateChildWorldTransforms(child, worldMatrix);
@@ -167,26 +160,18 @@ namespace scene {
 		glm::mat4 worldMatrix;
 
 		if (transform.isDirty) {
-			// Calculate the new world transform by combining with the parent's world transform
 			worldMatrix = parentWorldTransform * transform.getMatrix();
-
-			// Update or replace the WorldTransform component
 			entity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;
-
-			// Mark the transform as clean
 			transform.isDirty = false;
 		}
 		else if (entity.hasComponent<components::WorldTransformComponent>()) {
-			// Use cached world matrix
 			worldMatrix = entity.getComponent<components::WorldTransformComponent>().worldMatrix;
 		}
 		else {
-			// No cached matrix, compute it
 			worldMatrix = parentWorldTransform * transform.getMatrix();
 			entity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;
 		}
 
-		// Always recursively update children with the correct world matrix
 		for (auto& child : entity.getChildren()) {
 			if (child.isAlive()) {
 				updateChildWorldTransforms(child, worldMatrix);
@@ -200,7 +185,6 @@ namespace scene {
 			return false;
 		}
 
-		// Recursively check if any of the parent's children is the child or one of its descendants
 		for (auto& childEntity : parent.getChildren()) {
 			if (childEntity == child || isDescendant(childEntity, child)) {
 				return true;

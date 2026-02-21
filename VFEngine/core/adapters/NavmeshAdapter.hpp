@@ -12,8 +12,17 @@ namespace core
 {
     class NavmeshAdapter : public services::INavmeshProvider
     {
+    private:
+        dtNavMesh* navMesh = nullptr;
+        dtNavMeshQuery* navQuery = nullptr;
+        dtCrowd* crowd = nullptr;
+        bool initialized = false;
+
+        mutable std::mutex navMeshMutex;
+        mutable std::mutex progressMutex;
+        types::NavmeshBakeProgress currentProgress;
     public:
-        NavmeshAdapter();
+        explicit NavmeshAdapter();
         ~NavmeshAdapter() override;
 
         NavmeshAdapter(const NavmeshAdapter&) = delete;
@@ -56,16 +65,10 @@ namespace core
                            std::vector<uint32_t>& outIndices) const override;
 
     private:
-        dtNavMesh* navMesh = nullptr;
-        dtNavMeshQuery* navQuery = nullptr;
-        dtCrowd* crowd = nullptr;
-        bool initialized = false;
-
-        mutable std::mutex navMeshMutex;
-        types::NavmeshBakeProgress currentProgress;
-
         void destroyNavMesh();
         void destroyNavMeshLocked();
         void initCrowd(float agentRadius);
+        bool initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius);
+        void updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage);
     };
 }

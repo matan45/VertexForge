@@ -107,7 +107,6 @@ namespace windows::animation
 
             ImGui::Text("Name: %s", socket.name.c_str());
 
-            // Target bone combo
             if (ImGui::BeginCombo("Target Bone", socket.targetBoneName.c_str()))
             {
                 for (size_t i = 0; i < evaluatedBones.size(); ++i)
@@ -125,7 +124,6 @@ namespace windows::animation
                 ImGui::EndCombo();
             }
 
-            // Position offset from bone
             float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
             if (ImGui::DragFloat3("Position", pos, 0.01f))
             {
@@ -161,7 +159,6 @@ namespace windows::animation
                              selectedChannel >= 0 &&
                              selectedChannel < static_cast<int>(evaluatedBones.size());
 
-            // Check for duplicate name
             if (canCreate)
             {
                 for (const auto& existing : sockets)
@@ -203,7 +200,6 @@ namespace windows::animation
     void AnimationSocketPanel::drawSaveButton(const std::vector<animator::SocketDefinition>& sockets,
                                                const std::string& meshPath)
     {
-        // Decrease save message timer
         if (saveMessageTimer > 0.0f)
         {
             saveMessageTimer -= ImGui::GetIO().DeltaTime;
@@ -239,7 +235,6 @@ namespace windows::animation
             ImGui::TextDisabled("No sockets to save");
         }
 
-        // Show save status message
         if (saveMessageTimer > 0.0f)
         {
             if (saveSuccess)

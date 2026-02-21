@@ -1,9 +1,7 @@
 #include "NavmeshAdapter.hpp"
 #include "print/EditorLogger.hpp"
 
-#include <Recast.h>
 #include <DetourNavMesh.h>
-#include <DetourNavMeshBuilder.h>
 #include <DetourNavMeshQuery.h>
 #include <DetourCrowd.h>
 #include <DetourCommon.h>
@@ -24,7 +22,6 @@ namespace core
     // Highest-quality avoidance (Detour provides types 0-3)
     static constexpr int OBSTACLE_AVOIDANCE_TYPE = 3;
 
-    // Default search half-extents for poly queries (x, y, z)
     static constexpr float TARGET_HALF_EXTENTS[3] = {2.0f, 4.0f, 2.0f};
 
     NavmeshAdapter::NavmeshAdapter() = default;
@@ -92,215 +89,8 @@ namespace core
         }
     }
 
-    // === Navmesh Building ===
-
-    bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                                       const types::NavmeshBakeSettings& settings)
+    bool NavmeshAdapter::initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius)
     {
-        currentProgress.status = types::NavmeshBakeStatus::Collecting;
-        currentProgress.progress = 0.0f;
-        currentProgress.currentStage = "Preparing geometry";
-
-        const float* verts = geometry.vertices.data();
-        const int nVerts = geometry.getVertexCount();
-        const int* tris = geometry.triangles.data();
-        const int nTris = geometry.getTriangleCount();
-
-        float bmin[3] = {geometry.boundsMin.x, geometry.boundsMin.y, geometry.boundsMin.z};
-        float bmax[3] = {geometry.boundsMax.x, geometry.boundsMax.y, geometry.boundsMax.z};
-
-        // Step 1: Initialize build config
-        rcConfig cfg;
-        memset(&cfg, 0, sizeof(cfg));
-        cfg.cs = settings.cellSize;
-        cfg.ch = settings.cellHeight;
-        cfg.walkableSlopeAngle = settings.agentMaxSlope;
-        cfg.walkableHeight = static_cast<int>(ceilf(settings.agentHeight / cfg.ch));
-        cfg.walkableClimb = static_cast<int>(floorf(settings.agentMaxClimb / cfg.ch));
-        cfg.walkableRadius = static_cast<int>(ceilf(settings.agentRadius / cfg.cs));
-        cfg.maxEdgeLen = static_cast<int>(settings.edgeMaxLen / cfg.cs);
-        cfg.maxSimplificationError = settings.edgeMaxError;
-        cfg.minRegionArea = settings.regionMinSize * settings.regionMinSize;
-        cfg.mergeRegionArea = settings.regionMergeSize * settings.regionMergeSize;
-        cfg.maxVertsPerPoly = settings.vertsPerPoly;
-        cfg.detailSampleDist = settings.detailSampleDist < 0.9f ? 0 : cfg.cs * settings.detailSampleDist;
-        cfg.detailSampleMaxError = cfg.ch * settings.detailSampleMaxError;
-
-        rcVcopy(cfg.bmin, bmin);
-        rcVcopy(cfg.bmax, bmax);
-        rcCalcGridSize(cfg.bmin, cfg.bmax, cfg.cs, &cfg.width, &cfg.height);
-
-        rcContext ctx;
-
-        // Step 2: Rasterize input polygon soup
-        currentProgress.status = types::NavmeshBakeStatus::Voxelizing;
-        currentProgress.progress = 0.1f;
-        currentProgress.currentStage = "Voxelizing geometry";
-
-        rcHeightfield* solid = rcAllocHeightfield();
-        if (!solid || !rcCreateHeightfield(&ctx, *solid, cfg.width, cfg.height,
-                                            cfg.bmin, cfg.bmax, cfg.cs, cfg.ch))
-        {
-            vfLogError("NavmeshAdapter: Failed to create heightfield");
-            rcFreeHeightField(solid);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        std::vector<unsigned char> triAreas(nTris, 0);
-        rcMarkWalkableTriangles(&ctx, cfg.walkableSlopeAngle, verts, nVerts, tris, nTris, triAreas.data());
-        if (!rcRasterizeTriangles(&ctx, verts, nVerts, tris, triAreas.data(), nTris, *solid, cfg.walkableClimb))
-        {
-            vfLogError("NavmeshAdapter: Failed to rasterize triangles");
-            rcFreeHeightField(solid);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        // Step 3: Filter walkable surfaces
-        rcFilterLowHangingWalkableObstacles(&ctx, cfg.walkableClimb, *solid);
-        rcFilterLedgeSpans(&ctx, cfg.walkableHeight, cfg.walkableClimb, *solid);
-        rcFilterWalkableLowHeightSpans(&ctx, cfg.walkableHeight, *solid);
-
-        currentProgress.progress = 0.3f;
-        currentProgress.currentStage = "Building compact heightfield";
-
-        // Step 4: Partition walkable surface to simple regions
-        rcCompactHeightfield* chf = rcAllocCompactHeightfield();
-        if (!chf || !rcBuildCompactHeightfield(&ctx, cfg.walkableHeight, cfg.walkableClimb, *solid, *chf))
-        {
-            vfLogError("NavmeshAdapter: Failed to build compact heightfield");
-            rcFreeHeightField(solid);
-            rcFreeCompactHeightfield(chf);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-        rcFreeHeightField(solid);
-
-        if (!rcErodeWalkableArea(&ctx, cfg.walkableRadius, *chf))
-        {
-            vfLogError("NavmeshAdapter: Failed to erode walkable area");
-            rcFreeCompactHeightfield(chf);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        currentProgress.status = types::NavmeshBakeStatus::Building;
-        currentProgress.progress = 0.5f;
-        currentProgress.currentStage = "Building regions";
-
-        if (!rcBuildDistanceField(&ctx, *chf))
-        {
-            vfLogError("NavmeshAdapter: Failed to build distance field");
-            rcFreeCompactHeightfield(chf);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        if (!rcBuildRegions(&ctx, *chf, 0, cfg.minRegionArea, cfg.mergeRegionArea))
-        {
-            vfLogError("NavmeshAdapter: Failed to build regions");
-            rcFreeCompactHeightfield(chf);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        currentProgress.progress = 0.6f;
-        currentProgress.currentStage = "Building contours";
-
-        // Step 5: Trace and simplify region contours
-        rcContourSet* cset = rcAllocContourSet();
-        if (!cset || !rcBuildContours(&ctx, *chf, cfg.maxSimplificationError, cfg.maxEdgeLen, *cset))
-        {
-            vfLogError("NavmeshAdapter: Failed to build contours");
-            rcFreeCompactHeightfield(chf);
-            rcFreeContourSet(cset);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        currentProgress.progress = 0.7f;
-        currentProgress.currentStage = "Building polygon mesh";
-
-        // Step 6: Build polygons mesh from contours
-        rcPolyMesh* pmesh = rcAllocPolyMesh();
-        if (!pmesh || !rcBuildPolyMesh(&ctx, *cset, cfg.maxVertsPerPoly, *pmesh))
-        {
-            vfLogError("NavmeshAdapter: Failed to build polygon mesh");
-            rcFreeCompactHeightfield(chf);
-            rcFreeContourSet(cset);
-            rcFreePolyMesh(pmesh);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        currentProgress.progress = 0.8f;
-        currentProgress.currentStage = "Building detail mesh";
-
-        // Step 7: Create detail mesh for accurate height data
-        rcPolyMeshDetail* dmesh = rcAllocPolyMeshDetail();
-        if (!dmesh || !rcBuildPolyMeshDetail(&ctx, *pmesh, *chf,
-                                              cfg.detailSampleDist, cfg.detailSampleMaxError, *dmesh))
-        {
-            vfLogError("NavmeshAdapter: Failed to build detail mesh");
-            rcFreeCompactHeightfield(chf);
-            rcFreeContourSet(cset);
-            rcFreePolyMesh(pmesh);
-            rcFreePolyMeshDetail(dmesh);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        rcFreeCompactHeightfield(chf);
-        rcFreeContourSet(cset);
-
-        currentProgress.progress = 0.9f;
-        currentProgress.currentStage = "Creating Detour navmesh";
-
-        // Step 8: Create Detour data from Recast poly mesh
-        for (int i = 0; i < pmesh->npolys; ++i)
-        {
-            pmesh->flags[i] = 1; // Set all polys as walkable
-        }
-
-        dtNavMeshCreateParams params;
-        memset(&params, 0, sizeof(params));
-        params.verts = pmesh->verts;
-        params.vertCount = pmesh->nverts;
-        params.polys = pmesh->polys;
-        params.polyAreas = pmesh->areas;
-        params.polyFlags = pmesh->flags;
-        params.polyCount = pmesh->npolys;
-        params.nvp = pmesh->nvp;
-        params.detailMeshes = dmesh->meshes;
-        params.detailVerts = dmesh->verts;
-        params.detailVertsCount = dmesh->nverts;
-        params.detailTris = dmesh->tris;
-        params.detailTriCount = dmesh->ntris;
-        params.walkableHeight = settings.agentHeight;
-        params.walkableRadius = settings.agentRadius;
-        params.walkableClimb = settings.agentMaxClimb;
-        rcVcopy(params.bmin, pmesh->bmin);
-        rcVcopy(params.bmax, pmesh->bmax);
-        params.cs = cfg.cs;
-        params.ch = cfg.ch;
-        params.buildBvTree = true;
-
-        unsigned char* navData = nullptr;
-        int navDataSize = 0;
-        if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
-        {
-            vfLogError("NavmeshAdapter: Failed to create Detour navmesh data");
-            rcFreePolyMesh(pmesh);
-            rcFreePolyMeshDetail(dmesh);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
-            return false;
-        }
-
-        rcFreePolyMesh(pmesh);
-        rcFreePolyMeshDetail(dmesh);
-
-        // Destroy old navmesh and rebuild under single lock
         std::lock_guard lock(navMeshMutex);
         destroyNavMeshLocked();
 
@@ -308,7 +98,6 @@ namespace core
         if (!navMesh)
         {
             dtFree(navData);
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
             return false;
         }
 
@@ -318,7 +107,6 @@ namespace core
             dtFree(navData);
             dtFreeNavMesh(navMesh);
             navMesh = nullptr;
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
             return false;
         }
 
@@ -330,23 +118,24 @@ namespace core
             navQuery = nullptr;
             dtFreeNavMesh(navMesh);
             navMesh = nullptr;
-            currentProgress.status = types::NavmeshBakeStatus::Failed;
             return false;
         }
 
-        // Init crowd for agent management
-        initCrowd(settings.agentRadius);
-
-        currentProgress.status = types::NavmeshBakeStatus::Complete;
-        currentProgress.progress = 1.0f;
-        currentProgress.currentStage = "Complete";
-
-        vfLogInfo("NavmeshAdapter: Navmesh built successfully ({} polys)", params.polyCount);
+        initCrowd(agentRadius);
         return true;
+    }
+
+    void NavmeshAdapter::updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage)
+    {
+        std::lock_guard lock(progressMutex);
+        currentProgress.status = status;
+        currentProgress.progress = progress;
+        currentProgress.currentStage = stage;
     }
 
     types::NavmeshBakeProgress NavmeshAdapter::getBuildProgress() const
     {
+        std::lock_guard lock(progressMutex);
         return currentProgress;
     }
 
@@ -382,59 +171,59 @@ namespace core
     bool NavmeshAdapter::deserializeNavmesh(const navigation::NavmeshFileHeader& header,
                                               const std::vector<navigation::NavmeshTileData>& tiles)
     {
-        std::lock_guard lock(navMeshMutex);
-        destroyNavMeshLocked();
-
-        navMesh = dtAllocNavMesh();
-        if (!navMesh)
-            return false;
-
-        dtNavMeshParams meshParams;
-        memset(&meshParams, 0, sizeof(meshParams));
-        meshParams.orig[0] = header.boundsMin.x;
-        meshParams.orig[1] = header.boundsMin.y;
-        meshParams.orig[2] = header.boundsMin.z;
-        meshParams.tileWidth = header.settings.tileSize * header.settings.cellSize;
-        meshParams.tileHeight = header.settings.tileSize * header.settings.cellSize;
-        meshParams.maxTiles = std::max(1u, header.tileCount);
-        meshParams.maxPolys = MAX_POLYS;
-
-        dtStatus status = navMesh->init(&meshParams);
-        if (dtStatusFailed(status))
         {
-            dtFreeNavMesh(navMesh);
-            navMesh = nullptr;
-            return false;
+            std::lock_guard lock(navMeshMutex);
+            destroyNavMeshLocked();
+
+            navMesh = dtAllocNavMesh();
+            if (!navMesh)
+                return false;
+
+            dtNavMeshParams meshParams;
+            memset(&meshParams, 0, sizeof(meshParams));
+            meshParams.orig[0] = header.boundsMin.x;
+            meshParams.orig[1] = header.boundsMin.y;
+            meshParams.orig[2] = header.boundsMin.z;
+            meshParams.tileWidth = header.settings.tileSize * header.settings.cellSize;
+            meshParams.tileHeight = header.settings.tileSize * header.settings.cellSize;
+            meshParams.maxTiles = std::max(1u, header.tileCount);
+            meshParams.maxPolys = MAX_POLYS;
+
+            dtStatus status = navMesh->init(&meshParams);
+            if (dtStatusFailed(status))
+            {
+                dtFreeNavMesh(navMesh);
+                navMesh = nullptr;
+                return false;
+            }
+
+            for (const auto& tile : tiles)
+            {
+                if (tile.data.empty())
+                    continue;
+
+                unsigned char* data = static_cast<unsigned char*>(dtAlloc(tile.dataSize, DT_ALLOC_PERM));
+                if (!data)
+                    continue;
+
+                memcpy(data, tile.data.data(), tile.dataSize);
+                navMesh->addTile(data, tile.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
+            }
+
+            navQuery = dtAllocNavMeshQuery();
+            if (!navQuery || dtStatusFailed(navQuery->init(navMesh, MAX_POLYS)))
+            {
+                dtFreeNavMeshQuery(navQuery);
+                navQuery = nullptr;
+                dtFreeNavMesh(navMesh);
+                navMesh = nullptr;
+                return false;
+            }
+
+            initCrowd(header.settings.agentRadius);
         }
 
-        for (const auto& tile : tiles)
-        {
-            if (tile.data.empty())
-                continue;
-
-            unsigned char* data = static_cast<unsigned char*>(dtAlloc(tile.dataSize, DT_ALLOC_PERM));
-            if (!data)
-                continue;
-
-            memcpy(data, tile.data.data(), tile.dataSize);
-            navMesh->addTile(data, tile.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
-        }
-
-        navQuery = dtAllocNavMeshQuery();
-        if (!navQuery || dtStatusFailed(navQuery->init(navMesh, MAX_POLYS)))
-        {
-            dtFreeNavMeshQuery(navQuery);
-            navQuery = nullptr;
-            dtFreeNavMesh(navMesh);
-            navMesh = nullptr;
-            return false;
-        }
-
-        // Init crowd
-        initCrowd(header.settings.agentRadius);
-
-        currentProgress.status = types::NavmeshBakeStatus::Complete;
-        currentProgress.progress = 1.0f;
+        updateProgress(types::NavmeshBakeStatus::Complete, 1.0f, "Complete");
         return true;
     }
 
@@ -447,7 +236,7 @@ namespace core
     void NavmeshAdapter::clearNavmesh()
     {
         destroyNavMesh();
-        currentProgress = {};
+        updateProgress(types::NavmeshBakeStatus::Idle, 0.0f, "");
     }
 
     // === Pathfinding ===
@@ -489,7 +278,6 @@ namespace core
             return result;
         }
 
-        // Find straight path through corridor
         float straightPath[MAX_POLYS * 3];
         unsigned char straightPathFlags[MAX_POLYS];
         dtPolyRef straightPathPolys[MAX_POLYS];
@@ -685,8 +473,6 @@ namespace core
                     continue;
 
                 const dtPolyDetail* pd = &tile->detailMeshes[j];
-                uint32_t baseIdx = static_cast<uint32_t>(outVertices.size());
-
                 for (int k = 0; k < pd->triCount; ++k)
                 {
                     const unsigned char* t = &tile->detailTris[(pd->triBase + k) * 4];

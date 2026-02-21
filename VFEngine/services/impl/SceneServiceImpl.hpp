@@ -4,7 +4,6 @@
 #include "../data/EntityConversion.hpp"
 #include <memory>
 #include <optional>
-#include <cstdint>
 
 namespace scene
 {

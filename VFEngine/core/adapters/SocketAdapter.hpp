@@ -1,5 +1,9 @@
 #pragma once
 #include "../../services/providers/ISocketProvider.hpp"
+#include <entt/entt.hpp>
+#include <optional>
+
+namespace resource { struct SkeletonData; }
 
 namespace core
 {
@@ -31,5 +35,9 @@ namespace core
                                                         const std::string& socketName) const override;
         [[nodiscard]] glm::mat4 getSocketWorldTransform(services::EntityHandle parentEntity,
                                                          const std::string& socketName) const override;
+
+    private:
+        static std::optional<entt::entity> resolveEntity(services::EntityHandle handle);
+        static const resource::SkeletonData* getSkeletonForEntity(entt::entity entity);
     };
 }

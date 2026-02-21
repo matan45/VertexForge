@@ -103,7 +103,6 @@ namespace render::mesh
             return;
         }
 
-        // Create vertex buffer
         vk::DeviceSize vertexBufferSize = static_cast<vk::DeviceSize>(vertices.size() * sizeof(glm::vec3));
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -121,7 +120,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer (triangle indices directly)
         vk::DeviceSize indexBufferSize = static_cast<vk::DeviceSize>(triangleIndices.size() * sizeof(uint32_t));
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -166,7 +164,7 @@ namespace render::mesh
 
         NavmeshDebugPushConstants pushConstants{};
         pushConstants.mvp = projection * view;
-        pushConstants.color = glm::vec4(1.0f, 0.0f, 0.0f, 0.4f); // Semi-transparent red
+        pushConstants.color = glm::vec4(1.0f, 0.0f, 0.0f, 0.4f);
 
         commandBuffer.pushConstants(wireframePipelineLayout,
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

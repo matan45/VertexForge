@@ -53,7 +53,5 @@ namespace types
         NavmeshBakeStatus status = NavmeshBakeStatus::Idle;
         float progress = 0.0f;
         std::string currentStage;
-        uint32_t tilesCompleted = 0;
-        uint32_t tilesTotal = 0;
     };
 }

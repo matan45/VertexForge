@@ -24,25 +24,20 @@ namespace windows
         std::string windowTitle;
         std::unique_ptr<editor::OrbitCamera> camera;
 
-        // Mesh preview
-        math::AABB meshBounds; // Cached bounds for camera fitting
+        math::AABB meshBounds;
         std::vector<services::SubMeshInfo> subMeshes;
         std::vector<services::LODInfo> lodLevels;
-        int selectedSubMesh = -1; // -1 = all submeshes
-        int selectedLOD = -1; // -1 = auto, 0-3 = force specific LOD
+        int selectedSubMesh = -1;
+        int selectedLOD = -1;
 
-        // Camera input state
         bool isDraggingPreview = false;
 
-        // Window state
         bool isOpen = true;
         bool needsInit = true;
         bool previewCleanedUp = false;
 
-        // Async loading state
         services::MeshLoadingProgress loadingProgress;
 
-        // Skeleton & socket data (read-only display)
         bool hasSkeleton = false;
         std::vector<std::string> boneNames;
         std::vector<animator::SocketDefinition> sockets;

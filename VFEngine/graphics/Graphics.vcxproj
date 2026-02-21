@@ -269,6 +269,7 @@
     <ClCompile Include="animation\AnimationBlender.cpp" />
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
     <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />

@@ -3,21 +3,8 @@
 #include "resource/AnimationResource.hpp"
 #include "print/EditorLogger.hpp"
 
-#include <fstream>
 #include <vector>
 #include <filesystem>
-
-namespace
-{
-    void writeString(std::ofstream& file, const std::string& str)
-    {
-        resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(str.size()));
-        if (!str.empty())
-        {
-            file.write(str.data(), str.size());
-        }
-    }
-}
 
 namespace types
 {
@@ -30,7 +17,6 @@ namespace types
             return false;
         }
 
-        // Use the canonical reader to find event data offset
         std::streampos eventOffset = resource::AnimationResource::getEventDataOffset(animPath);
         if (eventOffset == std::streampos(0))
         {
@@ -38,7 +24,6 @@ namespace types
             return false;
         }
 
-        // Read all file data before the event section
         std::vector<char> prefixData;
         {
             std::ifstream file(animPath, std::ios::binary);
@@ -58,7 +43,6 @@ namespace types
             }
         }
 
-        // Rewrite the file: prefix + new event data
         {
             std::ofstream file(animPath, std::ios::binary | std::ios::trunc);
             if (!file.is_open())
@@ -67,10 +51,8 @@ namespace types
                 return false;
             }
 
-            // Write everything before events
             file.write(prefixData.data(), static_cast<std::streamsize>(prefixData.size()));
 
-            // Write event data
             uint32_t eventCount = static_cast<uint32_t>(events.size());
             resource::endian::writeLE<uint32_t>(file, eventCount);
 
@@ -90,5 +72,14 @@ namespace types
 
         vfLogInfo("AnimationEventWriter: Saved {} events to {}", events.size(), animPath);
         return true;
+    }
+
+    void AnimationEventWriter::writeString(std::ofstream& file, const std::string& str)
+    {
+        resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(str.size()));
+        if (!str.empty())
+        {
+            file.write(str.data(), str.size());
+        }
     }
 }

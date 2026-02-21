@@ -110,13 +110,13 @@ namespace windows
         bool hasUISlider = uiSliderDrawer.draw(handle);
         bool hasUIProgressBar = uiProgressBarDrawer.draw(handle);
 
-        addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
-                               hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
-                               hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
-                               hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
-                               hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
-                               hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent);
+        addComponentPopup.draw({handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
+                                hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
+                                hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
+                                hasUICanvas, hasUIRect, hasUIImage, hasUILabel,
+                                hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
+                                hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
+                                hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

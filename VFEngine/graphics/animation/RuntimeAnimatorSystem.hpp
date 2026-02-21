@@ -27,6 +27,7 @@ namespace animation
 
         bool initialized = false;
         bool pendingCacheCleanup = false;
+
     public:
         static RuntimeAnimatorSystem& instance();
 
@@ -58,5 +59,9 @@ namespace animation
         RuntimeAnimatorSystem& operator=(const RuntimeAnimatorSystem&) = delete;
 
         const resource::AnimationData* loadAnimation(const std::string& path);
+
+        void buildSocketTransformCache();
+        void resolveAttachmentParent(entt::entity attachedEntity);
+        void applyAttachmentTransform(entt::entity attachedEntity);
     };
 }

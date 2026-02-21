@@ -8,7 +8,6 @@
 
 namespace events::navmesh
 {
-    // === Commands ===
 
     struct BakeNavmeshCommand : ICommand<>
     {
@@ -58,7 +57,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "StopNavmeshAgent"; }
     };
 
-    // === Queries ===
 
     struct FindPathQuery : IQuery<navigation::NavPath>
     {
@@ -109,7 +107,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "GetNavmeshDebugMesh"; }
     };
 
-    // === Notifications ===
 
     struct NavmeshBakeCompleteNotification : INotification
     {

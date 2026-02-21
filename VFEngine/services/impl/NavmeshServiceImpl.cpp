@@ -21,13 +21,18 @@ namespace services
         assert(navmeshProvider && "NavmeshProvider must not be null");
     }
 
-    NavmeshServiceImpl::~NavmeshServiceImpl() = default;
+    NavmeshServiceImpl::~NavmeshServiceImpl()
+    {
+        if (bakeFuture.valid())
+        {
+            bakeFuture.wait();
+        }
+    }
 
     void NavmeshServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // === Commands ===
 
         dispatcher.registerCommandHandler<events::navmesh::BakeNavmeshCommand>(
             [this](const events::navmesh::BakeNavmeshCommand& cmd)
@@ -77,7 +82,6 @@ namespace services
                 stopAgent(cmd.entity);
             });
 
-        // === Queries ===
 
         dispatcher.registerQueryHandler<events::navmesh::FindPathQuery>(
             [this](const events::navmesh::FindPathQuery& query)
@@ -124,10 +128,12 @@ namespace services
             });
     }
 
-    // === Baking ===
 
     void NavmeshServiceImpl::bakeNavmesh(const types::NavmeshBakeSettings& settings)
     {
+        if (bakeFuture.valid())
+            return;
+
         lastBakeSettings = settings;
 
         navigation::NavmeshInputGeometry geometry;
@@ -147,30 +153,38 @@ namespace services
         vfLogInfo("NavmeshService: Baking navmesh with {} vertices, {} triangles",
                   geometry.getVertexCount(), geometry.getTriangleCount());
 
-        bool success = navmeshProvider->buildNavmesh(geometry, settings);
-
-        auto& dispatcher = ::events::EventDispatcher::instance();
-        events::navmesh::NavmeshBakeCompleteNotification notification;
-        notification.success = success;
-        notification.message = success ? "Navmesh bake complete" : "Navmesh bake failed";
-        dispatcher.publish(notification);
-
-        if (success)
-        {
-            vfLogInfo("NavmeshService: Navmesh bake complete");
-        }
-        else
-        {
-            vfLogError("NavmeshService: Navmesh bake failed");
-        }
+        bakeFuture = std::async(std::launch::async,
+            [this, geom = std::move(geometry), settings]()
+            {
+                return navmeshProvider->buildNavmesh(geom, settings);
+            });
     }
 
     types::NavmeshBakeProgress NavmeshServiceImpl::getBakeProgress() const
     {
+        if (bakeFuture.valid())
+        {
+            auto status = bakeFuture.wait_for(std::chrono::seconds(0));
+            if (status == std::future_status::ready)
+            {
+                bool success = bakeFuture.get();
+
+                auto& dispatcher = ::events::EventDispatcher::instance();
+                events::navmesh::NavmeshBakeCompleteNotification notification;
+                notification.success = success;
+                notification.message = success ? "Navmesh bake complete" : "Navmesh bake failed";
+                dispatcher.publish(notification);
+
+                if (success)
+                    vfLogInfo("NavmeshService: Navmesh bake complete");
+                else
+                    vfLogError("NavmeshService: Navmesh bake failed");
+            }
+        }
+
         return navmeshProvider->getBuildProgress();
     }
 
-    // === Serialization ===
 
     bool NavmeshServiceImpl::saveNavmesh(const std::string& filePath)
     {
@@ -231,13 +245,11 @@ namespace services
         navmeshProvider->clearNavmesh();
         entityToAgentIndex.clear();
 
-        // Clear debug visualization
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::render::ClearNavmeshDebugMeshCommand clearCmd;
         dispatcher.execute(clearCmd);
     }
 
-    // === Pathfinding ===
 
     navigation::NavPath NavmeshServiceImpl::findPath(const glm::vec3& start, const glm::vec3& end,
                                                       float agentRadius, float agentHeight)
@@ -267,13 +279,12 @@ namespace services
         return navmeshProvider->isPointOnNavmesh(point, tolerance);
     }
 
-    // === Agent Management ===
 
     void NavmeshServiceImpl::addAgent(EntityHandle entity)
     {
         if (entityToAgentIndex.count(entity.id))
         {
-            return; // Already registered
+            return;
         }
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -283,7 +294,6 @@ namespace services
             return;
         }
 
-        // Read agent params from component or use defaults
         float radius = 0.3f;
         float height = 2.0f;
         float maxSpeed = 3.5f;
@@ -365,7 +375,6 @@ namespace services
 
         navmeshProvider->updateCrowd(deltaTime);
 
-        // Sync crowd agent positions back to entity transforms
         auto& registry = scene::EntityRegistry::getRegistry();
         for (const auto& [entityId, agentIdx] : entityToAgentIndex)
         {
@@ -381,12 +390,9 @@ namespace services
             transform.position = agentPos;
             transform.isDirty = true;
 
-            // Sync kinematic physics body if present
-            // (physics body follows agent, not the other way around)
         }
     }
 
-    // === Debug ===
 
     void NavmeshServiceImpl::getNavmeshDebugMesh(std::vector<glm::vec3>& outVertices,
                                                    std::vector<uint32_t>& outIndices) const
@@ -394,257 +400,4 @@ namespace services
         navmeshProvider->getDebugMesh(outVertices, outIndices);
     }
 
-    // === Geometry Collection ===
-
-    void NavmeshServiceImpl::collectSceneGeometry(const types::NavmeshBakeSettings& settings,
-                                                    navigation::NavmeshInputGeometry& outGeometry)
-    {
-        if (settings.includeTerrain)
-        {
-            collectTerrainGeometry(outGeometry);
-        }
-
-        if (settings.includeStaticMeshes)
-        {
-            collectStaticMeshGeometry(outGeometry);
-        }
-
-        if (settings.includeColliders)
-        {
-            collectColliderGeometry(outGeometry);
-        }
-    }
-
-    void NavmeshServiceImpl::collectTerrainGeometry(navigation::NavmeshInputGeometry& outGeometry)
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        auto terrainGeometry = dispatcher.query(events::terrain::GetTerrainGeometryQuery{});
-
-        if (terrainGeometry.vertices.empty())
-        {
-            return;
-        }
-
-        int baseVertex = outGeometry.getVertexCount();
-
-        // Copy terrain vertices
-        for (size_t i = 0; i + 2 < terrainGeometry.vertices.size(); i += 3)
-        {
-            outGeometry.addVertex(glm::vec3(
-                terrainGeometry.vertices[i],
-                terrainGeometry.vertices[i + 1],
-                terrainGeometry.vertices[i + 2]));
-        }
-
-        // Copy terrain triangles with offset
-        for (size_t i = 0; i + 2 < terrainGeometry.triangles.size(); i += 3)
-        {
-            outGeometry.addTriangle(
-                baseVertex + terrainGeometry.triangles[i],
-                baseVertex + terrainGeometry.triangles[i + 1],
-                baseVertex + terrainGeometry.triangles[i + 2]);
-        }
-
-        vfLogInfo("NavmeshService: Collected terrain geometry: {} verts, {} tris",
-                  terrainGeometry.vertices.size() / 3, terrainGeometry.triangles.size() / 3);
-    }
-
-    void NavmeshServiceImpl::collectStaticMeshGeometry(navigation::NavmeshInputGeometry& outGeometry)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        int totalVerts = 0;
-        int totalTris = 0;
-
-        auto view = registry.view<components::MeshComponent, components::TransformComponent>();
-        for (auto entity : view)
-        {
-            // Skip entities with dynamic rigid bodies - they move at runtime
-            if (registry.all_of<components::RigidBodyComponent>(entity))
-            {
-                const auto& rb = registry.get<components::RigidBodyComponent>(entity);
-                if (rb.type == components::RigidBodyType::Dynamic)
-                {
-                    continue;
-                }
-            }
-
-            const auto& mesh = view.get<components::MeshComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
-
-            if (mesh.meshPath.empty())
-            {
-                continue;
-            }
-
-            // Load mesh data synchronously (baking is not frame-critical)
-            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshPath);
-            auto meshesData = meshFuture.get();
-
-            if (!meshesData || meshesData->meshes.empty())
-            {
-                continue;
-            }
-
-            glm::mat4 modelMatrix = transform.getMatrix();
-
-            for (const auto& submesh : meshesData->meshes)
-            {
-                if (submesh.lodLevels.empty())
-                {
-                    continue;
-                }
-
-                // Always use LOD 0 (highest detail) for navmesh
-                const auto& lod = submesh.lodLevels[0];
-                int baseVertex = outGeometry.getVertexCount();
-
-                for (const auto& vertex : lod.vertices)
-                {
-                    glm::vec3 worldPos = glm::vec3(modelMatrix * glm::vec4(vertex.position, 1.0f));
-                    outGeometry.addVertex(worldPos);
-                }
-
-                for (size_t i = 0; i + 2 < lod.indices.size(); i += 3)
-                {
-                    outGeometry.addTriangle(
-                        baseVertex + static_cast<int>(lod.indices[i]),
-                        baseVertex + static_cast<int>(lod.indices[i + 1]),
-                        baseVertex + static_cast<int>(lod.indices[i + 2]));
-                }
-
-                totalVerts += static_cast<int>(lod.vertices.size());
-                totalTris += static_cast<int>(lod.indices.size() / 3);
-            }
-        }
-
-        if (totalVerts > 0)
-        {
-            vfLogInfo("NavmeshService: Collected static mesh geometry: {} verts, {} tris",
-                      totalVerts, totalTris);
-        }
-    }
-
-    void NavmeshServiceImpl::collectColliderGeometry(navigation::NavmeshInputGeometry& outGeometry)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        int totalVerts = 0;
-        int totalTris = 0;
-
-        auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
-        for (auto entity : view)
-        {
-            // Skip entities that already contributed mesh geometry
-            if (registry.all_of<components::MeshComponent>(entity))
-            {
-                continue;
-            }
-
-            // Skip dynamic bodies
-            if (registry.all_of<components::RigidBodyComponent>(entity))
-            {
-                const auto& rb = registry.get<components::RigidBodyComponent>(entity);
-                if (rb.type == components::RigidBodyType::Dynamic)
-                {
-                    continue;
-                }
-            }
-
-            // Skip triggers - they don't block navigation
-            const auto& collider = view.get<components::ColliderComponent>(entity);
-            if (collider.isTrigger)
-            {
-                continue;
-            }
-
-            const auto& transform = view.get<components::TransformComponent>(entity);
-
-            glm::mat4 modelMatrix = transform.getMatrix();
-            modelMatrix = glm::translate(modelMatrix, collider.offset);
-
-            if (collider.shape == components::ColliderShape::Box)
-            {
-                // Generate box geometry (8 vertices, 12 triangles)
-                glm::vec3 half = collider.size * 0.5f;
-                int base = outGeometry.getVertexCount();
-
-                glm::vec3 corners[8] = {
-                    {-half.x, -half.y, -half.z}, { half.x, -half.y, -half.z},
-                    { half.x,  half.y, -half.z}, {-half.x,  half.y, -half.z},
-                    {-half.x, -half.y,  half.z}, { half.x, -half.y,  half.z},
-                    { half.x,  half.y,  half.z}, {-half.x,  half.y,  half.z}
-                };
-
-                for (const auto& corner : corners)
-                {
-                    outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(corner, 1.0f)));
-                }
-
-                // 6 faces, 2 triangles each
-                int boxIndices[] = {
-                    0,1,2, 0,2,3, // front
-                    5,4,7, 5,7,6, // back
-                    4,0,3, 4,3,7, // left
-                    1,5,6, 1,6,2, // right
-                    3,2,6, 3,6,7, // top
-                    4,5,1, 4,1,0  // bottom
-                };
-                for (int i = 0; i < 36; i += 3)
-                {
-                    outGeometry.addTriangle(base + boxIndices[i], base + boxIndices[i+1], base + boxIndices[i+2]);
-                }
-
-                totalVerts += 8;
-                totalTris += 12;
-            }
-            else if (collider.shape == components::ColliderShape::ConvexMesh ||
-                     collider.shape == components::ColliderShape::TriangleMesh)
-            {
-                // Load mesh-based collider geometry
-                if (collider.meshPath.empty())
-                {
-                    continue;
-                }
-
-                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshPath);
-                auto meshesData = meshFuture.get();
-                if (!meshesData || meshesData->meshes.empty())
-                {
-                    continue;
-                }
-
-                for (const auto& submesh : meshesData->meshes)
-                {
-                    if (submesh.lodLevels.empty()) continue;
-                    const auto& lod = submesh.lodLevels[0];
-                    int base = outGeometry.getVertexCount();
-
-                    for (const auto& vertex : lod.vertices)
-                    {
-                        outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(vertex.position, 1.0f)));
-                    }
-
-                    for (size_t i = 0; i + 2 < lod.indices.size(); i += 3)
-                    {
-                        outGeometry.addTriangle(
-                            base + static_cast<int>(lod.indices[i]),
-                            base + static_cast<int>(lod.indices[i + 1]),
-                            base + static_cast<int>(lod.indices[i + 2]));
-                    }
-
-                    totalVerts += static_cast<int>(lod.vertices.size());
-                    totalTris += static_cast<int>(lod.indices.size() / 3);
-                }
-            }
-            // Sphere and Capsule colliders: Recast handles voxelization, so
-            // these simple shapes contribute less to navmesh obstruction.
-            // They can be added later if needed.
-        }
-
-        if (totalVerts > 0)
-        {
-            vfLogInfo("NavmeshService: Collected collider geometry: {} verts, {} tris",
-                      totalVerts, totalTris);
-        }
-    }
 }

@@ -13,7 +13,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // _native_socket_attach(childEntityId, parentEntityId, socketName) -> bool
         interpreter->registerNativeFunction("_native_socket_attach",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -37,7 +36,6 @@ namespace core::api
                 return value::Value(dispatcher.execute(cmd));
             });
 
-        // _native_socket_detach(entityId) -> void
         interpreter->registerNativeFunction("_native_socket_detach",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -57,7 +55,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_socket_setActive(entityId, active) -> void
         interpreter->registerNativeFunction("_native_socket_setActive",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -80,7 +77,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_socket_isAttached(entityId) -> bool
         interpreter->registerNativeFunction("_native_socket_isAttached",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -96,7 +92,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_socket_hasSocket(parentEntityId, socketName) -> bool
         interpreter->registerNativeFunction("_native_socket_hasSocket",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -115,7 +110,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_socket_getPosition(parentEntityId, socketName) -> float[3]
         interpreter->registerNativeFunction("_native_socket_getPosition",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -135,7 +129,6 @@ namespace core::api
                 return makeVec3Array(pos);
             });
 
-        // _native_socket_getTransform(parentEntityId, socketName) -> float[16]
         interpreter->registerNativeFunction("_native_socket_getTransform",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -162,7 +155,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // _native_socket_getSockets(parentEntityId) -> string[]
         interpreter->registerNativeFunction("_native_socket_getSockets",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -186,7 +178,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // _native_socket_getRotation(parentEntityId, socketName) -> float[4] (w,x,y,z)
         interpreter->registerNativeFunction("_native_socket_getRotation",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -213,7 +204,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // _native_socket_getParentEntity(childEntityId) -> int64
         interpreter->registerNativeFunction("_native_socket_getParentEntity",
             [](const std::vector<value::Value>& args) -> value::Value
             {

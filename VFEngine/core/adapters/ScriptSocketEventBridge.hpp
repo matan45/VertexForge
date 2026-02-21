@@ -17,6 +17,13 @@ namespace core
 {
     class ScriptSocketEventBridge
     {
+    private:
+        ::services::ScriptInterpreter* interpreter;
+        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
+        const std::unordered_map<uint64_t, std::any>& instanceToObject;
+        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
+
+        std::vector<::events::SubscriptionToken> tokens;
     public:
         ScriptSocketEventBridge(
             ::services::ScriptInterpreter* interpreter,
@@ -32,12 +39,5 @@ namespace core
                                  ::services::EntityHandle parentEntity,
                                  const std::string& socketName,
                                  bool attached);
-
-        ::services::ScriptInterpreter* interpreter;
-        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
-        const std::unordered_map<uint64_t, std::any>& instanceToObject;
-        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
-
-        std::vector<::events::SubscriptionToken> tokens;
     };
 }

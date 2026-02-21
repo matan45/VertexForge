@@ -17,7 +17,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // _native_navmesh_findPath(sx, sy, sz, ex, ey, ez) -> array of waypoint floats
         interpreter->registerNativeFunction("_native_navmesh_findPath",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -67,7 +66,6 @@ namespace core::api
                 return value::Value(result);
             });
 
-        // _native_navmesh_setDestination(entityId, tx, ty, tz) -> void
         interpreter->registerNativeFunction("_native_navmesh_setDestination",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -81,7 +79,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_navmesh_stopAgent(entityId) -> void
         interpreter->registerNativeFunction("_native_navmesh_stopAgent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -93,7 +90,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_navmesh_isPointOnNavmesh(x, y, z) -> bool
         interpreter->registerNativeFunction("_native_navmesh_isPointOnNavmesh",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -105,7 +101,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_navmesh_getClosestPoint(x, y, z) -> vec3 array
         interpreter->registerNativeFunction("_native_navmesh_getClosestPoint",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {

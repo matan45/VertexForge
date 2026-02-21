@@ -9,42 +9,29 @@
 
 namespace core
 {
-    namespace
-    {
-        template<typename Func>
-        void withEntity(services::EntityHandle entity, Func&& func)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!services::internal::isValidHandle(entity, registry))
-                return;
-            func(services::internal::fromHandle(entity));
-        }
-
-        template<typename T, typename Func>
-        T withEntityOr(services::EntityHandle entity, T defaultVal, Func&& func)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!services::internal::isValidHandle(entity, registry))
-                return defaultVal;
-            return func(services::internal::fromHandle(entity));
-        }
-
-        const resource::SkeletonData* getSkeletonForEntity(entt::entity entity)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!registry.all_of<components::MeshComponent>(entity))
-                return nullptr;
-
-            const auto& meshComp = registry.get<components::MeshComponent>(entity);
-            if (meshComp.meshPath.empty())
-                return nullptr;
-
-            return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshPath);
-        }
-    }
-
     SocketAdapter::SocketAdapter() = default;
     SocketAdapter::~SocketAdapter() = default;
+
+    std::optional<entt::entity> SocketAdapter::resolveEntity(services::EntityHandle handle)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!services::internal::isValidHandle(handle, registry))
+            return std::nullopt;
+        return services::internal::fromHandle(handle);
+    }
+
+    const resource::SkeletonData* SocketAdapter::getSkeletonForEntity(entt::entity entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::MeshComponent>(entity))
+            return nullptr;
+
+        const auto& meshComp = registry.get<components::MeshComponent>(entity);
+        if (meshComp.meshPath.empty())
+            return nullptr;
+
+        return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshPath);
+    }
 
     bool SocketAdapter::attachToSocket(services::EntityHandle childEntity, services::EntityHandle parentEntity,
                                        const std::string& socketName)
@@ -60,7 +47,6 @@ namespace core
         auto child = services::internal::fromHandle(childEntity);
         auto parent = services::internal::fromHandle(parentEntity);
 
-        // Verify parent has a skeleton with the named socket
         const auto* skeleton = getSkeletonForEntity(parent);
         if (!skeleton)
         {
@@ -81,18 +67,15 @@ namespace core
         attachment.cachedSocketIndex = socketIdx;
         attachment.isActive = true;
 
-        // Store parent name for persistence across scene/prefab loads
         if (registry.all_of<components::NameComponent>(parent))
         {
             attachment.parentEntityName = registry.get<components::NameComponent>(parent).name;
         }
 
-        // Update child's transform position to the socket's world position
         if (registry.all_of<components::TransformComponent>(child))
         {
             auto& transform = registry.get<components::TransformComponent>(child);
 
-            // Compute socket world position from bind pose
             const auto& socket = skeleton->sockets[socketIdx];
             glm::mat4 socketModel = socket.getLocalOffsetMatrix();
             if (socket.boneIndex >= 0 &&
@@ -111,7 +94,6 @@ namespace core
             transform.isDirty = true;
         }
 
-        // Publish notification
         events::socket::SocketAttachmentChangedNotification notif;
         notif.childEntity = childEntity;
         notif.parentEntity = parentEntity;
@@ -124,194 +106,192 @@ namespace core
 
     void SocketAdapter::detachFromSocket(services::EntityHandle childEntity)
     {
-        withEntity(childEntity, [&](entt::entity child)
+        auto resolved = resolveEntity(childEntity);
+        if (!resolved) return;
+        auto child = *resolved;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::SocketAttachmentComponent>(child))
+            return;
+
+        const auto& attachment = registry.get<components::SocketAttachmentComponent>(child);
+        auto parentHandle = services::internal::toHandle(attachment.parentEntity);
+
+        registry.remove<components::SocketAttachmentComponent>(child);
+
+        if (registry.all_of<components::TransformComponent>(child))
         {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (registry.all_of<components::SocketAttachmentComponent>(child))
-            {
-                const auto& attachment = registry.get<components::SocketAttachmentComponent>(child);
-                auto parentHandle = services::internal::toHandle(attachment.parentEntity);
+            registry.get<components::TransformComponent>(child).isDirty = true;
+        }
 
-                registry.remove<components::SocketAttachmentComponent>(child);
-
-                // Mark transform dirty so SceneGraphSystem recalculates
-                if (registry.all_of<components::TransformComponent>(child))
-                {
-                    registry.get<components::TransformComponent>(child).isDirty = true;
-                }
-
-                events::socket::SocketAttachmentChangedNotification notif;
-                notif.childEntity = childEntity;
-                notif.parentEntity = parentHandle;
-                notif.attached = false;
-                events::EventDispatcher::instance().publish(notif);
-            }
-        });
+        events::socket::SocketAttachmentChangedNotification notif;
+        notif.childEntity = childEntity;
+        notif.parentEntity = parentHandle;
+        notif.attached = false;
+        events::EventDispatcher::instance().publish(notif);
     }
 
     void SocketAdapter::setSocketActive(services::EntityHandle entity, bool active)
     {
-        withEntity(entity, [&](entt::entity e)
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return;
+        auto e = *resolved;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (registry.all_of<components::SocketAttachmentComponent>(e))
         {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (registry.all_of<components::SocketAttachmentComponent>(e))
-            {
-                registry.get<components::SocketAttachmentComponent>(e).isActive = active;
-                if (registry.all_of<components::TransformComponent>(e))
-                {
-                    registry.get<components::TransformComponent>(e).isDirty = true;
-                }
-            }
-        });
-    }
-
-    std::vector<std::string> SocketAdapter::getSocketNames(services::EntityHandle entity) const
-    {
-        return withEntityOr<std::vector<std::string>>(entity, {}, [](entt::entity e)
-        {
-            const auto* skeleton = getSkeletonForEntity(e);
-            if (!skeleton)
-                return std::vector<std::string>{};
-
-            std::vector<std::string> names;
-            names.reserve(skeleton->sockets.size());
-            for (const auto& socket : skeleton->sockets)
-            {
-                names.push_back(socket.name);
-            }
-            return names;
-        });
-    }
-
-    bool SocketAdapter::hasSocket(services::EntityHandle entity, const std::string& socketName) const
-    {
-        return withEntityOr<bool>(entity, false, [&socketName](entt::entity e)
-        {
-            const auto* skeleton = getSkeletonForEntity(e);
-            return skeleton && skeleton->getSocketIndex(socketName) >= 0;
-        });
-    }
-
-    bool SocketAdapter::isAttached(services::EntityHandle entity) const
-    {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!registry.all_of<components::SocketAttachmentComponent>(e))
-                return false;
-            const auto& attachment = registry.get<components::SocketAttachmentComponent>(e);
-            return attachment.isActive && attachment.parentEntity != entt::null;
-        });
-    }
-
-    bool SocketAdapter::addSocketAttachmentComponent(services::EntityHandle entity)
-    {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (registry.all_of<components::SocketAttachmentComponent>(e))
-                return false;
-            registry.emplace<components::SocketAttachmentComponent>(e);
-            return true;
-        });
-    }
-
-    bool SocketAdapter::removeSocketAttachmentComponent(services::EntityHandle entity)
-    {
-        return withEntityOr<bool>(entity, false, [&entity](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!registry.all_of<components::SocketAttachmentComponent>(e))
-                return false;
-
-            const auto& attachment = registry.get<components::SocketAttachmentComponent>(e);
-            auto parentHandle = services::internal::toHandle(attachment.parentEntity);
-
-            registry.remove<components::SocketAttachmentComponent>(e);
-
+            registry.get<components::SocketAttachmentComponent>(e).isActive = active;
             if (registry.all_of<components::TransformComponent>(e))
             {
                 registry.get<components::TransformComponent>(e).isDirty = true;
             }
+        }
+    }
 
-            events::socket::SocketAttachmentChangedNotification notif;
-            notif.childEntity = entity;
-            notif.parentEntity = parentHandle;
-            notif.attached = false;
-            events::EventDispatcher::instance().publish(notif);
-            return true;
-        });
+    std::vector<std::string> SocketAdapter::getSocketNames(services::EntityHandle entity) const
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return {};
+
+        const auto* skeleton = getSkeletonForEntity(*resolved);
+        if (!skeleton) return {};
+
+        std::vector<std::string> names;
+        names.reserve(skeleton->sockets.size());
+        for (const auto& socket : skeleton->sockets)
+        {
+            names.push_back(socket.name);
+        }
+        return names;
+    }
+
+    bool SocketAdapter::hasSocket(services::EntityHandle entity, const std::string& socketName) const
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        const auto* skeleton = getSkeletonForEntity(*resolved);
+        return skeleton && skeleton->getSocketIndex(socketName) >= 0;
+    }
+
+    bool SocketAdapter::isAttached(services::EntityHandle entity) const
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::SocketAttachmentComponent>(*resolved))
+            return false;
+        const auto& attachment = registry.get<components::SocketAttachmentComponent>(*resolved);
+        return attachment.isActive && attachment.parentEntity != entt::null;
+    }
+
+    bool SocketAdapter::addSocketAttachmentComponent(services::EntityHandle entity)
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (registry.all_of<components::SocketAttachmentComponent>(*resolved))
+            return false;
+        registry.emplace<components::SocketAttachmentComponent>(*resolved);
+        return true;
+    }
+
+    bool SocketAdapter::removeSocketAttachmentComponent(services::EntityHandle entity)
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+        auto e = *resolved;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::SocketAttachmentComponent>(e))
+            return false;
+
+        const auto& attachment = registry.get<components::SocketAttachmentComponent>(e);
+        auto parentHandle = services::internal::toHandle(attachment.parentEntity);
+
+        registry.remove<components::SocketAttachmentComponent>(e);
+
+        if (registry.all_of<components::TransformComponent>(e))
+        {
+            registry.get<components::TransformComponent>(e).isDirty = true;
+        }
+
+        events::socket::SocketAttachmentChangedNotification notif;
+        notif.childEntity = entity;
+        notif.parentEntity = parentHandle;
+        notif.attached = false;
+        events::EventDispatcher::instance().publish(notif);
+        return true;
     }
 
     bool SocketAdapter::hasSocketAttachmentComponent(services::EntityHandle entity) const
     {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            return registry.all_of<components::SocketAttachmentComponent>(e);
-        });
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        return registry.all_of<components::SocketAttachmentComponent>(*resolved);
     }
 
     bool SocketAdapter::addSocketOverrideComponent(services::EntityHandle entity)
     {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (registry.all_of<components::SocketOverrideComponent>(e))
-                return false;
-            registry.emplace<components::SocketOverrideComponent>(e);
-            return true;
-        });
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (registry.all_of<components::SocketOverrideComponent>(*resolved))
+            return false;
+        registry.emplace<components::SocketOverrideComponent>(*resolved);
+        return true;
     }
 
     bool SocketAdapter::removeSocketOverrideComponent(services::EntityHandle entity)
     {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!registry.all_of<components::SocketOverrideComponent>(e))
-                return false;
-            registry.remove<components::SocketOverrideComponent>(e);
-            return true;
-        });
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::SocketOverrideComponent>(*resolved))
+            return false;
+        registry.remove<components::SocketOverrideComponent>(*resolved);
+        return true;
     }
 
     bool SocketAdapter::hasSocketOverrideComponent(services::EntityHandle entity) const
     {
-        return withEntityOr<bool>(entity, false, [](entt::entity e)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            return registry.all_of<components::SocketOverrideComponent>(e);
-        });
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        return registry.all_of<components::SocketOverrideComponent>(*resolved);
     }
 
     std::optional<events::socket::SocketAttachmentData>
     SocketAdapter::getSocketAttachmentData(services::EntityHandle entity) const
     {
-        return withEntityOr<std::optional<events::socket::SocketAttachmentData>>(
-            entity, std::nullopt, [](entt::entity e)
-            -> std::optional<events::socket::SocketAttachmentData>
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return std::nullopt;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::SocketAttachmentComponent>(*resolved))
+            return std::nullopt;
+
+        const auto& attachment = registry.get<components::SocketAttachmentComponent>(*resolved);
+        events::socket::SocketAttachmentData data;
+        data.parentEntity = services::internal::toHandle(attachment.parentEntity);
+        data.socketName = attachment.socketName;
+        data.isActive = attachment.isActive;
+
+        if (attachment.parentEntity != entt::null &&
+            registry.valid(attachment.parentEntity) &&
+            registry.all_of<components::NameComponent>(attachment.parentEntity))
         {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            if (!registry.all_of<components::SocketAttachmentComponent>(e))
-                return std::nullopt;
+            data.parentEntityName = registry.get<components::NameComponent>(attachment.parentEntity).name;
+        }
 
-            const auto& attachment = registry.get<components::SocketAttachmentComponent>(e);
-            events::socket::SocketAttachmentData data;
-            data.parentEntity = services::internal::toHandle(attachment.parentEntity);
-            data.socketName = attachment.socketName;
-            data.isActive = attachment.isActive;
-
-            // Try to get parent entity name
-            if (attachment.parentEntity != entt::null &&
-                registry.valid(attachment.parentEntity) &&
-                registry.all_of<components::NameComponent>(attachment.parentEntity))
-            {
-                data.parentEntityName = registry.get<components::NameComponent>(attachment.parentEntity).name;
-            }
-
-            return data;
-        });
+        return data;
     }
 
     glm::vec3 SocketAdapter::getSocketWorldPosition(services::EntityHandle parentEntity,
@@ -324,37 +304,36 @@ namespace core
     glm::mat4 SocketAdapter::getSocketWorldTransform(services::EntityHandle parentEntity,
                                                       const std::string& socketName) const
     {
-        return withEntityOr<glm::mat4>(parentEntity, glm::mat4(1.0f), [&socketName](entt::entity parent)
+        auto resolved = resolveEntity(parentEntity);
+        if (!resolved) return glm::mat4(1.0f);
+        auto parent = *resolved;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        const auto* skeleton = getSkeletonForEntity(parent);
+        if (!skeleton)
+            return glm::mat4(1.0f);
+
+        int32_t socketIdx = skeleton->getSocketIndex(socketName);
+        if (socketIdx < 0)
+            return glm::mat4(1.0f);
+
+        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(parent);
+        if (!animator || !animator->isInitialized())
+            return glm::mat4(1.0f);
+
+        std::vector<glm::mat4> socketTransforms;
+        animator->computeSocketTransforms(skeleton->sockets, socketTransforms);
+
+        if (socketIdx >= static_cast<int32_t>(socketTransforms.size()))
+            return glm::mat4(1.0f);
+
+        glm::mat4 parentWorld = glm::mat4(1.0f);
+        if (registry.all_of<components::WorldTransformComponent>(parent))
         {
-            auto& registry = scene::EntityRegistry::getRegistry();
+            parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
+        }
 
-            const auto* skeleton = getSkeletonForEntity(parent);
-            if (!skeleton)
-                return glm::mat4(1.0f);
-
-            int32_t socketIdx = skeleton->getSocketIndex(socketName);
-            if (socketIdx < 0)
-                return glm::mat4(1.0f);
-
-            // Compute socket model-space transform via AnimatorStateMachine
-            auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(parent);
-            if (!animator || !animator->isInitialized())
-                return glm::mat4(1.0f);
-
-            std::vector<glm::mat4> socketTransforms;
-            animator->computeSocketTransforms(skeleton->sockets, socketTransforms);
-
-            if (socketIdx >= static_cast<int32_t>(socketTransforms.size()))
-                return glm::mat4(1.0f);
-
-            // Apply parent world transform
-            glm::mat4 parentWorld = glm::mat4(1.0f);
-            if (registry.all_of<components::WorldTransformComponent>(parent))
-            {
-                parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
-            }
-
-            return parentWorld * socketTransforms[socketIdx];
-        });
+        return parentWorld * socketTransforms[socketIdx];
     }
 }

@@ -10,7 +10,6 @@
 
 namespace events::socket
 {
-    // ========== DATA ==========
 
     struct SocketAttachmentData
     {
@@ -20,7 +19,6 @@ namespace events::socket
         bool isActive = true;
     };
 
-    // ========== COMMANDS ==========
 
     struct AttachToSocketCommand : ::events::ICommand<bool>
     {
@@ -67,7 +65,6 @@ namespace events::socket
         std::string_view getName() const override { return "RemoveSocketOverrideComponent"; }
     };
 
-    // ========== QUERIES ==========
 
     struct GetSocketNamesQuery : ::events::IQuery<std::vector<std::string>>
     {
@@ -120,14 +117,13 @@ namespace events::socket
         std::string_view getName() const override { return "GetSocketWorldTransform"; }
     };
 
-    // ========== NOTIFICATIONS ==========
 
     struct SocketAttachmentChangedNotification : ::events::INotification
     {
         ::services::EntityHandle childEntity;
         ::services::EntityHandle parentEntity;
         std::string socketName;
-        bool attached; // true = attached, false = detached
+        bool attached;
         std::string_view getName() const override { return "SocketAttachmentChanged"; }
     };
 
