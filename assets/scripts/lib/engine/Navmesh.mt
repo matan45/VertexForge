@@ -3,14 +3,16 @@
 //
 // Usage examples:
 //   int self = Entity::self();
-//   Navmesh::setDestination(self, 10.0, 0.0, 5.0);  // Move agent to target
-//   Navmesh::stopAgent(self);                         // Stop agent movement
-//   float[] path = Navmesh::findPath(0.0, 0.0, 0.0, 10.0, 0.0, 5.0);
-//   bool onMesh = Navmesh::isPointOnNavmesh(5.0, 0.0, 3.0);
+//   Navmesh::setDestination(self, new Vec3f(10.0, 0.0, 5.0));
+//   Navmesh::stopAgent(self);
+//   Vec3f[] path = Navmesh::findPath(new Vec3f(0.0, 0.0, 0.0), new Vec3f(10.0, 0.0, 5.0));
+//   bool onMesh = Navmesh::isPointOnNavmesh(new Vec3f(5.0, 0.0, 3.0));
 //
 // Note: Agents must have a NavmeshAgent component and the navmesh must be baked
 // before pathfinding functions will work. Use the Navigation window in the editor
 // to bake the navmesh.
+
+import * from "../math/Vec3f.mt";
 
 public class Navmesh {
 
@@ -22,22 +24,31 @@ public class Navmesh {
     // ============================================
 
     // Find a path between two world positions
-    // Returns float[] with format: [waypointCount, x0, y0, z0, x1, y1, z1, ...]
-    // Returns [0] if no path found
+    // Returns Vec3f[] of waypoints, empty array if no path found
     // Rate limited: max 50 path queries per frame
-    public static function findPath(float sx, float sy, float sz, float ex, float ey, float ez): float[] {
-        return _native_navmesh_findPath(sx, sy, sz, ex, ey, ez);
+    public static function findPath(Vec3f start, Vec3f end): Vec3f[] {
+        float[] raw = _native_navmesh_findPath(start.x, start.y, start.z, end.x, end.y, end.z);
+        int count = toInt(raw[0]);
+        if (count <= 0) {
+            return new Vec3f[0];
+        }
+        Vec3f[] waypoints = new Vec3f[count];
+        for (int i = 0; i < count; i = i + 1) {
+            int base = 1 + i * 3;
+            waypoints[i] = new Vec3f(raw[base], raw[base + 1], raw[base + 2]);
+        }
+        return waypoints;
     }
 
     // Check if a world position is on the navmesh
-    public static function isPointOnNavmesh(float x, float y, float z): bool {
-        return _native_navmesh_isPointOnNavmesh(x, y, z);
+    public static function isPointOnNavmesh(Vec3f point): bool {
+        return _native_navmesh_isPointOnNavmesh(point.x, point.y, point.z);
     }
 
     // Get the closest point on the navmesh to a world position
-    // Returns float[3] (x, y, z)
-    public static function getClosestPoint(float x, float y, float z): float[] {
-        return _native_navmesh_getClosestPoint(x, y, z);
+    public static function getClosestPoint(Vec3f point): Vec3f {
+        float[] raw = _native_navmesh_getClosestPoint(point.x, point.y, point.z);
+        return new Vec3f(raw[0], raw[1], raw[2]);
     }
 
     // ============================================
@@ -46,8 +57,8 @@ public class Navmesh {
 
     // Set the navigation target for an entity's NavmeshAgent
     // The agent will pathfind and move toward the target with crowd avoidance
-    public static function setDestination(int entityId, float tx, float ty, float tz): void {
-        _native_navmesh_setDestination(entityId, tx, ty, tz);
+    public static function setDestination(int entityId, Vec3f target): void {
+        _native_navmesh_setDestination(entityId, target.x, target.y, target.z);
     }
 
     // Stop an entity's NavmeshAgent from moving
