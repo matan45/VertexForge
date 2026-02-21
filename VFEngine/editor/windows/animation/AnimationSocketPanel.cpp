@@ -46,7 +46,7 @@ namespace windows::animation
         {
             ImGui::Spacing();
             ImGui::Separator();
-            changed |= drawSocketEditor(sockets[selectedSocketIndex], evaluatedBones, selectedChannel);
+            changed |= drawSocketEditor(sockets[selectedSocketIndex], evaluatedBones);
 
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
@@ -97,8 +97,7 @@ namespace windows::animation
     }
 
     bool AnimationSocketPanel::drawSocketEditor(animator::SocketDefinition& socket,
-                                                 const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
-                                                 int selectedChannel)
+                                                 const std::vector<services::EvaluatedBoneInfo>& evaluatedBones)
     {
         bool changed = false;
 

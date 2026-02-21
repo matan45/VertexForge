@@ -7,7 +7,6 @@
 #include "events/PreviewEvents.hpp"
 #include <filesystem>
 
-
 namespace windows
 {
     MeshPreviewWindow::MeshPreviewWindow(const std::string& meshFilePath)

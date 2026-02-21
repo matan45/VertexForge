@@ -21,8 +21,7 @@ namespace windows::animation
     private:
         void drawSocketList(std::vector<animator::SocketDefinition>& sockets, int& selectedSocket);
         bool drawSocketEditor(animator::SocketDefinition& socket,
-                              const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
-                              int selectedChannel);
+                              const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
         bool drawNewSocketCreation(std::vector<animator::SocketDefinition>& sockets,
                                    const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                    int selectedChannel);

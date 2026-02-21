@@ -84,10 +84,11 @@ namespace core
                 {
                     NativeAPIRegistry::setCurrentEntity(targetEntity);
                     auto& instance = std::any_cast<value::Value&>(const_cast<std::any&>(objIt->second));
+                    // Args: (childId, parentId, socketName)
                     interpreter->callMethod(instance, methodName,
-                                            {value::Value(static_cast<int64_t>(parentEntity.id)),
-                                             value::Value(socketName),
-                                             value::Value(static_cast<int64_t>(childEntity.id))});
+                                            {value::Value(static_cast<int64_t>(childEntity.id)),
+                                             value::Value(static_cast<int64_t>(parentEntity.id)),
+                                             value::Value(socketName)});
                 }
                 catch (const std::exception& e)
                 {
