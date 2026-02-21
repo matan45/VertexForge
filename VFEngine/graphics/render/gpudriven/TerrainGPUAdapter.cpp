@@ -118,8 +118,6 @@ namespace render::gpudriven
         const auto& lodData = tile.lodLevels[lodLevel];
         if (lodData.isEmpty())
         {
-            vfLogWarning("TerrainGPUAdapter: LOD {} is empty for tile ({}, {})",
-                         lodLevel, key.coordX, key.coordZ);
             return true; // Empty LOD is considered success
         }
 

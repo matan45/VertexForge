@@ -2,6 +2,7 @@
 #include "../events/NavmeshEvents.hpp"
 #include "../events/TerrainEvents.hpp"
 #include "../events/RenderEvents.hpp"
+#include "../events/ResourceEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -185,7 +186,14 @@ namespace services
         header.settings = lastBakeSettings;
         header.tileCount = static_cast<uint32_t>(tiles.size());
 
-        return navigation::NavmeshSerializer::save(filePath, header, tiles);
+        bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
+        if (result)
+        {
+            events::resource::AssetSavedNotification notif;
+            notif.filePath = filePath;
+            ::events::EventDispatcher::instance().publish(notif);
+        }
+        return result;
     }
 
     bool NavmeshServiceImpl::loadNavmesh(const std::string& filePath)

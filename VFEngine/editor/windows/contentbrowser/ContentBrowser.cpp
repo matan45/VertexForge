@@ -67,6 +67,15 @@ namespace windows
                 }
             });
 
+        assetSavedToken = dispatcher.subscribe<events::resource::AssetSavedNotification>(
+            [this](const events::resource::AssetSavedNotification&)
+            {
+                if (fs::exists(currentPath) && fs::is_directory(currentPath))
+                {
+                    loadDirectory(currentPath);
+                }
+            });
+
         fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
             [this](const events::fileops::FileMovedNotification&)
             {
@@ -104,6 +113,10 @@ namespace windows
         if (importCompletedToken.isValid())
         {
             dispatcher.unsubscribe(importCompletedToken);
+        }
+        if (assetSavedToken.isValid())
+        {
+            dispatcher.unsubscribe(assetSavedToken);
         }
         if (fileMovedToken.isValid())
         {
@@ -239,7 +252,7 @@ namespace windows
                     cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                     events::EventDispatcher::instance().execute(cmd);
                 }
-                else
+                else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)
                 {
                     showFileWindow = true;
                 }
@@ -412,7 +425,8 @@ namespace windows
         if (extension == ".vfPrefab") return Prefab;
         if (extension == ".vfTerrainMat") return TerrainMaterial;
         if (extension == ".vfTerrain") return Terrain;
-        if (extension == ".vfPhysAnim") return Other;
+        if (extension == ".vfNavmesh") return Navmesh;
+        if (extension == ".vfPhysAnim") return PhysAnim;
         if (extension == ".mt") return Script;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
