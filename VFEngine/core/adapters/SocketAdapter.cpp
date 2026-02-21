@@ -116,6 +116,7 @@ namespace core
 
         const auto& attachment = registry.get<components::SocketAttachmentComponent>(child);
         auto parentHandle = services::internal::toHandle(attachment.parentEntity);
+        std::string socketName = attachment.socketName;
 
         registry.remove<components::SocketAttachmentComponent>(child);
 
@@ -127,6 +128,7 @@ namespace core
         events::socket::SocketAttachmentChangedNotification notif;
         notif.childEntity = childEntity;
         notif.parentEntity = parentHandle;
+        notif.socketName = std::move(socketName);
         notif.attached = false;
         events::EventDispatcher::instance().publish(notif);
     }

@@ -12,7 +12,7 @@ namespace services
     private:
         INavmeshProvider* navmeshProvider;
         types::NavmeshBakeSettings lastBakeSettings;
-        mutable std::future<bool> bakeFuture;
+        std::future<bool> bakeFuture;
 
         std::unordered_map<uint64_t, int> entityToAgentIndex;
 
@@ -50,6 +50,7 @@ namespace services
                                  std::vector<uint32_t>& outIndices) const override;
 
     private:
+        void pollBakeCompletion();
         void collectSceneGeometry(const types::NavmeshBakeSettings& settings,
                                   navigation::NavmeshInputGeometry& outGeometry);
         void collectTerrainGeometry(navigation::NavmeshInputGeometry& outGeometry);

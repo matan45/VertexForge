@@ -145,7 +145,8 @@ namespace handlers {
     void RuntimeHandler::initializeServices() {
         sceneService = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
-            bootstrap->getAnimatorProvider()
+            bootstrap->getAnimatorProvider(),
+            bootstrap->getSocketProvider()
         );
         renderService = std::make_shared<services::RuntimeRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),

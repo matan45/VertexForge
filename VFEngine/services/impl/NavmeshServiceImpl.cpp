@@ -162,27 +162,29 @@ namespace services
 
     types::NavmeshBakeProgress NavmeshServiceImpl::getBakeProgress() const
     {
-        if (bakeFuture.valid())
-        {
-            auto status = bakeFuture.wait_for(std::chrono::seconds(0));
-            if (status == std::future_status::ready)
-            {
-                bool success = bakeFuture.get();
-
-                auto& dispatcher = ::events::EventDispatcher::instance();
-                events::navmesh::NavmeshBakeCompleteNotification notification;
-                notification.success = success;
-                notification.message = success ? "Navmesh bake complete" : "Navmesh bake failed";
-                dispatcher.publish(notification);
-
-                if (success)
-                    vfLogInfo("NavmeshService: Navmesh bake complete");
-                else
-                    vfLogError("NavmeshService: Navmesh bake failed");
-            }
-        }
-
         return navmeshProvider->getBuildProgress();
+    }
+
+    void NavmeshServiceImpl::pollBakeCompletion()
+    {
+        if (!bakeFuture.valid())
+            return;
+
+        if (bakeFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return;
+
+        bool success = bakeFuture.get();
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        events::navmesh::NavmeshBakeCompleteNotification notification;
+        notification.success = success;
+        notification.message = success ? "Navmesh bake complete" : "Navmesh bake failed";
+        dispatcher.publish(notification);
+
+        if (success)
+            vfLogInfo("NavmeshService: Navmesh bake complete");
+        else
+            vfLogError("NavmeshService: Navmesh bake failed");
     }
 
 
@@ -368,6 +370,8 @@ namespace services
 
     void NavmeshServiceImpl::updateAgents(float deltaTime)
     {
+        pollBakeCompletion();
+
         if (entityToAgentIndex.empty())
         {
             return;

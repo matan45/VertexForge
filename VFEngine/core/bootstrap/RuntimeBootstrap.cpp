@@ -6,6 +6,7 @@
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/NavmeshAdapter.hpp"
+#include "../adapters/SocketAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
@@ -32,6 +33,7 @@ namespace core
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         navmeshAdapter = std::make_unique<NavmeshAdapter>();
+        socketAdapter = std::make_unique<SocketAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
@@ -97,6 +99,7 @@ namespace core
         scriptingAdapter.reset();
         physicsAdapter.reset();
         navmeshAdapter.reset();
+        socketAdapter.reset();
         animatorAdapter.reset();
 
         if (coreInterface)
@@ -128,6 +131,11 @@ namespace core
     services::INavmeshProvider* RuntimeBootstrap::getNavmeshProvider()
     {
         return navmeshAdapter.get();
+    }
+
+    services::ISocketProvider* RuntimeBootstrap::getSocketProvider()
+    {
+        return socketAdapter.get();
     }
 
     services::IAnimatorProvider* RuntimeBootstrap::getAnimatorProvider()

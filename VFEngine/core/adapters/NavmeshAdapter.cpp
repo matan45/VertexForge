@@ -207,7 +207,11 @@ namespace core
                     continue;
 
                 memcpy(data, tile.data.data(), tile.dataSize);
-                navMesh->addTile(data, tile.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
+                dtStatus tileStatus = navMesh->addTile(data, tile.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
+                if (dtStatusFailed(tileStatus))
+                {
+                    dtFree(data);
+                }
             }
 
             navQuery = dtAllocNavMeshQuery();

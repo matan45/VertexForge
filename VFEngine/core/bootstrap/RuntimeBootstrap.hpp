@@ -9,6 +9,7 @@ namespace services
     class IScriptingProvider;
     class IPhysicsProvider;
     class INavmeshProvider;
+    class ISocketProvider;
     class IAnimatorProvider;
     class IVFXRuntimeProvider;
     class IPostProcessProvider;
@@ -37,6 +38,7 @@ namespace core
     class ScriptingAdapter;
     class PhysicsAdapter;
     class NavmeshAdapter;
+    class SocketAdapter;
     class AnimatorAdapter;
     class VFXRuntimeAdapter;
     class PostProcessAdapter;
@@ -53,6 +55,7 @@ namespace core
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
         std::unique_ptr<NavmeshAdapter> navmeshAdapter;
+        std::unique_ptr<SocketAdapter> socketAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
@@ -83,6 +86,8 @@ namespace core
         services::IPhysicsProvider* getPhysicsProvider();
 
         services::INavmeshProvider* getNavmeshProvider();
+
+        services::ISocketProvider* getSocketProvider();
 
         services::IAnimatorProvider* getAnimatorProvider();
 

@@ -4,7 +4,6 @@
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SocketEvents.hpp"
-#include "components/Components.hpp"
 #include <glm/gtc/quaternion.hpp>
 
 namespace core::api
@@ -205,7 +204,7 @@ namespace core::api
             });
 
         interpreter->registerNativeFunction("_native_socket_getParentEntity",
-            [](const std::vector<value::Value>& args) -> value::Value
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 if (args.empty())
                     return value::Value(static_cast<int64_t>(-1));
@@ -214,16 +213,14 @@ namespace core::api
                 if (entityId < 0)
                     return value::Value(static_cast<int64_t>(-1));
 
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto entity = static_cast<entt::entity>(static_cast<uint32_t>(entityId));
-                if (!registry.valid(entity))
+                events::socket::GetSocketAttachmentDataQuery query;
+                query.entity = intToEntity(entityId);
+                auto data = dispatcher.query(query);
+
+                if (!data || !data->parentEntity.isValid())
                     return value::Value(static_cast<int64_t>(-1));
 
-                auto* attachment = registry.try_get<components::SocketAttachmentComponent>(entity);
-                if (!attachment || attachment->parentEntity == entt::null)
-                    return value::Value(static_cast<int64_t>(-1));
-
-                return value::Value(static_cast<int64_t>(static_cast<uint32_t>(attachment->parentEntity)));
+                return value::Value(static_cast<int64_t>(data->parentEntity.id));
             });
     }
 }

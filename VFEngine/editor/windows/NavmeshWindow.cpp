@@ -87,8 +87,8 @@ namespace windows
             drawBakeSettings();
             ImGui::Spacing();
             drawActions();
-            ImGui::Spacing();
-            drawDebugSection();
+
+
         }
         ImGui::End();
     }
@@ -262,33 +262,4 @@ namespace windows
         }
     }
 
-    void NavmeshWindow::drawDebugSection()
-    {
-        if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Indent();
-
-            auto& dispatcher = events::EventDispatcher::instance();
-            bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
-
-            if (ImGui::Checkbox("Show Navmesh Overlay", &showNavmesh))
-            {
-                events::render::SetShowNavmeshDebugCommand cmd;
-                cmd.show = showNavmesh;
-                dispatcher.execute(cmd);
-
-                if (showNavmesh)
-                {
-                    pushNavmeshDebugMesh();
-                }
-                else
-                {
-                    events::render::ClearNavmeshDebugMeshCommand clearCmd;
-                    dispatcher.execute(clearCmd);
-                }
-            }
-
-            ImGui::Unindent();
-        }
-    }
 }

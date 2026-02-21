@@ -21,7 +21,6 @@ namespace windows
         void drawPolygonSection();
         void drawFilterSection();
         void drawActions();
-        void drawDebugSection();
 
         void pushNavmeshDebugMesh();
 
