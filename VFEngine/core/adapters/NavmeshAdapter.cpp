@@ -16,6 +16,17 @@ namespace core
     static constexpr int MAX_POLYS = 2048;
     static constexpr int MAX_CROWD_AGENTS = 128;
 
+    // Recast/Detour recommended multipliers (see dtCrowdAgentParams docs)
+    static constexpr float CROWD_MAX_AGENT_RADIUS_MULT = 4.0f;
+    static constexpr float COLLISION_QUERY_RANGE_MULT = 12.0f;
+    static constexpr float PATH_OPT_RANGE_MULT = 30.0f;
+    static constexpr float AGENT_SEPARATION_WEIGHT = 2.0f;
+    // Highest-quality avoidance (Detour provides types 0-3)
+    static constexpr int OBSTACLE_AVOIDANCE_TYPE = 3;
+
+    // Default search half-extents for poly queries (x, y, z)
+    static constexpr float TARGET_HALF_EXTENTS[3] = {2.0f, 4.0f, 2.0f};
+
     NavmeshAdapter::NavmeshAdapter() = default;
 
     NavmeshAdapter::~NavmeshAdapter()
@@ -43,7 +54,11 @@ namespace core
     void NavmeshAdapter::destroyNavMesh()
     {
         std::lock_guard lock(navMeshMutex);
+        destroyNavMeshLocked();
+    }
 
+    void NavmeshAdapter::destroyNavMeshLocked()
+    {
         if (crowd)
         {
             dtFreeCrowd(crowd);
@@ -61,7 +76,7 @@ namespace core
         }
     }
 
-    void NavmeshAdapter::initCrowd()
+    void NavmeshAdapter::initCrowd(float agentRadius)
     {
         if (!navMesh)
             return;
@@ -73,7 +88,7 @@ namespace core
         crowd = dtAllocCrowd();
         if (crowd)
         {
-            crowd->init(MAX_CROWD_AGENTS, 2.0f, navMesh);
+            crowd->init(MAX_CROWD_AGENTS, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
         }
     }
 
@@ -285,10 +300,9 @@ namespace core
         rcFreePolyMesh(pmesh);
         rcFreePolyMeshDetail(dmesh);
 
-        // Destroy old navmesh
-        destroyNavMesh();
-
+        // Destroy old navmesh and rebuild under single lock
         std::lock_guard lock(navMeshMutex);
+        destroyNavMeshLocked();
 
         navMesh = dtAllocNavMesh();
         if (!navMesh)
@@ -321,11 +335,7 @@ namespace core
         }
 
         // Init crowd for agent management
-        crowd = dtAllocCrowd();
-        if (crowd)
-        {
-            crowd->init(MAX_CROWD_AGENTS, settings.agentRadius * 4.0f, navMesh);
-        }
+        initCrowd(settings.agentRadius);
 
         currentProgress.status = types::NavmeshBakeStatus::Complete;
         currentProgress.progress = 1.0f;
@@ -372,9 +382,8 @@ namespace core
     bool NavmeshAdapter::deserializeNavmesh(const navigation::NavmeshFileHeader& header,
                                               const std::vector<navigation::NavmeshTileData>& tiles)
     {
-        destroyNavMesh();
-
         std::lock_guard lock(navMeshMutex);
+        destroyNavMeshLocked();
 
         navMesh = dtAllocNavMesh();
         if (!navMesh)
@@ -422,11 +431,7 @@ namespace core
         }
 
         // Init crowd
-        crowd = dtAllocCrowd();
-        if (crowd)
-        {
-            crowd->init(MAX_CROWD_AGENTS, header.settings.agentRadius * 4.0f, navMesh);
-        }
+        initCrowd(header.settings.agentRadius);
 
         currentProgress.status = types::NavmeshBakeStatus::Complete;
         currentProgress.progress = 1.0f;
@@ -458,7 +463,7 @@ namespace core
 
         float startPos[3] = {start.x, start.y, start.z};
         float endPos[3] = {end.x, end.y, end.z};
-        float halfExtents[3] = {agentRadius * 4.0f, agentHeight, agentRadius * 4.0f};
+        float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
 
         dtQueryFilter filter;
         filter.setIncludeFlags(0xFFFF);
@@ -568,12 +573,12 @@ namespace core
         ap.height = height;
         ap.maxAcceleration = maxAcceleration;
         ap.maxSpeed = maxSpeed;
-        ap.collisionQueryRange = radius * 12.0f;
-        ap.pathOptimizationRange = radius * 30.0f;
+        ap.collisionQueryRange = radius * COLLISION_QUERY_RANGE_MULT;
+        ap.pathOptimizationRange = radius * PATH_OPT_RANGE_MULT;
         ap.updateFlags = DT_CROWD_ANTICIPATE_TURNS | DT_CROWD_OPTIMIZE_VIS |
                          DT_CROWD_OPTIMIZE_TOPO | DT_CROWD_OBSTACLE_AVOIDANCE;
-        ap.obstacleAvoidanceType = 3;
-        ap.separationWeight = 2.0f;
+        ap.obstacleAvoidanceType = OBSTACLE_AVOIDANCE_TYPE;
+        ap.separationWeight = AGENT_SEPARATION_WEIGHT;
 
         float pos[3] = {position.x, position.y, position.z};
         return crowd->addAgent(pos, &ap);
@@ -595,7 +600,7 @@ namespace core
             return;
 
         float pos[3] = {target.x, target.y, target.z};
-        float halfExtents[3] = {2.0f, 4.0f, 2.0f};
+        float halfExtents[3] = {TARGET_HALF_EXTENTS[0], TARGET_HALF_EXTENTS[1], TARGET_HALF_EXTENTS[2]};
 
         dtQueryFilter filter;
         filter.setIncludeFlags(0xFFFF);

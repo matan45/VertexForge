@@ -13,7 +13,7 @@ namespace core
     class NavmeshAdapter : public services::INavmeshProvider
     {
     public:
-        explicit NavmeshAdapter();
+        NavmeshAdapter();
         ~NavmeshAdapter() override;
 
         NavmeshAdapter(const NavmeshAdapter&) = delete;
@@ -65,6 +65,7 @@ namespace core
         types::NavmeshBakeProgress currentProgress;
 
         void destroyNavMesh();
-        void initCrowd();
+        void destroyNavMeshLocked();
+        void initCrowd(float agentRadius);
     };
 }

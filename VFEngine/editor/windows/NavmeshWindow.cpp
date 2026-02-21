@@ -30,10 +30,6 @@ namespace windows
         {
             dispatcher.unsubscribe(bakeCompleteToken);
         }
-        if (navmeshClearedToken.isValid())
-        {
-            dispatcher.unsubscribe(navmeshClearedToken);
-        }
     }
 
     void NavmeshWindow::pushNavmeshDebugMesh()

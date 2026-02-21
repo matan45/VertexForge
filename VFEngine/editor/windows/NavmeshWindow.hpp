@@ -13,7 +13,6 @@ namespace windows
         bool visible = false;
         types::NavmeshBakeSettings settings;
         events::SubscriptionToken bakeCompleteToken;
-        events::SubscriptionToken navmeshClearedToken;
         nfd::FileDialog fileDialog;
 
         void drawBakeSettings();

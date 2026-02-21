@@ -43,7 +43,7 @@ namespace postprocess
 
     struct ToneMappingSettings
     {
-        bool enabled = true;
+        bool enabled = false;
         ToneMappingMode mode = ToneMappingMode::ACES;
         float exposure = 1.0f;
         float gamma = 2.2f;
@@ -147,7 +147,7 @@ namespace postprocess
 
     struct PostProcessSettings
     {
-        bool enabled = true;
+        bool enabled = false;
 
         ToneMappingSettings toneMapping;
         FXAASettings fxaa;
