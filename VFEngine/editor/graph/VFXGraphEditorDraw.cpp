@@ -1,10 +1,183 @@
 #include "VFXGraphEditor.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "imgui.h"
+#include "ImCurveEdit.h"
+#include "ImGradient.h"
 #include <nfd/FileDialog.hpp>
 #include <filesystem>
+#include <unordered_map>
+#include <algorithm>
 
 namespace ed = ax::NodeEditor;
+
+namespace {
+
+    class VFXCurveDelegate : public ImCurveEdit::Delegate {
+        std::vector<ImVec2> points;
+        ImVec2 rangeMin{0.0f, 0.0f};
+        ImVec2 rangeMax{1.0f, 1.0f};
+
+    public:
+        bool dirty = false;
+
+        void syncFrom(const vfx::VFXCurve& curve) {
+            points.clear();
+            for (const auto& key : curve.keys) {
+                points.push_back({key.time, key.value});
+            }
+            updateRange();
+            dirty = false;
+        }
+
+        void syncTo(vfx::VFXCurve& curve) {
+            curve.keys.clear();
+            for (const auto& p : points) {
+                vfx::VFXCurveKey key;
+                key.time = p.x;
+                key.value = p.y;
+                curve.keys.push_back(key);
+            }
+            std::sort(curve.keys.begin(), curve.keys.end(),
+                      [](const auto& a, const auto& b) { return a.time < b.time; });
+
+            for (size_t i = 0; i < curve.keys.size(); ++i) {
+                if (curve.keys.size() <= 1) {
+                    curve.keys[i].inTangent = 0.0f;
+                    curve.keys[i].outTangent = 0.0f;
+                } else if (i == 0) {
+                    float dt = curve.keys[1].time - curve.keys[0].time;
+                    if (dt > 0.0001f)
+                        curve.keys[i].outTangent = (curve.keys[1].value - curve.keys[0].value) / dt;
+                    else
+                        curve.keys[i].outTangent = 0.0f;
+                    curve.keys[i].inTangent = curve.keys[i].outTangent;
+                } else if (i == curve.keys.size() - 1) {
+                    float dt = curve.keys[i].time - curve.keys[i - 1].time;
+                    if (dt > 0.0001f)
+                        curve.keys[i].inTangent = (curve.keys[i].value - curve.keys[i - 1].value) / dt;
+                    else
+                        curve.keys[i].inTangent = 0.0f;
+                    curve.keys[i].outTangent = curve.keys[i].inTangent;
+                } else {
+                    float dt = curve.keys[i + 1].time - curve.keys[i - 1].time;
+                    if (dt > 0.0001f) {
+                        float tangent = (curve.keys[i + 1].value - curve.keys[i - 1].value) / dt;
+                        curve.keys[i].inTangent = tangent;
+                        curve.keys[i].outTangent = tangent;
+                    } else {
+                        curve.keys[i].inTangent = 0.0f;
+                        curve.keys[i].outTangent = 0.0f;
+                    }
+                }
+            }
+            dirty = false;
+        }
+
+        size_t GetCurveCount() override { return 1; }
+        bool IsVisible(size_t) override { return true; }
+        ImCurveEdit::CurveType GetCurveType(size_t) const override { return ImCurveEdit::CurveSmooth; }
+        ImVec2& GetMin() override { return rangeMin; }
+        ImVec2& GetMax() override { return rangeMax; }
+        size_t GetPointCount(size_t) override { return points.size(); }
+        uint32_t GetCurveColor(size_t) override { return 0xFF40FF40; }
+        ImVec2* GetPoints(size_t) override { return points.data(); }
+
+        int EditPoint(size_t, int pointIndex, ImVec2 value) override {
+            points[pointIndex] = value;
+            dirty = true;
+            return pointIndex;
+        }
+
+        void AddPoint(size_t, ImVec2 value) override {
+            points.push_back(value);
+            dirty = true;
+        }
+
+    private:
+        void updateRange() {
+            if (points.empty()) return;
+            float minVal = points[0].y, maxVal = points[0].y;
+            for (const auto& p : points) {
+                minVal = std::min(minVal, p.y);
+                maxVal = std::max(maxVal, p.y);
+            }
+            rangeMin.y = std::min(minVal - 0.1f, 0.0f);
+            rangeMax.y = std::max(maxVal + 0.1f, 1.0f);
+        }
+    };
+
+    class VFXGradientDelegate : public ImGradient::Delegate {
+        std::vector<ImVec4> points;
+
+    public:
+        bool dirty = false;
+
+        void syncFrom(const vfx::VFXGradient& gradient) {
+            points.clear();
+            for (const auto& stop : gradient.stops) {
+                points.push_back({stop.color.r, stop.color.g, stop.color.b, stop.position});
+            }
+            dirty = false;
+        }
+
+        void syncTo(vfx::VFXGradient& gradient, float selectedAlpha = 1.0f, int selectedIdx = -1) {
+            gradient.stops.clear();
+            for (size_t i = 0; i < points.size(); ++i) {
+                vfx::VFXGradientStop stop;
+                stop.position = points[i].w;
+                stop.color = glm::vec4(points[i].x, points[i].y, points[i].z, 1.0f);
+                gradient.stops.push_back(stop);
+            }
+            std::sort(gradient.stops.begin(), gradient.stops.end(),
+                      [](const auto& a, const auto& b) { return a.position < b.position; });
+            dirty = false;
+        }
+
+        size_t GetPointCount() override { return points.size(); }
+        ImVec4* GetPoints() override { return points.data(); }
+
+        int EditPoint(int pointIndex, ImVec4 value) override {
+            points[pointIndex] = value;
+            dirty = true;
+            return pointIndex;
+        }
+
+        ImVec4 GetPoint(float t) override {
+            if (points.empty()) return {1, 1, 1, 0};
+            if (points.size() == 1) return points[0];
+
+            std::vector<ImVec4> sorted = points;
+            std::sort(sorted.begin(), sorted.end(),
+                      [](const ImVec4& a, const ImVec4& b) { return a.w < b.w; });
+
+            if (t <= sorted.front().w) return sorted.front();
+            if (t >= sorted.back().w) return sorted.back();
+
+            for (size_t i = 0; i < sorted.size() - 1; ++i) {
+                if (t >= sorted[i].w && t <= sorted[i + 1].w) {
+                    float range = sorted[i + 1].w - sorted[i].w;
+                    float frac = (range > 0.0001f) ? (t - sorted[i].w) / range : 0.0f;
+                    return ImVec4(
+                        sorted[i].x + (sorted[i + 1].x - sorted[i].x) * frac,
+                        sorted[i].y + (sorted[i + 1].y - sorted[i].y) * frac,
+                        sorted[i].z + (sorted[i + 1].z - sorted[i].z) * frac,
+                        t);
+                }
+            }
+            return sorted.back();
+        }
+
+        void AddPoint(ImVec4 value) override {
+            points.push_back(value);
+            dirty = true;
+        }
+    };
+
+    static std::unordered_map<std::string, VFXCurveDelegate> s_curveDelegates;
+    static std::unordered_map<std::string, VFXGradientDelegate> s_gradientDelegates;
+    static std::unordered_map<std::string, int> s_gradientSelections;
+
+} // anonymous namespace
 
 namespace editor::graph {
 
@@ -213,6 +386,60 @@ namespace editor::graph {
                                 }
                             }
                         }
+                    }
+                    break;
+                }
+                case vfx::VFXPropertyType::Curve: {
+                    vfx::VFXCurve* val = std::get_if<vfx::VFXCurve>(&prop.value);
+                    if (val) {
+                        ImGui::Text("%s", propName.c_str());
+                        auto& delegate = s_curveDelegates[widgetId];
+                        if (delegate.GetPointCount(0) == 0 ||
+                            delegate.GetPointCount(0) != val->keys.size()) {
+                            delegate.syncFrom(*val);
+                        }
+                        ed::Suspend();
+                        unsigned int curveId = static_cast<unsigned int>(
+                            std::hash<std::string>{}(widgetId));
+                        ImCurveEdit::Edit(delegate, ImVec2(200, 100), curveId);
+                        if (delegate.dirty) {
+                            delegate.syncTo(*val);
+                            if (onGraphChanged) onGraphChanged();
+                        }
+                        ed::Resume();
+                    }
+                    break;
+                }
+                case vfx::VFXPropertyType::Gradient: {
+                    vfx::VFXGradient* val = std::get_if<vfx::VFXGradient>(&prop.value);
+                    if (val) {
+                        ImGui::Text("%s", propName.c_str());
+                        auto& delegate = s_gradientDelegates[widgetId];
+                        auto& selection = s_gradientSelections[widgetId];
+                        if (delegate.GetPointCount() == 0 ||
+                            delegate.GetPointCount() != val->stops.size()) {
+                            delegate.syncFrom(*val);
+                            selection = -1;
+                        }
+                        ed::Suspend();
+                        ImGradient::Edit(delegate, ImVec2(200, 20), selection);
+                        if (delegate.dirty) {
+                            delegate.syncTo(*val);
+                            if (onGraphChanged) onGraphChanged();
+                        }
+                        if (selection >= 0 && selection < static_cast<int>(val->stops.size())) {
+                            float alpha = val->stops[selection].color.a;
+                            std::string alphaId = "##alpha" + widgetId;
+                            ImGui::Text("Alpha");
+                            ImGui::SameLine(labelWidth);
+                            ImGui::PushItemWidth(inputWidth);
+                            if (ImGui::SliderFloat(alphaId.c_str(), &alpha, 0.0f, 1.0f, "%.2f")) {
+                                val->stops[selection].color.a = alpha;
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        ed::Resume();
                     }
                     break;
                 }

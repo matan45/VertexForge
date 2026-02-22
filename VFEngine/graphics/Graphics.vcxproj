@@ -250,6 +250,7 @@
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
+    <ClInclude Include="render\vfx\VFXLUTBaker.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
     <ClInclude Include="render\vfx\VFXQuadData.hpp" />
     <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
@@ -419,6 +420,7 @@
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXLUTBaker.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />

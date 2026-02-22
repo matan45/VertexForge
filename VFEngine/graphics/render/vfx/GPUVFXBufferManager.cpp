@@ -59,11 +59,19 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createLUTBuffer())
+            {
+                loggerError("GPUVFXBufferManager: Failed to create LUT buffer");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
-                           getStateBufferSize() + getDrawCommandBufferSize()) / (1024.0f * 1024.0f));
+                           getStateBufferSize() + getDrawCommandBufferSize() +
+                           getLUTBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -212,6 +220,12 @@ namespace render::vfx
     {
         auto& vkDevice = device.getLogicalDevice();
 
+        if (lutMapped && lutMemory)
+        {
+            vkDevice.unmapMemory(lutMemory);
+            lutMapped = nullptr;
+        }
+
         if (configMapped && configMemory)
         {
             vkDevice.unmapMemory(configMemory);
@@ -232,6 +246,7 @@ namespace render::vfx
         core::BufferUtilities::destroyBuffer(vkDevice, configBuffer, configMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, drawCommandBuffer, drawCommandMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, lutBuffer, lutMemory);
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const
@@ -254,6 +269,37 @@ namespace render::vfx
         return static_cast<vk::DeviceSize>(maxEmitters) * sizeof(VFXDrawIndirectCommand);
     }
 
+    vk::DeviceSize GPUVFXBufferManager::getLUTBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(maxEmitters) *
+               GPUVFXConstants::LUT_CHANNELS * GPUVFXConstants::LUT_RESOLUTION *
+               sizeof(glm::vec4);
+    }
+
+    bool GPUVFXBufferManager::createLUTBuffer()
+    {
+        core::BufferInfoRequest request(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getLUTBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible |
+            vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+
+        core::BufferUtilities::createBuffer(request, lutBuffer, lutMemory);
+
+        if (lutBuffer && lutMemory)
+        {
+            lutMapped = device.getLogicalDevice().mapMemory(
+                lutMemory, 0, getLUTBufferSize(), vk::MemoryMapFlags{}
+            );
+            std::memset(lutMapped, 0, getLUTBufferSize());
+            return true;
+        }
+        return false;
+    }
+
     void GPUVFXBufferManager::updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config)
     {
         if (!initialized || emitterIndex >= maxEmitters || !configMapped)
@@ -274,6 +320,21 @@ namespace render::vfx
 
         auto* states = static_cast<GPUEmitterState*>(stateStagingMapped[currentFrameIndex]);
         states[emitterIndex] = state;
+    }
+
+    void GPUVFXBufferManager::updateEmitterLUT(uint32_t emitterIndex, const std::vector<glm::vec4>& lutData)
+    {
+        if (!initialized || emitterIndex >= maxEmitters || !lutMapped)
+        {
+            return;
+        }
+
+        constexpr uint32_t entriesPerEmitter = GPUVFXConstants::LUT_CHANNELS * GPUVFXConstants::LUT_RESOLUTION;
+        uint32_t offset = emitterIndex * entriesPerEmitter;
+        uint32_t copyCount = std::min(static_cast<uint32_t>(lutData.size()), entriesPerEmitter);
+
+        auto* dst = static_cast<glm::vec4*>(lutMapped) + offset;
+        std::memcpy(dst, lutData.data(), copyCount * sizeof(glm::vec4));
     }
 
     void GPUVFXBufferManager::resetActiveCount(vk::CommandBuffer cmd, uint32_t emitterIndex)

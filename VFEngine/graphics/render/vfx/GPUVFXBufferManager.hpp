@@ -3,6 +3,7 @@
 #include "GPUVFXTypes.hpp"
 #include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 #include <vector>
 #include <array>
 
@@ -35,6 +36,10 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer;
         vk::DeviceMemory drawCommandMemory;
 
+        vk::Buffer lutBuffer;
+        vk::DeviceMemory lutMemory;
+        void* lutMapped = nullptr;
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -63,14 +68,17 @@ namespace render::vfx
         vk::Buffer getConfigBuffer() const { return configBuffer; }
         vk::Buffer getStateBuffer() const { return stateBuffer; }
         vk::Buffer getDrawCommandBuffer() const { return drawCommandBuffer; }
+        vk::Buffer getLUTBuffer() const { return lutBuffer; }
 
         vk::DeviceSize getParticleBufferSize() const;
         vk::DeviceSize getConfigBufferSize() const;
         vk::DeviceSize getStateBufferSize() const;
         vk::DeviceSize getDrawCommandBufferSize() const;
+        vk::DeviceSize getLUTBufferSize() const;
 
         void updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config);
         void updateEmitterState(uint32_t emitterIndex, const GPUEmitterState& state);
+        void updateEmitterLUT(uint32_t emitterIndex, const std::vector<glm::vec4>& lutData);
 
         void resetActiveCount(vk::CommandBuffer cmd, uint32_t emitterIndex);
         void resetAllActiveCounts(vk::CommandBuffer cmd);
@@ -103,6 +111,7 @@ namespace render::vfx
         bool createConfigBuffer();
         bool createStateBuffer();
         bool createDrawCommandBuffer();
+        bool createLUTBuffer();
         void destroyBuffers();
     };
 }

@@ -177,24 +177,23 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        particle.color = glm::mix(mod.startColor, mod.endColor, t);
+        particle.color = mod.gradient.evaluate(t);
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
-        particle.size = particle.initialSize * multiplier;
+        particle.size = particle.initialSize * mod.curve.evaluate(t);
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
+        float multiplier = mod.curve.evaluate(t);
         particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
     }
 
-    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float /*t*/, float deltaTime)
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
     {
-        particle.rotation += glm::radians(mod.angularVelocity) * deltaTime;
+        particle.rotation += glm::radians(mod.curve.evaluate(t)) * deltaTime;
     }
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)

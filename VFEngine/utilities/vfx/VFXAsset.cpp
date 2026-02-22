@@ -167,6 +167,32 @@ namespace vfx
             return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
         case VFXPropertyType::String:
             return std::holds_alternative<std::string>(val) ? std::get<std::string>(val) : "";
+        case VFXPropertyType::Curve:
+            if (auto* curve = std::get_if<VFXCurve>(&val))
+            {
+                json cj;
+                json keysArr = json::array();
+                for (const auto& key : curve->keys)
+                {
+                    keysArr.push_back(json::array({key.time, key.value, key.inTangent, key.outTangent}));
+                }
+                cj["keys"] = keysArr;
+                return cj;
+            }
+            return json::object();
+        case VFXPropertyType::Gradient:
+            if (auto* grad = std::get_if<VFXGradient>(&val))
+            {
+                json gj;
+                json stopsArr = json::array();
+                for (const auto& stop : grad->stops)
+                {
+                    stopsArr.push_back(json::array({stop.position, stop.color.r, stop.color.g, stop.color.b, stop.color.a}));
+                }
+                gj["stops"] = stopsArr;
+                return gj;
+            }
+            return json::object();
         default:
             return 0.0f;
         }
@@ -199,6 +225,43 @@ namespace vfx
                 return j.is_boolean() ? j.get<bool>() : false;
             case VFXPropertyType::String:
                 return j.is_string() ? j.get<std::string>() : std::string("");
+            case VFXPropertyType::Curve:
+            {
+                VFXCurve curve;
+                if (j.is_object() && j.contains("keys") && j["keys"].is_array())
+                {
+                    for (const auto& keyArr : j["keys"])
+                    {
+                        if (keyArr.is_array() && keyArr.size() >= 4)
+                        {
+                            curve.keys.push_back({
+                                keyArr[0].get<float>(), keyArr[1].get<float>(),
+                                keyArr[2].get<float>(), keyArr[3].get<float>()
+                            });
+                        }
+                    }
+                }
+                return curve;
+            }
+            case VFXPropertyType::Gradient:
+            {
+                VFXGradient gradient;
+                if (j.is_object() && j.contains("stops") && j["stops"].is_array())
+                {
+                    for (const auto& stopArr : j["stops"])
+                    {
+                        if (stopArr.is_array() && stopArr.size() >= 5)
+                        {
+                            gradient.stops.push_back({
+                                stopArr[0].get<float>(),
+                                glm::vec4(stopArr[1].get<float>(), stopArr[2].get<float>(),
+                                          stopArr[3].get<float>(), stopArr[4].get<float>())
+                            });
+                        }
+                    }
+                }
+                return gradient;
+            }
             default:
                 return 0.0f;
             }
@@ -214,7 +277,8 @@ namespace vfx
         json j;
         j["type"] = propertyTypeToString(prop.type);
         j["value"] = serializePropertyValue(prop.value, prop.type);
-        if (prop.type == VFXPropertyType::Float || prop.type == VFXPropertyType::Int)
+        if (prop.type == VFXPropertyType::Float || prop.type == VFXPropertyType::Int ||
+            prop.type == VFXPropertyType::Curve)
         {
             j["min"] = prop.min;
             j["max"] = prop.max;
@@ -275,7 +339,96 @@ namespace vfx
             }
         }
 
+        // Auto-migrate legacy modifier properties (v1.0 -> v1.1)
+        if (isModifierNode(node.type))
+        {
+            migrateModifierNode(node);
+        }
+
         return node;
+    }
+
+    void VFXAsset::migrateModifierNode(VFXNode& node)
+    {
+        // Migrate ColorOverLifetime: startColor/endColor -> gradient
+        if (node.type == VFXNodeType::ColorOverLifetime)
+        {
+            auto startIt = node.properties.find("startColor");
+            auto endIt = node.properties.find("endColor");
+            if (startIt != node.properties.end() && endIt != node.properties.end() &&
+                node.properties.find("gradient") == node.properties.end())
+            {
+                glm::vec4 startColor = std::get_if<glm::vec4>(&startIt->second.value)
+                    ? *std::get_if<glm::vec4>(&startIt->second.value) : ModifierDefaults::COLOR_START;
+                glm::vec4 endColor = std::get_if<glm::vec4>(&endIt->second.value)
+                    ? *std::get_if<glm::vec4>(&endIt->second.value) : ModifierDefaults::COLOR_END;
+                node.properties.erase(startIt);
+                node.properties.erase(endIt);
+                node.properties["gradient"] = VFXProperty{
+                    "gradient", VFXPropertyType::Gradient,
+                    VFXGradient::fromStartEnd(startColor, endColor), 0.0f, 1.0f
+                };
+            }
+        }
+        // Migrate SizeOverLifetime: startMultiplier/endMultiplier -> curve
+        else if (node.type == VFXNodeType::SizeOverLifetime)
+        {
+            auto startIt = node.properties.find("startMultiplier");
+            auto endIt = node.properties.find("endMultiplier");
+            if (startIt != node.properties.end() && endIt != node.properties.end() &&
+                node.properties.find("curve") == node.properties.end())
+            {
+                float startVal = std::get_if<float>(&startIt->second.value)
+                    ? *std::get_if<float>(&startIt->second.value) : ModifierDefaults::SIZE_START_MULTIPLIER;
+                float endVal = std::get_if<float>(&endIt->second.value)
+                    ? *std::get_if<float>(&endIt->second.value) : ModifierDefaults::SIZE_END_MULTIPLIER;
+                float maxVal = endIt->second.max;
+                node.properties.erase(startIt);
+                node.properties.erase(endIt);
+                node.properties["curve"] = VFXProperty{
+                    "curve", VFXPropertyType::Curve,
+                    VFXCurve::fromStartEnd(startVal, endVal), 0.0f, maxVal
+                };
+            }
+        }
+        // Migrate SpeedOverLifetime: startMultiplier/endMultiplier -> curve
+        else if (node.type == VFXNodeType::SpeedOverLifetime)
+        {
+            auto startIt = node.properties.find("startMultiplier");
+            auto endIt = node.properties.find("endMultiplier");
+            if (startIt != node.properties.end() && endIt != node.properties.end() &&
+                node.properties.find("curve") == node.properties.end())
+            {
+                float startVal = std::get_if<float>(&startIt->second.value)
+                    ? *std::get_if<float>(&startIt->second.value) : ModifierDefaults::SPEED_START_MULTIPLIER;
+                float endVal = std::get_if<float>(&endIt->second.value)
+                    ? *std::get_if<float>(&endIt->second.value) : ModifierDefaults::SPEED_END_MULTIPLIER;
+                float maxVal = endIt->second.max;
+                node.properties.erase(startIt);
+                node.properties.erase(endIt);
+                node.properties["curve"] = VFXProperty{
+                    "curve", VFXPropertyType::Curve,
+                    VFXCurve::fromStartEnd(startVal, endVal), 0.0f, maxVal
+                };
+            }
+        }
+        // Migrate RotationOverLifetime: angularVelocity -> curve
+        else if (node.type == VFXNodeType::RotationOverLifetime)
+        {
+            auto it = node.properties.find("angularVelocity");
+            if (it != node.properties.end() && node.properties.find("curve") == node.properties.end())
+            {
+                float angVel = std::get_if<float>(&it->second.value)
+                    ? *std::get_if<float>(&it->second.value) : ModifierDefaults::ANGULAR_VELOCITY;
+                float minVal = it->second.min;
+                float maxVal = it->second.max;
+                node.properties.erase(it);
+                node.properties["curve"] = VFXProperty{
+                    "curve", VFXPropertyType::Curve,
+                    VFXCurve::constant(angVel), minVal, maxVal
+                };
+            }
+        }
     }
 
     json VFXAsset::serializeLink(const VFXNodeLink& link)

@@ -6,6 +6,7 @@
 #include <variant>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "VFXCurveTypes.hpp"
 
 namespace vfx
 {
@@ -18,10 +19,13 @@ namespace vfx
         Color,
         Int,
         Bool,
-        String
+        String,
+        Curve,
+        Gradient
     };
 
-    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string>;
+    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string,
+                                          VFXCurve, VFXGradient>;
 
     enum class VFXNodeType : uint8_t
     {

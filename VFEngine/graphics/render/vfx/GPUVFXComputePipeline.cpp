@@ -76,7 +76,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -97,6 +97,11 @@ namespace render::vfx
         bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -158,7 +163,7 @@ namespace render::vfx
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 4;
+        poolSizes[0].descriptorCount = 5;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -185,17 +190,20 @@ namespace render::vfx
         vk::Buffer particleBuffer,
         vk::Buffer configBuffer,
         vk::Buffer stateBuffer,
-        vk::Buffer drawCommandBuffer)
+        vk::Buffer drawCommandBuffer,
+        vk::Buffer lutBuffer)
     {
         if (particleBuffer != cachedParticleBuffer ||
             configBuffer != cachedConfigBuffer ||
             stateBuffer != cachedStateBuffer ||
-            drawCommandBuffer != cachedDrawCommandBuffer)
+            drawCommandBuffer != cachedDrawCommandBuffer ||
+            lutBuffer != cachedLUTBuffer)
         {
             cachedParticleBuffer = particleBuffer;
             cachedConfigBuffer = configBuffer;
             cachedStateBuffer = stateBuffer;
             cachedDrawCommandBuffer = drawCommandBuffer;
+            cachedLUTBuffer = lutBuffer;
             descriptorsNeedUpdate = true;
         }
     }
@@ -229,7 +237,12 @@ namespace render::vfx
         drawCmdInfo.offset = 0;
         drawCmdInfo.range = VK_WHOLE_SIZE;
 
-        std::array<vk::WriteDescriptorSet, 4> writes{};
+        vk::DescriptorBufferInfo lutInfo{};
+        lutInfo.buffer = cachedLUTBuffer;
+        lutInfo.offset = 0;
+        lutInfo.range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 5> writes{};
 
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
@@ -254,6 +267,12 @@ namespace render::vfx
         writes[3].descriptorCount = 1;
         writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[3].pBufferInfo = &drawCmdInfo;
+
+        writes[4].dstSet = descriptorSet;
+        writes[4].dstBinding = 4;
+        writes[4].descriptorCount = 1;
+        writes[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[4].pBufferInfo = &lutInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
 

@@ -3,6 +3,7 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
+#include "../render/vfx/VFXLUTBaker.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
@@ -43,7 +44,8 @@ namespace controllers
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getConfigBuffer(),
                 gpuBufferManager->getStateBuffer(),
-                gpuBufferManager->getDrawCommandBuffer()
+                gpuBufferManager->getDrawCommandBuffer(),
+                gpuBufferManager->getLUTBuffer()
             );
 
             gpuRenderPipeline->updateParticleBuffer(
@@ -133,6 +135,18 @@ namespace controllers
                 instance.gpuParticleCount,
                 dist(gen)
             );
+
+            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
+            if (lutResult.lutFlags != 0)
+            {
+                gpuBufferManager->updateEmitterLUT(instance.gpuEmitterIndex, lutResult.data);
+                gpuConfig.lutBaseOffset = instance.gpuEmitterIndex *
+                    render::vfx::GPUVFXConstants::LUT_CHANNELS *
+                    render::vfx::GPUVFXConstants::LUT_RESOLUTION;
+                gpuConfig.lutChannelStride = render::vfx::GPUVFXConstants::LUT_RESOLUTION;
+                gpuConfig.lutFlags = lutResult.lutFlags;
+            }
+
             gpuBufferManager->updateEmitterConfig(instance.gpuEmitterIndex, gpuConfig);
 
             auto gpuState = toGPUState(instance);
@@ -177,25 +191,25 @@ namespace controllers
                 if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorOverLifetime;
-                    gpuConfig.colorStart = mod.startColor;
-                    gpuConfig.colorEnd = mod.endColor;
+                    gpuConfig.colorStart = mod.gradient.evaluate(0.0f);
+                    gpuConfig.colorEnd = mod.gradient.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeOverLifetime;
-                    gpuConfig.sizeStartMult = mod.startMultiplier;
-                    gpuConfig.sizeEndMult = mod.endMultiplier;
+                    gpuConfig.sizeStartMult = mod.curve.evaluate(0.0f);
+                    gpuConfig.sizeEndMult = mod.curve.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SpeedOverLifetime;
-                    gpuConfig.speedStartMult = mod.startMultiplier;
-                    gpuConfig.speedEndMult = mod.endMultiplier;
+                    gpuConfig.speedStartMult = mod.curve.evaluate(0.0f);
+                    gpuConfig.speedEndMult = mod.curve.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::RotationOverLifetime;
-                    gpuConfig.angularVelocity = glm::radians(mod.angularVelocity);
+                    gpuConfig.angularVelocity = glm::radians(mod.curve.evaluate(0.0f));
                 }
             }, modifier);
         }

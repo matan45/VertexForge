@@ -75,9 +75,9 @@ namespace render::vfx
         float speedStartMult;
         float speedEndMult;
         float angularVelocity;
-        float modPadding1 = 0.0f;
-        float modPadding2 = 0.0f;
-        float modPadding3 = 0.0f;
+        uint32_t lutBaseOffset = 0;
+        uint32_t lutChannelStride = 0;
+        uint32_t lutFlags = 0;
 
         glm::vec4 gravityDir;
         glm::vec4 windDir;
@@ -155,6 +155,14 @@ namespace render::vfx
     static_assert(offsetof(VFXDrawIndirectCommand, vertexOffset) == 12, "VFXDrawIndirectCommand::vertexOffset offset mismatch");
     static_assert(offsetof(VFXDrawIndirectCommand, firstInstance) == 16, "VFXDrawIndirectCommand::firstInstance offset mismatch");
 
+    namespace LUTFlags
+    {
+        inline constexpr uint32_t Color = 1 << 0;
+        inline constexpr uint32_t Size = 1 << 1;
+        inline constexpr uint32_t Speed = 1 << 2;
+        inline constexpr uint32_t Rotation = 1 << 3;
+    }
+
     namespace GPUVFXConstants
     {
         inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;
@@ -162,6 +170,8 @@ namespace render::vfx
         inline constexpr uint32_t DEFAULT_PARTICLES_PER_EMITTER = 1024;
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
+        inline constexpr uint32_t LUT_RESOLUTION = 64;
+        inline constexpr uint32_t LUT_CHANNELS = 4; // color, size, speed, rotation
     }
 
     namespace EmitterFlags

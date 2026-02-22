@@ -54,7 +54,9 @@ namespace vfx
         case VFXPropertyType::Color:  return "Color";
         case VFXPropertyType::Int:    return "Int";
         case VFXPropertyType::Bool:   return "Bool";
-        case VFXPropertyType::String: return "String";
+        case VFXPropertyType::String:   return "String";
+        case VFXPropertyType::Curve:    return "Curve";
+        case VFXPropertyType::Gradient: return "Gradient";
         default: return "Float";
         }
     }
@@ -68,7 +70,9 @@ namespace vfx
         if (str == "Color")  return VFXPropertyType::Color;
         if (str == "Int")    return VFXPropertyType::Int;
         if (str == "Bool")   return VFXPropertyType::Bool;
-        if (str == "String") return VFXPropertyType::String;
+        if (str == "String")   return VFXPropertyType::String;
+        if (str == "Curve")    return VFXPropertyType::Curve;
+        if (str == "Gradient") return VFXPropertyType::Gradient;
         return VFXPropertyType::Float;
     }
 

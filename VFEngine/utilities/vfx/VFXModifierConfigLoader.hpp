@@ -23,6 +23,8 @@ namespace vfx
 
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);
+        static VFXCurve getCurve(const VFXNode& node, const std::string& propName, const VFXCurve& defaultValue);
+        static VFXGradient getGradient(const VFXNode& node, const std::string& propName, const VFXGradient& defaultValue);
     };
 
     inline VFXModifierChain VFXModifierConfigLoader::fromGraph(const VFXGraph& graph)
@@ -120,31 +122,31 @@ namespace vfx
     inline ColorOverLifetimeConfig VFXModifierConfigLoader::extractColorConfig(const VFXNode& node)
     {
         ColorOverLifetimeConfig config;
-        config.startColor = getVec4(node, "startColor", ModifierDefaults::COLOR_START);
-        config.endColor = getVec4(node, "endColor", ModifierDefaults::COLOR_END);
+        config.gradient = getGradient(node, "gradient",
+            VFXGradient::fromStartEnd(ModifierDefaults::COLOR_START, ModifierDefaults::COLOR_END));
         return config;
     }
 
     inline SizeOverLifetimeConfig VFXModifierConfigLoader::extractSizeConfig(const VFXNode& node)
     {
         SizeOverLifetimeConfig config;
-        config.startMultiplier = getFloat(node, "startMultiplier", ModifierDefaults::SIZE_START_MULTIPLIER);
-        config.endMultiplier = getFloat(node, "endMultiplier", ModifierDefaults::SIZE_END_MULTIPLIER);
+        config.curve = getCurve(node, "curve",
+            VFXCurve::fromStartEnd(ModifierDefaults::SIZE_START_MULTIPLIER, ModifierDefaults::SIZE_END_MULTIPLIER));
         return config;
     }
 
     inline SpeedOverLifetimeConfig VFXModifierConfigLoader::extractSpeedConfig(const VFXNode& node)
     {
         SpeedOverLifetimeConfig config;
-        config.startMultiplier = getFloat(node, "startMultiplier", ModifierDefaults::SPEED_START_MULTIPLIER);
-        config.endMultiplier = getFloat(node, "endMultiplier", ModifierDefaults::SPEED_END_MULTIPLIER);
+        config.curve = getCurve(node, "curve",
+            VFXCurve::fromStartEnd(ModifierDefaults::SPEED_START_MULTIPLIER, ModifierDefaults::SPEED_END_MULTIPLIER));
         return config;
     }
 
     inline RotationOverLifetimeConfig VFXModifierConfigLoader::extractRotationConfig(const VFXNode& node)
     {
         RotationOverLifetimeConfig config;
-        config.angularVelocity = getFloat(node, "angularVelocity", ModifierDefaults::ANGULAR_VELOCITY);
+        config.curve = getCurve(node, "curve", VFXCurve::constant(ModifierDefaults::ANGULAR_VELOCITY));
         return config;
     }
 
@@ -167,6 +169,30 @@ namespace vfx
             return defaultValue;
 
         if (auto* val = std::get_if<glm::vec4>(&it->second.value))
+            return *val;
+
+        return defaultValue;
+    }
+
+    inline VFXCurve VFXModifierConfigLoader::getCurve(const VFXNode& node, const std::string& propName, const VFXCurve& defaultValue)
+    {
+        auto it = node.properties.find(propName);
+        if (it == node.properties.end())
+            return defaultValue;
+
+        if (auto* val = std::get_if<VFXCurve>(&it->second.value))
+            return *val;
+
+        return defaultValue;
+    }
+
+    inline VFXGradient VFXModifierConfigLoader::getGradient(const VFXNode& node, const std::string& propName, const VFXGradient& defaultValue)
+    {
+        auto it = node.properties.find(propName);
+        if (it == node.properties.end())
+            return defaultValue;
+
+        if (auto* val = std::get_if<VFXGradient>(&it->second.value))
             return *val;
 
         return defaultValue;
