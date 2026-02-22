@@ -17,8 +17,12 @@ namespace render::vfx
         float rotation;
         float initialSize;
         float initialSpeed;
+        uint32_t spawnSeed;
+        float _pad1 = 0.0f;
+        float _pad2 = 0.0f;
+        float _pad3 = 0.0f;
     };
-    static_assert(sizeof(GPUParticle) == 64, "GPUParticle must be 64 bytes for GPU alignment");
+    static_assert(sizeof(GPUParticle) == 80, "GPUParticle must be 80 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
     static_assert(offsetof(GPUParticle, lifetime) == 12, "GPUParticle::lifetime offset mismatch");
     static_assert(offsetof(GPUParticle, velocity) == 16, "GPUParticle::velocity offset mismatch");
@@ -28,6 +32,7 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, rotation) == 52, "GPUParticle::rotation offset mismatch");
     static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
     static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
+    static_assert(offsetof(GPUParticle, spawnSeed) == 64, "GPUParticle::spawnSeed offset mismatch");
 
     namespace ModifierFlags
     {

@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
+#include <algorithm>
 
 namespace windows
 {
@@ -166,8 +167,8 @@ namespace windows
         params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
 
         // Flipbook (VK-493)
-        params.flipbookRows = getInt(*emitterNode, "flipbookRows", vfx::EmitterDefaults::FLIPBOOK_ROWS);
-        params.flipbookColumns = getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS);
+        params.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", vfx::EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
+        params.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
         params.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", vfx::EmitterDefaults::FLIPBOOK_FRAME_RATE);
         params.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", vfx::EmitterDefaults::FLIPBOOK_RANDOM_START);
 

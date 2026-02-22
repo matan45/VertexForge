@@ -8,107 +8,96 @@ namespace render::vfx
         LUTBakeResult result;
         constexpr uint32_t res = GPUVFXConstants::LUT_RESOLUTION;
 
-        // Reserve space: up to 4 channels * resolution entries
+        // Reserve space: exactly 4 channels * resolution entries
         result.data.reserve(GPUVFXConstants::LUT_CHANNELS * res);
-
-        // Channel 0: Color (gradient)
-        bool hasColor = false;
-        // Channel 1: Size (curve)
-        bool hasSize = false;
-        // Channel 2: Speed (curve)
-        bool hasSpeed = false;
-        // Channel 3: Rotation (curve)
-        bool hasRotation = false;
-
-        for (const auto& modifier : modifiers.modifiers)
-        {
-            std::visit([&](const auto& mod) {
-                using T = std::decay_t<decltype(mod)>;
-                if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
-                {
-                    hasColor = true;
-                }
-                else if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
-                {
-                    hasSize = true;
-                }
-                else if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
-                {
-                    hasSpeed = true;
-                }
-                else if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
-                {
-                    hasRotation = true;
-                }
-            }, modifier);
-        }
 
         // Bake each channel in order: color, size, speed, rotation
         // Always bake all 4 channels to maintain fixed stride layout
+        // Only the first modifier of each type is used; duplicates are skipped
+
+        bool bakedColor = false;
         for (const auto& modifier : modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
                 using T = std::decay_t<decltype(mod)>;
                 if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
                 {
-                    bakeGradient(mod.gradient, result.data);
-                    result.lutFlags |= LUTFlags::Color;
+                    if (!bakedColor)
+                    {
+                        bakeGradient(mod.gradient, result.data);
+                        result.lutFlags |= LUTFlags::Color;
+                        bakedColor = true;
+                    }
                 }
             }, modifier);
         }
-        if (!hasColor)
+        if (!bakedColor)
         {
-            // Pad with identity color
             for (uint32_t i = 0; i < res; ++i)
                 result.data.emplace_back(1.0f, 1.0f, 1.0f, 1.0f);
         }
 
+        bool bakedSize = false;
         for (const auto& modifier : modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
                 using T = std::decay_t<decltype(mod)>;
                 if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
                 {
-                    bakeCurve(mod.curve, result.data);
-                    result.lutFlags |= LUTFlags::Size;
+                    if (!bakedSize)
+                    {
+                        bakeCurve(mod.curve, result.data);
+                        result.lutFlags |= LUTFlags::Size;
+                        bakedSize = true;
+                    }
                 }
             }, modifier);
         }
-        if (!hasSize)
+        if (!bakedSize)
         {
             for (uint32_t i = 0; i < res; ++i)
                 result.data.emplace_back(1.0f, 0.0f, 0.0f, 0.0f);
         }
 
+        bool bakedSpeed = false;
         for (const auto& modifier : modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
                 using T = std::decay_t<decltype(mod)>;
                 if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
                 {
-                    bakeCurve(mod.curve, result.data);
-                    result.lutFlags |= LUTFlags::Speed;
+                    if (!bakedSpeed)
+                    {
+                        bakeCurve(mod.curve, result.data);
+                        result.lutFlags |= LUTFlags::Speed;
+                        bakedSpeed = true;
+                    }
                 }
             }, modifier);
         }
-        if (!hasSpeed)
+        if (!bakedSpeed)
         {
             for (uint32_t i = 0; i < res; ++i)
                 result.data.emplace_back(1.0f, 0.0f, 0.0f, 0.0f);
         }
 
+        bool bakedRotation = false;
         for (const auto& modifier : modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
                 using T = std::decay_t<decltype(mod)>;
                 if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
                 {
-                    bakeRotationCurve(mod.curve, result.data);
-                    result.lutFlags |= LUTFlags::Rotation;
+                    if (!bakedRotation)
+                    {
+                        bakeRotationCurve(mod.curve, result.data);
+                        result.lutFlags |= LUTFlags::Rotation;
+                        bakedRotation = true;
+                    }
                 }
             }, modifier);
         }
-        if (!hasRotation)
+        if (!bakedRotation)
         {
             for (uint32_t i = 0; i < res; ++i)
                 result.data.emplace_back(0.0f, 0.0f, 0.0f, 0.0f);

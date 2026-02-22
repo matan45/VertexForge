@@ -14,6 +14,10 @@ struct GPUParticle
     float rotation;
     float initialSize;
     float initialSpeed;
+    uint spawnSeed;
+    float _pad1;
+    float _pad2;
+    float _pad3;
 };
 
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
@@ -646,6 +650,7 @@ void main()
 
             p.initialSize = config.startSize;
             p.initialSpeed = config.startSpeed;
+            p.spawnSeed = seed;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
             p.velocity = dir * config.startSpeed;

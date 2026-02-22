@@ -19,6 +19,10 @@ struct GPUParticle
     float rotation;
     float initialSize;
     float initialSpeed;
+    uint spawnSeed;
+    float _pad1;
+    float _pad2;
+    float _pad3;
 };
 
 struct GPUEmitterConfig
@@ -120,8 +124,7 @@ void main() {
         else
             frameIndex = lifetimeRatio * totalFrames;
         if ((config.modifierFlags & FLIPBOOK_RANDOM_START) != 0u) {
-            uint seed = particleIdx * 2654435761u;
-            frameIndex += float(seed % uint(totalFrames));
+            frameIndex += float(p.spawnSeed % uint(totalFrames));
         }
         frameIndex = mod(frameIndex, totalFrames);
     }

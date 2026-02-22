@@ -31,40 +31,46 @@ namespace editor::vfxeditor
         std::sort(curve.keys.begin(), curve.keys.end(),
                   [](const auto& a, const auto& b) { return a.time < b.time; });
 
-        for (size_t i = 0; i < curve.keys.size(); ++i)
+        if (curve.keys.size() <= 1)
         {
-            if (curve.keys.size() <= 1)
+            for (auto& key : curve.keys)
             {
-                curve.keys[i].inTangent = 0.0f;
-                curve.keys[i].outTangent = 0.0f;
+                key.inTangent = 0.0f;
+                key.outTangent = 0.0f;
             }
-            else if (i == 0)
+        }
+        else
+        {
+            for (size_t i = 0; i < curve.keys.size(); ++i)
             {
-                float dt = curve.keys[1].time - curve.keys[0].time;
-                curve.keys[i].outTangent = (dt > 0.0001f)
-                    ? (curve.keys[1].value - curve.keys[0].value) / dt : 0.0f;
-                curve.keys[i].inTangent = curve.keys[i].outTangent;
-            }
-            else if (i == curve.keys.size() - 1)
-            {
-                float dt = curve.keys[i].time - curve.keys[i - 1].time;
-                curve.keys[i].inTangent = (dt > 0.0001f)
-                    ? (curve.keys[i].value - curve.keys[i - 1].value) / dt : 0.0f;
-                curve.keys[i].outTangent = curve.keys[i].inTangent;
-            }
-            else
-            {
-                float dt = curve.keys[i + 1].time - curve.keys[i - 1].time;
-                if (dt > 0.0001f)
+                if (i == 0)
                 {
-                    float tangent = (curve.keys[i + 1].value - curve.keys[i - 1].value) / dt;
-                    curve.keys[i].inTangent = tangent;
-                    curve.keys[i].outTangent = tangent;
+                    float dt = curve.keys[1].time - curve.keys[0].time;
+                    curve.keys[i].outTangent = (dt > 0.0001f)
+                        ? (curve.keys[1].value - curve.keys[0].value) / dt : 0.0f;
+                    curve.keys[i].inTangent = curve.keys[i].outTangent;
+                }
+                else if (i == curve.keys.size() - 1)
+                {
+                    float dt = curve.keys[i].time - curve.keys[i - 1].time;
+                    curve.keys[i].inTangent = (dt > 0.0001f)
+                        ? (curve.keys[i].value - curve.keys[i - 1].value) / dt : 0.0f;
+                    curve.keys[i].outTangent = curve.keys[i].inTangent;
                 }
                 else
                 {
-                    curve.keys[i].inTangent = 0.0f;
-                    curve.keys[i].outTangent = 0.0f;
+                    float dt = curve.keys[i + 1].time - curve.keys[i - 1].time;
+                    if (dt > 0.0001f)
+                    {
+                        float tangent = (curve.keys[i + 1].value - curve.keys[i - 1].value) / dt;
+                        curve.keys[i].inTangent = tangent;
+                        curve.keys[i].outTangent = tangent;
+                    }
+                    else
+                    {
+                        curve.keys[i].inTangent = 0.0f;
+                        curve.keys[i].outTangent = 0.0f;
+                    }
                 }
             }
         }
@@ -113,12 +119,22 @@ namespace editor::vfxeditor
         std::sort(gradient.stops.begin(), gradient.stops.end(),
                   [](const auto& a, const auto& b) { return a.position < b.position; });
         dirty = false;
+        sortedDirty = true;
+    }
+
+    void VFXGradientDelegate::rebuildSortedCache()
+    {
+        sortedCache = points;
+        std::sort(sortedCache.begin(), sortedCache.end(),
+                  [](const ImVec4& a, const ImVec4& b) { return a.w < b.w; });
+        sortedDirty = false;
     }
 
     int VFXGradientDelegate::EditPoint(int pointIndex, ImVec4 value)
     {
         points[pointIndex] = value;
         dirty = true;
+        sortedDirty = true;
         return pointIndex;
     }
 
@@ -127,27 +143,25 @@ namespace editor::vfxeditor
         if (points.empty()) return {1, 1, 1, 0};
         if (points.size() == 1) return points[0];
 
-        std::vector<ImVec4> sorted = points;
-        std::sort(sorted.begin(), sorted.end(),
-                  [](const ImVec4& a, const ImVec4& b) { return a.w < b.w; });
+        if (sortedDirty) rebuildSortedCache();
 
-        if (t <= sorted.front().w) return sorted.front();
-        if (t >= sorted.back().w) return sorted.back();
+        if (t <= sortedCache.front().w) return sortedCache.front();
+        if (t >= sortedCache.back().w) return sortedCache.back();
 
-        for (size_t i = 0; i < sorted.size() - 1; ++i)
+        for (size_t i = 0; i < sortedCache.size() - 1; ++i)
         {
-            if (t >= sorted[i].w && t <= sorted[i + 1].w)
+            if (t >= sortedCache[i].w && t <= sortedCache[i + 1].w)
             {
-                float range = sorted[i + 1].w - sorted[i].w;
-                float frac = (range > 0.0001f) ? (t - sorted[i].w) / range : 0.0f;
+                float range = sortedCache[i + 1].w - sortedCache[i].w;
+                float frac = (range > 0.0001f) ? (t - sortedCache[i].w) / range : 0.0f;
                 return ImVec4(
-                    sorted[i].x + (sorted[i + 1].x - sorted[i].x) * frac,
-                    sorted[i].y + (sorted[i + 1].y - sorted[i].y) * frac,
-                    sorted[i].z + (sorted[i + 1].z - sorted[i].z) * frac,
+                    sortedCache[i].x + (sortedCache[i + 1].x - sortedCache[i].x) * frac,
+                    sortedCache[i].y + (sortedCache[i + 1].y - sortedCache[i].y) * frac,
+                    sortedCache[i].z + (sortedCache[i + 1].z - sortedCache[i].z) * frac,
                     t);
             }
         }
-        return sorted.back();
+        return sortedCache.back();
     }
 
     void VFXGradientDelegate::AddPoint(ImVec4 value)
@@ -155,6 +169,7 @@ namespace editor::vfxeditor
         points.push_back(value);
         alphas.push_back(1.0f);
         dirty = true;
+        sortedDirty = true;
     }
 
     // --- VFXPropertyPanel ---

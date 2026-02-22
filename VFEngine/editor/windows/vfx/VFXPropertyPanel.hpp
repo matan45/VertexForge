@@ -40,6 +40,10 @@ namespace editor::vfxeditor
     {
         std::vector<ImVec4> points;
         std::vector<float> alphas;  // Per-stop alpha (separate from ImVec4 which uses .w for position)
+        std::vector<ImVec4> sortedCache;
+        bool sortedDirty = true;
+
+        void rebuildSortedCache();
 
     public:
         bool dirty = false;

@@ -149,11 +149,11 @@ namespace vfx
 
             // Rendering
             emitterNode.properties["alphaClipThreshold"] = VFXProperty{
-                "Alpha Clip", VFXPropertyType::Float,
+                "alphaClipThreshold", VFXPropertyType::Float,
                 EmitterDefaults::ALPHA_CLIP_THRESHOLD, 0.0f, 1.0f
             };
             emitterNode.properties["additiveBlend"] = VFXProperty{
-                "Additive", VFXPropertyType::Bool,
+                "additiveBlend", VFXPropertyType::Bool,
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
             };
 
