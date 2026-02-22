@@ -69,6 +69,7 @@ namespace controllers
         }
         pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns);
 
+        lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
     }
@@ -198,11 +199,38 @@ namespace controllers
         return particleSystem ? particleSystem->isPlaying() : false;
     }
 
+    void VFXPreviewController::recreateOffscreenResources()
+    {
+        device.getLogicalDevice().waitIdle();
+
+        // Remove old ImGui descriptor sets before destroying image views
+        for (auto const& resources : offscreenResources.colorImages)
+        {
+            if (resources.descriptorSet)
+            {
+                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+            }
+        }
+
+        cleanupOffscreenResources();
+        createOffscreenResources();
+
+        pipeline->recreate();
+
+        lastExtent = swapChain.getSwapchainExtent();
+    }
+
     void* VFXPreviewController::render()
     {
         if (!initialized || !pipeline || !pipeline->isInitialized())
         {
             return nullptr;
+        }
+
+        vk::Extent2D currentExtent = swapChain.getSwapchainExtent();
+        if (currentExtent.width != lastExtent.width || currentExtent.height != lastExtent.height)
+        {
+            recreateOffscreenResources();
         }
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();

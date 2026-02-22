@@ -61,6 +61,7 @@ namespace controllers
 
         VFXPreviewParams currentParams;
         bool initialized = false;
+        vk::Extent2D lastExtent{};
 
     public:
         explicit VFXPreviewController();
@@ -87,6 +88,7 @@ namespace controllers
     private:
         void createOffscreenResources();
         void cleanupOffscreenResources();
+        void recreateOffscreenResources();
         void createSampler();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
     };
