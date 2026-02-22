@@ -23,5 +23,6 @@ namespace render::vfx
     private:
         static void bakeGradient(const ::vfx::VFXGradient& gradient, std::vector<glm::vec4>& out);
         static void bakeCurve(const ::vfx::VFXCurve& curve, std::vector<glm::vec4>& out);
+        static void bakeRotationCurve(const ::vfx::VFXCurve& curve, std::vector<glm::vec4>& out);
     };
 }
