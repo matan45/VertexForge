@@ -304,7 +304,7 @@ namespace render::vfx
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(VFXFlipbookPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,  // Particles don't write depth
@@ -564,10 +564,12 @@ namespace render::vfx
         updateDescriptorSet();
     }
 
-    void VFXBillboardPipeline::setFlipbookConfig(int rows, int columns)
+    void VFXBillboardPipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend)
     {
         flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
         flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
+        flipbookPC.alphaClipThreshold = alphaClipThreshold;
+        flipbookPC.blendMode = additiveBlend ? 1u : 0u;
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
@@ -605,7 +607,8 @@ namespace render::vfx
 
             commandBuffer.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
 
-            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+            commandBuffer.pushConstants(pipelineLayout,
+                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                         0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
 
             commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);

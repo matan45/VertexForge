@@ -145,14 +145,25 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
+layout(push_constant) uniform PushConstants {
+    uint emitterIndex;
+    float alphaClipThreshold;
+    uint blendMode;
+} pc;
+
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
 
     vec4 finalColor = texColor * fragColor;
 
-    if (finalColor.a < 0.01) {
+    if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
-    outColor = finalColor;
+    if (pc.blendMode == 1u) {
+        // Additive: pre-multiply by alpha, output zero alpha
+        outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
+    } else {
+        outColor = finalColor;
+    }
 }

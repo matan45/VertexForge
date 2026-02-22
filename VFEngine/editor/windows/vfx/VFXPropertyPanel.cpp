@@ -89,9 +89,11 @@ namespace editor::vfxeditor
     void VFXGradientDelegate::syncFrom(const vfx::VFXGradient& gradient)
     {
         points.clear();
+        alphas.clear();
         for (const auto& stop : gradient.stops)
         {
             points.push_back({stop.color.r, stop.color.g, stop.color.b, stop.position});
+            alphas.push_back(stop.color.a);
         }
         dirty = false;
     }
@@ -99,11 +101,13 @@ namespace editor::vfxeditor
     void VFXGradientDelegate::syncTo(vfx::VFXGradient& gradient)
     {
         gradient.stops.clear();
-        for (const auto& p : points)
+        for (size_t i = 0; i < points.size(); ++i)
         {
+            const auto& p = points[i];
             vfx::VFXGradientStop stop;
             stop.position = p.w;
-            stop.color = glm::vec4(p.x, p.y, p.z, 1.0f);
+            float a = (i < alphas.size()) ? alphas[i] : 1.0f;
+            stop.color = glm::vec4(p.x, p.y, p.z, a);
             gradient.stops.push_back(stop);
         }
         std::sort(gradient.stops.begin(), gradient.stops.end(),
@@ -149,6 +153,7 @@ namespace editor::vfxeditor
     void VFXGradientDelegate::AddPoint(ImVec4 value)
     {
         points.push_back(value);
+        alphas.push_back(1.0f);
         dirty = true;
     }
 
@@ -228,6 +233,7 @@ namespace editor::vfxeditor
             if (ImGui::SliderFloat("Alpha", &alpha, 0.0f, 1.0f, "%.2f"))
             {
                 stop.color.a = alpha;
+                gradientDelegate.syncFrom(gradient);
                 notifyChanged();
             }
             ImGui::PopItemWidth();
@@ -304,6 +310,57 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawRenderingProperties(vfx::VFXNode& node)
+    {
+        ImGui::Text("Rendering");
+        ImGui::Separator();
+
+        struct RenderEntry { const char* key; const char* label; };
+        static constexpr RenderEntry entries[] = {
+            {"alphaClipThreshold", "Alpha Clip"},
+            {"additiveBlend",     "Additive"},
+        };
+
+        float inputWidth = 80.0f;
+
+        for (const auto& entry : entries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            auto& prop = it->second;
+            std::string widgetId = std::string("##panel_") + entry.key;
+
+            if (prop.type == vfx::VFXPropertyType::Float)
+            {
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Bool)
+            {
+                auto* val = std::get_if<bool>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+    }
+
     void VFXPropertyPanel::draw(vfx::VFXGraph* graph, uint32_t selectedNodeId)
     {
         if (!graph || selectedNodeId == 0)
@@ -325,10 +382,12 @@ namespace editor::vfxeditor
             lastPropertyKey.clear();
         }
 
-        // Emitter node: show flipbook properties
+        // Emitter node: show flipbook and rendering properties
         if (node->type == vfx::VFXNodeType::Emitter)
         {
             drawFlipbookProperties(*node);
+            ImGui::Spacing();
+            drawRenderingProperties(*node);
             return;
         }
 

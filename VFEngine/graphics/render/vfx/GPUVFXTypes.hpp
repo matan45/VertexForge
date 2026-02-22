@@ -60,6 +60,11 @@ namespace render::vfx
         inline constexpr uint32_t RandomStart = 1 << 14;
     }
 
+    namespace BlendFlags
+    {
+        inline constexpr uint32_t AdditiveBlend = 1 << 15;
+    }
+
     struct alignas(16) GPUEmitterConfig
     {
         glm::vec4 emitDirection;
@@ -216,6 +221,8 @@ namespace render::vfx
     struct GPUVFXBillboardPushConstants
     {
         uint32_t emitterIndex;
+        float alphaClipThreshold = 0.1f;
+        uint32_t blendMode = 0;  // 0 = alpha blend, 1 = additive
     };
 
     // Push constants for CPU billboard pipeline (VK-493)
@@ -223,5 +230,7 @@ namespace render::vfx
     {
         float flipbookColumns;
         float flipbookRows;
+        float alphaClipThreshold;
+        uint32_t blendMode;  // 0 = alpha blend, 1 = additive
     };
 }

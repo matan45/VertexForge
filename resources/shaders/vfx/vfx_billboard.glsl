@@ -24,6 +24,8 @@ layout(binding = 0) uniform CameraUBO {
 layout(push_constant) uniform FlipbookPC {
     float flipbookColumns;
     float flipbookRows;
+    float alphaClipThreshold;
+    uint blendMode;  // 0 = alpha blend, 1 = additive
 } pc;
 
 void main() {
@@ -70,6 +72,13 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
+layout(push_constant) uniform FlipbookPC {
+    float flipbookColumns;
+    float flipbookRows;
+    float alphaClipThreshold;
+    uint blendMode;
+} pc;
+
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
     vec4 finalColor = texColor * fragColor;
@@ -80,9 +89,14 @@ void main() {
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
 
-    if (finalColor.a < 0.01) {
+    if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
-    outColor = finalColor;
+    if (pc.blendMode == 1u) {
+        // Additive: pre-multiply by alpha, output zero alpha
+        outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
+    } else {
+        outColor = finalColor;
+    }
 }

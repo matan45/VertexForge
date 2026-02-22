@@ -147,6 +147,16 @@ namespace vfx
                 EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
             };
 
+            // Rendering
+            emitterNode.properties["alphaClipThreshold"] = VFXProperty{
+                "Alpha Clip", VFXPropertyType::Float,
+                EmitterDefaults::ALPHA_CLIP_THRESHOLD, 0.0f, 1.0f
+            };
+            emitterNode.properties["additiveBlend"] = VFXProperty{
+                "Additive", VFXPropertyType::Bool,
+                EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

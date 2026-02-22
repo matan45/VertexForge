@@ -29,6 +29,10 @@ namespace services
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
         bool flipbookRandomStart = false;
+
+        // Rendering
+        float alphaClipThreshold = 0.1f;
+        bool additiveBlend = false;
     };
 
     class IVFXPreviewProvider

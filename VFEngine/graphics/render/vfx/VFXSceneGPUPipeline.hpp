@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace core
 {
@@ -35,7 +36,6 @@ namespace render::vfx
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet descriptorSet;
 
         // Buffers
         vk::Buffer quadVertexBuffer;
@@ -60,9 +60,25 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
-        // Custom texture support
-        std::unique_ptr<core::Texture> customTexture;
-        std::string currentTexturePath;
+        // Per-emitter texture and rendering config
+        static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
+
+        struct EmitterRenderConfig
+        {
+            std::string texturePath;
+            float alphaClipThreshold = 0.1f;
+            uint32_t blendMode = 0;
+        };
+
+        struct TextureEntry
+        {
+            std::unique_ptr<core::Texture> texture;
+            vk::DescriptorSet descriptorSet;
+        };
+
+        std::unordered_map<uint32_t, EmitterRenderConfig> emitterConfigs;
+        std::unordered_map<std::string, TextureEntry> textureEntries;
+        vk::DescriptorSet defaultDescriptorSet;
 
     public:
         explicit VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -87,8 +103,10 @@ namespace render::vfx
         // Update emitter config buffer binding (VK-493)
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
 
-        // Set custom texture for particles
-        void setTexture(const std::string& texturePath);
+        // Per-emitter texture and rendering config
+        void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
+        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend);
+        void removeEmitter(uint32_t emitterIndex);
 
         // Record indirect draw commands inline within existing render pass
         void recordCommandsInline(
@@ -107,5 +125,7 @@ namespace render::vfx
         void createDefaultTexture();
         void createSampler();
         void writeDescriptors() const;
+        void writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const;
+        vk::DescriptorSet allocateDescriptorSetFromPool();
     };
 }

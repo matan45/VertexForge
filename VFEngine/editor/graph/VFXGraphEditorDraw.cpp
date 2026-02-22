@@ -100,6 +100,7 @@ namespace editor::graph {
         for (auto& [propName, prop] : node.properties) {
             if (propName == "shapeType") continue;
             if (propName.rfind("flipbook", 0) == 0) continue;  // shown in property panel
+            if (propName == "alphaClipThreshold" || propName == "additiveBlend") continue;  // shown in property panel
 
             std::string widgetId = "##" + idPrefix + propName + std::to_string(node.id);
 

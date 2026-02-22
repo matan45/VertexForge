@@ -220,8 +220,8 @@ namespace render::vfx
             defaultTextureImage = nullptr;
         }
 
-        customTexture.reset();
-        currentTexturePath.clear();
+        textureEntries.clear();
+        emitterConfigs.clear();
 
         if (gpuShader)
         {
@@ -288,31 +288,37 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::createDescriptorPool()
     {
+        uint32_t totalSets = MAX_TEXTURE_SLOTS + 1;  // +1 for default descriptor set
+
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = 1;
+        poolSizes[0].descriptorCount = totalSets;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = 1;
+        poolSizes[1].descriptorCount = totalSets;
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 2;  // VK-493: particle SSBO + config SSBO
+        poolSizes[2].descriptorCount = totalSets * 2;  // particle SSBO + config SSBO per set
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 1;
+        poolInfo.maxSets = totalSets;
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
     void VFXSceneGPUPipeline::allocateDescriptorSet()
     {
+        defaultDescriptorSet = allocateDescriptorSetFromPool();
+    }
+
+    vk::DescriptorSet VFXSceneGPUPipeline::allocateDescriptorSetFromPool()
+    {
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        auto result = device.getLogicalDevice().allocateDescriptorSets(allocInfo);
-        descriptorSet = result[0];
+        return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
     void VFXSceneGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
@@ -342,6 +348,20 @@ namespace render::vfx
             return;
         }
 
+        // Update default descriptor set
+        writeDescriptorSet(defaultDescriptorSet, nullptr);
+
+        // Update all texture descriptor sets
+        for (const auto& [path, entry] : textureEntries)
+        {
+            writeDescriptorSet(entry.descriptorSet, entry.texture.get());
+        }
+
+        descriptorsNeedUpdate = false;
+    }
+
+    void VFXSceneGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
+    {
         auto vkDevice = device.getLogicalDevice();
 
         // Camera UBO
@@ -353,10 +373,10 @@ namespace render::vfx
         // Texture
         vk::DescriptorImageInfo textureInfo{};
         textureInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        if (customTexture)
+        if (texture)
         {
-            textureInfo.imageView = customTexture->getImageView();
-            textureInfo.sampler = customTexture->getSampler();
+            textureInfo.imageView = texture->getImageView();
+            textureInfo.sampler = texture->getSampler();
         }
         else
         {
@@ -370,7 +390,7 @@ namespace render::vfx
         particleInfo.offset = 0;
         particleInfo.range = cachedParticleBufferSize;
 
-        // Emitter config SSBO (VK-493)
+        // Emitter config SSBO
         vk::DescriptorBufferInfo configInfo{};
         configInfo.buffer = cachedConfigBuffer;
         configInfo.offset = 0;
@@ -378,37 +398,31 @@ namespace render::vfx
 
         std::array<vk::WriteDescriptorSet, 4> writes{};
 
-        // Binding 0: Camera UBO
-        writes[0].dstSet = descriptorSet;
+        writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
         writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         writes[0].pBufferInfo = &cameraInfo;
 
-        // Binding 1: Texture
-        writes[1].dstSet = descriptorSet;
+        writes[1].dstSet = dstSet;
         writes[1].dstBinding = 1;
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[1].pImageInfo = &textureInfo;
 
-        // Binding 2: Particle SSBO
-        writes[2].dstSet = descriptorSet;
+        writes[2].dstSet = dstSet;
         writes[2].dstBinding = 2;
         writes[2].descriptorCount = 1;
         writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[2].pBufferInfo = &particleInfo;
 
-        // Binding 3: Emitter config SSBO (VK-493)
-        writes[3].dstSet = descriptorSet;
+        writes[3].dstSet = dstSet;
         writes[3].dstBinding = 3;
         writes[3].descriptorCount = 1;
         writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[3].pBufferInfo = &configInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
-
-        descriptorsNeedUpdate = false;
     }
 
     void VFXSceneGPUPipeline::createPipeline()
@@ -427,7 +441,7 @@ namespace render::vfx
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,  // Particles don't write depth
@@ -563,43 +577,74 @@ namespace render::vfx
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
-    void VFXSceneGPUPipeline::setTexture(const std::string& texturePath)
+    void VFXSceneGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
-        if (texturePath == currentTexturePath)
+        emitterConfigs[emitterIndex].texturePath = texturePath;
+
+        if (texturePath.empty())
         {
+            return;  // Will use default descriptor set
+        }
+
+        // Check if texture already loaded
+        if (textureEntries.count(texturePath))
+        {
+            return;
+        }
+
+        if (!std::filesystem::exists(texturePath))
+        {
+            loggerWarning("VFX GPU texture not found: {}", texturePath);
+            emitterConfigs[emitterIndex].texturePath.clear();
+            return;
+        }
+
+        if (textureEntries.size() >= MAX_TEXTURE_SLOTS)
+        {
+            loggerWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
+                          MAX_TEXTURE_SLOTS, emitterIndex);
+            emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
 
         device.getLogicalDevice().waitIdle();
 
-        customTexture.reset();
-        currentTexturePath.clear();
-
-        if (texturePath.empty() || !std::filesystem::exists(texturePath))
-        {
-            if (!texturePath.empty())
-            {
-                loggerWarning("VFX GPU texture not found: {}", texturePath);
-            }
-            descriptorsNeedUpdate = true;
-            return;
-        }
-
         try
         {
-            customTexture = std::make_unique<core::Texture>(device);
-            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
-            currentTexturePath = texturePath;
+            auto& entry = textureEntries[texturePath];
+            entry.texture = std::make_unique<core::Texture>(device);
+            entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
+            entry.descriptorSet = allocateDescriptorSetFromPool();
+
+            if (cachedParticleBuffer && cachedConfigBuffer)
+            {
+                writeDescriptorSet(entry.descriptorSet, entry.texture.get());
+            }
+            else
+            {
+                descriptorsNeedUpdate = true;
+            }
+
             loggerInfo("VFX GPU texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
             loggerError("Failed to load VFX GPU texture '{}': {}", texturePath, e.what());
-            customTexture.reset();
-            currentTexturePath.clear();
+            textureEntries.erase(texturePath);
+            emitterConfigs[emitterIndex].texturePath.clear();
         }
+    }
 
-        descriptorsNeedUpdate = true;
+    void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
+                                                         float alphaClipThreshold, bool additiveBlend)
+    {
+        emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
+        emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
+    }
+
+    void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
+    {
+        emitterConfigs.erase(emitterIndex);
     }
 
     void VFXSceneGPUPipeline::recordCommandsInline(
@@ -618,9 +663,6 @@ namespace render::vfx
         // Bind pipeline
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                               0, descriptorSet, {});
-
         // Bind only quad vertex buffer (no instance buffer - data comes from SSBO)
         vk::Buffer vertexBuffers[] = {quadVertexBuffer};
         vk::DeviceSize offsets[] = {0};
@@ -629,12 +671,47 @@ namespace render::vfx
         // Bind index buffer
         cmd.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
 
-        // Issue indirect draws for each emitter with per-emitter push constants (VK-493)
+        // Issue indirect draws per emitter with per-emitter descriptor set and push constants
+        vk::DescriptorSet lastBoundSet = nullptr;
+
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
+            // Look up per-emitter config
+            vk::DescriptorSet setToBind = defaultDescriptorSet;
+            float alphaClip = 0.1f;
+            uint32_t blendMode = 0;
+
+            auto configIt = emitterConfigs.find(i);
+            if (configIt != emitterConfigs.end())
+            {
+                alphaClip = configIt->second.alphaClipThreshold;
+                blendMode = configIt->second.blendMode;
+
+                if (!configIt->second.texturePath.empty())
+                {
+                    auto texIt = textureEntries.find(configIt->second.texturePath);
+                    if (texIt != textureEntries.end())
+                    {
+                        setToBind = texIt->second.descriptorSet;
+                    }
+                }
+            }
+
+            // Only rebind descriptor set if changed
+            if (setToBind != lastBoundSet)
+            {
+                cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                       0, setToBind, {});
+                lastBoundSet = setToBind;
+            }
+
+            // Per-emitter push constants
             GPUVFXBillboardPushConstants pushConstants{};
             pushConstants.emitterIndex = i;
-            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+            pushConstants.alphaClipThreshold = alphaClip;
+            pushConstants.blendMode = blendMode;
+            cmd.pushConstants(pipelineLayout,
+                              vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
 
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);

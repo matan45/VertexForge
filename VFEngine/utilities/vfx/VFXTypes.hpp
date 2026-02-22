@@ -143,6 +143,10 @@ namespace vfx
         inline constexpr int FLIPBOOK_COLUMNS = 1;
         inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
         inline constexpr bool FLIPBOOK_RANDOM_START = false;
+
+        // Rendering
+        inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
+        inline constexpr bool ADDITIVE_BLEND = false;
     }
 
     namespace ModifierDefaults

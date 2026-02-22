@@ -147,6 +147,10 @@ namespace render::vfx
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;   // 0 = lifetime-based, >0 = fixed FPS
         bool flipbookRandomStart = false;
+
+        // Rendering
+        float alphaClipThreshold = 0.1f;
+        bool additiveBlend = false;
     };
 
     namespace VFXConstants

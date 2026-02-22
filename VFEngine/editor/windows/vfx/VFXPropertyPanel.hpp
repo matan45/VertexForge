@@ -39,6 +39,7 @@ namespace editor::vfxeditor
     class VFXGradientDelegate : public ImGradient::Delegate
     {
         std::vector<ImVec4> points;
+        std::vector<float> alphas;  // Per-stop alpha (separate from ImVec4 which uses .w for position)
 
     public:
         bool dirty = false;
@@ -72,6 +73,7 @@ namespace editor::vfxeditor
         void drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop);
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         void drawFlipbookProperties(vfx::VFXNode& node);
+        void drawRenderingProperties(vfx::VFXNode& node);
         void notifyChanged();
     };
 }

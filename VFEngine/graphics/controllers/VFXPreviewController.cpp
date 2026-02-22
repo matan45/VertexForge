@@ -61,13 +61,16 @@ namespace controllers
         config.flipbookColumns = currentParams.flipbookColumns;
         config.flipbookFrameRate = currentParams.flipbookFrameRate;
         config.flipbookRandomStart = currentParams.flipbookRandomStart;
+        config.alphaClipThreshold = currentParams.alphaClipThreshold;
+        config.additiveBlend = currentParams.additiveBlend;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
         {
             pipeline->setTexture(currentParams.texturePath);
         }
-        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns);
+        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
+                                    currentParams.alphaClipThreshold, currentParams.additiveBlend);
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
@@ -142,13 +145,16 @@ namespace controllers
             config.flipbookColumns = params.flipbookColumns;
             config.flipbookFrameRate = params.flipbookFrameRate;
             config.flipbookRandomStart = params.flipbookRandomStart;
+            config.alphaClipThreshold = params.alphaClipThreshold;
+            config.additiveBlend = params.additiveBlend;
             particleSystem->setEmitterConfig(config);
         }
 
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
-            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns);
+            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
+                                        params.alphaClipThreshold, params.additiveBlend);
         }
     }
 
