@@ -6,24 +6,15 @@ namespace editor::vfxeditor
 {
     // --- VFXCurveDelegate ---
 
-    void VFXCurveDelegate::syncFrom(const vfx::VFXCurve& curve)
+    void VFXCurveDelegate::syncFrom(const vfx::VFXCurve& curve, float yMin, float yMax)
     {
         points.clear();
         for (const auto& key : curve.keys)
         {
             points.push_back({key.time, key.value});
         }
-        if (!points.empty())
-        {
-            float minVal = points[0].y, maxVal = points[0].y;
-            for (const auto& p : points)
-            {
-                minVal = std::min(minVal, p.y);
-                maxVal = std::max(maxVal, p.y);
-            }
-            rangeMin.y = std::min(minVal - 0.1f, 0.0f);
-            rangeMax.y = std::max(maxVal + 0.1f, 1.0f);
-        }
+        rangeMin = ImVec2(0.0f, yMin);
+        rangeMax = ImVec2(1.0f, yMax);
         dirty = false;
     }
 
@@ -168,12 +159,13 @@ namespace editor::vfxeditor
         if (onPropertyChanged) onPropertyChanged();
     }
 
-    void VFXPropertyPanel::drawCurveEditor(vfx::VFXCurve& curve, const std::string& label)
+    void VFXPropertyPanel::drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop)
     {
+        const std::string& label = prop.name;
         std::string key = label;
         if (lastPropertyKey != key)
         {
-            curveDelegate.syncFrom(curve);
+            curveDelegate.syncFrom(curve, prop.min, prop.max);
             lastPropertyKey = key;
         }
 
@@ -273,7 +265,7 @@ namespace editor::vfxeditor
                 auto* curve = std::get_if<vfx::VFXCurve>(&prop.value);
                 if (curve)
                 {
-                    drawCurveEditor(*curve, propName);
+                    drawCurveEditor(*curve, prop);
                 }
             }
             else if (prop.type == vfx::VFXPropertyType::Gradient)

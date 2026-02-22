@@ -21,7 +21,7 @@ namespace editor::vfxeditor
     public:
         bool dirty = false;
 
-        void syncFrom(const vfx::VFXCurve& curve);
+        void syncFrom(const vfx::VFXCurve& curve, float yMin = 0.0f, float yMax = 1.0f);
         void syncTo(vfx::VFXCurve& curve);
 
         size_t GetCurveCount() override { return 1; }
@@ -69,7 +69,7 @@ namespace editor::vfxeditor
         uint32_t lastSelectedNodeId = 0;
         std::string lastPropertyKey;
 
-        void drawCurveEditor(vfx::VFXCurve& curve, const std::string& label);
+        void drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop);
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         void notifyChanged();
     };
