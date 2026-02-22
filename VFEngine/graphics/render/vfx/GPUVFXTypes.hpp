@@ -18,7 +18,7 @@ namespace render::vfx
         float initialSize;
         float initialSpeed;
         uint32_t spawnSeed;
-        float _pad1 = 0.0f;
+        float glowIntensity = 0.0f;
         float _pad2 = 0.0f;
         float _pad3 = 0.0f;
     };
@@ -40,6 +40,7 @@ namespace render::vfx
         inline constexpr uint32_t SizeOverLifetime = 1 << 1;
         inline constexpr uint32_t SpeedOverLifetime = 1 << 2;
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
+        inline constexpr uint32_t GlowOverLifetime = 1 << 15;
     }
 
     namespace ForceFlags
@@ -190,6 +191,7 @@ namespace render::vfx
         inline constexpr uint32_t Size = 1 << 1;
         inline constexpr uint32_t Speed = 1 << 2;
         inline constexpr uint32_t Rotation = 1 << 3;
+        inline constexpr uint32_t Glow = 1 << 4;
     }
 
     namespace GPUVFXConstants
@@ -200,7 +202,7 @@ namespace render::vfx
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
-        inline constexpr uint32_t LUT_CHANNELS = 4;
+        inline constexpr uint32_t LUT_CHANNELS = 5;
     }
 
     namespace EmitterFlags
@@ -245,6 +247,9 @@ namespace render::vfx
         uint32_t emitterIndex;
         float alphaClipThreshold = 0.1f;
         uint32_t blendMode = 0;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
     };
 
     struct VFXFlipbookPushConstants
@@ -255,5 +260,8 @@ namespace render::vfx
         uint32_t blendMode = 0;
         uint32_t renderMode = RenderModeFlags::Billboard;
         float stretchMultiplier = 1.0f;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
     };
 }

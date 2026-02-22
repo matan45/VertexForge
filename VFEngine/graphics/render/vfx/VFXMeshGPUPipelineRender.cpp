@@ -250,10 +250,12 @@ namespace render::vfx
     }
 
     void VFXMeshGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
-                                                         float alphaClipThreshold, bool additiveBlend)
+                                                         float alphaClipThreshold, bool additiveBlend,
+                                                         const glm::vec3& glowColor)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
         emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
+        emitterConfigs[emitterIndex].glowColor = glowColor;
     }
 
     void VFXMeshGPUPipeline::removeEmitter(uint32_t emitterIndex)
@@ -333,10 +335,19 @@ namespace render::vfx
                 lastBoundSet = setToBind;
             }
 
+            glm::vec3 gc(1.0f);
+            if (configIt != emitterConfigs.end())
+            {
+                gc = configIt->second.glowColor;
+            }
+
             GPUVFXBillboardPushConstants pushConstants{};
             pushConstants.emitterIndex = i;
             pushConstants.alphaClipThreshold = alphaClip;
             pushConstants.blendMode = blendMode;
+            pushConstants.glowColorR = gc.r;
+            pushConstants.glowColorG = gc.g;
+            pushConstants.glowColorB = gc.b;
             cmd.pushConstants(pipelineLayout,
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);

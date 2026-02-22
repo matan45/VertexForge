@@ -15,7 +15,7 @@ struct GPUParticle
     float initialSize;
     float initialSpeed;
     uint spawnSeed;
-    float _pad1;
+    float glowIntensity;
     float _pad2;
     float _pad3;
 };
@@ -38,6 +38,7 @@ const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
 const uint FLIPBOOK_RANDOM_START = 16384u;
+const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
 
 struct GPUEmitterConfig
 {
@@ -129,6 +130,7 @@ const uint LUT_FLAG_COLOR = 1u;
 const uint LUT_FLAG_SIZE = 2u;
 const uint LUT_FLAG_SPEED = 4u;
 const uint LUT_FLAG_ROTATION = 8u;
+const uint LUT_FLAG_GLOW = 16u;
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -572,6 +574,14 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
             p.rotation += config.angularVelocity * config.deltaTime;
         }
     }
+
+    if ((config.modifierFlags & MODIFIER_GLOW_OVER_LIFETIME) != 0u)
+    {
+        if ((config.lutFlags & LUT_FLAG_GLOW) != 0u)
+        {
+            p.glowIntensity = sampleLUT(config.lutBaseOffset, 4u, config.lutChannelStride, lifetimeRatio).x;
+        }
+    }
 }
 
 void main()
@@ -657,6 +667,7 @@ void main()
             p.initialSize = config.startSize;
             p.initialSpeed = config.startSpeed;
             p.spawnSeed = seed;
+            p.glowIntensity = 0.0;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
             p.velocity = dir * config.startSpeed;

@@ -467,7 +467,8 @@ namespace render::vfx
     }
 
     void VFXScenePipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend,
-                                               int renderMode, float stretchMultiplier)
+                                               int renderMode, float stretchMultiplier,
+                                               const glm::vec3& glowColor)
     {
         flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
         flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
@@ -475,6 +476,9 @@ namespace render::vfx
         flipbookPC.blendMode = additiveBlend ? 1u : 0u;
         flipbookPC.renderMode = static_cast<uint32_t>(renderMode);
         flipbookPC.stretchMultiplier = stretchMultiplier;
+        flipbookPC.glowColorR = glowColor.r;
+        flipbookPC.glowColorG = glowColor.g;
+        flipbookPC.glowColorB = glowColor.b;
     }
 
     void VFXScenePipeline::recordCommandsInline(const vk::CommandBuffer& commandBuffer) const

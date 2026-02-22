@@ -107,6 +107,7 @@ namespace render::vfx
                     instance.flipbookFrameIndex = 0.0f;
                 }
 
+                instance.glowIntensity = particle.glowIntensity;
                 instances.push_back(instance);
             }
         }
@@ -227,6 +228,11 @@ namespace render::vfx
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
     {
         particle.rotation += glm::radians(mod.curve.evaluate(t)) * deltaTime;
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::GlowOverLifetimeConfig& mod, float t, float /*deltaTime*/)
+    {
+        particle.glowIntensity = mod.curve.evaluate(t);
     }
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)

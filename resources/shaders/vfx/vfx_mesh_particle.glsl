@@ -13,6 +13,7 @@ layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
 layout(location = 4) out vec3 fragNormal;
 layout(location = 5) out vec3 fragWorldPos;
+layout(location = 6) out float fragGlowIntensity;
 
 struct GPUParticle
 {
@@ -26,7 +27,7 @@ struct GPUParticle
     float initialSize;
     float initialSpeed;
     uint spawnSeed;
-    float _pad1;
+    float glowIntensity;
     float _pad2;
     float _pad3;
 };
@@ -50,6 +51,9 @@ layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
     uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -66,6 +70,7 @@ void main() {
         fragViewDepth = 0.0;
         fragNormal = vec3(0.0);
         fragWorldPos = vec3(0.0);
+        fragGlowIntensity = 0.0;
         return;
     }
 
@@ -102,6 +107,7 @@ void main() {
     fragLifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
     fragNormal = rotationMatrix * inNormal;
     fragWorldPos = worldPos;
+    fragGlowIntensity = p.glowIntensity;
 }
 
 #type FRAGMENT
@@ -113,6 +119,7 @@ layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
 layout(location = 4) in vec3 fragNormal;
 layout(location = 5) in vec3 fragWorldPos;
+layout(location = 6) in float fragGlowIntensity;
 
 layout(location = 0) out vec4 outColor;
 
@@ -182,6 +189,9 @@ layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
     uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -207,6 +217,10 @@ void main() {
         float softFactor = clamp(depthDiff / config.softParticleDistance, 0.0, 1.0);
         finalColor.a *= softFactor;
     }
+
+    // Glow: additive emissive color
+    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    finalColor.rgb += glowColor * fragGlowIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

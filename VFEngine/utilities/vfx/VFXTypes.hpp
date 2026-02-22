@@ -35,6 +35,7 @@ namespace vfx
         SizeOverLifetime,
         SpeedOverLifetime,
         RotationOverLifetime,
+        GlowOverLifetime,
         ForceGravity,
         ForceWind,
         ForceTurbulence,
@@ -47,7 +48,8 @@ namespace vfx
         return type == VFXNodeType::ColorOverLifetime ||
                type == VFXNodeType::SizeOverLifetime ||
                type == VFXNodeType::SpeedOverLifetime ||
-               type == VFXNodeType::RotationOverLifetime;
+               type == VFXNodeType::RotationOverLifetime ||
+               type == VFXNodeType::GlowOverLifetime;
     }
 
     inline bool isForceNode(VFXNodeType type)

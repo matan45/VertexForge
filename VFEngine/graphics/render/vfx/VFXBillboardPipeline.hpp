@@ -76,7 +76,8 @@ namespace render::vfx
         void setTexture(const std::string& texturePath);
 
         void setFlipbookConfig(int rows, int columns, float alphaClipThreshold = 0.1f, bool additiveBlend = false,
-                               int renderMode = 0, float stretchMultiplier = 1.0f);
+                               int renderMode = 0, float stretchMultiplier = 1.0f,
+                               const glm::vec3& glowColor = glm::vec3(1.0f));
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

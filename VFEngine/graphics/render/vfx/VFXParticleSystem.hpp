@@ -47,6 +47,7 @@ namespace render::vfx
         void applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::GlowOverLifetimeConfig& mod, float t, float deltaTime);
 
         void applyForces(VFXParticle& particle, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime);

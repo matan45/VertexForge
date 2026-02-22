@@ -11,11 +11,13 @@ layout(location = 3) in vec4 inWorldPosAndSize;
 layout(location = 4) in vec4 inColor;
 layout(location = 5) in float inLifetimeRatio;
 layout(location = 6) in float inRotation;
+layout(location = 7) in float inGlowIntensity;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out vec3 fragNormal;
+layout(location = 4) out float fragGlowIntensity;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -27,6 +29,9 @@ layout(binding = 0) uniform CameraUBO {
 layout(push_constant) uniform PushConstants {
     float alphaClipThreshold;
     uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -52,6 +57,7 @@ void main() {
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
     fragNormal = rotY * inNormal;
+    fragGlowIntensity = inGlowIntensity;
 }
 
 #type FRAGMENT
@@ -61,6 +67,7 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in vec3 fragNormal;
+layout(location = 4) in float fragGlowIntensity;
 
 layout(location = 0) out vec4 outColor;
 
@@ -69,6 +76,9 @@ layout(binding = 1) uniform sampler2D particleTexture;
 layout(push_constant) uniform PushConstants {
     float alphaClipThreshold;
     uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -87,6 +97,10 @@ void main() {
         float fadeProgress = (fragLifetimeRatio - fadeStart) / (1.0 - fadeStart);
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
+
+    // Glow: additive emissive color
+    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    finalColor.rgb += glowColor * fragGlowIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

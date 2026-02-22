@@ -167,6 +167,8 @@ namespace editor::graph
             return IM_COL32(80, 160, 200, 255);   // Blue
         case vfx::VFXNodeType::RotationOverLifetime:
             return IM_COL32(200, 200, 80, 255);   // Yellow
+        case vfx::VFXNodeType::GlowOverLifetime:
+            return IM_COL32(255, 220, 100, 255);  // Warm white
         case vfx::VFXNodeType::ForceGravity:
         case vfx::VFXNodeType::ForceWind:
         case vfx::VFXNodeType::ForceTurbulence:
@@ -189,6 +191,7 @@ namespace editor::graph
         case vfx::VFXNodeType::SizeOverLifetime: return "Size Over Lifetime";
         case vfx::VFXNodeType::SpeedOverLifetime: return "Speed Over Lifetime";
         case vfx::VFXNodeType::RotationOverLifetime: return "Rotation Over Lifetime";
+        case vfx::VFXNodeType::GlowOverLifetime: return "Glow Over Lifetime";
         case vfx::VFXNodeType::ForceGravity: return "Gravity";
         case vfx::VFXNodeType::ForceWind: return "Wind";
         case vfx::VFXNodeType::ForceTurbulence: return "Turbulence";

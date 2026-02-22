@@ -68,6 +68,7 @@ namespace render::vfx
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
             uint32_t renderMode = 0; // VK-496: skip mesh particle emitters
+            glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
         };
 
         struct TextureEntry
@@ -102,7 +103,8 @@ namespace render::vfx
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
 
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
-        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend);
+        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
+                                       const glm::vec3& glowColor = glm::vec3(1.0f));
         void setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode);
         void removeEmitter(uint32_t emitterIndex);
 

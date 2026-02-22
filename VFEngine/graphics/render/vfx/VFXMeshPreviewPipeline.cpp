@@ -288,7 +288,7 @@ namespace render::vfx
         instanceBinding.stride = sizeof(VFXInstanceData);
         instanceBinding.inputRate = vk::VertexInputRate::eInstance;
 
-        std::array<vk::VertexInputAttributeDescription, 4> instanceAttribs{};
+        std::array<vk::VertexInputAttributeDescription, 5> instanceAttribs{};
         // location 3: worldPosAndSize (vec4)
         instanceAttribs[0].binding = 1;
         instanceAttribs[0].location = 3;
@@ -312,6 +312,12 @@ namespace render::vfx
         instanceAttribs[3].location = 6;
         instanceAttribs[3].format = vk::Format::eR32Sfloat;
         instanceAttribs[3].offset = offsetof(VFXInstanceData, rotation);
+
+        // location 7: glowIntensity (float)
+        instanceAttribs[4].binding = 1;
+        instanceAttribs[4].location = 7;
+        instanceAttribs[4].format = vk::Format::eR32Sfloat;
+        instanceAttribs[4].offset = offsetof(VFXInstanceData, glowIntensity);
 
         std::vector<vk::VertexInputAttributeDescription> allAttribs;
         allAttribs.insert(allAttribs.end(), meshAttribs.begin(), meshAttribs.end());
@@ -593,10 +599,14 @@ namespace render::vfx
         loggerInfo("VFXMeshPreviewPipeline: Mesh set: {} ({} indices)", meshPath, meshIndexCount);
     }
 
-    void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend)
+    void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+                                                       const glm::vec3& glowColor)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
         pushConstants.blendMode = additiveBlend ? 1u : 0u;
+        pushConstants.glowColorR = glowColor.r;
+        pushConstants.glowColorG = glowColor.g;
+        pushConstants.glowColorB = glowColor.b;
     }
 
     void VFXMeshPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

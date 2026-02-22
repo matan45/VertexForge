@@ -267,6 +267,19 @@ namespace editor::graph
             };
             break;
 
+        case vfx::VFXNodeType::GlowOverLifetime:
+            node.properties["curve"] = vfx::VFXProperty{
+                "curve", vfx::VFXPropertyType::Curve,
+                vfx::VFXCurve::fromStartEnd(1.0f, 0.0f),
+                0.0f, 10.0f
+            };
+            node.properties["glowColor"] = vfx::VFXProperty{
+                "glowColor", vfx::VFXPropertyType::Color,
+                glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
+                0.0f, 1.0f
+            };
+            break;
+
         default:
             break;
         }
@@ -485,6 +498,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
                 if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
                 if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
+                if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
                 ImGui::EndMenu();
             }
 

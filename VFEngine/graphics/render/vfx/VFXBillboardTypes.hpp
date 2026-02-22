@@ -35,6 +35,7 @@ namespace render::vfx
         glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};
 
         uint32_t spawnSeed = 0;
+        float glowIntensity = 0.0f;
     };
 
     struct VFXInstanceData
@@ -45,7 +46,7 @@ namespace render::vfx
         float lifetimeRatio;
         float rotation;
         float flipbookFrameIndex;
-        float padding1;
+        float glowIntensity;
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -56,9 +57,9 @@ namespace render::vfx
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 6> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 6> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -84,6 +85,11 @@ namespace render::vfx
             attributes[4].location = 6;
             attributes[4].format = vk::Format::eR32Sfloat;
             attributes[4].offset = offsetof(VFXInstanceData, flipbookFrameIndex);
+
+            attributes[5].binding = 1;
+            attributes[5].location = 7;
+            attributes[5].format = vk::Format::eR32Sfloat;
+            attributes[5].offset = offsetof(VFXInstanceData, glowIntensity);
 
             return attributes;
         }
@@ -159,6 +165,9 @@ namespace render::vfx
 
         // Mesh particle (VK-496)
         std::string meshPath;
+
+        // Glow color
+        glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
     };
 
     namespace VFXConstants

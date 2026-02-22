@@ -9,10 +9,12 @@ layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
 layout(location = 5) in float inRotation;
 layout(location = 6) in float inFlipbookFrameIndex;
+layout(location = 7) in float inGlowIntensity;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
+layout(location = 3) out float fragGlowIntensity;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -33,6 +35,9 @@ layout(push_constant) uniform FlipbookPC {
     uint blendMode;  // 0 = alpha blend, 1 = additive
     uint renderMode;
     float stretchMultiplier;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -74,6 +79,7 @@ void main() {
 
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
+    fragGlowIntensity = inGlowIntensity;
 }
 
 #type FRAGMENT
@@ -82,6 +88,7 @@ void main() {
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
+layout(location = 3) in float fragGlowIntensity;
 
 layout(location = 0) out vec4 outColor;
 
@@ -94,6 +101,9 @@ layout(push_constant) uniform FlipbookPC {
     uint blendMode;
     uint renderMode;
     float stretchMultiplier;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -105,6 +115,10 @@ void main() {
         float fadeProgress = (fragLifetimeRatio - fadeStart) / (1.0 - fadeStart);
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
+
+    // Glow: additive emissive color
+    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    finalColor.rgb += glowColor * fragGlowIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

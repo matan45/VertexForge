@@ -253,6 +253,10 @@ namespace controllers
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::RotationOverLifetime;
                     gpuConfig.angularVelocity = glm::radians(mod.curve.evaluate(0.0f));
                 }
+                else if constexpr (std::is_same_v<T, ::vfx::GlowOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::GlowOverLifetime;
+                }
             }, modifier);
         }
 

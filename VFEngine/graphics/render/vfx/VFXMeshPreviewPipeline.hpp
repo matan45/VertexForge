@@ -26,6 +26,9 @@ namespace render::vfx
     {
         float alphaClipThreshold = 0.1f;
         uint32_t blendMode = 0;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
     };
 
     class VFXMeshPreviewPipeline
@@ -91,7 +94,8 @@ namespace render::vfx
 
         void setTexture(const std::string& texturePath);
         void setMesh(const std::string& meshPath);
-        void setRenderingConfig(float alphaClipThreshold, bool additiveBlend);
+        void setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+                                const glm::vec3& glowColor = glm::vec3(1.0f));
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

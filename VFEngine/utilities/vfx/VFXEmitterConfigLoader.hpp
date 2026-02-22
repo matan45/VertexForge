@@ -130,6 +130,9 @@ namespace vfx
         // Mesh particle (VK-496)
         config.meshPath = getString(*emitterNode, "meshPath", "");
 
+        // Glow color
+        config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
+
         return config;
     }
 }

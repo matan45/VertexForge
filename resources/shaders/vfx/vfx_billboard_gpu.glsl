@@ -8,6 +8,7 @@ layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
+layout(location = 4) out float fragGlowIntensity;
 
 struct GPUParticle
 {
@@ -21,7 +22,7 @@ struct GPUParticle
     float initialSize;
     float initialSpeed;
     uint spawnSeed;
-    float _pad1;
+    float glowIntensity;
     float _pad2;
     float _pad3;
 };
@@ -111,6 +112,7 @@ void main() {
         fragColor = vec4(0.0);
         fragLifetimeRatio = 1.0;
         fragViewDepth = 0.0;
+        fragGlowIntensity = 0.0;
         return;
     }
 
@@ -185,6 +187,7 @@ void main() {
 
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
+    fragGlowIntensity = p.glowIntensity;
 }
 
 #type FRAGMENT
@@ -194,6 +197,7 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
+layout(location = 4) in float fragGlowIntensity;
 
 layout(location = 0) out vec4 outColor;
 
@@ -263,6 +267,9 @@ layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
     uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
@@ -284,6 +291,10 @@ void main() {
         float softFactor = clamp(depthDiff / config.softParticleDistance, 0.0, 1.0);
         finalColor.a *= softFactor;
     }
+
+    // Glow: additive emissive color
+    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    finalColor.rgb += glowColor * fragGlowIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

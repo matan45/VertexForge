@@ -9,6 +9,7 @@
 #include "../render/vfx/VFXMeshPreviewPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
+#include "vfx/VFXModifierConfigLoader.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
 
@@ -79,9 +80,10 @@ namespace controllers
         {
             pipeline->setTexture(currentParams.texturePath);
         }
+        glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
         pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
                                     currentParams.alphaClipThreshold, currentParams.additiveBlend,
-                                    currentParams.renderMode, currentParams.stretchMultiplier);
+                                    currentParams.renderMode, currentParams.stretchMultiplier, glowColor);
 
         // VK-496: Set mesh and texture on mesh preview pipeline
         if (!currentParams.meshPath.empty())
@@ -92,7 +94,7 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
-        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend);
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, glowColor);
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
@@ -187,12 +189,14 @@ namespace controllers
             particleSystem->setEmitterConfig(config);
         }
 
+        glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
             pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
                                         params.alphaClipThreshold, params.additiveBlend,
-                                        params.renderMode, params.stretchMultiplier);
+                                        params.renderMode, params.stretchMultiplier, glowColor);
         }
 
         // VK-496: Update mesh preview pipeline
@@ -200,7 +204,7 @@ namespace controllers
         {
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
-            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend);
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, glowColor);
         }
     }
 

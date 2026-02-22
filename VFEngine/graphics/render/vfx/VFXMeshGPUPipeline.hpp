@@ -78,6 +78,7 @@ namespace render::vfx
             std::string texturePath;
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
+            glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
         };
 
         struct TextureEntry
@@ -115,7 +116,8 @@ namespace render::vfx
 
         void setEmitterMesh(uint32_t emitterIndex, const std::string& meshPath);
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
-        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend);
+        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
+                                       const glm::vec3& glowColor = glm::vec3(1.0f));
         void removeEmitter(uint32_t emitterIndex);
 
         uint32_t getEmitterMeshIndexCount(uint32_t emitterIndex) const;

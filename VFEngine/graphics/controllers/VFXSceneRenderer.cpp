@@ -9,6 +9,7 @@
 #include "../render/vfx/VFXMeshGPUPipeline.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
+#include "vfx/VFXModifierConfigLoader.hpp"
 #include "print/Logger.hpp"
 
 namespace controllers
@@ -168,12 +169,16 @@ namespace controllers
             cpuPipeline->setTexture(storedConfig.texturePath);
         }
 
+        // Extract glow color from modifier chain
+        glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(storedConfig.modifiers);
+
         // Set flipbook and rendering config on CPU pipeline (VK-493)
         if (cpuPipeline)
         {
             cpuPipeline->setFlipbookConfig(storedConfig.flipbookRows, storedConfig.flipbookColumns,
                                            storedConfig.alphaClipThreshold, storedConfig.additiveBlend,
-                                           static_cast<int>(storedConfig.renderMode), storedConfig.stretchMultiplier);
+                                           static_cast<int>(storedConfig.renderMode), storedConfig.stretchMultiplier,
+                                           glowColor);
         }
 
         // Per-emitter GPU texture and rendering config
@@ -182,7 +187,8 @@ namespace controllers
             gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
-                                                          storedConfig.additiveBlend);
+                                                          storedConfig.additiveBlend,
+                                                          glowColor);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
         }
@@ -195,7 +201,8 @@ namespace controllers
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
-                                                        storedConfig.additiveBlend);
+                                                        storedConfig.additiveBlend,
+                                                        glowColor);
         }
 
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",

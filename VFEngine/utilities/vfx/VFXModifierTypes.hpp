@@ -28,11 +28,18 @@ namespace vfx
         VFXCurve curve = VFXCurve::constant(0.0f);
     };
 
+    struct GlowOverLifetimeConfig
+    {
+        VFXCurve curve = VFXCurve::fromStartEnd(1.0f, 0.0f);
+        glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+    };
+
     using VFXModifierConfig = std::variant<
         ColorOverLifetimeConfig,
         SizeOverLifetimeConfig,
         SpeedOverLifetimeConfig,
-        RotationOverLifetimeConfig
+        RotationOverLifetimeConfig,
+        GlowOverLifetimeConfig
     >;
 
     struct VFXModifierChain
