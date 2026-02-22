@@ -99,6 +99,10 @@ namespace editor::graph {
         void addShapeNode(vfx::ShapeType shapeType, const std::string& name);
         void removeExistingLinks(uint32_t nodeId, const std::string& pin, bool isSource);
 
+        static void initializeModifierProperties(vfx::VFXNode& node);
+        static void initializeForceProperties(vfx::VFXNode& node);
+        static void initializeShapeProperties(vfx::VFXNode& node, vfx::ShapeType shapeType);
+
         bool canCreateLink(uint32_t startPinId, uint32_t endPinId) const;
         vfx::VFXNode* findNodeByPinId(uint32_t pinId);
         const vfx::VFXNode* findNodeByPinId(uint32_t pinId) const;

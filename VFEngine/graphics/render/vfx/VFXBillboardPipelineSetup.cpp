@@ -1,120 +1,78 @@
-#include "VFXScenePipeline.hpp"
+#include "VFXBillboardPipeline.hpp"
 #include "VFXQuadData.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
-#include <filesystem>
 
 namespace render::vfx
 {
-    VFXScenePipeline::VFXScenePipeline(core::Device& device, core::SwapChain& swapChain)
-        : device{device}
-        , swapChain{swapChain}
+    void VFXBillboardPipeline::createRenderPass()
     {
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        vk::AttachmentDescription depthAttachment{};
+        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::AttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+
+        vk::SubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        dependency.srcAccessMask = vk::AccessFlags{};
+        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
+                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
+
+        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
     }
 
-    VFXScenePipeline::~VFXScenePipeline() = default;
-
-    void VFXScenePipeline::init(vk::RenderPass renderPass)
-    {
-        externalRenderPass = renderPass;
-
-        loadShader();
-        createDescriptorSetLayout();
-        createDescriptorPool();
-        createBuffers();
-        createDefaultTexture();
-        createSampler();
-        createDescriptorSet();
-        createPipeline();
-
-        initialized = true;
-    }
-
-    void VFXScenePipeline::loadShader()
-    {
-        vfxShader = std::make_shared<core::Shader>(device);
-        vfxShader->readShader("../../resources/shaders/vfx/vfx_billboard.glsl");
-    }
-
-    void VFXScenePipeline::recreate(vk::RenderPass renderPass)
-    {
-        externalRenderPass = renderPass;
-
-        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
-        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
-
-        createPipeline();
-    }
-
-    void VFXScenePipeline::cleanUp()
-    {
-        auto& dev = device.getLogicalDevice();
-
-        if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
-        if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
-
-        if (descriptorPool)
-        {
-            if (descriptorSet)
-                dev.freeDescriptorSets(descriptorPool, descriptorSet);
-            dev.destroyDescriptorPool(descriptorPool);
-        }
-        if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
-
-        if (cameraUBO)
-        {
-            dev.destroyBuffer(cameraUBO);
-            dev.freeMemory(cameraUBOMemory);
-            cameraUBO = nullptr;
-        }
-        if (quadVertexBuffer)
-        {
-            dev.destroyBuffer(quadVertexBuffer);
-            dev.freeMemory(quadVertexBufferMemory);
-            quadVertexBuffer = nullptr;
-        }
-        if (quadIndexBuffer)
-        {
-            dev.destroyBuffer(quadIndexBuffer);
-            dev.freeMemory(quadIndexBufferMemory);
-            quadIndexBuffer = nullptr;
-        }
-        if (instanceBuffer)
-        {
-            dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
-            instanceBuffer = nullptr;
-        }
-
-        customTexture.reset();
-        currentTexturePath.clear();
-
-        if (textureSampler) dev.destroySampler(textureSampler);
-        if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
-        if (defaultTextureImage)
-        {
-            dev.destroyImage(defaultTextureImage);
-            dev.freeMemory(defaultTextureMemory);
-        }
-
-        if (vfxShader)
-        {
-            vfxShader->cleanUp();
-            vfxShader.reset();
-        }
-
-        currentInstanceCount = 0;
-        initialized = false;
-    }
-
-    void VFXScenePipeline::createDescriptorSetLayout()
+    void VFXBillboardPipeline::createDescriptorSetLayout()
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(2);
 
@@ -137,7 +95,7 @@ namespace render::vfx
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void VFXScenePipeline::createDescriptorPool()
+    void VFXBillboardPipeline::createDescriptorPool()
     {
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
@@ -154,7 +112,7 @@ namespace render::vfx
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
-    void VFXScenePipeline::createDescriptorSet()
+    void VFXBillboardPipeline::createDescriptorSet()
     {
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
@@ -166,7 +124,7 @@ namespace render::vfx
         updateDescriptorSet();
     }
 
-    void VFXScenePipeline::updateDescriptorSet()
+    void VFXBillboardPipeline::updateDescriptorSet()
     {
         vk::DescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = cameraUBO;
@@ -206,7 +164,7 @@ namespace render::vfx
         device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
     }
 
-    void VFXScenePipeline::createPipeline()
+    void VFXBillboardPipeline::createPipeline()
     {
         auto vertexBinding = VFXQuadVertex::getBindingDescription();
         auto instanceBinding = VFXInstanceData::getBindingDescription();
@@ -220,7 +178,7 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = externalRenderPass,
+            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
             .shaderStages = vfxShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
@@ -240,7 +198,29 @@ namespace render::vfx
         pipelineLayout = result.pipelineLayout;
     }
 
-    void VFXScenePipeline::createBuffers()
+    void VFXBillboardPipeline::createFramebuffers()
+    {
+        framebuffers.resize(offscreenResources.colorImages.size());
+        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
+
+        for (uint32_t i = 0; i < framebuffers.size(); i++)
+        {
+            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
+            std::array<vk::ImageView, 2> attachments = {colorView, depth};
+
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.width = swapChain.getSwapchainExtent().width;
+            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.layers = 1;
+
+            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+        }
+    }
+
+    void VFXBillboardPipeline::createBuffers()
     {
         core::BufferInfoRequest uboRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         uboRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
@@ -292,7 +272,7 @@ namespace render::vfx
         core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
     }
 
-    void VFXScenePipeline::createDefaultTexture()
+    void VFXBillboardPipeline::createDefaultTexture()
     {
         constexpr uint32_t texSize = 1;
 
@@ -366,7 +346,7 @@ namespace render::vfx
         device.getLogicalDevice().freeMemory(stagingMemory);
     }
 
-    void VFXScenePipeline::createSampler()
+    void VFXBillboardPipeline::createSampler()
     {
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -386,116 +366,5 @@ namespace render::vfx
         samplerInfo.maxLod = 0.0f;
 
         textureSampler = device.getLogicalDevice().createSampler(samplerInfo);
-    }
-
-    void VFXScenePipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                            const glm::vec3& cameraPos, float time) const
-    {
-        VFXCameraUBO ubo{};
-        ubo.view = view;
-        ubo.projection = projection;
-        ubo.cameraPos = cameraPos;
-        ubo.time = time;
-
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
-        {
-            std::memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
-        }
-    }
-
-    void VFXScenePipeline::setParticleInstances(const std::vector<VFXInstanceData>& instances)
-    {
-        if (instances.empty())
-        {
-            currentInstanceCount = 0;
-            return;
-        }
-
-        currentInstanceCount = static_cast<uint32_t>(std::min(instances.size(),
-                                                              static_cast<size_t>(maxInstances)));
-
-        void* data;
-        vk::DeviceSize bufferSize = sizeof(VFXInstanceData) * currentInstanceCount;
-        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
-        if (result == vk::Result::eSuccess)
-        {
-            std::memcpy(data, instances.data(), bufferSize);
-            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
-        }
-    }
-
-    void VFXScenePipeline::setTexture(const std::string& texturePath)
-    {
-        if (texturePath == currentTexturePath)
-        {
-            return;
-        }
-
-        device.getLogicalDevice().waitIdle();
-
-        customTexture.reset();
-        currentTexturePath.clear();
-
-        if (texturePath.empty() || !std::filesystem::exists(texturePath))
-        {
-            if (!texturePath.empty())
-            {
-                loggerWarning("VFX scene texture not found: {}", texturePath);
-            }
-            updateDescriptorSet();
-            return;
-        }
-
-        try
-        {
-            customTexture = std::make_unique<core::Texture>(device);
-            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
-            currentTexturePath = texturePath;
-            loggerInfo("VFX scene texture loaded: {}", texturePath);
-        }
-        catch (const std::exception& e)
-        {
-            loggerError("Failed to load VFX scene texture '{}': {}", texturePath, e.what());
-            customTexture.reset();
-            currentTexturePath.clear();
-        }
-
-        updateDescriptorSet();
-    }
-
-    void VFXScenePipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend)
-    {
-        flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
-        flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
-        flipbookPC.alphaClipThreshold = alphaClipThreshold;
-        flipbookPC.blendMode = additiveBlend ? 1u : 0u;
-    }
-
-    void VFXScenePipeline::recordCommandsInline(const vk::CommandBuffer& commandBuffer) const
-    {
-        if (!initialized || currentInstanceCount == 0)
-        {
-            return;
-        }
-
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                          0, descriptorSet, nullptr);
-
-        vk::Buffer vertexBuffers[] = {quadVertexBuffer, instanceBuffer};
-        vk::DeviceSize offsets[] = {0, 0};
-        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
-
-        commandBuffer.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
-
-        commandBuffer.pushConstants(pipelineLayout,
-                                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                                    0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
-
-        commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);
     }
 }

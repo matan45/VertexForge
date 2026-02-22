@@ -15,7 +15,6 @@ namespace render::vfx
     class GPUVFXComputePipeline
     {
     private:
-    private:
         core::Device& device;
 
         std::unique_ptr<core::Shader> shader;
@@ -33,6 +32,7 @@ namespace render::vfx
         vk::Buffer cachedConfigBuffer;
         vk::Buffer cachedStateBuffer;
         vk::Buffer cachedDrawCommandBuffer;
+        vk::Buffer cachedLUTBuffer;
 
     public:
         explicit GPUVFXComputePipeline(core::Device& device);
@@ -49,7 +49,8 @@ namespace render::vfx
             vk::Buffer particleBuffer,
             vk::Buffer configBuffer,
             vk::Buffer stateBuffer,
-            vk::Buffer drawCommandBuffer
+            vk::Buffer drawCommandBuffer,
+            vk::Buffer lutBuffer
         );
 
         void dispatch(

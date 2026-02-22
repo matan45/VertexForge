@@ -8,6 +8,7 @@ layout(location = 2) in vec4 inWorldPosAndSize;
 layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
 layout(location = 5) in float inRotation;
+layout(location = 6) in float inFlipbookFrameIndex;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
@@ -19,6 +20,13 @@ layout(binding = 0) uniform CameraUBO {
     vec3 cameraPos;
     float time;
 } camera;
+
+layout(push_constant) uniform FlipbookPC {
+    float flipbookColumns;
+    float flipbookRows;
+    float alphaClipThreshold;
+    uint blendMode;  // 0 = alpha blend, 1 = additive
+} pc;
 
 void main() {
     vec3 worldPos = inWorldPosAndSize.xyz;
@@ -40,7 +48,12 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
-    fragTexCoord = inTexCoord;
+    float frameIndex = floor(inFlipbookFrameIndex);
+    float col = mod(frameIndex, pc.flipbookColumns);
+    float row = floor(frameIndex / pc.flipbookColumns);
+    vec2 tileSize = vec2(1.0 / pc.flipbookColumns, 1.0 / pc.flipbookRows);
+    fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
+
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
 }
@@ -56,6 +69,13 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
+layout(push_constant) uniform FlipbookPC {
+    float flipbookColumns;
+    float flipbookRows;
+    float alphaClipThreshold;
+    uint blendMode;
+} pc;
+
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
     vec4 finalColor = texColor * fragColor;
@@ -66,9 +86,14 @@ void main() {
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
 
-    if (finalColor.a < 0.01) {
+    if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
-    outColor = finalColor;
+    if (pc.blendMode == 1u) {
+        // Additive: pre-multiply by alpha, output zero alpha
+        outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
+    } else {
+        outColor = finalColor;
+    }
 }

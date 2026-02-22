@@ -99,6 +99,8 @@ namespace editor::graph {
                                              float labelWidth, float inputWidth) {
         for (auto& [propName, prop] : node.properties) {
             if (propName == "shapeType") continue;
+            if (propName.rfind("flipbook", 0) == 0) continue;  // shown in property panel
+            if (propName == "alphaClipThreshold" || propName == "additiveBlend") continue;  // shown in property panel
 
             std::string widgetId = "##" + idPrefix + propName + std::to_string(node.id);
 
@@ -213,6 +215,24 @@ namespace editor::graph {
                                 }
                             }
                         }
+                    }
+                    break;
+                }
+                case vfx::VFXPropertyType::Curve: {
+                    vfx::VFXCurve* val = std::get_if<vfx::VFXCurve>(&prop.value);
+                    if (val) {
+                        ImGui::Text("%s", propName.c_str());
+                        ImGui::SameLine(labelWidth);
+                        ImGui::TextDisabled("%zu keys", val->keys.size());
+                    }
+                    break;
+                }
+                case vfx::VFXPropertyType::Gradient: {
+                    vfx::VFXGradient* val = std::get_if<vfx::VFXGradient>(&prop.value);
+                    if (val) {
+                        ImGui::Text("%s", propName.c_str());
+                        ImGui::SameLine(labelWidth);
+                        ImGui::TextDisabled("%zu stops", val->stops.size());
                     }
                     break;
                 }

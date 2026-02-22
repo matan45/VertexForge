@@ -67,6 +67,8 @@ namespace render::vfx
         std::vector<VFXInstanceData> instances;
         instances.reserve(getActiveParticleCount());
 
+        int totalFrames = config.flipbookRows * config.flipbookColumns;
+
         for (const auto& particle : particles)
         {
             if (particle.active)
@@ -77,6 +79,34 @@ namespace render::vfx
                 instance.color = particle.color;
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
                 instance.rotation = particle.rotation;
+
+                // Flipbook frame index computation (VK-493)
+                if (totalFrames > 1)
+                {
+                    float frameIndex;
+                    if (config.flipbookFrameRate > 0.0f)
+                    {
+                        frameIndex = particle.lifetime * config.flipbookFrameRate;
+                    }
+                    else
+                    {
+                        frameIndex = instance.lifetimeRatio * static_cast<float>(totalFrames);
+                    }
+
+                    if (config.flipbookRandomStart)
+                    {
+                        frameIndex += static_cast<float>(particle.spawnSeed % static_cast<uint32_t>(totalFrames));
+                    }
+
+                    frameIndex = std::fmod(frameIndex, static_cast<float>(totalFrames));
+                    if (frameIndex < 0.0f) frameIndex += static_cast<float>(totalFrames);
+                    instance.flipbookFrameIndex = frameIndex;
+                }
+                else
+                {
+                    instance.flipbookFrameIndex = 0.0f;
+                }
+
                 instances.push_back(instance);
             }
         }
@@ -115,6 +145,9 @@ namespace render::vfx
 
         particle->initialDirection = direction;
         particle->velocity = direction * config.startSpeed;
+
+        // Assign deterministic seed for flipbook random start (VK-493)
+        particle->spawnSeed = rng();
     }
 
     void VFXParticleSystem::updateParticle(VFXParticle& particle, float deltaTime)
@@ -177,24 +210,23 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        particle.color = glm::mix(mod.startColor, mod.endColor, t);
+        particle.color = mod.gradient.evaluate(t);
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
-        particle.size = particle.initialSize * multiplier;
+        particle.size = particle.initialSize * mod.curve.evaluate(t);
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
+        float multiplier = mod.curve.evaluate(t);
         particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
     }
 
-    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float /*t*/, float deltaTime)
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
     {
-        particle.rotation += glm::radians(mod.angularVelocity) * deltaTime;
+        particle.rotation += glm::radians(mod.curve.evaluate(t)) * deltaTime;
     }
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)

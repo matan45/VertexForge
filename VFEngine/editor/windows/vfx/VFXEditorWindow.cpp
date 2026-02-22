@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
+#include <algorithm>
 
 namespace windows
 {
@@ -41,6 +42,8 @@ namespace windows
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
             needsPreviewUpdate = true;
+
+            propertyPanel.setOnPropertyChanged([this]() { onGraphChanged(); });
         }
     }
 
@@ -129,6 +132,16 @@ namespace windows
             return defaultValue;
         };
 
+        auto getInt = [](const vfx::VFXNode& node, const std::string& propName, int32_t defaultValue) -> int32_t {
+            auto it = node.properties.find(propName);
+            if (it != node.properties.end()) {
+                if (auto* val = std::get_if<int32_t>(&it->second.value)) {
+                    return *val;
+                }
+            }
+            return defaultValue;
+        };
+
         auto getString = [](const vfx::VFXNode& node, const std::string& propName, const std::string& defaultValue) -> std::string {
             auto it = node.properties.find(propName);
             if (it != node.properties.end()) {
@@ -152,6 +165,16 @@ namespace windows
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
         params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
+
+        // Flipbook (VK-493)
+        params.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", vfx::EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
+        params.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
+        params.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", vfx::EmitterDefaults::FLIPBOOK_FRAME_RATE);
+        params.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", vfx::EmitterDefaults::FLIPBOOK_RANDOM_START);
+
+        // Rendering
+        params.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", vfx::EmitterDefaults::ALPHA_CLIP_THRESHOLD);
+        params.additiveBlend = getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND);
 
         previewPanel->setParams(params);
     }
@@ -182,24 +205,38 @@ namespace windows
                 drawToolbar();
 
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
+                float spacing = ImGui::GetStyle().ItemSpacing.y;
+                float topHeight = contentSize.y - propertyPanelHeight - spacing;
 
-                ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, contentSize.y), true);
-                previewPanel->draw();
+                // Top row: Preview | Graph
+                ImGui::BeginChild("TopRow", ImVec2(0, topHeight), false, ImGuiWindowFlags_NoScrollbar);
+                {
+                    ImVec2 topSize = ImGui::GetContentRegionAvail();
+
+                    ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, topSize.y), true);
+                    previewPanel->draw();
+                    ImGui::EndChild();
+
+                    if (needsPreviewUpdate)
+                    {
+                        updatePreviewFromGraph();
+                        previewPanel->play();
+                        needsPreviewUpdate = false;
+                    }
+
+                    ImGui::SameLine();
+
+                    float graphWidth = topSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
+                    ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, topSize.y), true,
+                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                    drawGraphPanel();
+                    ImGui::EndChild();
+                }
                 ImGui::EndChild();
 
-                if (needsPreviewUpdate)
-                {
-                    updatePreviewFromGraph();
-                    previewPanel->play();
-                    needsPreviewUpdate = false;
-                }
-
-                ImGui::SameLine();
-
-                float graphWidth = contentSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
-                ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, contentSize.y), true,
-                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-                drawGraphPanel();
+                // Bottom row: Property Panel
+                ImGui::BeginChild("PropertyPanel", ImVec2(0, propertyPanelHeight), true);
+                drawPropertyPanel();
                 ImGui::EndChild();
             }
         }
@@ -253,6 +290,18 @@ namespace windows
         else
         {
             ImGui::TextDisabled("No VFX loaded");
+        }
+    }
+
+    void VFXEditorWindow::drawPropertyPanel()
+    {
+        if (vfxData && graphEditor)
+        {
+            propertyPanel.draw(&vfxData->graph, graphEditor->getSelectedNodeId());
+        }
+        else
+        {
+            ImGui::TextDisabled("Select a modifier node to edit its curve or gradient");
         }
     }
 }

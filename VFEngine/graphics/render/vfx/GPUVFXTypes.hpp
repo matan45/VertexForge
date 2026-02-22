@@ -17,8 +17,12 @@ namespace render::vfx
         float rotation;
         float initialSize;
         float initialSpeed;
+        uint32_t spawnSeed;
+        float _pad1 = 0.0f;
+        float _pad2 = 0.0f;
+        float _pad3 = 0.0f;
     };
-    static_assert(sizeof(GPUParticle) == 64, "GPUParticle must be 64 bytes for GPU alignment");
+    static_assert(sizeof(GPUParticle) == 80, "GPUParticle must be 80 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
     static_assert(offsetof(GPUParticle, lifetime) == 12, "GPUParticle::lifetime offset mismatch");
     static_assert(offsetof(GPUParticle, velocity) == 16, "GPUParticle::velocity offset mismatch");
@@ -28,6 +32,7 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, rotation) == 52, "GPUParticle::rotation offset mismatch");
     static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
     static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
+    static_assert(offsetof(GPUParticle, spawnSeed) == 64, "GPUParticle::spawnSeed offset mismatch");
 
     namespace ModifierFlags
     {
@@ -55,6 +60,11 @@ namespace render::vfx
         inline constexpr uint32_t RandomDirection = 1 << 13;
     }
 
+    namespace FlipbookFlags
+    {
+        inline constexpr uint32_t RandomStart = 1 << 14;
+    }
+
     struct alignas(16) GPUEmitterConfig
     {
         glm::vec4 emitDirection;
@@ -75,9 +85,9 @@ namespace render::vfx
         float speedStartMult;
         float speedEndMult;
         float angularVelocity;
-        float modPadding1 = 0.0f;
-        float modPadding2 = 0.0f;
-        float modPadding3 = 0.0f;
+        uint32_t lutBaseOffset = 0;
+        uint32_t lutChannelStride = 0;
+        uint32_t lutFlags = 0;
 
         glm::vec4 gravityDir;
         glm::vec4 windDir;
@@ -88,7 +98,9 @@ namespace render::vfx
 
         glm::vec4 shapeDimensions;
         uint32_t shapeFlags;
-        float shapePadding[3] = {0.0f, 0.0f, 0.0f};
+        float flipbookColumns = 1.0f;
+        float flipbookRows = 1.0f;
+        float flipbookFrameRate = 0.0f;
     };
     static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -155,6 +167,14 @@ namespace render::vfx
     static_assert(offsetof(VFXDrawIndirectCommand, vertexOffset) == 12, "VFXDrawIndirectCommand::vertexOffset offset mismatch");
     static_assert(offsetof(VFXDrawIndirectCommand, firstInstance) == 16, "VFXDrawIndirectCommand::firstInstance offset mismatch");
 
+    namespace LUTFlags
+    {
+        inline constexpr uint32_t Color = 1 << 0;
+        inline constexpr uint32_t Size = 1 << 1;
+        inline constexpr uint32_t Speed = 1 << 2;
+        inline constexpr uint32_t Rotation = 1 << 3;
+    }
+
     namespace GPUVFXConstants
     {
         inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;
@@ -162,6 +182,8 @@ namespace render::vfx
         inline constexpr uint32_t DEFAULT_PARTICLES_PER_EMITTER = 1024;
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
+        inline constexpr uint32_t LUT_RESOLUTION = 64;
+        inline constexpr uint32_t LUT_CHANNELS = 4;
     }
 
     namespace EmitterFlags
@@ -194,4 +216,19 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
+
+    struct GPUVFXBillboardPushConstants
+    {
+        uint32_t emitterIndex;
+        float alphaClipThreshold = 0.1f;
+        uint32_t blendMode = 0;
+    };
+
+    struct VFXFlipbookPushConstants
+    {
+        float flipbookColumns;
+        float flipbookRows;
+        float alphaClipThreshold;
+        uint32_t blendMode = 0;
+    };
 }

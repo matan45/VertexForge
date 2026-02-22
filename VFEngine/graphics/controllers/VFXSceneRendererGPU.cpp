@@ -3,6 +3,7 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
+#include "../render/vfx/VFXLUTBaker.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
@@ -43,12 +44,18 @@ namespace controllers
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getConfigBuffer(),
                 gpuBufferManager->getStateBuffer(),
-                gpuBufferManager->getDrawCommandBuffer()
+                gpuBufferManager->getDrawCommandBuffer(),
+                gpuBufferManager->getLUTBuffer()
             );
 
             gpuRenderPipeline->updateParticleBuffer(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getParticleBufferSize()
+            );
+
+            gpuRenderPipeline->updateConfigBuffer(
+                gpuBufferManager->getConfigBuffer(),
+                gpuBufferManager->getConfigBufferSize()
             );
 
             loggerInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
@@ -111,13 +118,9 @@ namespace controllers
                 continue;
             }
 
-            // Track emission time for looping control
             instance.emissionTime += deltaTime;
 
             uint32_t spawnThisFrame = 0;
-            // Only spawn new particles if:
-            // - looping is enabled, OR
-            // - we haven't exceeded the emission duration (one lifetime cycle)
             bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
 
             if (instance.active && canSpawn)
@@ -133,6 +136,18 @@ namespace controllers
                 instance.gpuParticleCount,
                 dist(gen)
             );
+
+            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
+            if (lutResult.lutFlags != 0)
+            {
+                gpuBufferManager->updateEmitterLUT(instance.gpuEmitterIndex, lutResult.data);
+                gpuConfig.lutBaseOffset = instance.gpuEmitterIndex *
+                    render::vfx::GPUVFXConstants::LUT_CHANNELS *
+                    render::vfx::GPUVFXConstants::LUT_RESOLUTION;
+                gpuConfig.lutChannelStride = render::vfx::GPUVFXConstants::LUT_RESOLUTION;
+                gpuConfig.lutFlags = lutResult.lutFlags;
+            }
+
             gpuBufferManager->updateEmitterConfig(instance.gpuEmitterIndex, gpuConfig);
 
             auto gpuState = toGPUState(instance);
@@ -177,25 +192,25 @@ namespace controllers
                 if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorOverLifetime;
-                    gpuConfig.colorStart = mod.startColor;
-                    gpuConfig.colorEnd = mod.endColor;
+                    gpuConfig.colorStart = mod.gradient.evaluate(0.0f);
+                    gpuConfig.colorEnd = mod.gradient.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeOverLifetime;
-                    gpuConfig.sizeStartMult = mod.startMultiplier;
-                    gpuConfig.sizeEndMult = mod.endMultiplier;
+                    gpuConfig.sizeStartMult = mod.curve.evaluate(0.0f);
+                    gpuConfig.sizeEndMult = mod.curve.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SpeedOverLifetime;
-                    gpuConfig.speedStartMult = mod.startMultiplier;
-                    gpuConfig.speedEndMult = mod.endMultiplier;
+                    gpuConfig.speedStartMult = mod.curve.evaluate(0.0f);
+                    gpuConfig.speedEndMult = mod.curve.evaluate(1.0f);
                 }
                 else if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::RotationOverLifetime;
-                    gpuConfig.angularVelocity = glm::radians(mod.angularVelocity);
+                    gpuConfig.angularVelocity = glm::radians(mod.curve.evaluate(0.0f));
                 }
             }, modifier);
         }
@@ -255,7 +270,6 @@ namespace controllers
             break;
         case ::vfx::ShapeType::Point:
         default:
-            // No flag set for Point (default behavior)
             break;
         }
 
@@ -269,6 +283,14 @@ namespace controllers
             gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
         }
 
+        gpuConfig.flipbookColumns = static_cast<float>(cpuConfig.flipbookColumns);
+        gpuConfig.flipbookRows = static_cast<float>(cpuConfig.flipbookRows);
+        gpuConfig.flipbookFrameRate = cpuConfig.flipbookFrameRate;
+        if (cpuConfig.flipbookRandomStart)
+        {
+            gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
+        }
+
         return gpuConfig;
     }
 
@@ -279,8 +301,8 @@ namespace controllers
         gpuState.worldTransform = instance.worldTransform;
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
-        gpuState.activeCount = 0;  // Reset by compute shader
-        gpuState.spawnThisFrame = 0;  // Set by caller
+        gpuState.activeCount = 0;
+        gpuState.spawnThisFrame = 0;
         gpuState.spawnAccumulator = instance.spawnAccumulator;
         gpuState.flags = 0;
         if (instance.active)

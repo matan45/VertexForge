@@ -207,6 +207,7 @@
     <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
     <ClInclude Include="windows\vfx\VFXEditorWindow.hpp" />
     <ClInclude Include="windows\vfx\VFXPreviewPanel.hpp" />
+    <ClInclude Include="windows\vfx\VFXPropertyPanel.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
@@ -316,6 +317,7 @@
     <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
     <ClCompile Include="windows\vfx\VFXEditorWindow.cpp" />
     <ClCompile Include="windows\vfx\VFXPreviewPanel.cpp" />
+    <ClCompile Include="windows\vfx\VFXPropertyPanel.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />

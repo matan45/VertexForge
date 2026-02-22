@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
+#include "GPUVFXTypes.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -52,6 +53,8 @@ namespace render::vfx
         std::unique_ptr<core::Texture> customTexture;
         std::string currentTexturePath;
 
+        VFXFlipbookPushConstants flipbookPC{1.0f, 1.0f, 0.1f, 0};
+
     public:
         explicit VFXScenePipeline(core::Device& device, core::SwapChain& swapChain);
         ~VFXScenePipeline();
@@ -66,6 +69,8 @@ namespace render::vfx
         void setParticleInstances(const std::vector<VFXInstanceData>& instances);
 
         void setTexture(const std::string& texturePath);
+
+        void setFlipbookConfig(int rows, int columns, float alphaClipThreshold = 0.1f, bool additiveBlend = false);
 
         void recordCommandsInline(const vk::CommandBuffer& commandBuffer) const;
 

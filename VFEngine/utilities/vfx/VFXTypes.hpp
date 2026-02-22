@@ -6,6 +6,7 @@
 #include <variant>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "VFXCurveTypes.hpp"
 
 namespace vfx
 {
@@ -18,10 +19,13 @@ namespace vfx
         Color,
         Int,
         Bool,
-        String
+        String,
+        Curve,
+        Gradient
     };
 
-    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string>;
+    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string,
+                                          VFXCurve, VFXGradient>;
 
     enum class VFXNodeType : uint8_t
     {
@@ -133,6 +137,16 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+
+        // Flipbook defaults (VK-493)
+        inline constexpr int FLIPBOOK_ROWS = 1;
+        inline constexpr int FLIPBOOK_COLUMNS = 1;
+        inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
+        inline constexpr bool FLIPBOOK_RANDOM_START = false;
+
+        // Rendering
+        inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
+        inline constexpr bool ADDITIVE_BLEND = false;
     }
 
     namespace ModifierDefaults

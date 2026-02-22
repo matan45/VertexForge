@@ -19,7 +19,51 @@ struct GPUParticle
     float rotation;
     float initialSize;
     float initialSpeed;
+    uint spawnSeed;
+    float _pad1;
+    float _pad2;
+    float _pad3;
 };
+
+struct GPUEmitterConfig
+{
+    vec4 emitDirection;
+    vec4 startColor;
+    float spawnRate;
+    float lifetime;
+    float startSize;
+    float startSpeed;
+    uint maxParticles;
+    uint seed;
+    float deltaTime;
+    uint modifierFlags;
+
+    vec4 colorStart;
+    vec4 colorEnd;
+    float sizeStartMult;
+    float sizeEndMult;
+    float speedStartMult;
+    float speedEndMult;
+    float angularVelocity;
+    uint lutBaseOffset;
+    uint lutChannelStride;
+    uint lutFlags;
+
+    vec4 gravityDir;
+    vec4 windDir;
+    vec4 windNoise;
+    vec4 turbulence;
+    vec4 vortexAxis;
+    vec4 vortexCenter;
+
+    vec4 shapeDimensions;
+    uint shapeFlags;
+    float flipbookColumns;
+    float flipbookRows;
+    float flipbookFrameRate;
+};
+
+const uint FLIPBOOK_RANDOM_START = (1u << 14u);
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -31,6 +75,14 @@ layout(binding = 0) uniform CameraUBO {
 layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
     GPUParticle particles[];
 };
+
+layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
+    GPUEmitterConfig configs[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint emitterIndex;
+} pc;
 
 void main() {
     uint particleIdx = gl_InstanceIndex;
@@ -62,7 +114,24 @@ void main() {
 
     float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
 
-    fragTexCoord = inTexCoord;
+    GPUEmitterConfig config = configs[pc.emitterIndex];
+    float totalFrames = config.flipbookColumns * config.flipbookRows;
+    float frameIndex = 0.0;
+    if (totalFrames > 1.0) {
+        if (config.flipbookFrameRate > 0.0)
+            frameIndex = p.lifetime * config.flipbookFrameRate;
+        else
+            frameIndex = lifetimeRatio * totalFrames;
+        if ((config.modifierFlags & FLIPBOOK_RANDOM_START) != 0u) {
+            frameIndex += float(p.spawnSeed % uint(totalFrames));
+        }
+        frameIndex = mod(frameIndex, totalFrames);
+    }
+    float col = mod(floor(frameIndex), config.flipbookColumns);
+    float row = floor(floor(frameIndex) / config.flipbookColumns);
+    vec2 tileSize = vec2(1.0 / config.flipbookColumns, 1.0 / config.flipbookRows);
+    fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
+
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
 }
@@ -78,14 +147,25 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
+layout(push_constant) uniform PushConstants {
+    uint emitterIndex;
+    float alphaClipThreshold;
+    uint blendMode;
+} pc;
+
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
 
     vec4 finalColor = texColor * fragColor;
 
-    if (finalColor.a < 0.01) {
+    if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
-    outColor = finalColor;
+    if (pc.blendMode == 1u) {
+        // Additive: pre-multiply by alpha, output zero alpha
+        outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
+    } else {
+        outColor = finalColor;
+    }
 }

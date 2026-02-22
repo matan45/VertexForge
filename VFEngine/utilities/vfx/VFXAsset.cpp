@@ -129,6 +129,34 @@ namespace vfx
                 std::string(""), 0.0f, 0.0f
             };
 
+            // Flipbook / Texture Sheet Animation (VK-493)
+            emitterNode.properties["flipbookRows"] = VFXProperty{
+                "flipbookRows", VFXPropertyType::Int,
+                EmitterDefaults::FLIPBOOK_ROWS, 1.0f, 16.0f
+            };
+            emitterNode.properties["flipbookColumns"] = VFXProperty{
+                "flipbookColumns", VFXPropertyType::Int,
+                EmitterDefaults::FLIPBOOK_COLUMNS, 1.0f, 16.0f
+            };
+            emitterNode.properties["flipbookFrameRate"] = VFXProperty{
+                "flipbookFrameRate", VFXPropertyType::Float,
+                EmitterDefaults::FLIPBOOK_FRAME_RATE, 0.0f, 120.0f
+            };
+            emitterNode.properties["flipbookRandomStart"] = VFXProperty{
+                "flipbookRandomStart", VFXPropertyType::Bool,
+                EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
+            };
+
+            // Rendering
+            emitterNode.properties["alphaClipThreshold"] = VFXProperty{
+                "alphaClipThreshold", VFXPropertyType::Float,
+                EmitterDefaults::ALPHA_CLIP_THRESHOLD, 0.0f, 1.0f
+            };
+            emitterNode.properties["additiveBlend"] = VFXProperty{
+                "additiveBlend", VFXPropertyType::Bool,
+                EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace
@@ -167,6 +195,32 @@ namespace vfx
             return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
         case VFXPropertyType::String:
             return std::holds_alternative<std::string>(val) ? std::get<std::string>(val) : "";
+        case VFXPropertyType::Curve:
+            if (auto* curve = std::get_if<VFXCurve>(&val))
+            {
+                json cj;
+                json keysArr = json::array();
+                for (const auto& key : curve->keys)
+                {
+                    keysArr.push_back(json::array({key.time, key.value, key.inTangent, key.outTangent}));
+                }
+                cj["keys"] = keysArr;
+                return cj;
+            }
+            return json::object();
+        case VFXPropertyType::Gradient:
+            if (auto* grad = std::get_if<VFXGradient>(&val))
+            {
+                json gj;
+                json stopsArr = json::array();
+                for (const auto& stop : grad->stops)
+                {
+                    stopsArr.push_back(json::array({stop.position, stop.color.r, stop.color.g, stop.color.b, stop.color.a}));
+                }
+                gj["stops"] = stopsArr;
+                return gj;
+            }
+            return json::object();
         default:
             return 0.0f;
         }
@@ -199,6 +253,43 @@ namespace vfx
                 return j.is_boolean() ? j.get<bool>() : false;
             case VFXPropertyType::String:
                 return j.is_string() ? j.get<std::string>() : std::string("");
+            case VFXPropertyType::Curve:
+            {
+                VFXCurve curve;
+                if (j.is_object() && j.contains("keys") && j["keys"].is_array())
+                {
+                    for (const auto& keyArr : j["keys"])
+                    {
+                        if (keyArr.is_array() && keyArr.size() >= 4)
+                        {
+                            curve.keys.push_back({
+                                keyArr[0].get<float>(), keyArr[1].get<float>(),
+                                keyArr[2].get<float>(), keyArr[3].get<float>()
+                            });
+                        }
+                    }
+                }
+                return curve;
+            }
+            case VFXPropertyType::Gradient:
+            {
+                VFXGradient gradient;
+                if (j.is_object() && j.contains("stops") && j["stops"].is_array())
+                {
+                    for (const auto& stopArr : j["stops"])
+                    {
+                        if (stopArr.is_array() && stopArr.size() >= 5)
+                        {
+                            gradient.stops.push_back({
+                                stopArr[0].get<float>(),
+                                glm::vec4(stopArr[1].get<float>(), stopArr[2].get<float>(),
+                                          stopArr[3].get<float>(), stopArr[4].get<float>())
+                            });
+                        }
+                    }
+                }
+                return gradient;
+            }
             default:
                 return 0.0f;
             }
@@ -214,7 +305,8 @@ namespace vfx
         json j;
         j["type"] = propertyTypeToString(prop.type);
         j["value"] = serializePropertyValue(prop.value, prop.type);
-        if (prop.type == VFXPropertyType::Float || prop.type == VFXPropertyType::Int)
+        if (prop.type == VFXPropertyType::Float || prop.type == VFXPropertyType::Int ||
+            prop.type == VFXPropertyType::Curve)
         {
             j["min"] = prop.min;
             j["max"] = prop.max;

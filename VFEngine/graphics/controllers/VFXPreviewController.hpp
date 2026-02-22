@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../core/OffScreen.hpp"
 #include <vfx/VFXModifierTypes.hpp>
 #include <vfx/VFXForceTypes.hpp>
@@ -38,6 +37,16 @@ namespace controllers
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
+
+        // Flipbook (VK-493)
+        int flipbookRows = 1;
+        int flipbookColumns = 1;
+        float flipbookFrameRate = 0.0f;
+        bool flipbookRandomStart = false;
+
+        // Rendering
+        float alphaClipThreshold = 0.1f;
+        bool additiveBlend = false;
     };
 
     class VFXPreviewController
@@ -55,6 +64,7 @@ namespace controllers
 
         VFXPreviewParams currentParams;
         bool initialized = false;
+        vk::Extent2D lastExtent{};
 
     public:
         explicit VFXPreviewController();
@@ -81,6 +91,7 @@ namespace controllers
     private:
         void createOffscreenResources();
         void cleanupOffscreenResources();
+        void recreateOffscreenResources();
         void createSampler();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
     };

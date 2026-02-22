@@ -154,18 +154,27 @@ namespace controllers
 
         instances[id] = std::move(instance);
 
-        // Set texture on pipelines if config has a texture path
+        // Set texture and config on pipelines
         const auto& storedConfig = instances[id].config;
-        if (!storedConfig.texturePath.empty())
+        if (!storedConfig.texturePath.empty() && cpuPipeline)
         {
-            if (cpuPipeline)
-            {
-                cpuPipeline->setTexture(storedConfig.texturePath);
-            }
-            if (gpuRenderPipeline)
-            {
-                gpuRenderPipeline->setTexture(storedConfig.texturePath);
-            }
+            cpuPipeline->setTexture(storedConfig.texturePath);
+        }
+
+        // Set flipbook and rendering config on CPU pipeline (VK-493)
+        if (cpuPipeline)
+        {
+            cpuPipeline->setFlipbookConfig(storedConfig.flipbookRows, storedConfig.flipbookColumns,
+                                           storedConfig.alphaClipThreshold, storedConfig.additiveBlend);
+        }
+
+        // Per-emitter GPU texture and rendering config
+        if (gpuRenderPipeline && instances[id].gpuDriven)
+        {
+            gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
+            gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
+                                                          storedConfig.alphaClipThreshold,
+                                                          storedConfig.additiveBlend);
         }
 
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",

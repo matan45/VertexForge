@@ -57,13 +57,22 @@ namespace controllers
         config.modifiers = currentParams.modifiers;
         config.forces = currentParams.forces;
         config.shape = currentParams.shape;
+        config.flipbookRows = currentParams.flipbookRows;
+        config.flipbookColumns = currentParams.flipbookColumns;
+        config.flipbookFrameRate = currentParams.flipbookFrameRate;
+        config.flipbookRandomStart = currentParams.flipbookRandomStart;
+        config.alphaClipThreshold = currentParams.alphaClipThreshold;
+        config.additiveBlend = currentParams.additiveBlend;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
         {
             pipeline->setTexture(currentParams.texturePath);
         }
+        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
+                                    currentParams.alphaClipThreshold, currentParams.additiveBlend);
 
+        lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
     }
@@ -132,12 +141,20 @@ namespace controllers
             config.modifiers = params.modifiers;
             config.forces = params.forces;
             config.shape = params.shape;
+            config.flipbookRows = params.flipbookRows;
+            config.flipbookColumns = params.flipbookColumns;
+            config.flipbookFrameRate = params.flipbookFrameRate;
+            config.flipbookRandomStart = params.flipbookRandomStart;
+            config.alphaClipThreshold = params.alphaClipThreshold;
+            config.additiveBlend = params.additiveBlend;
             particleSystem->setEmitterConfig(config);
         }
 
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
+            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
+                                        params.alphaClipThreshold, params.additiveBlend);
         }
     }
 
@@ -188,11 +205,38 @@ namespace controllers
         return particleSystem ? particleSystem->isPlaying() : false;
     }
 
+    void VFXPreviewController::recreateOffscreenResources()
+    {
+        device.getLogicalDevice().waitIdle();
+
+        // Remove old ImGui descriptor sets before destroying image views
+        for (auto const& resources : offscreenResources.colorImages)
+        {
+            if (resources.descriptorSet)
+            {
+                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+            }
+        }
+
+        cleanupOffscreenResources();
+        createOffscreenResources();
+
+        pipeline->recreate();
+
+        lastExtent = swapChain.getSwapchainExtent();
+    }
+
     void* VFXPreviewController::render()
     {
         if (!initialized || !pipeline || !pipeline->isInitialized())
         {
             return nullptr;
+        }
+
+        vk::Extent2D currentExtent = swapChain.getSwapchainExtent();
+        if (currentExtent.width != lastExtent.width || currentExtent.height != lastExtent.height)
+        {
+            recreateOffscreenResources();
         }
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();

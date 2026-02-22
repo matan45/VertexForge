@@ -14,6 +14,10 @@ struct GPUParticle
     float rotation;
     float initialSize;
     float initialSpeed;
+    uint spawnSeed;
+    float _pad1;
+    float _pad2;
+    float _pad3;
 };
 
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
@@ -32,6 +36,8 @@ const uint SHAPE_BOX = 1024u;
 const uint SHAPE_CIRCLE = 2048u;
 const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
+
+const uint FLIPBOOK_RANDOM_START = 16384u;
 
 struct GPUEmitterConfig
 {
@@ -53,9 +59,9 @@ struct GPUEmitterConfig
     float speedStartMult;
     float speedEndMult;
     float angularVelocity;
-    float modPadding1;
-    float modPadding2;
-    float modPadding3;
+    uint lutBaseOffset;
+    uint lutChannelStride;
+    uint lutFlags;
 
     vec4 gravityDir;
     vec4 windDir;
@@ -66,9 +72,9 @@ struct GPUEmitterConfig
 
     vec4 shapeDimensions;
     uint shapeFlags;
-    float shapePadding1;
-    float shapePadding2;
-    float shapePadding3;
+    float flipbookColumns;
+    float flipbookRows;
+    float flipbookFrameRate;
 };
 
 struct GPUEmitterState
@@ -108,6 +114,15 @@ layout(std430, set = 0, binding = 2) buffer EmitterStateBuffer {
 layout(std430, set = 0, binding = 3) writeonly buffer DrawCommandBuffer {
     VFXDrawIndirectCommand drawCommands[];
 };
+
+layout(std430, set = 0, binding = 4) readonly buffer LUTBuffer {
+    vec4 lutData[];
+};
+
+const uint LUT_FLAG_COLOR = 1u;
+const uint LUT_FLAG_SIZE = 2u;
+const uint LUT_FLAG_SPEED = 4u;
+const uint LUT_FLAG_ROTATION = 8u;
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -479,22 +494,58 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
     p.velocity += totalForce * config.deltaTime;
 }
 
+vec4 sampleLUT(uint baseOffset, uint channelIndex, uint stride, float t)
+{
+    float coord = clamp(t, 0.0, 1.0) * float(stride - 1u);
+    uint lower = uint(floor(coord));
+    uint upper = min(lower + 1u, stride - 1u);
+    float frac = coord - float(lower);
+
+    uint channelOffset = baseOffset + channelIndex * stride;
+    vec4 a = lutData[channelOffset + lower];
+    vec4 b = lutData[channelOffset + upper];
+    return mix(a, b, frac);
+}
+
 void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetimeRatio)
 {
     if ((config.modifierFlags & MODIFIER_COLOR_OVER_LIFETIME) != 0u)
     {
-        p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
+        if ((config.lutFlags & LUT_FLAG_COLOR) != 0u)
+        {
+            p.color = sampleLUT(config.lutBaseOffset, 0u, config.lutChannelStride, lifetimeRatio);
+        }
+        else
+        {
+            p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
+        }
     }
 
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
     {
-        float sizeMult = mix(config.sizeStartMult, config.sizeEndMult, lifetimeRatio);
+        float sizeMult;
+        if ((config.lutFlags & LUT_FLAG_SIZE) != 0u)
+        {
+            sizeMult = sampleLUT(config.lutBaseOffset, 1u, config.lutChannelStride, lifetimeRatio).x;
+        }
+        else
+        {
+            sizeMult = mix(config.sizeStartMult, config.sizeEndMult, lifetimeRatio);
+        }
         p.size = p.initialSize * sizeMult;
     }
 
     if ((config.modifierFlags & MODIFIER_SPEED_OVER_LIFETIME) != 0u)
     {
-        float speedMult = mix(config.speedStartMult, config.speedEndMult, lifetimeRatio);
+        float speedMult;
+        if ((config.lutFlags & LUT_FLAG_SPEED) != 0u)
+        {
+            speedMult = sampleLUT(config.lutBaseOffset, 2u, config.lutChannelStride, lifetimeRatio).x;
+        }
+        else
+        {
+            speedMult = mix(config.speedStartMult, config.speedEndMult, lifetimeRatio);
+        }
         float currentSpeed = length(p.velocity);
         if (currentSpeed > 0.001)
         {
@@ -505,7 +556,15 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
 
     if ((config.modifierFlags & MODIFIER_ROTATION_OVER_LIFETIME) != 0u)
     {
-        p.rotation += config.angularVelocity * config.deltaTime;
+        if ((config.lutFlags & LUT_FLAG_ROTATION) != 0u)
+        {
+            float angVel = sampleLUT(config.lutBaseOffset, 3u, config.lutChannelStride, lifetimeRatio).x;
+            p.rotation += angVel * config.deltaTime;
+        }
+        else
+        {
+            p.rotation += config.angularVelocity * config.deltaTime;
+        }
     }
 }
 
@@ -591,6 +650,7 @@ void main()
 
             p.initialSize = config.startSize;
             p.initialSpeed = config.startSpeed;
+            p.spawnSeed = seed;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
             p.velocity = dir * config.startSpeed;
