@@ -294,7 +294,7 @@ namespace editor::vfxeditor
                 if (val)
                 {
                     ImGui::Text("%s", entry.label);
-                    ImGui::SameLine(100.0f);
+                    ImGui::SameLine();
                     if (ImGui::Checkbox(widgetId.c_str(), val))
                     {
                         notifyChanged();
