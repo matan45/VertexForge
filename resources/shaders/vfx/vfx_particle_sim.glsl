@@ -33,6 +33,8 @@ const uint SHAPE_CIRCLE = 2048u;
 const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
+const uint FLIPBOOK_RANDOM_START = 16384u;
+
 struct GPUEmitterConfig
 {
     vec4 emitDirection;
@@ -66,9 +68,9 @@ struct GPUEmitterConfig
 
     vec4 shapeDimensions;
     uint shapeFlags;
-    float shapePadding1;
-    float shapePadding2;
-    float shapePadding3;
+    float flipbookColumns;
+    float flipbookRows;
+    float flipbookFrameRate;
 };
 
 struct GPUEmitterState

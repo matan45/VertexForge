@@ -129,6 +129,24 @@ namespace vfx
                 std::string(""), 0.0f, 0.0f
             };
 
+            // Flipbook / Texture Sheet Animation (VK-493)
+            emitterNode.properties["flipbookRows"] = VFXProperty{
+                "flipbookRows", VFXPropertyType::Int,
+                EmitterDefaults::FLIPBOOK_ROWS, 1.0f, 16.0f
+            };
+            emitterNode.properties["flipbookColumns"] = VFXProperty{
+                "flipbookColumns", VFXPropertyType::Int,
+                EmitterDefaults::FLIPBOOK_COLUMNS, 1.0f, 16.0f
+            };
+            emitterNode.properties["flipbookFrameRate"] = VFXProperty{
+                "flipbookFrameRate", VFXPropertyType::Float,
+                EmitterDefaults::FLIPBOOK_FRAME_RATE, 0.0f, 120.0f
+            };
+            emitterNode.properties["flipbookRandomStart"] = VFXProperty{
+                "flipbookRandomStart", VFXPropertyType::Bool,
+                EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

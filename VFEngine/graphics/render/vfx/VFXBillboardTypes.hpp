@@ -26,6 +26,8 @@ namespace render::vfx
         float initialSize = 1.0f;
         float initialSpeed = 1.0f;
         glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};  // Stored at spawn for speed modifier
+
+        uint32_t spawnSeed = 0;  // Deterministic seed for flipbook random start (VK-493)
     };
 
     struct VFXInstanceData
@@ -34,8 +36,9 @@ namespace render::vfx
         float size;
         glm::vec4 color;
         float lifetimeRatio;
-        float rotation;         // Rotation angle in radians (VK-238)
-        float padding[2];
+        float rotation;             // Rotation angle in radians (VK-238)
+        float flipbookFrameIndex;   // Computed frame index for flipbook animation (VK-493)
+        float padding1;
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -46,9 +49,9 @@ namespace render::vfx
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -69,6 +72,11 @@ namespace render::vfx
             attributes[3].location = 5;
             attributes[3].format = vk::Format::eR32Sfloat;
             attributes[3].offset = offsetof(VFXInstanceData, rotation);
+
+            attributes[4].binding = 1;
+            attributes[4].location = 6;
+            attributes[4].format = vk::Format::eR32Sfloat;
+            attributes[4].offset = offsetof(VFXInstanceData, flipbookFrameIndex);
 
             return attributes;
         }
@@ -133,6 +141,12 @@ namespace render::vfx
 
         // Shape config (VK-240)
         ::vfx::ShapeConfig shape;
+
+        // Flipbook / Texture Sheet Animation (VK-493)
+        int flipbookRows = 1;
+        int flipbookColumns = 1;
+        float flipbookFrameRate = 0.0f;   // 0 = lifetime-based, >0 = fixed FPS
+        bool flipbookRandomStart = false;
     };
 
     namespace VFXConstants

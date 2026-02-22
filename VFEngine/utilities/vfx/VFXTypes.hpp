@@ -137,6 +137,12 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+
+        // Flipbook defaults (VK-493)
+        inline constexpr int FLIPBOOK_ROWS = 1;
+        inline constexpr int FLIPBOOK_COLUMNS = 1;
+        inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
+        inline constexpr bool FLIPBOOK_RANDOM_START = false;
     }
 
     namespace ModifierDefaults

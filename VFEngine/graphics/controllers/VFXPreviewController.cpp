@@ -57,12 +57,17 @@ namespace controllers
         config.modifiers = currentParams.modifiers;
         config.forces = currentParams.forces;
         config.shape = currentParams.shape;
+        config.flipbookRows = currentParams.flipbookRows;
+        config.flipbookColumns = currentParams.flipbookColumns;
+        config.flipbookFrameRate = currentParams.flipbookFrameRate;
+        config.flipbookRandomStart = currentParams.flipbookRandomStart;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
         {
             pipeline->setTexture(currentParams.texturePath);
         }
+        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns);
 
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
@@ -132,12 +137,17 @@ namespace controllers
             config.modifiers = params.modifiers;
             config.forces = params.forces;
             config.shape = params.shape;
+            config.flipbookRows = params.flipbookRows;
+            config.flipbookColumns = params.flipbookColumns;
+            config.flipbookFrameRate = params.flipbookFrameRate;
+            config.flipbookRandomStart = params.flipbookRandomStart;
             particleSystem->setEmitterConfig(config);
         }
 
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
+            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns);
         }
     }
 

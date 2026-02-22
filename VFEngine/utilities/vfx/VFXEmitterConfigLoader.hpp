@@ -5,6 +5,7 @@
 #include "VFXModifierConfigLoader.hpp"
 #include "VFXForceConfigLoader.hpp"
 #include "VFXShapeConfigLoader.hpp"
+#include <algorithm>
 #include <optional>
 #include <string_view>
 
@@ -26,6 +27,7 @@ namespace vfx
 
         // Specialized extractors for common types
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
+        static int32_t getInt(const VFXNode& node, const std::string& propName, int32_t defaultValue);
         static glm::vec3 getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);
         static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
@@ -54,6 +56,11 @@ namespace vfx
     inline float VFXEmitterConfigLoader::getFloat(const VFXNode& node, const std::string& propName, float defaultValue)
     {
         return getPropertyValue<float>(node, propName, defaultValue);
+    }
+
+    inline int32_t VFXEmitterConfigLoader::getInt(const VFXNode& node, const std::string& propName, int32_t defaultValue)
+    {
+        return getPropertyValue<int32_t>(node, propName, defaultValue);
     }
 
     inline glm::vec3 VFXEmitterConfigLoader::getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue)
@@ -125,6 +132,12 @@ namespace vfx
 
         // Load shape config (VK-240)
         config.shape = VFXShapeConfigLoader::fromGraph(data.graph);
+
+        // Flipbook / Texture Sheet Animation (VK-493)
+        config.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
+        config.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
+        config.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", EmitterDefaults::FLIPBOOK_FRAME_RATE);
+        config.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", EmitterDefaults::FLIPBOOK_RANDOM_START);
 
         return config;
     }

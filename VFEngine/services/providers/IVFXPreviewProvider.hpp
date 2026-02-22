@@ -23,6 +23,12 @@ namespace services
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
+
+        // Flipbook (VK-493)
+        int flipbookRows = 1;
+        int flipbookColumns = 1;
+        float flipbookFrameRate = 0.0f;
+        bool flipbookRandomStart = false;
     };
 
     class IVFXPreviewProvider

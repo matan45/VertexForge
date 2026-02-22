@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
+#include "GPUVFXTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <string>
@@ -49,6 +50,10 @@ namespace render::vfx
         vk::Buffer cachedParticleBuffer;
         vk::DeviceSize cachedParticleBufferSize = 0;
 
+        // Cached emitter config buffer info (VK-493)
+        vk::Buffer cachedConfigBuffer;
+        vk::DeviceSize cachedConfigBufferSize = 0;
+
         // Default texture (white 1x1)
         vk::Image defaultTextureImage;
         vk::DeviceMemory defaultTextureMemory;
@@ -78,6 +83,9 @@ namespace render::vfx
 
         // Update particle buffer binding (called when buffer changes)
         void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
+
+        // Update emitter config buffer binding (VK-493)
+        void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
 
         // Set custom texture for particles
         void setTexture(const std::string& texturePath);

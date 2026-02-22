@@ -53,6 +53,11 @@ namespace controllers
                 gpuBufferManager->getParticleBufferSize()
             );
 
+            gpuRenderPipeline->updateConfigBuffer(
+                gpuBufferManager->getConfigBuffer(),
+                gpuBufferManager->getConfigBufferSize()
+            );
+
             loggerInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
                        gpuBufferManager->getMaxParticles(),
                        gpuBufferManager->getMaxEmitters());
@@ -281,6 +286,15 @@ namespace controllers
         if (cpuConfig.shape.randomDirection)
         {
             gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
+        }
+
+        // Flipbook (VK-493)
+        gpuConfig.flipbookColumns = static_cast<float>(cpuConfig.flipbookColumns);
+        gpuConfig.flipbookRows = static_cast<float>(cpuConfig.flipbookRows);
+        gpuConfig.flipbookFrameRate = cpuConfig.flipbookFrameRate;
+        if (cpuConfig.flipbookRandomStart)
+        {
+            gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
         }
 
         return gpuConfig;

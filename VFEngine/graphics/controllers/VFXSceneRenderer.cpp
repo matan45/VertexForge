@@ -168,6 +168,12 @@ namespace controllers
             }
         }
 
+        // Set flipbook config on CPU pipeline (VK-493)
+        if (cpuPipeline)
+        {
+            cpuPipeline->setFlipbookConfig(storedConfig.flipbookRows, storedConfig.flipbookColumns);
+        }
+
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;

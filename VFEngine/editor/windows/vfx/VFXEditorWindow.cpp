@@ -131,6 +131,16 @@ namespace windows
             return defaultValue;
         };
 
+        auto getInt = [](const vfx::VFXNode& node, const std::string& propName, int32_t defaultValue) -> int32_t {
+            auto it = node.properties.find(propName);
+            if (it != node.properties.end()) {
+                if (auto* val = std::get_if<int32_t>(&it->second.value)) {
+                    return *val;
+                }
+            }
+            return defaultValue;
+        };
+
         auto getString = [](const vfx::VFXNode& node, const std::string& propName, const std::string& defaultValue) -> std::string {
             auto it = node.properties.find(propName);
             if (it != node.properties.end()) {
@@ -154,6 +164,12 @@ namespace windows
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
         params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
+
+        // Flipbook (VK-493)
+        params.flipbookRows = getInt(*emitterNode, "flipbookRows", vfx::EmitterDefaults::FLIPBOOK_ROWS);
+        params.flipbookColumns = getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS);
+        params.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", vfx::EmitterDefaults::FLIPBOOK_FRAME_RATE);
+        params.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", vfx::EmitterDefaults::FLIPBOOK_RANDOM_START);
 
         previewPanel->setParams(params);
     }

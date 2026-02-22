@@ -231,6 +231,8 @@ namespace render::vfx
 
         cachedParticleBuffer = nullptr;
         cachedParticleBufferSize = 0;
+        cachedConfigBuffer = nullptr;
+        cachedConfigBufferSize = 0;
         descriptorsNeedUpdate = true;
         initialized = false;
 
@@ -251,7 +253,7 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
@@ -271,6 +273,12 @@ namespace render::vfx
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
+        // Binding 3: Emitter config SSBO (VK-493: flipbook config access in vertex shader)
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -286,7 +294,7 @@ namespace render::vfx
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 1;
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 1;
+        poolSizes[2].descriptorCount = 2;  // VK-493: particle SSBO + config SSBO
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -317,9 +325,19 @@ namespace render::vfx
         }
     }
 
+    void VFXSceneGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
+    {
+        if (configBuffer != cachedConfigBuffer || configBufferSize != cachedConfigBufferSize)
+        {
+            cachedConfigBuffer = configBuffer;
+            cachedConfigBufferSize = configBufferSize;
+            descriptorsNeedUpdate = true;
+        }
+    }
+
     void VFXSceneGPUPipeline::writeDescriptors() const
     {
-        if (!descriptorsNeedUpdate || !cachedParticleBuffer)
+        if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer)
         {
             return;
         }
@@ -352,7 +370,13 @@ namespace render::vfx
         particleInfo.offset = 0;
         particleInfo.range = cachedParticleBufferSize;
 
-        std::array<vk::WriteDescriptorSet, 3> writes{};
+        // Emitter config SSBO (VK-493)
+        vk::DescriptorBufferInfo configInfo{};
+        configInfo.buffer = cachedConfigBuffer;
+        configInfo.offset = 0;
+        configInfo.range = cachedConfigBufferSize;
+
+        std::array<vk::WriteDescriptorSet, 4> writes{};
 
         // Binding 0: Camera UBO
         writes[0].dstSet = descriptorSet;
@@ -375,6 +399,13 @@ namespace render::vfx
         writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[2].pBufferInfo = &particleInfo;
 
+        // Binding 3: Emitter config SSBO (VK-493)
+        writes[3].dstSet = descriptorSet;
+        writes[3].dstBinding = 3;
+        writes[3].descriptorCount = 1;
+        writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[3].pBufferInfo = &configInfo;
+
         vkDevice.updateDescriptorSets(writes, {});
 
         descriptorsNeedUpdate = false;
@@ -395,6 +426,8 @@ namespace render::vfx
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
+            .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,  // Particles don't write depth
@@ -596,9 +629,14 @@ namespace render::vfx
         // Bind index buffer
         cmd.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
 
-        // Issue indirect draws for each emitter
+        // Issue indirect draws for each emitter with per-emitter push constants (VK-493)
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
+            GPUVFXBillboardPushConstants pushConstants{};
+            pushConstants.emitterIndex = i;
+            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                              0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
+
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
         }

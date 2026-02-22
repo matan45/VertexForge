@@ -55,6 +55,11 @@ namespace render::vfx
         inline constexpr uint32_t RandomDirection = 1 << 13;
     }
 
+    namespace FlipbookFlags
+    {
+        inline constexpr uint32_t RandomStart = 1 << 14;
+    }
+
     struct alignas(16) GPUEmitterConfig
     {
         glm::vec4 emitDirection;
@@ -88,7 +93,9 @@ namespace render::vfx
 
         glm::vec4 shapeDimensions;
         uint32_t shapeFlags;
-        float shapePadding[3] = {0.0f, 0.0f, 0.0f};
+        float flipbookColumns = 1.0f;   // VK-493: was shapePadding[0]
+        float flipbookRows = 1.0f;      // VK-493: was shapePadding[1]
+        float flipbookFrameRate = 0.0f;  // VK-493: was shapePadding[2]
     };
     static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -204,4 +211,17 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
+
+    // Push constants for GPU billboard pipeline (VK-493)
+    struct GPUVFXBillboardPushConstants
+    {
+        uint32_t emitterIndex;
+    };
+
+    // Push constants for CPU billboard pipeline (VK-493)
+    struct VFXFlipbookPushConstants
+    {
+        float flipbookColumns;
+        float flipbookRows;
+    };
 }

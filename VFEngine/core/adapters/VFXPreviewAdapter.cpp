@@ -52,9 +52,13 @@ namespace core
         controllerParams.emitDirection = params.emitDirection;
         controllerParams.texturePath = params.texturePath;
         controllerParams.looping = params.looping;
-        controllerParams.modifiers = params.modifiers; 
-        controllerParams.forces = params.forces;       
-        controllerParams.shape = params.shape;         
+        controllerParams.modifiers = params.modifiers;
+        controllerParams.forces = params.forces;
+        controllerParams.shape = params.shape;
+        controllerParams.flipbookRows = params.flipbookRows;
+        controllerParams.flipbookColumns = params.flipbookColumns;
+        controllerParams.flipbookFrameRate = params.flipbookFrameRate;
+        controllerParams.flipbookRandomStart = params.flipbookRandomStart;
 
         controller->setParams(controllerParams);
     }

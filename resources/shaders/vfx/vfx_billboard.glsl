@@ -8,6 +8,7 @@ layout(location = 2) in vec4 inWorldPosAndSize;
 layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
 layout(location = 5) in float inRotation;
+layout(location = 6) in float inFlipbookFrameIndex;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
@@ -19,6 +20,11 @@ layout(binding = 0) uniform CameraUBO {
     vec3 cameraPos;
     float time;
 } camera;
+
+layout(push_constant) uniform FlipbookPC {
+    float flipbookColumns;
+    float flipbookRows;
+} pc;
 
 void main() {
     vec3 worldPos = inWorldPosAndSize.xyz;
@@ -40,7 +46,15 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
-    fragTexCoord = inTexCoord;
+    // Flipbook UV remapping (VK-493)
+    // Branch-free: when columns=1, rows=1 -> frameIndex=0, col=0, row=0, tileSize=(1,1)
+    // so fragTexCoord = inTexCoord (identity)
+    float frameIndex = floor(inFlipbookFrameIndex);
+    float col = mod(frameIndex, pc.flipbookColumns);
+    float row = floor(frameIndex / pc.flipbookColumns);
+    vec2 tileSize = vec2(1.0 / pc.flipbookColumns, 1.0 / pc.flipbookRows);
+    fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
+
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
 }

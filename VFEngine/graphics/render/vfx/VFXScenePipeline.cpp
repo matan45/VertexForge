@@ -227,6 +227,8 @@ namespace render::vfx
             .vertexAttributes = std::move(allAttribs),
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
+            .pushConstantSize = sizeof(VFXFlipbookPushConstants),
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
@@ -464,6 +466,12 @@ namespace render::vfx
         updateDescriptorSet();
     }
 
+    void VFXScenePipeline::setFlipbookConfig(int rows, int columns)
+    {
+        flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
+        flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
+    }
+
     void VFXScenePipeline::recordCommandsInline(const vk::CommandBuffer& commandBuffer) const
     {
         if (!initialized || currentInstanceCount == 0)
@@ -481,6 +489,9 @@ namespace render::vfx
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
 
         commandBuffer.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
+
+        commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                    0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
 
         commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);
     }
