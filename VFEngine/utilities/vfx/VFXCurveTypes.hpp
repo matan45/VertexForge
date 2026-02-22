@@ -2,8 +2,6 @@
 
 #include <glm/glm.hpp>
 #include <vector>
-#include <algorithm>
-#include <cstdint>
 
 namespace vfx
 {
@@ -11,8 +9,8 @@ namespace vfx
     {
         float time = 0.0f;       // [0..1] normalized lifetime
         float value = 0.0f;
-        float inTangent = 0.0f;  // incoming tangent
-        float outTangent = 0.0f; // outgoing tangent
+        float inTangent = 0.0f;
+        float outTangent = 0.0f;
     };
 
     struct VFXCurve

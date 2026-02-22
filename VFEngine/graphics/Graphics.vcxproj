@@ -420,9 +420,13 @@
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXBillboardPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\VFXBillboardPipelineSetup.cpp" />
     <ClCompile Include="render\vfx\VFXLUTBaker.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXSceneGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\VFXSceneGPUPipelineSetup.cpp" />
     <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />
     <ClCompile Include="render\volumetric\VolumetricFogComposite.cpp" />
     <ClCompile Include="render\volumetric\VolumetricGridManager.cpp" />

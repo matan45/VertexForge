@@ -3,104 +3,63 @@
 
 namespace render::vfx
 {
+    template<typename ModifierType>
+    bool VFXLUTBaker::bakeChannel(const ::vfx::VFXModifierChain& modifiers,
+                                   uint32_t lutFlag,
+                                   const std::function<void(const ModifierType&, std::vector<glm::vec4>&)>& bakeFn,
+                                   LUTBakeResult& result)
+    {
+        for (const auto& modifier : modifiers.modifiers)
+        {
+            bool found = false;
+            std::visit([&](const auto& mod) {
+                using T = std::decay_t<decltype(mod)>;
+                if constexpr (std::is_same_v<T, ModifierType>)
+                {
+                    bakeFn(mod, result.data);
+                    result.lutFlags |= lutFlag;
+                    found = true;
+                }
+            }, modifier);
+            if (found) return true;
+        }
+        return false;
+    }
+
+    void VFXLUTBaker::fillDefault(std::vector<glm::vec4>& out, const glm::vec4& value)
+    {
+        constexpr uint32_t res = GPUVFXConstants::LUT_RESOLUTION;
+        for (uint32_t i = 0; i < res; ++i)
+            out.emplace_back(value);
+    }
+
     LUTBakeResult VFXLUTBaker::bake(const ::vfx::VFXModifierChain& modifiers)
     {
         LUTBakeResult result;
-        constexpr uint32_t res = GPUVFXConstants::LUT_RESOLUTION;
+        result.data.reserve(GPUVFXConstants::LUT_CHANNELS * GPUVFXConstants::LUT_RESOLUTION);
 
-        // Reserve space: exactly 4 channels * resolution entries
-        result.data.reserve(GPUVFXConstants::LUT_CHANNELS * res);
-
-        // Bake each channel in order: color, size, speed, rotation
-        // Always bake all 4 channels to maintain fixed stride layout
-        // Only the first modifier of each type is used; duplicates are skipped
-
-        bool bakedColor = false;
-        for (const auto& modifier : modifiers.modifiers)
+        if (!bakeChannel<::vfx::ColorOverLifetimeConfig>(modifiers, LUTFlags::Color,
+            [](const auto& mod, auto& out) { bakeGradient(mod.gradient, out); }, result))
         {
-            std::visit([&](const auto& mod) {
-                using T = std::decay_t<decltype(mod)>;
-                if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
-                {
-                    if (!bakedColor)
-                    {
-                        bakeGradient(mod.gradient, result.data);
-                        result.lutFlags |= LUTFlags::Color;
-                        bakedColor = true;
-                    }
-                }
-            }, modifier);
-        }
-        if (!bakedColor)
-        {
-            for (uint32_t i = 0; i < res; ++i)
-                result.data.emplace_back(1.0f, 1.0f, 1.0f, 1.0f);
+            fillDefault(result.data, glm::vec4(1.0f));
         }
 
-        bool bakedSize = false;
-        for (const auto& modifier : modifiers.modifiers)
+        if (!bakeChannel<::vfx::SizeOverLifetimeConfig>(modifiers, LUTFlags::Size,
+            [](const auto& mod, auto& out) { bakeCurve(mod.curve, out); }, result))
         {
-            std::visit([&](const auto& mod) {
-                using T = std::decay_t<decltype(mod)>;
-                if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
-                {
-                    if (!bakedSize)
-                    {
-                        bakeCurve(mod.curve, result.data);
-                        result.lutFlags |= LUTFlags::Size;
-                        bakedSize = true;
-                    }
-                }
-            }, modifier);
-        }
-        if (!bakedSize)
-        {
-            for (uint32_t i = 0; i < res; ++i)
-                result.data.emplace_back(1.0f, 0.0f, 0.0f, 0.0f);
+            fillDefault(result.data, glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
         }
 
-        bool bakedSpeed = false;
-        for (const auto& modifier : modifiers.modifiers)
+        if (!bakeChannel<::vfx::SpeedOverLifetimeConfig>(modifiers, LUTFlags::Speed,
+            [](const auto& mod, auto& out) { bakeCurve(mod.curve, out); }, result))
         {
-            std::visit([&](const auto& mod) {
-                using T = std::decay_t<decltype(mod)>;
-                if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
-                {
-                    if (!bakedSpeed)
-                    {
-                        bakeCurve(mod.curve, result.data);
-                        result.lutFlags |= LUTFlags::Speed;
-                        bakedSpeed = true;
-                    }
-                }
-            }, modifier);
-        }
-        if (!bakedSpeed)
-        {
-            for (uint32_t i = 0; i < res; ++i)
-                result.data.emplace_back(1.0f, 0.0f, 0.0f, 0.0f);
+            fillDefault(result.data, glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
         }
 
-        bool bakedRotation = false;
-        for (const auto& modifier : modifiers.modifiers)
+        if (!bakeChannel<::vfx::RotationOverLifetimeConfig>(modifiers, LUTFlags::Rotation,
+            [](const auto& mod, auto& out) { bakeRotationCurve(mod.curve, out); }, result))
         {
-            std::visit([&](const auto& mod) {
-                using T = std::decay_t<decltype(mod)>;
-                if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
-                {
-                    if (!bakedRotation)
-                    {
-                        bakeRotationCurve(mod.curve, result.data);
-                        result.lutFlags |= LUTFlags::Rotation;
-                        bakedRotation = true;
-                    }
-                }
-            }, modifier);
-        }
-        if (!bakedRotation)
-        {
-            for (uint32_t i = 0; i < res; ++i)
-                result.data.emplace_back(0.0f, 0.0f, 0.0f, 0.0f);
+            fillDefault(result.data, glm::vec4(0.0f));
         }
 
         result.totalEntries = static_cast<uint32_t>(result.data.size());

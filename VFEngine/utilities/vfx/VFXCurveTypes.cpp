@@ -13,15 +13,12 @@ namespace vfx
         if (keys.size() == 1)
             return keys[0].value;
 
-        // Before first key
         if (t <= keys.front().time)
             return keys.front().value;
 
-        // After last key
         if (t >= keys.back().time)
             return keys.back().value;
 
-        // Find bounding keys
         for (size_t i = 0; i < keys.size() - 1; ++i)
         {
             const auto& k0 = keys[i];
@@ -82,15 +79,12 @@ namespace vfx
         if (stops.size() == 1)
             return stops[0].color;
 
-        // Before first stop
         if (t <= stops.front().position)
             return stops.front().color;
 
-        // After last stop
         if (t >= stops.back().position)
             return stops.back().color;
 
-        // Find bounding stops
         for (size_t i = 0; i < stops.size() - 1; ++i)
         {
             const auto& s0 = stops[i];

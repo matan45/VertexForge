@@ -39,7 +39,7 @@ namespace editor::vfxeditor
     class VFXGradientDelegate : public ImGradient::Delegate
     {
         std::vector<ImVec4> points;
-        std::vector<float> alphas;  // Per-stop alpha (separate from ImVec4 which uses .w for position)
+        std::vector<float> alphas; // Per-stop alpha (separate from ImVec4 which uses .w for position)
         std::vector<ImVec4> sortedCache;
         bool sortedDirty = true;
 
@@ -60,10 +60,6 @@ namespace editor::vfxeditor
 
     class VFXPropertyPanel
     {
-    public:
-        void draw(vfx::VFXGraph* graph, uint32_t selectedNodeId);
-        void setOnPropertyChanged(PropertyChangedCallback callback) { onPropertyChanged = callback; }
-
     private:
         PropertyChangedCallback onPropertyChanged;
 
@@ -74,6 +70,11 @@ namespace editor::vfxeditor
         uint32_t lastSelectedNodeId = 0;
         std::string lastPropertyKey;
 
+    public:
+        void draw(vfx::VFXGraph* graph, uint32_t selectedNodeId);
+        void setOnPropertyChanged(PropertyChangedCallback callback) { onPropertyChanged = callback; }
+
+    private:
         void drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop);
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         void drawFlipbookProperties(vfx::VFXNode& node);

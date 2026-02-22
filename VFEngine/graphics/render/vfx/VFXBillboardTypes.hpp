@@ -16,18 +16,17 @@ namespace render::vfx
         glm::vec3 velocity{0.0f};
         glm::vec4 color{1.0f};
         float size = 1.0f;
-        float rotation = 0.0f;      // Rotation angle in radians (VK-238)
+        float rotation = 0.0f;
         float lifetime = 0.0f;
         float maxLifetime = 1.0f;
         bool active = false;
 
-        // Store initial values for modifier calculations (VK-238)
         glm::vec4 initialColor{1.0f};
         float initialSize = 1.0f;
         float initialSpeed = 1.0f;
-        glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};  // Stored at spawn for speed modifier
+        glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};
 
-        uint32_t spawnSeed = 0;  // Deterministic seed for flipbook random start (VK-493)
+        uint32_t spawnSeed = 0;
     };
 
     struct VFXInstanceData
@@ -36,8 +35,8 @@ namespace render::vfx
         float size;
         glm::vec4 color;
         float lifetimeRatio;
-        float rotation;             // Rotation angle in radians (VK-238)
-        float flipbookFrameIndex;   // Computed frame index for flipbook animation (VK-493)
+        float rotation;
+        float flipbookFrameIndex;
         float padding1;
 
         static vk::VertexInputBindingDescription getBindingDescription()
@@ -133,22 +132,15 @@ namespace render::vfx
         std::string texturePath;
         bool looping = true;
 
-        // Modifier chain (VK-238)
         ::vfx::VFXModifierChain modifiers;
-
-        // Force chain (VK-239)
         ::vfx::VFXForceChain forces;
-
-        // Shape config (VK-240)
         ::vfx::ShapeConfig shape;
 
-        // Flipbook / Texture Sheet Animation (VK-493)
         int flipbookRows = 1;
         int flipbookColumns = 1;
-        float flipbookFrameRate = 0.0f;   // 0 = lifetime-based, >0 = fixed FPS
+        float flipbookFrameRate = 0.0f;
         bool flipbookRandomStart = false;
 
-        // Rendering
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
     };

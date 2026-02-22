@@ -65,11 +65,6 @@ namespace render::vfx
         inline constexpr uint32_t RandomStart = 1 << 14;
     }
 
-    namespace BlendFlags
-    {
-        inline constexpr uint32_t AdditiveBlend = 1 << 15;
-    }
-
     struct alignas(16) GPUEmitterConfig
     {
         glm::vec4 emitDirection;
@@ -103,9 +98,9 @@ namespace render::vfx
 
         glm::vec4 shapeDimensions;
         uint32_t shapeFlags;
-        float flipbookColumns = 1.0f;   // VK-493: was shapePadding[0]
-        float flipbookRows = 1.0f;      // VK-493: was shapePadding[1]
-        float flipbookFrameRate = 0.0f;  // VK-493: was shapePadding[2]
+        float flipbookColumns = 1.0f;
+        float flipbookRows = 1.0f;
+        float flipbookFrameRate = 0.0f;
     };
     static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -188,7 +183,7 @@ namespace render::vfx
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
-        inline constexpr uint32_t LUT_CHANNELS = 4; // color, size, speed, rotation
+        inline constexpr uint32_t LUT_CHANNELS = 4;
     }
 
     namespace EmitterFlags
@@ -222,20 +217,18 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
 
-    // Push constants for GPU billboard pipeline (VK-493)
     struct GPUVFXBillboardPushConstants
     {
         uint32_t emitterIndex;
         float alphaClipThreshold = 0.1f;
-        uint32_t blendMode = 0;  // 0 = alpha blend, 1 = additive
+        uint32_t blendMode = 0;
     };
 
-    // Push constants for CPU billboard pipeline (VK-493)
     struct VFXFlipbookPushConstants
     {
         float flipbookColumns;
         float flipbookRows;
         float alphaClipThreshold;
-        uint32_t blendMode;  // 0 = alpha blend, 1 = additive
+        uint32_t blendMode = 0;
     };
 }

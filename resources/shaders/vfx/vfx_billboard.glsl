@@ -48,9 +48,6 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
-    // Flipbook UV remapping (VK-493)
-    // Branch-free: when columns=1, rows=1 -> frameIndex=0, col=0, row=0, tileSize=(1,1)
-    // so fragTexCoord = inTexCoord (identity)
     float frameIndex = floor(inFlipbookFrameIndex);
     float col = mod(frameIndex, pc.flipbookColumns);
     float row = floor(frameIndex / pc.flipbookColumns);

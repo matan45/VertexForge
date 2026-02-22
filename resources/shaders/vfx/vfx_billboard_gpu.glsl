@@ -114,7 +114,6 @@ void main() {
 
     float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
 
-    // Flipbook UV remapping (VK-493)
     GPUEmitterConfig config = configs[pc.emitterIndex];
     float totalFrames = config.flipbookColumns * config.flipbookRows;
     float frameIndex = 0.0;

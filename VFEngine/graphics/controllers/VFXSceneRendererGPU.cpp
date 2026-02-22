@@ -118,13 +118,9 @@ namespace controllers
                 continue;
             }
 
-            // Track emission time for looping control
             instance.emissionTime += deltaTime;
 
             uint32_t spawnThisFrame = 0;
-            // Only spawn new particles if:
-            // - looping is enabled, OR
-            // - we haven't exceeded the emission duration (one lifetime cycle)
             bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
 
             if (instance.active && canSpawn)
@@ -274,7 +270,6 @@ namespace controllers
             break;
         case ::vfx::ShapeType::Point:
         default:
-            // No flag set for Point (default behavior)
             break;
         }
 
@@ -288,7 +283,6 @@ namespace controllers
             gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
         }
 
-        // Flipbook (VK-493)
         gpuConfig.flipbookColumns = static_cast<float>(cpuConfig.flipbookColumns);
         gpuConfig.flipbookRows = static_cast<float>(cpuConfig.flipbookRows);
         gpuConfig.flipbookFrameRate = cpuConfig.flipbookFrameRate;
@@ -307,8 +301,8 @@ namespace controllers
         gpuState.worldTransform = instance.worldTransform;
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
-        gpuState.activeCount = 0;  // Reset by compute shader
-        gpuState.spawnThisFrame = 0;  // Set by caller
+        gpuState.activeCount = 0;
+        gpuState.spawnThisFrame = 0;
         gpuState.spawnAccumulator = instance.spawnAccumulator;
         gpuState.flags = 0;
         if (instance.active)

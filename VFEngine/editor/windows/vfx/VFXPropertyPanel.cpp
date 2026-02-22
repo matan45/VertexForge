@@ -4,8 +4,6 @@
 
 namespace editor::vfxeditor
 {
-    // --- VFXCurveDelegate ---
-
     void VFXCurveDelegate::syncFrom(const vfx::VFXCurve& curve, float yMin, float yMax)
     {
         points.clear();
@@ -90,8 +88,6 @@ namespace editor::vfxeditor
         dirty = true;
     }
 
-    // --- VFXGradientDelegate ---
-
     void VFXGradientDelegate::syncFrom(const vfx::VFXGradient& gradient)
     {
         points.clear();
@@ -171,8 +167,6 @@ namespace editor::vfxeditor
         dirty = true;
         sortedDirty = true;
     }
-
-    // --- VFXPropertyPanel ---
 
     void VFXPropertyPanel::notifyChanged()
     {
@@ -397,7 +391,6 @@ namespace editor::vfxeditor
             lastPropertyKey.clear();
         }
 
-        // Emitter node: show flipbook and rendering properties
         if (node->type == vfx::VFXNodeType::Emitter)
         {
             drawFlipbookProperties(*node);
@@ -406,7 +399,6 @@ namespace editor::vfxeditor
             return;
         }
 
-        // Modifier nodes: show curve/gradient editors
         if (!vfx::isModifierNode(node->type))
         {
             ImGui::TextDisabled("Select a modifier or emitter node to edit properties");

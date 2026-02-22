@@ -252,6 +252,10 @@
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />
     <ClCompile Include="vfx\VFXCurveTypes.cpp" />
+    <ClCompile Include="vfx\VFXEmitterConfigLoader.cpp" />
+    <ClCompile Include="vfx\VFXForceConfigLoader.cpp" />
+    <ClCompile Include="vfx\VFXModifierConfigLoader.cpp" />
+    <ClCompile Include="vfx\VFXShapeConfigLoader.cpp" />
     <ClCompile Include="vfx\VFXTypes.cpp" />
     <ClCompile Include="water\WaterGrid.cpp" />
   </ItemGroup>

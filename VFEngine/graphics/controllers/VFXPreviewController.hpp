@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../core/OffScreen.hpp"
 #include <vfx/VFXModifierTypes.hpp>
 #include <vfx/VFXForceTypes.hpp>
