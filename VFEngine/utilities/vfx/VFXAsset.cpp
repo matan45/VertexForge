@@ -160,7 +160,7 @@ namespace vfx
             // Render mode & soft particles (VK-494)
             emitterNode.properties["renderMode"] = VFXProperty{
                 "renderMode", VFXPropertyType::Int,
-                EmitterDefaults::RENDER_MODE, 0.0f, 2.0f
+                EmitterDefaults::RENDER_MODE, 0.0f, 3.0f
             };
             emitterNode.properties["softParticleDistance"] = VFXProperty{
                 "softParticleDistance", VFXPropertyType::Float,
@@ -169,6 +169,12 @@ namespace vfx
             emitterNode.properties["stretchMultiplier"] = VFXProperty{
                 "stretchMultiplier", VFXPropertyType::Float,
                 EmitterDefaults::STRETCH_MULTIPLIER, 0.1f, 10.0f
+            };
+
+            // Mesh particle (VK-496)
+            emitterNode.properties["meshPath"] = VFXProperty{
+                "meshPath", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
             };
 
             return emitterNode;

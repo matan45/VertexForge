@@ -14,7 +14,8 @@ namespace render::vfx
     {
         Billboard = 0,
         StretchedBillboard = 1,
-        HorizontalBillboard = 2
+        HorizontalBillboard = 2,
+        MeshParticle = 3
     };
 
     struct VFXParticle
@@ -155,6 +156,9 @@ namespace render::vfx
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
+
+        // Mesh particle (VK-496)
+        std::string meshPath;
     };
 
     namespace VFXConstants

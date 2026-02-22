@@ -36,6 +36,9 @@ namespace services
         int renderMode = 0;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
+
+        // Mesh particle (VK-496)
+        std::string meshPath;
     };
 
     class IVFXPreviewProvider

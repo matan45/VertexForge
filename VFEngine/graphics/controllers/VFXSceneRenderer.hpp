@@ -23,6 +23,12 @@ namespace render::vfx
     class GPUVFXBufferManager;
     class GPUVFXComputePipeline;
     class VFXSceneGPUPipeline;
+    class VFXMeshGPUPipeline;
+}
+
+namespace render::mesh
+{
+    class MeshGPUCache;
 }
 
 namespace controllers
@@ -65,6 +71,8 @@ namespace controllers
         std::unique_ptr<render::vfx::GPUVFXBufferManager> gpuBufferManager;
         std::unique_ptr<render::vfx::GPUVFXComputePipeline> gpuComputePipeline;
         std::unique_ptr<render::vfx::VFXSceneGPUPipeline> gpuRenderPipeline;
+        std::unique_ptr<render::vfx::VFXMeshGPUPipeline> gpuMeshPipeline;
+        std::unique_ptr<render::mesh::MeshGPUCache> gpuMeshCache;
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
 

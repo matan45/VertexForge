@@ -121,11 +121,14 @@ namespace vfx
 
         // Render mode & soft particles (VK-494)
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(
-            std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 2));
+            std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 3));
         config.softParticleDistance = std::max(0.0f,
             getFloat(*emitterNode, "softParticleDistance", EmitterDefaults::SOFT_PARTICLE_DISTANCE));
         config.stretchMultiplier = std::max(0.1f,
             getFloat(*emitterNode, "stretchMultiplier", EmitterDefaults::STRETCH_MULTIPLIER));
+
+        // Mesh particle (VK-496)
+        config.meshPath = getString(*emitterNode, "meshPath", "");
 
         return config;
     }

@@ -6,7 +6,9 @@
 #include "../core/RenderManager.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../render/vfx/VFXBillboardPipeline.hpp"
+#include "../render/vfx/VFXMeshPreviewPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
+#include "../render/mesh/MeshGPUCache.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
 
@@ -45,6 +47,11 @@ namespace controllers
         pipeline = std::make_unique<render::vfx::VFXBillboardPipeline>(device, swapChain, offscreenResources);
         pipeline->init();
 
+        // VK-496: Mesh preview pipeline
+        previewMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
+        meshPipeline = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources, *previewMeshCache);
+        meshPipeline->init();
+
         render::vfx::VFXEmitterConfig config;
         config.spawnRate = currentParams.spawnRate;
         config.lifetime = currentParams.lifetime;
@@ -76,6 +83,17 @@ namespace controllers
                                     currentParams.alphaClipThreshold, currentParams.additiveBlend,
                                     currentParams.renderMode, currentParams.stretchMultiplier);
 
+        // VK-496: Set mesh and texture on mesh preview pipeline
+        if (!currentParams.meshPath.empty())
+        {
+            meshPipeline->setMesh(currentParams.meshPath);
+        }
+        if (!currentParams.texturePath.empty())
+        {
+            meshPipeline->setTexture(currentParams.texturePath);
+        }
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend);
+
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
@@ -89,6 +107,18 @@ namespace controllers
         }
 
         device.getLogicalDevice().waitIdle();
+
+        if (meshPipeline)
+        {
+            meshPipeline->cleanUp();
+            meshPipeline.reset();
+        }
+
+        if (previewMeshCache)
+        {
+            previewMeshCache->unloadAllMeshes();
+            previewMeshCache.reset();
+        }
 
         if (pipeline)
         {
@@ -164,6 +194,14 @@ namespace controllers
                                         params.alphaClipThreshold, params.additiveBlend,
                                         params.renderMode, params.stretchMultiplier);
         }
+
+        // VK-496: Update mesh preview pipeline
+        if (meshPipeline && meshPipeline->isInitialized())
+        {
+            meshPipeline->setMesh(params.meshPath);
+            meshPipeline->setTexture(params.texturePath);
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend);
+        }
     }
 
     void VFXPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
@@ -172,6 +210,11 @@ namespace controllers
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->updateCameraUBO(view, projection, cameraPos, time);
+        }
+
+        if (meshPipeline && meshPipeline->isInitialized())
+        {
+            meshPipeline->updateCameraUBO(view, projection, cameraPos, time);
         }
     }
 
@@ -231,6 +274,11 @@ namespace controllers
 
         pipeline->recreate();
 
+        if (meshPipeline)
+        {
+            meshPipeline->recreate();
+        }
+
         lastExtent = swapChain.getSwapchainExtent();
     }
 
@@ -254,17 +302,36 @@ namespace controllers
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
+        // VK-496: Route to mesh or billboard pipeline based on render mode
+        bool useMeshPipeline = currentParams.renderMode == 3 &&
+                               meshPipeline && meshPipeline->isInitialized() &&
+                               meshPipeline->hasMesh();
+
         if (particleSystem)
         {
             auto instances = particleSystem->getInstanceData();
-            pipeline->setParticleInstances(instances);
+            if (useMeshPipeline)
+            {
+                meshPipeline->setParticleInstances(instances);
+            }
+            else
+            {
+                pipeline->setParticleInstances(instances);
+            }
         }
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
-        pipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        if (useMeshPipeline)
+        {
+            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+        else
+        {
+            pipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
         commandBuffer.end();
 
         vk::SubmitInfo submitInfo(

@@ -181,6 +181,9 @@ namespace windows
         params.softParticleDistance = getFloat(*emitterNode, "softParticleDistance", vfx::EmitterDefaults::SOFT_PARTICLE_DISTANCE);
         params.stretchMultiplier = getFloat(*emitterNode, "stretchMultiplier", vfx::EmitterDefaults::STRETCH_MULTIPLIER);
 
+        // Mesh particle (VK-496)
+        params.meshPath = getString(*emitterNode, "meshPath", "");
+
         previewPanel->setParams(params);
     }
 

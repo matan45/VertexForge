@@ -67,7 +67,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    float _padRend;
+    uint meshIndexCount;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -250,7 +250,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    float _padRend;
+    uint meshIndexCount;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

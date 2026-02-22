@@ -1,6 +1,8 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
+#include <nfd/FileDialog.hpp>
 #include <algorithm>
+#include <filesystem>
 
 namespace editor::vfxeditor
 {
@@ -326,7 +328,7 @@ namespace editor::vfxeditor
 
         float inputWidth = 80.0f;
 
-        // Render mode combo (VK-494)
+        // Render mode combo (VK-494, VK-496)
         int currentRenderMode = 0;
         {
             auto rmIt = node.properties.find("renderMode");
@@ -335,13 +337,13 @@ namespace editor::vfxeditor
                 auto& prop = rmIt->second;
                 if (auto* val = std::get_if<int32_t>(&prop.value))
                 {
-                    currentRenderMode = std::clamp(*val, 0, 2);
+                    currentRenderMode = std::clamp(*val, 0, 3);
                     ImGui::Text("Render Mode");
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    const char* modes[] = {"Billboard", "Stretched", "Horizontal"};
+                    const char* modes[] = {"Billboard", "Stretched", "Horizontal", "Mesh Particle"};
                     int current = currentRenderMode;
-                    if (ImGui::Combo("##panel_renderMode", &current, modes, 3))
+                    if (ImGui::Combo("##panel_renderMode", &current, modes, 4))
                     {
                         *val = current;
                         currentRenderMode = current;
@@ -350,6 +352,49 @@ namespace editor::vfxeditor
                 }
             }
         }
+
+        // Mesh path selector (VK-496) - shown only in Mesh Particle mode
+        if (currentRenderMode == 3)
+        {
+            auto meshIt = node.properties.find("meshPath");
+            if (meshIt != node.properties.end())
+            {
+                auto* meshVal = std::get_if<std::string>(&meshIt->second.value);
+                if (meshVal)
+                {
+                    ImGui::Text("Mesh");
+                    ImGui::SameLine(100.0f);
+                    std::string display = meshVal->empty() ? "(none)" : std::filesystem::path(*meshVal).filename().string();
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    ImGui::InputText("##panel_meshPath", display.data(), display.size() + 1, ImGuiInputTextFlags_ReadOnly);
+                    ImGui::SameLine();
+                    if (ImGui::Button("...##meshBrowse"))
+                    {
+                        nfd::FileDialog dialog;
+                        std::string path = dialog.openFileDialog({
+                            {L"VF Mesh", L"*.vfMesh"}
+                        });
+                        if (!path.empty())
+                        {
+                            *meshVal = path;
+                            notifyChanged();
+                        }
+                    }
+                    if (!meshVal->empty())
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::Button("X##meshClear"))
+                        {
+                            meshVal->clear();
+                            notifyChanged();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Disable flipbook/stretch in mesh mode
+        bool isMeshMode = (currentRenderMode == 3);
 
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
@@ -367,8 +412,10 @@ namespace editor::vfxeditor
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
 
-            // Disable stretch controls unless StretchedBillboard (VK-494)
+            // Disable stretch unless StretchedBillboard; disable flipbook-related in mesh mode (VK-494, VK-496)
             bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
+            if (isMeshMode && (strcmp(entry.key, "stretchMultiplier") == 0))
+                disableWidget = true;
             if (disableWidget) ImGui::BeginDisabled();
 
             if (prop.type == vfx::VFXPropertyType::Float)

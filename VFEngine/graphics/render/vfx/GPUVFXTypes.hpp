@@ -70,6 +70,7 @@ namespace render::vfx
         inline constexpr uint32_t Billboard = 0;
         inline constexpr uint32_t StretchedBillboard = 1;
         inline constexpr uint32_t HorizontalBillboard = 2;
+        inline constexpr uint32_t MeshParticle = 3;
     }
 
     struct alignas(16) GPUEmitterConfig
@@ -113,7 +114,7 @@ namespace render::vfx
         uint32_t renderMode = RenderModeFlags::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-        float _padRend = 0.0f;
+        uint32_t meshIndexCount = 6; // VK-496: defaults to 6 for billboard quad, set to mesh index count for mesh particles
     };
     static_assert(sizeof(GPUEmitterConfig) == 272, "GPUEmitterConfig must be 272 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");

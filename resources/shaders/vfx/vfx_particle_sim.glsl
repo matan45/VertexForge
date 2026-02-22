@@ -80,7 +80,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    float _padRend;
+    uint meshIndexCount;
 };
 
 struct GPUEmitterState
@@ -674,7 +674,7 @@ void main()
 
     if (gl_GlobalInvocationID.x == 0u)
     {
-        drawCommands[pc.emitterIndex].indexCount = 6u;
+        drawCommands[pc.emitterIndex].indexCount = configs[pc.emitterIndex].meshIndexCount;
         drawCommands[pc.emitterIndex].instanceCount = maxParts;
         drawCommands[pc.emitterIndex].firstIndex = 0u;
         drawCommands[pc.emitterIndex].vertexOffset = 0;

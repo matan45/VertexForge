@@ -18,7 +18,13 @@ namespace core
 namespace render::vfx
 {
     class VFXBillboardPipeline;
+    class VFXMeshPreviewPipeline;
     class VFXParticleSystem;
+}
+
+namespace render::mesh
+{
+    class MeshGPUCache;
 }
 
 namespace controllers
@@ -52,6 +58,9 @@ namespace controllers
         int renderMode = 0;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
+
+        // Mesh particle (VK-496)
+        std::string meshPath;
     };
 
     class VFXPreviewController
@@ -61,6 +70,8 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<core::CommandPool> commandPool;
         std::unique_ptr<render::vfx::VFXBillboardPipeline> pipeline;
+        std::unique_ptr<render::vfx::VFXMeshPreviewPipeline> meshPipeline;
+        std::unique_ptr<render::mesh::MeshGPUCache> previewMeshCache;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
 
         core::OffscreenResources offscreenResources;

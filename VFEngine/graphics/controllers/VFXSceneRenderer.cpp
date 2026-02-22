@@ -6,6 +6,8 @@
 #include "../render/vfx/GPUVFXBufferManager.hpp"
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
+#include "../render/vfx/VFXMeshGPUPipeline.hpp"
+#include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "print/Logger.hpp"
 
@@ -60,6 +62,11 @@ namespace controllers
         if (gpuRenderPipeline)
         {
             gpuRenderPipeline->recreate(sceneRenderPass);
+        }
+
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->recreate(sceneRenderPass);
         }
     }
 
@@ -176,6 +183,19 @@ namespace controllers
             gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
                                                           storedConfig.additiveBlend);
+            gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
+                                                      static_cast<uint32_t>(storedConfig.renderMode));
+        }
+
+        // VK-496: Mesh particle pipeline setup
+        if (gpuMeshPipeline && instances[id].gpuDriven &&
+            storedConfig.renderMode == render::vfx::VFXRenderMode::MeshParticle)
+        {
+            gpuMeshPipeline->setEmitterMesh(instances[id].gpuEmitterIndex, storedConfig.meshPath);
+            gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
+            gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
+                                                        storedConfig.alphaClipThreshold,
+                                                        storedConfig.additiveBlend);
         }
 
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
@@ -191,6 +211,12 @@ namespace controllers
             if (it->second.gpuDriven && gpuBufferManager)
             {
                 pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
+            }
+
+            // VK-496: Remove from mesh pipeline
+            if (it->second.gpuDriven && gpuMeshPipeline)
+            {
+                gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
 
             loggerInfo("Destroyed VFX instance {}", id);
@@ -398,6 +424,11 @@ namespace controllers
         {
             gpuRenderPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
         }
+
+        if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
+        {
+            gpuMeshPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+        }
     }
 
     void VFXSceneRenderer::setSceneDepthImageView(vk::ImageView depthView)
@@ -405,6 +436,11 @@ namespace controllers
         if (gpuRenderPipeline && gpuRenderPipeline->isInitialized())
         {
             gpuRenderPipeline->setSceneDepthImageView(depthView);
+        }
+
+        if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
+        {
+            gpuMeshPipeline->setSceneDepthImageView(depthView);
         }
     }
 

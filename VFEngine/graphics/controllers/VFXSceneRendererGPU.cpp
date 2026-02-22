@@ -2,8 +2,10 @@
 #include "../render/vfx/GPUVFXBufferManager.hpp"
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
+#include "../render/vfx/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/vfx/VFXLUTBaker.hpp"
+#include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
@@ -40,6 +42,16 @@ namespace controllers
                 return false;
             }
 
+            // VK-496: Mesh particle pipeline
+            gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
+            gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
+            gpuMeshPipeline->init(renderPass);
+            if (!gpuMeshPipeline->isInitialized())
+            {
+                loggerError("Failed to initialize GPU VFX mesh pipeline");
+                return false;
+            }
+
             gpuComputePipeline->updateDescriptors(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getConfigBuffer(),
@@ -54,6 +66,17 @@ namespace controllers
             );
 
             gpuRenderPipeline->updateConfigBuffer(
+                gpuBufferManager->getConfigBuffer(),
+                gpuBufferManager->getConfigBufferSize()
+            );
+
+            // VK-496: Pass shared buffers to mesh pipeline
+            gpuMeshPipeline->updateParticleBuffer(
+                gpuBufferManager->getParticleBuffer(),
+                gpuBufferManager->getParticleBufferSize()
+            );
+
+            gpuMeshPipeline->updateConfigBuffer(
                 gpuBufferManager->getConfigBuffer(),
                 gpuBufferManager->getConfigBufferSize()
             );
@@ -73,6 +96,18 @@ namespace controllers
 
     void VFXSceneRenderer::cleanupGPUMode()
     {
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->cleanup();
+            gpuMeshPipeline.reset();
+        }
+
+        if (gpuMeshCache)
+        {
+            gpuMeshCache->unloadAllMeshes();
+            gpuMeshCache.reset();
+        }
+
         if (gpuRenderPipeline)
         {
             gpuRenderPipeline->cleanup();
@@ -136,6 +171,12 @@ namespace controllers
                 instance.gpuParticleCount,
                 dist(gen)
             );
+
+            // VK-496: Set mesh index count for mesh particle emitters
+            if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
+            {
+                gpuConfig.meshIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
+            }
 
             auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
             if (lutResult.lutFlags != 0)
@@ -296,6 +337,9 @@ namespace controllers
         gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;
         gpuConfig.stretchMultiplier = cpuConfig.stretchMultiplier;
 
+        // VK-496: meshIndexCount defaults to 6 (billboard quad), overridden for mesh particles
+        gpuConfig.meshIndexCount = 6;
+
         return gpuConfig;
     }
 
@@ -426,5 +470,15 @@ namespace controllers
             gpuBufferManager->getDrawCommandBuffer(),
             gpuBufferManager->getMaxEmitters()
         );
+
+        // VK-496: Record mesh particle draw commands
+        if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
+        {
+            gpuMeshPipeline->recordCommandsInline(
+                cmd,
+                gpuBufferManager->getDrawCommandBuffer(),
+                gpuBufferManager->getMaxEmitters()
+            );
+        }
     }
 }

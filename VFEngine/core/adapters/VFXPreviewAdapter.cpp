@@ -64,6 +64,7 @@ namespace core
         controllerParams.renderMode = params.renderMode;
         controllerParams.softParticleDistance = params.softParticleDistance;
         controllerParams.stretchMultiplier = params.stretchMultiplier;
+        controllerParams.meshPath = params.meshPath;
 
         controller->setParams(controllerParams);
     }

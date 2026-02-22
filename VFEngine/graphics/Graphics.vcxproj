@@ -251,6 +251,8 @@
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
     <ClInclude Include="render\vfx\VFXLUTBaker.hpp" />
+    <ClInclude Include="render\vfx\VFXMeshGPUPipeline.hpp" />
+    <ClInclude Include="render\vfx\VFXMeshPreviewPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
     <ClInclude Include="render\vfx\VFXQuadData.hpp" />
     <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
@@ -423,6 +425,9 @@
     <ClCompile Include="render\vfx\VFXBillboardPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipelineSetup.cpp" />
     <ClCompile Include="render\vfx\VFXLUTBaker.cpp" />
+    <ClCompile Include="render\vfx\VFXMeshGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXMeshGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\VFXMeshPreviewPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipelineRender.cpp" />
@@ -498,6 +503,8 @@
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_mesh_particle.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_mesh_preview.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />

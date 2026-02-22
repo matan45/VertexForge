@@ -1,0 +1,646 @@
+#include "VFXMeshPreviewPipeline.hpp"
+#include "../mesh/MeshGPUCache.hpp"
+#include "../mesh/MeshTypes.hpp"
+#include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
+#include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
+#include "../../core/OffScreen.hpp"
+#include "../../core/PipelineUtilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
+#include "print/Logger.hpp"
+#include <filesystem>
+
+namespace render::vfx
+{
+    VFXMeshPreviewPipeline::VFXMeshPreviewPipeline(core::Device& device, core::SwapChain& swapChain,
+                                                     core::OffscreenResources& offscreenResources,
+                                                     render::mesh::MeshGPUCache& meshCache)
+        : device{device}
+        , swapChain{swapChain}
+        , offscreenResources{offscreenResources}
+        , meshCache{meshCache}
+    {
+    }
+
+    VFXMeshPreviewPipeline::~VFXMeshPreviewPipeline() = default;
+
+    void VFXMeshPreviewPipeline::init()
+    {
+        loadShader();
+        createRenderPass();
+        createDescriptorSetLayout();
+        createDescriptorPool();
+        createBuffers();
+        createDefaultTexture();
+        createSampler();
+        createDescriptorSet();
+        createPipeline();
+        createFramebuffers();
+
+        initialized = true;
+    }
+
+    void VFXMeshPreviewPipeline::loadShader()
+    {
+        meshShader = std::make_shared<core::Shader>(device);
+        meshShader->readShader("../../resources/shaders/vfx/vfx_mesh_preview.glsl");
+    }
+
+    void VFXMeshPreviewPipeline::recreate()
+    {
+        for (auto& framebuffer : framebuffers)
+        {
+            device.getLogicalDevice().destroyFramebuffer(framebuffer);
+        }
+        device.getLogicalDevice().destroyRenderPass(renderPass);
+        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
+
+        createRenderPass();
+        createPipeline();
+        createFramebuffers();
+    }
+
+    void VFXMeshPreviewPipeline::cleanUp()
+    {
+        auto& dev = device.getLogicalDevice();
+
+        for (auto& framebuffer : framebuffers)
+        {
+            dev.destroyFramebuffer(framebuffer);
+        }
+        framebuffers.clear();
+
+        if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
+        if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
+
+        if (descriptorPool)
+        {
+            if (descriptorSet)
+                dev.freeDescriptorSets(descriptorPool, descriptorSet);
+            dev.destroyDescriptorPool(descriptorPool);
+        }
+        if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
+
+        if (renderPass) dev.destroyRenderPass(renderPass);
+
+        if (cameraUBO)
+        {
+            dev.destroyBuffer(cameraUBO);
+            dev.freeMemory(cameraUBOMemory);
+            cameraUBO = nullptr;
+        }
+        if (instanceBuffer)
+        {
+            dev.destroyBuffer(instanceBuffer);
+            dev.freeMemory(instanceBufferMemory);
+            instanceBuffer = nullptr;
+        }
+
+        customTexture.reset();
+        currentTexturePath.clear();
+        currentMeshPath.clear();
+        currentMeshId.clear();
+        meshVertexBuffer = nullptr;
+        meshIndexBuffer = nullptr;
+        meshIndexCount = 0;
+
+        if (textureSampler) dev.destroySampler(textureSampler);
+        if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
+        if (defaultTextureImage)
+        {
+            dev.destroyImage(defaultTextureImage);
+            dev.freeMemory(defaultTextureMemory);
+        }
+
+        if (meshShader)
+        {
+            meshShader->cleanUp();
+            meshShader.reset();
+        }
+
+        currentInstanceCount = 0;
+        initialized = false;
+    }
+
+    void VFXMeshPreviewPipeline::createRenderPass()
+    {
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        vk::AttachmentDescription depthAttachment{};
+        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::AttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+
+        vk::SubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        dependency.srcAccessMask = vk::AccessFlags{};
+        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
+                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
+
+        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+    }
+
+    void VFXMeshPreviewPipeline::createDescriptorSetLayout()
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> bindings(2);
+
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+    }
+
+    void VFXMeshPreviewPipeline::createDescriptorPool()
+    {
+        std::vector<vk::DescriptorPoolSize> poolSizes(2);
+        poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[0].descriptorCount = 1;
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = 1;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = 1;
+
+        descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+    }
+
+    void VFXMeshPreviewPipeline::createDescriptorSet()
+    {
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+        updateDescriptorSet();
+    }
+
+    void VFXMeshPreviewPipeline::updateDescriptorSet()
+    {
+        vk::DescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = cameraUBO;
+        uboBufferInfo.offset = 0;
+        uboBufferInfo.range = sizeof(VFXCameraUBO);
+
+        vk::WriteDescriptorSet uboWrite{};
+        uboWrite.dstSet = descriptorSet;
+        uboWrite.dstBinding = 0;
+        uboWrite.dstArrayElement = 0;
+        uboWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        uboWrite.descriptorCount = 1;
+        uboWrite.pBufferInfo = &uboBufferInfo;
+
+        vk::DescriptorImageInfo textureImageInfo{};
+        textureImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        if (customTexture)
+        {
+            textureImageInfo.imageView = customTexture->getImageView();
+            textureImageInfo.sampler = customTexture->getSampler();
+        }
+        else
+        {
+            textureImageInfo.imageView = defaultTextureImageView;
+            textureImageInfo.sampler = textureSampler;
+        }
+
+        vk::WriteDescriptorSet textureWrite{};
+        textureWrite.dstSet = descriptorSet;
+        textureWrite.dstBinding = 1;
+        textureWrite.dstArrayElement = 0;
+        textureWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        textureWrite.descriptorCount = 1;
+        textureWrite.pImageInfo = &textureImageInfo;
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {uboWrite, textureWrite};
+        device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+    }
+
+    void VFXMeshPreviewPipeline::createPipeline()
+    {
+        // Binding 0: Mesh vertex data (stride 64)
+        auto meshBinding = render::mesh::MeshVertexInput::getBindingDescription();
+        auto meshAttribs = render::mesh::MeshVertexInput::getAttributeDescriptions();
+
+        // Binding 1: Instance data (VFXInstanceData) with shifted locations (3-6 to avoid mesh conflicts)
+        vk::VertexInputBindingDescription instanceBinding{};
+        instanceBinding.binding = 1;
+        instanceBinding.stride = sizeof(VFXInstanceData);
+        instanceBinding.inputRate = vk::VertexInputRate::eInstance;
+
+        std::array<vk::VertexInputAttributeDescription, 4> instanceAttribs{};
+        // location 3: worldPosAndSize (vec4)
+        instanceAttribs[0].binding = 1;
+        instanceAttribs[0].location = 3;
+        instanceAttribs[0].format = vk::Format::eR32G32B32A32Sfloat;
+        instanceAttribs[0].offset = offsetof(VFXInstanceData, worldPosition);
+
+        // location 4: color (vec4)
+        instanceAttribs[1].binding = 1;
+        instanceAttribs[1].location = 4;
+        instanceAttribs[1].format = vk::Format::eR32G32B32A32Sfloat;
+        instanceAttribs[1].offset = offsetof(VFXInstanceData, color);
+
+        // location 5: lifetimeRatio (float)
+        instanceAttribs[2].binding = 1;
+        instanceAttribs[2].location = 5;
+        instanceAttribs[2].format = vk::Format::eR32Sfloat;
+        instanceAttribs[2].offset = offsetof(VFXInstanceData, lifetimeRatio);
+
+        // location 6: rotation (float)
+        instanceAttribs[3].binding = 1;
+        instanceAttribs[3].location = 6;
+        instanceAttribs[3].format = vk::Format::eR32Sfloat;
+        instanceAttribs[3].offset = offsetof(VFXInstanceData, rotation);
+
+        std::vector<vk::VertexInputAttributeDescription> allAttribs;
+        allAttribs.insert(allAttribs.end(), meshAttribs.begin(), meshAttribs.end());
+        allAttribs.insert(allAttribs.end(), instanceAttribs.begin(), instanceAttribs.end());
+
+        core::GraphicsPipelineConfig config{
+            .device = device.getLogicalDevice(),
+            .renderPass = renderPass,
+            .extent = swapChain.getSwapchainExtent(),
+            .shaderStages = meshShader->getShaderStages(),
+            .vertexBindings = {meshBinding, instanceBinding},
+            .vertexAttributes = std::move(allAttribs),
+            .topology = vk::PrimitiveTopology::eTriangleList,
+            .descriptorSetLayouts = {descriptorSetLayout},
+            .pushConstantSize = sizeof(VFXMeshPreviewPushConstants),
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+            .cullMode = vk::CullModeFlagBits::eBack,
+            .depthTestEnable = true,
+            .depthWriteEnable = true,
+            .blendEnable = true
+        };
+
+        auto result = core::PipelineUtilities::createGraphicsPipeline(config);
+        graphicsPipeline = result.pipeline;
+        pipelineLayout = result.pipelineLayout;
+    }
+
+    void VFXMeshPreviewPipeline::createFramebuffers()
+    {
+        framebuffers.resize(offscreenResources.colorImages.size());
+        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
+
+        for (uint32_t i = 0; i < framebuffers.size(); i++)
+        {
+            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
+            std::array<vk::ImageView, 2> attachments = {colorView, depth};
+
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.width = swapChain.getSwapchainExtent().width;
+            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.layers = 1;
+
+            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+        }
+    }
+
+    void VFXMeshPreviewPipeline::createBuffers()
+    {
+        core::BufferInfoRequest uboRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        uboRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                vk::MemoryPropertyFlagBits::eHostCoherent;
+        uboRequest.size = sizeof(VFXCameraUBO);
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
+
+        vk::DeviceSize instanceBufferSize = sizeof(VFXInstanceData) * maxInstances;
+        core::BufferInfoRequest instanceRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        instanceRequest.size = instanceBufferSize;
+        instanceRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
+        instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                     vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
+    }
+
+    void VFXMeshPreviewPipeline::createDefaultTexture()
+    {
+        constexpr uint32_t texSize = 1;
+
+        core::ImageInfoRequest imageInfo(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            texSize, texSize, 1, 1,
+            vk::Format::eR8G8B8A8Unorm,
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+
+        core::ImageViewInfoRequest viewInfo(
+            device.getLogicalDevice(),
+            defaultTextureImage,
+            vk::Format::eR8G8B8A8Unorm,
+            vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::e2D
+        );
+        core::ImageUtilities::createImageView(viewInfo, defaultTextureImageView);
+
+        std::vector<uint8_t> pixelData = {255, 255, 255, 255};
+        vk::DeviceSize imageSize = pixelData.size();
+
+        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        stagingRequest.size = imageSize;
+        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                    vk::MemoryPropertyFlagBits::eHostCoherent;
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingMemory;
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+        void* data;
+        vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        if (mapResult == vk::Result::eSuccess)
+        {
+            std::memcpy(data, pixelData.data(), imageSize);
+            device.getLogicalDevice().unmapMemory(stagingMemory);
+        }
+
+        auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
+
+        core::ImageUtilities::transitionImageLayout(cmd.get(), defaultTextureImage,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::BufferImageCopy region{};
+        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent = vk::Extent3D{texSize, texSize, 1};
+
+        cmd->copyBufferToImage(stagingBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, region);
+
+        core::ImageUtilities::transitionImageLayout(cmd.get(), defaultTextureImage,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingMemory);
+    }
+
+    void VFXMeshPreviewPipeline::createSampler()
+    {
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = vk::CompareOp::eAlways;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+
+        textureSampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void VFXMeshPreviewPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                                                   const glm::vec3& cameraPos, float time) const
+    {
+        VFXCameraUBO ubo{};
+        ubo.view = view;
+        ubo.projection = projection;
+        ubo.cameraPos = cameraPos;
+        ubo.time = time;
+
+        void* data;
+        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
+        if (result == vk::Result::eSuccess)
+        {
+            std::memcpy(data, &ubo, sizeof(ubo));
+            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+        }
+    }
+
+    void VFXMeshPreviewPipeline::setParticleInstances(const std::vector<VFXInstanceData>& instances)
+    {
+        if (instances.empty())
+        {
+            currentInstanceCount = 0;
+            return;
+        }
+
+        currentInstanceCount = static_cast<uint32_t>(std::min(instances.size(),
+                                                              static_cast<size_t>(maxInstances)));
+
+        void* data;
+        vk::DeviceSize bufferSize = sizeof(VFXInstanceData) * currentInstanceCount;
+        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
+        if (result == vk::Result::eSuccess)
+        {
+            std::memcpy(data, instances.data(), bufferSize);
+            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
+        }
+    }
+
+    void VFXMeshPreviewPipeline::setTexture(const std::string& texturePath)
+    {
+        if (texturePath == currentTexturePath)
+        {
+            return;
+        }
+
+        device.getLogicalDevice().waitIdle();
+
+        customTexture.reset();
+        currentTexturePath.clear();
+
+        if (texturePath.empty() || !std::filesystem::exists(texturePath))
+        {
+            if (!texturePath.empty())
+            {
+                loggerWarning("VFX mesh preview texture not found: {}", texturePath);
+            }
+            updateDescriptorSet();
+            return;
+        }
+
+        try
+        {
+            customTexture = std::make_unique<core::Texture>(device);
+            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
+            currentTexturePath = texturePath;
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("Failed to load VFX mesh preview texture '{}': {}", texturePath, e.what());
+            customTexture.reset();
+            currentTexturePath.clear();
+        }
+
+        updateDescriptorSet();
+    }
+
+    void VFXMeshPreviewPipeline::setMesh(const std::string& meshPath)
+    {
+        if (meshPath == currentMeshPath)
+        {
+            return;
+        }
+
+        currentMeshPath = meshPath;
+        meshVertexBuffer = nullptr;
+        meshIndexBuffer = nullptr;
+        meshIndexCount = 0;
+        currentMeshId.clear();
+
+        if (meshPath.empty())
+        {
+            return;
+        }
+
+        std::string meshId = meshCache.loadMesh(meshPath);
+        if (meshId.empty())
+        {
+            loggerWarning("VFXMeshPreviewPipeline: Failed to load mesh: {}", meshPath);
+            return;
+        }
+
+        const auto* meshData = meshCache.getMesh(meshId);
+        if (!meshData || meshData->subMeshes.empty())
+        {
+            loggerWarning("VFXMeshPreviewPipeline: No submeshes in mesh: {}", meshPath);
+            return;
+        }
+
+        const auto& lod0 = meshData->subMeshes[0].getLOD(0);
+        if (!lod0.isValid())
+        {
+            loggerWarning("VFXMeshPreviewPipeline: Invalid LOD 0 for mesh: {}", meshPath);
+            return;
+        }
+
+        currentMeshId = meshId;
+        meshVertexBuffer = lod0.vertexBuffer;
+        meshIndexBuffer = lod0.indexBuffer;
+        meshIndexCount = lod0.indexCount;
+
+        loggerInfo("VFXMeshPreviewPipeline: Mesh set: {} ({} indices)", meshPath, meshIndexCount);
+    }
+
+    void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend)
+    {
+        pushConstants.alphaClipThreshold = alphaClipThreshold;
+        pushConstants.blendMode = additiveBlend ? 1u : 0u;
+    }
+
+    void VFXMeshPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
+                                                       uint32_t imageIndex) const
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f}};
+        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+        if (currentInstanceCount > 0 && meshIndexCount > 0 && meshVertexBuffer && meshIndexBuffer)
+        {
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, descriptorSet, nullptr);
+
+            vk::Buffer vertexBuffers[] = {meshVertexBuffer, instanceBuffer};
+            vk::DeviceSize offsets[] = {0, 0};
+            commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+
+            commandBuffer.bindIndexBuffer(meshIndexBuffer, 0, vk::IndexType::eUint32);
+
+            commandBuffer.pushConstants(pipelineLayout,
+                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                        0, sizeof(VFXMeshPreviewPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(meshIndexCount, currentInstanceCount, 0, 0, 0);
+        }
+
+        commandBuffer.endRenderPass();
+    }
+}
