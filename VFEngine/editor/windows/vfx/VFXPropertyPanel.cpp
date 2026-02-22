@@ -234,18 +234,88 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawFlipbookProperties(vfx::VFXNode& node)
+    {
+        ImGui::Text("Flipbook");
+        ImGui::Separator();
+
+        struct FlipbookEntry { const char* key; const char* label; };
+        static constexpr FlipbookEntry entries[] = {
+            {"flipbookColumns",     "Columns"},
+            {"flipbookRows",        "Rows"},
+            {"flipbookFrameRate",   "Frame Rate"},
+            {"flipbookRandomStart", "Random Start"},
+        };
+
+        float inputWidth = 80.0f;
+
+        for (const auto& entry : entries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            auto& prop = it->second;
+            std::string widgetId = std::string("##panel_") + entry.key;
+
+            if (prop.type == vfx::VFXPropertyType::Int)
+            {
+                auto* val = std::get_if<int32_t>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    int v = *val;
+                    if (ImGui::DragInt(widgetId.c_str(), &v,
+                                       1.0f, static_cast<int>(prop.min), static_cast<int>(prop.max)))
+                    {
+                        *val = v;
+                        notifyChanged();
+                    }
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Float)
+            {
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Bool)
+            {
+                auto* val = std::get_if<bool>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+    }
+
     void VFXPropertyPanel::draw(vfx::VFXGraph* graph, uint32_t selectedNodeId)
     {
         if (!graph || selectedNodeId == 0)
         {
-            ImGui::TextDisabled("Select a modifier node to edit its curve or gradient");
+            ImGui::TextDisabled("Select a node to edit its properties");
             return;
         }
 
         vfx::VFXNode* node = graph->findNode(selectedNodeId);
-        if (!node || !vfx::isModifierNode(node->type))
+        if (!node)
         {
-            ImGui::TextDisabled("Select a modifier node to edit its curve or gradient");
+            ImGui::TextDisabled("Select a node to edit its properties");
             return;
         }
 
@@ -253,6 +323,20 @@ namespace editor::vfxeditor
         {
             lastSelectedNodeId = selectedNodeId;
             lastPropertyKey.clear();
+        }
+
+        // Emitter node: show flipbook properties
+        if (node->type == vfx::VFXNodeType::Emitter)
+        {
+            drawFlipbookProperties(*node);
+            return;
+        }
+
+        // Modifier nodes: show curve/gradient editors
+        if (!vfx::isModifierNode(node->type))
+        {
+            ImGui::TextDisabled("Select a modifier or emitter node to edit properties");
+            return;
         }
 
         ImGui::Text("%s", node->name.c_str());

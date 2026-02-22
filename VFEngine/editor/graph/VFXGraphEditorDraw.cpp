@@ -99,6 +99,7 @@ namespace editor::graph {
                                              float labelWidth, float inputWidth) {
         for (auto& [propName, prop] : node.properties) {
             if (propName == "shapeType") continue;
+            if (propName.rfind("flipbook", 0) == 0) continue;  // shown in property panel
 
             std::string widgetId = "##" + idPrefix + propName + std::to_string(node.id);
 

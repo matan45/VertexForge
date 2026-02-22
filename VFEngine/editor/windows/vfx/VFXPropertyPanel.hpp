@@ -71,6 +71,7 @@ namespace editor::vfxeditor
 
         void drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop);
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
+        void drawFlipbookProperties(vfx::VFXNode& node);
         void notifyChanged();
     };
 }
