@@ -61,6 +61,9 @@ namespace core
         controllerParams.flipbookRandomStart = params.flipbookRandomStart;
         controllerParams.alphaClipThreshold = params.alphaClipThreshold;
         controllerParams.additiveBlend = params.additiveBlend;
+        controllerParams.renderMode = params.renderMode;
+        controllerParams.softParticleDistance = params.softParticleDistance;
+        controllerParams.stretchMultiplier = params.stretchMultiplier;
 
         controller->setParams(controllerParams);
     }
