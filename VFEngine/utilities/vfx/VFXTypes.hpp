@@ -147,6 +147,11 @@ namespace vfx
         // Rendering
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
         inline constexpr bool ADDITIVE_BLEND = false;
+
+        // Render mode & soft particles (VK-494)
+        inline constexpr int RENDER_MODE = 0;
+        inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
+        inline constexpr float STRETCH_MULTIPLIER = 1.0f;
     }
 
     namespace ModifierDefaults

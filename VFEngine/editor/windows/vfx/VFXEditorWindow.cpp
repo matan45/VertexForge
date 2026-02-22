@@ -176,6 +176,11 @@ namespace windows
         params.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", vfx::EmitterDefaults::ALPHA_CLIP_THRESHOLD);
         params.additiveBlend = getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND);
 
+        // Render mode & soft particles (VK-494)
+        params.renderMode = getInt(*emitterNode, "renderMode", vfx::EmitterDefaults::RENDER_MODE);
+        params.softParticleDistance = getFloat(*emitterNode, "softParticleDistance", vfx::EmitterDefaults::SOFT_PARTICLE_DISTANCE);
+        params.stretchMultiplier = getFloat(*emitterNode, "stretchMultiplier", vfx::EmitterDefaults::STRETCH_MULTIPLIER);
+
         previewPanel->setParams(params);
     }
 

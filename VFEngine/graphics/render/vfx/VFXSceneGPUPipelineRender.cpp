@@ -11,7 +11,9 @@ namespace render::vfx
         const glm::mat4& view,
         const glm::mat4& projection,
         const glm::vec3& cameraPos,
-        float time) const
+        float time,
+        float nearPlane,
+        float farPlane) const
     {
         if (!cameraUBOMapped)
         {
@@ -23,8 +25,19 @@ namespace render::vfx
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
         ubo.time = time;
+        ubo.nearPlane = nearPlane;
+        ubo.farPlane = farPlane;
 
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
+    }
+
+    void VFXSceneGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
+    {
+        if (sceneDepthImageView != depthView)
+        {
+            sceneDepthImageView = depthView;
+            descriptorsNeedUpdate = true;
+        }
     }
 
     void VFXSceneGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
@@ -96,7 +109,13 @@ namespace render::vfx
         configInfo.offset = 0;
         configInfo.range = cachedConfigBufferSize;
 
-        std::array<vk::WriteDescriptorSet, 4> writes{};
+        // Scene depth for soft particles (VK-494)
+        vk::DescriptorImageInfo depthInfo{};
+        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        depthInfo.imageView = sceneDepthImageView ? sceneDepthImageView : defaultTextureImageView;
+        depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
+
+        std::array<vk::WriteDescriptorSet, 5> writes{};
 
         writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
@@ -121,6 +140,12 @@ namespace render::vfx
         writes[3].descriptorCount = 1;
         writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[3].pBufferInfo = &configInfo;
+
+        writes[4].dstSet = dstSet;
+        writes[4].dstBinding = 4;
+        writes[4].descriptorCount = 1;
+        writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[4].pImageInfo = &depthInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
     }

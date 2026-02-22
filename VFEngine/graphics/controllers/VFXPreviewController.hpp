@@ -47,6 +47,11 @@ namespace controllers
         // Rendering
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
+
+        // Render mode & soft particles (VK-494)
+        int renderMode = 0;
+        float softParticleDistance = 0.0f;
+        float stretchMultiplier = 1.0f;
     };
 
     class VFXPreviewController

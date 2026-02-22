@@ -21,11 +21,18 @@ layout(binding = 0) uniform CameraUBO {
     float time;
 } camera;
 
+// Render mode constants (VK-494)
+const uint RENDER_MODE_BILLBOARD = 0u;
+const uint RENDER_MODE_STRETCHED = 1u;
+const uint RENDER_MODE_HORIZONTAL = 2u;
+
 layout(push_constant) uniform FlipbookPC {
     float flipbookColumns;
     float flipbookRows;
     float alphaClipThreshold;
     uint blendMode;  // 0 = alpha blend, 1 = additive
+    uint renderMode;
+    float stretchMultiplier;
 } pc;
 
 void main() {
@@ -39,12 +46,23 @@ void main() {
         inPosition.x * sinR + inPosition.y * cosR
     );
 
-    vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
-    vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+    vec3 vertexPos;
 
-    vec3 vertexPos = worldPos
-        + cameraRight * rotatedPos.x * particleSize
-        + cameraUp * rotatedPos.y * particleSize;
+    if (pc.renderMode == RENDER_MODE_HORIZONTAL) {
+        // Horizontal billboard: flat on XZ plane (VK-494)
+        vec3 right = vec3(1.0, 0.0, 0.0);
+        vec3 forward = vec3(0.0, 0.0, 1.0);
+        vertexPos = worldPos
+            + right * rotatedPos.x * particleSize
+            + forward * rotatedPos.y * particleSize;
+    } else {
+        // Standard billboard: camera-facing (also used for stretched in preview since no velocity data)
+        vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
+        vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+        vertexPos = worldPos
+            + cameraRight * rotatedPos.x * particleSize
+            + cameraUp * rotatedPos.y * particleSize;
+    }
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
@@ -74,6 +92,8 @@ layout(push_constant) uniform FlipbookPC {
     float flipbookRows;
     float alphaClipThreshold;
     uint blendMode;
+    uint renderMode;
+    float stretchMultiplier;
 } pc;
 
 void main() {

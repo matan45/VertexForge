@@ -53,7 +53,7 @@ namespace render::vfx
         std::unique_ptr<core::Texture> customTexture;
         std::string currentTexturePath;
 
-        VFXFlipbookPushConstants flipbookPC{1.0f, 1.0f, 0.1f, 0};
+        VFXFlipbookPushConstants flipbookPC{1.0f, 1.0f, 0.1f, 0, RenderModeFlags::Billboard, 1.0f};
 
     public:
         explicit VFXScenePipeline(core::Device& device, core::SwapChain& swapChain);
@@ -70,7 +70,8 @@ namespace render::vfx
 
         void setTexture(const std::string& texturePath);
 
-        void setFlipbookConfig(int rows, int columns, float alphaClipThreshold = 0.1f, bool additiveBlend = false);
+        void setFlipbookConfig(int rows, int columns, float alphaClipThreshold = 0.1f, bool additiveBlend = false,
+                               int renderMode = 0, float stretchMultiplier = 1.0f);
 
         void recordCommandsInline(const vk::CommandBuffer& commandBuffer) const;
 

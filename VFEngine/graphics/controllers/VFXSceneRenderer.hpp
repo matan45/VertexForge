@@ -109,7 +109,10 @@ namespace controllers
 
         void update(float deltaTime);
         void setCamera(const glm::mat4& view, const glm::mat4& projection,
-                       const glm::vec3& cameraPos, float time);
+                       const glm::vec3& cameraPos, float time,
+                       float nearPlane = 0.1f, float farPlane = 1000.0f);
+
+        void setSceneDepthImageView(vk::ImageView depthView);
 
         void recordComputeCommands(vk::CommandBuffer cmd);
 

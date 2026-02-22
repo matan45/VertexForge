@@ -55,6 +55,10 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
+        // Scene depth texture for soft particles (VK-494)
+        vk::ImageView sceneDepthImageView;
+        vk::Sampler depthSampler;
+
         // Per-emitter texture and rendering config
         static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
 
@@ -88,7 +92,10 @@ namespace render::vfx
         bool isInitialized() const { return initialized; }
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos, float time) const;
+                             const glm::vec3& cameraPos, float time,
+                             float nearPlane = 0.1f, float farPlane = 1000.0f) const;
+
+        void setSceneDepthImageView(vk::ImageView depthView);
 
         void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
@@ -111,6 +118,7 @@ namespace render::vfx
         void createBuffers();
         void createDefaultTexture();
         void createSampler();
+        void createDepthSampler();
         void writeDescriptors() const;
         void writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const;
         vk::DescriptorSet allocateDescriptorSetFromPool();

@@ -86,12 +86,15 @@ namespace render::vfx
         updateDescriptorSet();
     }
 
-    void VFXBillboardPipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend)
+    void VFXBillboardPipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend,
+                                                    int renderMode, float stretchMultiplier)
     {
         flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
         flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
         flipbookPC.alphaClipThreshold = alphaClipThreshold;
         flipbookPC.blendMode = additiveBlend ? 1u : 0u;
+        flipbookPC.renderMode = static_cast<uint32_t>(renderMode);
+        flipbookPC.stretchMultiplier = stretchMultiplier;
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

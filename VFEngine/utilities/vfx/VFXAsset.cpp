@@ -157,6 +157,20 @@ namespace vfx
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
             };
 
+            // Render mode & soft particles (VK-494)
+            emitterNode.properties["renderMode"] = VFXProperty{
+                "renderMode", VFXPropertyType::Int,
+                EmitterDefaults::RENDER_MODE, 0.0f, 2.0f
+            };
+            emitterNode.properties["softParticleDistance"] = VFXProperty{
+                "softParticleDistance", VFXPropertyType::Float,
+                EmitterDefaults::SOFT_PARTICLE_DISTANCE, 0.0f, 50.0f
+            };
+            emitterNode.properties["stretchMultiplier"] = VFXProperty{
+                "stretchMultiplier", VFXPropertyType::Float,
+                EmitterDefaults::STRETCH_MULTIPLIER, 0.1f, 10.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

@@ -89,7 +89,9 @@ namespace render
 
         if (hasVFX)
         {
-            vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
+            vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime,
+                                          currentNearPlane, currentFarPlane);
+            vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
         }
 
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()

@@ -324,13 +324,40 @@ namespace editor::vfxeditor
         ImGui::Text("Rendering");
         ImGui::Separator();
 
+        float inputWidth = 80.0f;
+
+        // Render mode combo (VK-494)
+        int currentRenderMode = 0;
+        {
+            auto rmIt = node.properties.find("renderMode");
+            if (rmIt != node.properties.end())
+            {
+                auto& prop = rmIt->second;
+                if (auto* val = std::get_if<int32_t>(&prop.value))
+                {
+                    currentRenderMode = std::clamp(*val, 0, 2);
+                    ImGui::Text("Render Mode");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    const char* modes[] = {"Billboard", "Stretched", "Horizontal"};
+                    int current = currentRenderMode;
+                    if (ImGui::Combo("##panel_renderMode", &current, modes, 3))
+                    {
+                        *val = current;
+                        currentRenderMode = current;
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
-            {"alphaClipThreshold", "Alpha Clip"},
-            {"additiveBlend",     "Additive"},
+            {"alphaClipThreshold",   "Alpha Clip"},
+            {"additiveBlend",        "Additive"},
+            {"softParticleDistance",  "Soft Distance"},
+            {"stretchMultiplier",    "Stretch"},
         };
-
-        float inputWidth = 80.0f;
 
         for (const auto& entry : entries)
         {
@@ -339,6 +366,10 @@ namespace editor::vfxeditor
 
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
+
+            // Disable stretch controls unless StretchedBillboard (VK-494)
+            bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
+            if (disableWidget) ImGui::BeginDisabled();
 
             if (prop.type == vfx::VFXPropertyType::Float)
             {
@@ -367,6 +398,8 @@ namespace editor::vfxeditor
                     }
                 }
             }
+
+            if (disableWidget) ImGui::EndDisabled();
         }
     }
 

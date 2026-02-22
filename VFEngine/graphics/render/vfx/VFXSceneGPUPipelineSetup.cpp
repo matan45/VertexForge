@@ -74,13 +74,13 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
         // Binding 1: Particle texture
         bindings[1].binding = 1;
@@ -98,7 +98,13 @@ namespace render::vfx
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[3].descriptorCount = 1;
-        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        // Binding 4: Scene depth texture (VK-494 soft particles)
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -115,7 +121,7 @@ namespace render::vfx
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = totalSets;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = totalSets;
+        poolSizes[1].descriptorCount = totalSets * 2;  // particle texture + depth texture per set
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[2].descriptorCount = totalSets * 2;
 
@@ -265,5 +271,27 @@ namespace render::vfx
         samplerInfo.maxLod = 0.0f;
 
         textureSampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void VFXSceneGPUPipeline::createDepthSampler()
+    {
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = vk::CompareOp::eAlways;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+
+        depthSampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 }

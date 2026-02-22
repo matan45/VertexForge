@@ -291,6 +291,11 @@ namespace controllers
             gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
         }
 
+        // Render mode & soft particles (VK-494)
+        gpuConfig.renderMode = static_cast<uint32_t>(cpuConfig.renderMode);
+        gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;
+        gpuConfig.stretchMultiplier = cpuConfig.stretchMultiplier;
+
         return gpuConfig;
     }
 

@@ -75,6 +75,12 @@ struct GPUEmitterConfig
     float flipbookColumns;
     float flipbookRows;
     float flipbookFrameRate;
+
+    // Render mode & soft particles (VK-494)
+    uint renderMode;
+    float softParticleDistance;
+    float stretchMultiplier;
+    float _padRend;
 };
 
 struct GPUEmitterState

@@ -63,6 +63,9 @@ namespace controllers
         config.flipbookRandomStart = currentParams.flipbookRandomStart;
         config.alphaClipThreshold = currentParams.alphaClipThreshold;
         config.additiveBlend = currentParams.additiveBlend;
+        config.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
+        config.softParticleDistance = currentParams.softParticleDistance;
+        config.stretchMultiplier = currentParams.stretchMultiplier;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -70,7 +73,8 @@ namespace controllers
             pipeline->setTexture(currentParams.texturePath);
         }
         pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
-                                    currentParams.alphaClipThreshold, currentParams.additiveBlend);
+                                    currentParams.alphaClipThreshold, currentParams.additiveBlend,
+                                    currentParams.renderMode, currentParams.stretchMultiplier);
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
@@ -147,6 +151,9 @@ namespace controllers
             config.flipbookRandomStart = params.flipbookRandomStart;
             config.alphaClipThreshold = params.alphaClipThreshold;
             config.additiveBlend = params.additiveBlend;
+            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+            config.softParticleDistance = params.softParticleDistance;
+            config.stretchMultiplier = params.stretchMultiplier;
             particleSystem->setEmitterConfig(config);
         }
 
@@ -154,7 +161,8 @@ namespace controllers
         {
             pipeline->setTexture(params.texturePath);
             pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
-                                        params.alphaClipThreshold, params.additiveBlend);
+                                        params.alphaClipThreshold, params.additiveBlend,
+                                        params.renderMode, params.stretchMultiplier);
         }
     }
 

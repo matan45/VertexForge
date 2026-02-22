@@ -10,6 +10,13 @@
 
 namespace render::vfx
 {
+    enum class VFXRenderMode : uint32_t
+    {
+        Billboard = 0,
+        StretchedBillboard = 1,
+        HorizontalBillboard = 2
+    };
+
     struct VFXParticle
     {
         glm::vec3 position{0.0f};
@@ -143,6 +150,11 @@ namespace render::vfx
 
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
+
+        // Render mode & soft particles (VK-494)
+        VFXRenderMode renderMode = VFXRenderMode::Billboard;
+        float softParticleDistance = 0.0f;
+        float stretchMultiplier = 1.0f;
     };
 
     namespace VFXConstants

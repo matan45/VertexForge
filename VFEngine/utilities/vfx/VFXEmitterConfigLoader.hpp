@@ -119,6 +119,14 @@ namespace vfx
         config.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", EmitterDefaults::ALPHA_CLIP_THRESHOLD);
         config.additiveBlend = getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND);
 
+        // Render mode & soft particles (VK-494)
+        config.renderMode = static_cast<render::vfx::VFXRenderMode>(
+            std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 2));
+        config.softParticleDistance = std::max(0.0f,
+            getFloat(*emitterNode, "softParticleDistance", EmitterDefaults::SOFT_PARTICLE_DISTANCE));
+        config.stretchMultiplier = std::max(0.1f,
+            getFloat(*emitterNode, "stretchMultiplier", EmitterDefaults::STRETCH_MULTIPLIER));
+
         return config;
     }
 }

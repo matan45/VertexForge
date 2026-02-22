@@ -165,7 +165,8 @@ namespace controllers
         if (cpuPipeline)
         {
             cpuPipeline->setFlipbookConfig(storedConfig.flipbookRows, storedConfig.flipbookColumns,
-                                           storedConfig.alphaClipThreshold, storedConfig.additiveBlend);
+                                           storedConfig.alphaClipThreshold, storedConfig.additiveBlend,
+                                           static_cast<int>(storedConfig.renderMode), storedConfig.stretchMultiplier);
         }
 
         // Per-emitter GPU texture and rendering config
@@ -380,7 +381,8 @@ namespace controllers
     }
 
     void VFXSceneRenderer::setCamera(const glm::mat4& view, const glm::mat4& projection,
-                                      const glm::vec3& cameraPos, float time)
+                                      const glm::vec3& cameraPos, float time,
+                                      float nearPlane, float farPlane)
     {
         currentView = view;
         currentProjection = projection;
@@ -394,7 +396,15 @@ namespace controllers
 
         if (gpuRenderPipeline && gpuRenderPipeline->isInitialized())
         {
-            gpuRenderPipeline->updateCameraUBO(view, projection, cameraPos, time);
+            gpuRenderPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+        }
+    }
+
+    void VFXSceneRenderer::setSceneDepthImageView(vk::ImageView depthView)
+    {
+        if (gpuRenderPipeline && gpuRenderPipeline->isInitialized())
+        {
+            gpuRenderPipeline->setSceneDepthImageView(depthView);
         }
     }
 
