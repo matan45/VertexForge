@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "VFXPropertyPanel.hpp"
 #include <vfx/VFXTypes.hpp>
 #include <memory>
 #include <string>
@@ -24,12 +25,14 @@ namespace windows
         std::unique_ptr<vfx::VFXData> vfxData;
         std::unique_ptr<editor::graph::VFXGraphEditor> graphEditor;
         std::unique_ptr<editor::vfxeditor::VFXPreviewPanel> previewPanel;
+        editor::vfxeditor::VFXPropertyPanel propertyPanel;
 
         bool isOpen = true;
         bool needsInit = true;
         bool needsPreviewUpdate = false;
         bool isDirty = false;
         float previewPanelWidth = 280.0f;
+        float propertyPanelHeight = 200.0f;
 
     public:
         explicit VFXEditorWindow(const std::string& vfxPath);
@@ -47,6 +50,7 @@ namespace windows
 
         void drawToolbar();
         void drawGraphPanel();
+        void drawPropertyPanel();
 
         void onGraphChanged();
         void updatePreviewFromGraph();

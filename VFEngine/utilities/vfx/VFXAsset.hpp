@@ -8,7 +8,7 @@
 
 namespace vfx
 {
-    inline constexpr const char* VFX_FORMAT_VERSION = "1.1";
+    inline constexpr const char* VFX_FORMAT_VERSION = "1.0";
 
     class VFXAsset
     {
@@ -35,7 +35,5 @@ namespace vfx
                                   const WarningLogger& logWarning);
         static void parseVFXLinks(const nlohmann::json& graphJson, VFXGraph& graph,
                                   const WarningLogger& logWarning);
-
-        static void migrateModifierNode(VFXNode& node);
     };
 }

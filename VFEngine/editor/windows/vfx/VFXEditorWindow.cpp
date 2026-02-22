@@ -41,6 +41,8 @@ namespace windows
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
             needsPreviewUpdate = true;
+
+            propertyPanel.setOnPropertyChanged([this]() { onGraphChanged(); });
         }
     }
 
@@ -182,24 +184,38 @@ namespace windows
                 drawToolbar();
 
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
+                float spacing = ImGui::GetStyle().ItemSpacing.y;
+                float topHeight = contentSize.y - propertyPanelHeight - spacing;
 
-                ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, contentSize.y), true);
-                previewPanel->draw();
+                // Top row: Preview | Graph
+                ImGui::BeginChild("TopRow", ImVec2(0, topHeight), false, ImGuiWindowFlags_NoScrollbar);
+                {
+                    ImVec2 topSize = ImGui::GetContentRegionAvail();
+
+                    ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, topSize.y), true);
+                    previewPanel->draw();
+                    ImGui::EndChild();
+
+                    if (needsPreviewUpdate)
+                    {
+                        updatePreviewFromGraph();
+                        previewPanel->play();
+                        needsPreviewUpdate = false;
+                    }
+
+                    ImGui::SameLine();
+
+                    float graphWidth = topSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
+                    ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, topSize.y), true,
+                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                    drawGraphPanel();
+                    ImGui::EndChild();
+                }
                 ImGui::EndChild();
 
-                if (needsPreviewUpdate)
-                {
-                    updatePreviewFromGraph();
-                    previewPanel->play();
-                    needsPreviewUpdate = false;
-                }
-
-                ImGui::SameLine();
-
-                float graphWidth = contentSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
-                ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, contentSize.y), true,
-                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-                drawGraphPanel();
+                // Bottom row: Property Panel
+                ImGui::BeginChild("PropertyPanel", ImVec2(0, propertyPanelHeight), true);
+                drawPropertyPanel();
                 ImGui::EndChild();
             }
         }
@@ -253,6 +269,18 @@ namespace windows
         else
         {
             ImGui::TextDisabled("No VFX loaded");
+        }
+    }
+
+    void VFXEditorWindow::drawPropertyPanel()
+    {
+        if (vfxData && graphEditor)
+        {
+            propertyPanel.draw(&vfxData->graph, graphEditor->getSelectedNodeId());
+        }
+        else
+        {
+            ImGui::TextDisabled("Select a modifier node to edit its curve or gradient");
         }
     }
 }
