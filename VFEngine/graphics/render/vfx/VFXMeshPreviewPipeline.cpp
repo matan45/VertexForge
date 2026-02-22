@@ -25,22 +25,86 @@ namespace render::vfx
     {
     }
 
-    VFXMeshPreviewPipeline::~VFXMeshPreviewPipeline() = default;
+    VFXMeshPreviewPipeline::~VFXMeshPreviewPipeline()
+    {
+        cleanUp();
+    }
 
     void VFXMeshPreviewPipeline::init()
     {
-        loadShader();
-        createRenderPass();
-        createDescriptorSetLayout();
-        createDescriptorPool();
-        createBuffers();
-        createDefaultTexture();
-        createSampler();
-        createDescriptorSet();
-        createPipeline();
-        createFramebuffers();
+        if (initialized)
+        {
+            return;
+        }
 
-        initialized = true;
+        try
+        {
+            loadShader();
+            if (!meshShader || meshShader->getShaderStages().empty())
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to load shader");
+                return;
+            }
+
+            createRenderPass();
+            if (!renderPass)
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to create render pass");
+                cleanUp();
+                return;
+            }
+
+            createDescriptorSetLayout();
+            if (!descriptorSetLayout)
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to create descriptor set layout");
+                cleanUp();
+                return;
+            }
+
+            createDescriptorPool();
+            if (!descriptorPool)
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to create descriptor pool");
+                cleanUp();
+                return;
+            }
+
+            createBuffers();
+            if (!cameraUBO || !instanceBuffer)
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to create buffers");
+                cleanUp();
+                return;
+            }
+
+            createDefaultTexture();
+            createSampler();
+            createDescriptorSet();
+
+            createPipeline();
+            if (!graphicsPipeline || !pipelineLayout)
+            {
+                loggerError("VFXMeshPreviewPipeline: Failed to create graphics pipeline");
+                cleanUp();
+                return;
+            }
+
+            createFramebuffers();
+
+            initialized = true;
+            loggerInfo("VFXMeshPreviewPipeline initialized");
+        }
+        catch (const vk::SystemError& e)
+        {
+            loggerError("VFXMeshPreviewPipeline: Vulkan error during init - {}", e.what());
+            cleanUp();
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("VFXMeshPreviewPipeline: Exception during init - {}", e.what());
+            cleanUp();
+        }
     }
 
     void VFXMeshPreviewPipeline::loadShader()
@@ -87,11 +151,21 @@ namespace render::vfx
 
         if (renderPass) dev.destroyRenderPass(renderPass);
 
+        if (cameraUBOMapped && cameraUBOMemory)
+        {
+            dev.unmapMemory(cameraUBOMemory);
+            cameraUBOMapped = nullptr;
+        }
         if (cameraUBO)
         {
             dev.destroyBuffer(cameraUBO);
             dev.freeMemory(cameraUBOMemory);
             cameraUBO = nullptr;
+        }
+        if (instanceBufferMapped && instanceBufferMemory)
+        {
+            dev.unmapMemory(instanceBufferMemory);
+            instanceBufferMapped = nullptr;
         }
         if (instanceBuffer)
         {
@@ -369,20 +443,24 @@ namespace render::vfx
 
     void VFXMeshPreviewPipeline::createBuffers()
     {
-        core::BufferInfoRequest uboRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        auto vkDevice = device.getLogicalDevice();
+
+        core::BufferInfoRequest uboRequest(vkDevice, device.getPhysicalDevice());
         uboRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(VFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
+        cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(VFXCameraUBO));
 
         vk::DeviceSize instanceBufferSize = sizeof(VFXInstanceData) * maxInstances;
-        core::BufferInfoRequest instanceRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        core::BufferInfoRequest instanceRequest(vkDevice, device.getPhysicalDevice());
         instanceRequest.size = instanceBufferSize;
         instanceRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
+        instanceBufferMapped = vkDevice.mapMemory(instanceBufferMemory, 0, instanceBufferSize);
     }
 
     void VFXMeshPreviewPipeline::createDefaultTexture()
@@ -484,13 +562,7 @@ namespace render::vfx
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
-        {
-            std::memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
-        }
+        std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
     void VFXMeshPreviewPipeline::setParticleInstances(const std::vector<VFXInstanceData>& instances)
@@ -504,14 +576,8 @@ namespace render::vfx
         currentInstanceCount = static_cast<uint32_t>(std::min(instances.size(),
                                                               static_cast<size_t>(maxInstances)));
 
-        void* data;
         vk::DeviceSize bufferSize = sizeof(VFXInstanceData) * currentInstanceCount;
-        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
-        if (result == vk::Result::eSuccess)
-        {
-            std::memcpy(data, instances.data(), bufferSize);
-            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
-        }
+        std::memcpy(instanceBufferMapped, instances.data(), bufferSize);
     }
 
     void VFXMeshPreviewPipeline::setTexture(const std::string& texturePath)
@@ -558,6 +624,8 @@ namespace render::vfx
         {
             return;
         }
+
+        device.getLogicalDevice().waitIdle();
 
         currentMeshPath = meshPath;
         meshVertexBuffer = nullptr;

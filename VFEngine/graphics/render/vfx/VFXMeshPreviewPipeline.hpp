@@ -54,8 +54,10 @@ namespace render::vfx
 
         vk::Buffer instanceBuffer;
         vk::DeviceMemory instanceBufferMemory;
+        void* instanceBufferMapped = nullptr;
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        void* cameraUBOMapped = nullptr;
 
         uint32_t maxInstances = 1024;
         uint32_t currentInstanceCount = 0;

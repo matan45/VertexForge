@@ -161,11 +161,6 @@ namespace render::vfx
 
     void VFXMeshGPUPipeline::cleanup()
     {
-        if (!initialized)
-        {
-            return;
-        }
-
         auto vkDevice = device.getLogicalDevice();
 
         if (graphicsPipeline)

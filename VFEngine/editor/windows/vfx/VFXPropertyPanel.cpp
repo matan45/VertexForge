@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include <nfd/FileDialog.hpp>
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 
 namespace editor::vfxeditor
@@ -365,8 +366,11 @@ namespace editor::vfxeditor
                     ImGui::Text("Mesh");
                     ImGui::SameLine(100.0f);
                     std::string display = meshVal->empty() ? "(none)" : std::filesystem::path(*meshVal).filename().string();
+                    char buf[256];
+                    std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+                    buf[sizeof(buf) - 1] = '\0';
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    ImGui::InputText("##panel_meshPath", display.data(), display.size() + 1, ImGuiInputTextFlags_ReadOnly);
+                    ImGui::InputText("##panel_meshPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
                     ImGui::SameLine();
                     if (ImGui::Button("...##meshBrowse"))
                     {

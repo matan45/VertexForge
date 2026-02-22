@@ -139,7 +139,16 @@ void main() {
         } else {
             vec3 velDir = p.velocity / speed;
             vec3 toCamera = normalize(camera.cameraPos - p.position);
-            vec3 right = normalize(cross(toCamera, velDir));
+            vec3 rawRight = cross(toCamera, velDir);
+            float rightLen = length(rawRight);
+            vec3 right;
+            if (rightLen > 0.001) {
+                right = rawRight / rightLen;
+            } else {
+                // toCamera parallel to velDir - pick the world axis least aligned with velDir
+                vec3 alt = (abs(velDir.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+                right = normalize(cross(alt, velDir));
+            }
 
             vertexPos = p.position
                 + right * rotatedPos.x * p.size

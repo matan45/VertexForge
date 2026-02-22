@@ -260,11 +260,13 @@ namespace render::vfx
             vk::DescriptorSet setToBind = defaultDescriptorSet;
             float alphaClip = 0.1f;
             uint32_t blendMode = 0;
+            glm::vec3 gc(1.0f);
 
             if (configIt != emitterConfigs.end())
             {
                 alphaClip = configIt->second.alphaClipThreshold;
                 blendMode = configIt->second.blendMode;
+                gc = configIt->second.glowColor;
 
                 if (!configIt->second.texturePath.empty())
                 {
@@ -281,12 +283,6 @@ namespace render::vfx
                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                        0, setToBind, {});
                 lastBoundSet = setToBind;
-            }
-
-            glm::vec3 gc(1.0f);
-            if (configIt != emitterConfigs.end())
-            {
-                gc = configIt->second.glowColor;
             }
 
             GPUVFXBillboardPushConstants pushConstants{};
