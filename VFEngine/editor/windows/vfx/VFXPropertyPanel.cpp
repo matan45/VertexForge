@@ -529,6 +529,114 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawEventsProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        ImGui::Text("Events");
+        ImGui::Separator();
+
+        struct EventEntry
+        {
+            const char* enableKey;
+            const char* vfxKey;
+            const char* label;
+        };
+
+        static constexpr EventEntry eventEntries[] = {
+            {"eventOnSpawnEnabled",             "eventOnSpawnVFX",             "On Spawn"},
+            {"eventOnDeathEnabled",             "eventOnDeathVFX",             "On Death"},
+            {"eventOnCollisionEnabled",         "eventOnCollisionVFX",         "On Collision"},
+            {"eventOnLifetimeThresholdEnabled", "eventOnLifetimeThresholdVFX", "On Threshold"},
+        };
+
+        for (const auto& entry : eventEntries)
+        {
+            auto enableIt = node.properties.find(entry.enableKey);
+            if (enableIt == node.properties.end()) continue;
+
+            auto* enableVal = std::get_if<bool>(&enableIt->second.value);
+            if (!enableVal) continue;
+
+            ImGui::PushID(entry.enableKey);
+            ImGui::Text("%s", entry.label);
+            ImGui::SameLine();
+            if (ImGui::Checkbox("##enable", enableVal))
+            {
+                notifyChanged();
+            }
+
+            if (*enableVal)
+            {
+                auto vfxIt = node.properties.find(entry.vfxKey);
+                if (vfxIt != node.properties.end())
+                {
+                    auto* vfxVal = std::get_if<std::string>(&vfxIt->second.value);
+                    if (vfxVal)
+                    {
+                        ImGui::SameLine();
+                        std::string display = vfxVal->empty() ? "(none)"
+                            : std::filesystem::path(*vfxVal).filename().string();
+                        char buf[256];
+                        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+                        buf[sizeof(buf) - 1] = '\0';
+                        ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                        ImGui::InputText("##vfxPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+                        ImGui::SameLine();
+                        if (ImGui::Button("...##browse"))
+                        {
+                            nfd::FileDialog dialog;
+                            std::string path = dialog.openFileDialog({
+                                {L"VFX Asset (*.vfVFX)", L"*.vfVFX"}
+                            });
+                            if (!path.empty())
+                            {
+                                *vfxVal = path;
+                                notifyChanged();
+                            }
+                        }
+                        if (!vfxVal->empty())
+                        {
+                            ImGui::SameLine();
+                            if (ImGui::Button("X##clear"))
+                            {
+                                vfxVal->clear();
+                                notifyChanged();
+                            }
+                        }
+                    }
+                }
+            }
+            ImGui::PopID();
+        }
+
+        // Lifetime threshold slider (only shown when threshold event is enabled)
+        auto enableIt = node.properties.find("eventOnLifetimeThresholdEnabled");
+        bool threshEnabled = false;
+        if (enableIt != node.properties.end())
+        {
+            auto* ev = std::get_if<bool>(&enableIt->second.value);
+            if (ev) threshEnabled = *ev;
+        }
+
+        if (threshEnabled)
+        {
+            auto threshIt = node.properties.find("eventLifetimeThreshold");
+            if (threshIt != node.properties.end())
+            {
+                auto* val = std::get_if<float>(&threshIt->second.value);
+                if (val)
+                {
+                    ImGui::Text("Threshold");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::SliderFloat("##threshold", val, 0.0f, 1.0f, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+    }
+
     void VFXPropertyPanel::draw(vfx::VFXGraph* graph, uint32_t selectedNodeId)
     {
         if (!graph || selectedNodeId == 0)
@@ -555,6 +663,8 @@ namespace editor::vfxeditor
             drawFlipbookProperties(*node);
             ImGui::Spacing();
             drawRenderingProperties(*node);
+            ImGui::Spacing();
+            drawEventsProperties(*node, 80.0f);
             return;
         }
 

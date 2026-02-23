@@ -7,6 +7,7 @@
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXEventTypes.hpp"
 
 namespace render::vfx
 {
@@ -245,6 +246,8 @@ namespace render::vfx
         float uvScrollSpeedV = 0.0f;
         
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+
+        ::vfx::VFXEventConfig events;
     };
 
     struct VFXFlipbookConfig

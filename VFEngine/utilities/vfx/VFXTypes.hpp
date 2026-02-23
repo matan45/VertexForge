@@ -159,6 +159,13 @@ namespace vfx
 
         inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
+
+        // Events
+        inline constexpr bool EVENT_ON_SPAWN_ENABLED = false;
+        inline constexpr bool EVENT_ON_DEATH_ENABLED = false;
+        inline constexpr bool EVENT_ON_COLLISION_ENABLED = false;
+        inline constexpr bool EVENT_ON_LIFETIME_THRESHOLD_ENABLED = false;
+        inline constexpr float EVENT_LIFETIME_THRESHOLD = 0.5f;
     }
 
     namespace ModifierDefaults

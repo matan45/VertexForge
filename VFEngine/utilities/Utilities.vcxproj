@@ -181,6 +181,7 @@
     <ClInclude Include="vfx\VFXAsset.hpp" />
     <ClInclude Include="vfx\VFXCurveTypes.hpp" />
     <ClInclude Include="vfx\VFXEmitterConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXEventTypes.hpp" />
     <ClInclude Include="vfx\VFXForceConfigLoader.hpp" />
     <ClInclude Include="vfx\VFXForceTypes.hpp" />
     <ClInclude Include="vfx\VFXModifierConfigLoader.hpp" />
@@ -252,6 +253,7 @@
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />
     <ClCompile Include="vfx\VFXCurveTypes.cpp" />
+    <ClCompile Include="vfx\VFXEventTypes.cpp" />
     <ClCompile Include="vfx\VFXForceConfigLoader.cpp" />
     <ClCompile Include="vfx\VFXModifierConfigLoader.cpp" />
     <ClCompile Include="vfx\VFXShapeConfigLoader.cpp" />

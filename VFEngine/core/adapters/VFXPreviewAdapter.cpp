@@ -70,6 +70,7 @@ namespace core
         controllerParams.ribbonMinDistance = params.ribbonMinDistance;
         controllerParams.uvScrollSpeedU = params.uvScrollSpeedU;
         controllerParams.uvScrollSpeedV = params.uvScrollSpeedV;
+        controllerParams.events = params.events;
 
         controller->setParams(controllerParams);
     }

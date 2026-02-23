@@ -253,6 +253,8 @@ namespace controllers
     {
         device.getLogicalDevice().waitIdle();
 
+        activeSubEmitters.clear();
+        subEmitterConfigCache.clear();
         pendingEmitterFrees.clear();
 
         for (auto& [id, instance] : instances)

@@ -188,6 +188,18 @@ namespace windows
         params.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", vfx::EmitterDefaults::UV_SCROLL_SPEED_U);
         params.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", vfx::EmitterDefaults::UV_SCROLL_SPEED_V);
 
+        // Events
+        params.events.onSpawnEnabled = getBool(*emitterNode, "eventOnSpawnEnabled", false);
+        params.events.onSpawnVFXPath = getString(*emitterNode, "eventOnSpawnVFX", "");
+        params.events.onDeathEnabled = getBool(*emitterNode, "eventOnDeathEnabled", false);
+        params.events.onDeathVFXPath = getString(*emitterNode, "eventOnDeathVFX", "");
+        params.events.onCollisionEnabled = getBool(*emitterNode, "eventOnCollisionEnabled", false);
+        params.events.onCollisionVFXPath = getString(*emitterNode, "eventOnCollisionVFX", "");
+        params.events.onLifetimeThresholdEnabled = getBool(*emitterNode, "eventOnLifetimeThresholdEnabled", false);
+        params.events.onLifetimeThresholdVFXPath = getString(*emitterNode, "eventOnLifetimeThresholdVFX", "");
+        params.events.lifetimeThreshold = std::clamp(
+            getFloat(*emitterNode, "eventLifetimeThreshold", vfx::EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
+
         previewPanel->setParams(params);
     }
 

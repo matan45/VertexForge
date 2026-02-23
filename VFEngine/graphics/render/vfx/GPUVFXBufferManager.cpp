@@ -73,13 +73,20 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createEventBuffers())
+            {
+                loggerError("GPUVFXBufferManager: Failed to create event buffers");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
                            getStateBufferSize() + getDrawCommandBufferSize() +
                            getLUTBufferSize() + getRibbonRingBufferSize() +
-                           getRibbonHeadBufferSize()) / (1024.0f * 1024.0f));
+                           getRibbonHeadBufferSize() + getEventBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -257,6 +264,17 @@ namespace render::vfx
         core::BufferUtilities::destroyBuffer(vkDevice, lutBuffer, lutMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, ribbonRingBuffer, ribbonRingMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, ribbonHeadBuffer, ribbonHeadMemory);
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            if (eventReadbackMapped[i] && eventReadbackMemories[i])
+            {
+                vkDevice.unmapMemory(eventReadbackMemories[i]);
+                eventReadbackMapped[i] = nullptr;
+            }
+            core::BufferUtilities::destroyBuffer(vkDevice, eventReadbackBuffers[i], eventReadbackMemories[i]);
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, eventBuffer, eventMemory);
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const
@@ -295,6 +313,12 @@ namespace render::vfx
     vk::DeviceSize GPUVFXBufferManager::getRibbonHeadBufferSize() const
     {
         return static_cast<vk::DeviceSize>(maxEmitters) * sizeof(uint32_t);
+    }
+
+    vk::DeviceSize GPUVFXBufferManager::getEventBufferSize() const
+    {
+        return sizeof(uint32_t) +
+               static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME) * sizeof(GPUVFXEvent);
     }
 
     bool GPUVFXBufferManager::createLUTBuffer()
@@ -362,6 +386,100 @@ namespace render::vfx
 
         vk::DeviceSize offset = static_cast<vk::DeviceSize>(emitterIndex) * sizeof(uint32_t);
         cmd.fillBuffer(ribbonHeadBuffer, offset, sizeof(uint32_t), 0);
+    }
+
+    bool GPUVFXBufferManager::createEventBuffers()
+    {
+        core::BufferInfoRequest eventRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getEventBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferSrc |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        core::BufferUtilities::createBuffer(eventRequest, eventBuffer, eventMemory);
+        if (!eventBuffer || !eventMemory)
+        {
+            return false;
+        }
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            core::BufferInfoRequest readbackRequest(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                getEventBufferSize(),
+                vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent
+            );
+
+            core::BufferUtilities::createBuffer(readbackRequest,
+                eventReadbackBuffers[i], eventReadbackMemories[i]);
+            if (!eventReadbackBuffers[i] || !eventReadbackMemories[i])
+            {
+                return false;
+            }
+
+            eventReadbackMapped[i] = device.getLogicalDevice().mapMemory(
+                eventReadbackMemories[i], 0, getEventBufferSize(), vk::MemoryMapFlags{}
+            );
+            std::memset(eventReadbackMapped[i], 0, getEventBufferSize());
+        }
+        return true;
+    }
+
+    void GPUVFXBufferManager::clearEventBuffer(vk::CommandBuffer cmd)
+    {
+        if (!initialized || !eventBuffer)
+        {
+            return;
+        }
+
+        cmd.fillBuffer(eventBuffer, 0, sizeof(uint32_t), 0);
+    }
+
+    void GPUVFXBufferManager::copyEventBufferToReadback(vk::CommandBuffer cmd)
+    {
+        if (!initialized || !eventBuffer || !eventReadbackBuffers[currentFrameIndex])
+        {
+            return;
+        }
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = getEventBufferSize();
+        cmd.copyBuffer(eventBuffer, eventReadbackBuffers[currentFrameIndex], copyRegion);
+    }
+
+    std::vector<GPUVFXEvent> GPUVFXBufferManager::readbackEvents(uint32_t& outEventCount)
+    {
+        uint32_t readIndex = (currentFrameIndex + core::MAX_FRAMES_IN_FLIGHT - 1)
+                             % core::MAX_FRAMES_IN_FLIGHT;
+
+        if (!eventReadbackMapped[readIndex])
+        {
+            outEventCount = 0;
+            return {};
+        }
+
+        auto* data = static_cast<const uint8_t*>(eventReadbackMapped[readIndex]);
+        uint32_t eventCount = *reinterpret_cast<const uint32_t*>(data);
+        eventCount = std::min(eventCount, GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME);
+        outEventCount = eventCount;
+
+        if (eventCount == 0)
+        {
+            return {};
+        }
+
+        std::vector<GPUVFXEvent> events(eventCount);
+        std::memcpy(events.data(), data + sizeof(uint32_t), eventCount * sizeof(GPUVFXEvent));
+        return events;
     }
 
     void GPUVFXBufferManager::updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config)

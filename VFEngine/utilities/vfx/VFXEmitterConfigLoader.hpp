@@ -141,6 +141,18 @@ namespace vfx
         // Glow color
         config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
 
+        // Events
+        config.events.onSpawnEnabled = getBool(*emitterNode, "eventOnSpawnEnabled", false);
+        config.events.onSpawnVFXPath = getString(*emitterNode, "eventOnSpawnVFX", "");
+        config.events.onDeathEnabled = getBool(*emitterNode, "eventOnDeathEnabled", false);
+        config.events.onDeathVFXPath = getString(*emitterNode, "eventOnDeathVFX", "");
+        config.events.onCollisionEnabled = getBool(*emitterNode, "eventOnCollisionEnabled", false);
+        config.events.onCollisionVFXPath = getString(*emitterNode, "eventOnCollisionVFX", "");
+        config.events.onLifetimeThresholdEnabled = getBool(*emitterNode, "eventOnLifetimeThresholdEnabled", false);
+        config.events.onLifetimeThresholdVFXPath = getString(*emitterNode, "eventOnLifetimeThresholdVFX", "");
+        config.events.lifetimeThreshold = std::clamp(
+            getFloat(*emitterNode, "eventLifetimeThreshold", EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
+
         return config;
     }
 }

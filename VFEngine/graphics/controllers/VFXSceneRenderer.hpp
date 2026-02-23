@@ -89,6 +89,23 @@ namespace controllers
         uint32_t frameNumber = 0;
         static constexpr uint32_t FRAMES_BEFORE_FREE = 3;
 
+        std::vector<render::vfx::GPUVFXEvent> lastFrameEvents;
+        uint32_t lastFrameEventCount = 0;
+
+        static constexpr uint32_t MAX_SUB_EMITTERS_PER_PARENT = 32;
+
+        struct SubEmitterInstance
+        {
+            VFXInstanceId parentId = 0;
+            VFXInstanceId subId = 0;
+            float lifetime = 0.0f;
+            float maxLifetime = 5.0f;
+            bool finished = false;
+        };
+
+        std::vector<SubEmitterInstance> activeSubEmitters;
+        std::unordered_map<std::string, render::vfx::VFXEmitterConfig> subEmitterConfigCache;
+
         glm::mat4 currentView{1.0f};
         glm::mat4 currentProjection{1.0f};
         glm::vec3 currentCameraPos{0.0f};
@@ -140,6 +157,8 @@ namespace controllers
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);
         void processPendingEmitterFrees();
+        void processEvents();
+        void cleanupFinishedSubEmitters(float deltaTime);
 
         render::vfx::GPUEmitterConfig toGPUConfig(
             const render::vfx::VFXEmitterConfig& cpuConfig,

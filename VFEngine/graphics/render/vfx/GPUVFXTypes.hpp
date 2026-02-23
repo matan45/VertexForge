@@ -123,9 +123,9 @@ namespace render::vfx
 
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
-        float _uvPad1 = 0.0f;
-        float _uvPad2 = 0.0f;
-        float _uvPad3 = 0.0f;
+        uint32_t eventFlags = 0;
+        float lifetimeThreshold = 0.5f;
+        float _eventPad1 = 0.0f;
     };
     static_assert(sizeof(GPUEmitterConfig) == 304, "GPUEmitterConfig must be 304 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -162,6 +162,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, ribbonMinDistance) == 280, "GPUEmitterConfig::ribbonMinDistance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedU) == 284, "GPUEmitterConfig::uvScrollSpeedU offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedV) == 288, "GPUEmitterConfig::uvScrollSpeedV offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, eventFlags) == 292, "GPUEmitterConfig::eventFlags offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, lifetimeThreshold) == 296, "GPUEmitterConfig::lifetimeThreshold offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -210,6 +212,19 @@ namespace render::vfx
         inline constexpr uint32_t Glow = 1 << 4;
     }
 
+    struct alignas(16) GPUVFXEvent
+    {
+        glm::vec3 position;
+        uint32_t eventType;
+        glm::vec3 velocity;
+        uint32_t emitterIndex;
+    };
+    static_assert(sizeof(GPUVFXEvent) == 32, "GPUVFXEvent must be 32 bytes for GPU alignment");
+    static_assert(offsetof(GPUVFXEvent, position) == 0, "GPUVFXEvent::position offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, eventType) == 12, "GPUVFXEvent::eventType offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, velocity) == 16, "GPUVFXEvent::velocity offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, emitterIndex) == 28, "GPUVFXEvent::emitterIndex offset mismatch");
+
     namespace GPUVFXConstants
     {
         inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;
@@ -220,6 +235,7 @@ namespace render::vfx
         inline constexpr uint32_t LUT_RESOLUTION = 64;
         inline constexpr uint32_t LUT_CHANNELS = 5;
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
+        inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
     }
 
     namespace EmitterFlags
@@ -278,6 +294,7 @@ namespace render::vfx
         vk::Buffer lutBuffer;
         vk::Buffer ribbonRingBuffer;
         vk::Buffer ribbonHeadBuffer;
+        vk::Buffer eventBuffer;
     };
 
     struct VFXFlipbookPushConstants

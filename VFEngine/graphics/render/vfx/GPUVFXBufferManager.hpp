@@ -45,6 +45,12 @@ namespace render::vfx
         vk::Buffer ribbonHeadBuffer;
         vk::DeviceMemory ribbonHeadMemory;
 
+        vk::Buffer eventBuffer;
+        vk::DeviceMemory eventMemory;
+        std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> eventReadbackBuffers{};
+        std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMemories{};
+        std::array<void*, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMapped{};
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -76,11 +82,12 @@ namespace render::vfx
         vk::Buffer getLUTBuffer() const { return lutBuffer; }
         vk::Buffer getRibbonRingBuffer() const { return ribbonRingBuffer; }
         vk::Buffer getRibbonHeadBuffer() const { return ribbonHeadBuffer; }
+        vk::Buffer getEventBuffer() const { return eventBuffer; }
 
         GPUVFXBufferSet getBufferSet() const
         {
             return {particleBuffer, configBuffer, stateBuffer, drawCommandBuffer,
-                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer};
+                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer};
         }
 
         vk::DeviceSize getParticleBufferSize() const;
@@ -90,6 +97,11 @@ namespace render::vfx
         vk::DeviceSize getLUTBufferSize() const;
         vk::DeviceSize getRibbonRingBufferSize() const;
         vk::DeviceSize getRibbonHeadBufferSize() const;
+        vk::DeviceSize getEventBufferSize() const;
+
+        void clearEventBuffer(vk::CommandBuffer cmd);
+        void copyEventBufferToReadback(vk::CommandBuffer cmd);
+        std::vector<GPUVFXEvent> readbackEvents(uint32_t& outEventCount);
 
         void updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config);
         void updateEmitterState(uint32_t emitterIndex, const GPUEmitterState& state);
@@ -129,6 +141,7 @@ namespace render::vfx
         bool createDrawCommandBuffer();
         bool createLUTBuffer();
         bool createRibbonBuffers();
+        bool createEventBuffers();
         void destroyBuffers();
     };
 }

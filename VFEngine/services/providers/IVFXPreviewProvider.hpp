@@ -4,6 +4,7 @@
 #include <vfx/VFXModifierTypes.hpp>
 #include <vfx/VFXForceTypes.hpp>
 #include <vfx/VFXShapeTypes.hpp>
+#include <vfx/VFXEventTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -44,6 +45,8 @@ namespace services
 
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+
+        ::vfx::VFXEventConfig events;
     };
 
     class IVFXPreviewProvider

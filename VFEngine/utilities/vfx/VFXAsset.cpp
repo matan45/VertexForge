@@ -196,6 +196,44 @@ namespace vfx
                 EmitterDefaults::UV_SCROLL_SPEED_V, -10.0f, 10.0f
             };
 
+            // Events
+            emitterNode.properties["eventOnSpawnEnabled"] = VFXProperty{
+                "eventOnSpawnEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::EVENT_ON_SPAWN_ENABLED, 0.0f, 1.0f
+            };
+            emitterNode.properties["eventOnSpawnVFX"] = VFXProperty{
+                "eventOnSpawnVFX", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
+            emitterNode.properties["eventOnDeathEnabled"] = VFXProperty{
+                "eventOnDeathEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::EVENT_ON_DEATH_ENABLED, 0.0f, 1.0f
+            };
+            emitterNode.properties["eventOnDeathVFX"] = VFXProperty{
+                "eventOnDeathVFX", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
+            emitterNode.properties["eventOnCollisionEnabled"] = VFXProperty{
+                "eventOnCollisionEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::EVENT_ON_COLLISION_ENABLED, 0.0f, 1.0f
+            };
+            emitterNode.properties["eventOnCollisionVFX"] = VFXProperty{
+                "eventOnCollisionVFX", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
+            emitterNode.properties["eventOnLifetimeThresholdEnabled"] = VFXProperty{
+                "eventOnLifetimeThresholdEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED, 0.0f, 1.0f
+            };
+            emitterNode.properties["eventOnLifetimeThresholdVFX"] = VFXProperty{
+                "eventOnLifetimeThresholdVFX", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
+            emitterNode.properties["eventLifetimeThreshold"] = VFXProperty{
+                "eventLifetimeThreshold", VFXPropertyType::Float,
+                EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

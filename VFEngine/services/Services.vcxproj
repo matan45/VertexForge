@@ -135,6 +135,7 @@
     <ClInclude Include="events\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\UIEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
+    <ClInclude Include="events\VFXEventNotifications.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\VFXRuntimeEvents.hpp" />
     <ClInclude Include="events\WaterEvents.hpp" />

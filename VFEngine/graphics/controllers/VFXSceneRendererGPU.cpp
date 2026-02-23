@@ -11,9 +11,14 @@
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXEmitterConfigLoader.hpp"
+#include "../../services/events/VFXEventNotifications.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 #include "print/Logger.hpp"
 #include <random>
 #include <type_traits>
+#include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace controllers
 {
@@ -161,6 +166,10 @@ namespace controllers
         {
             return;
         }
+
+        lastFrameEvents = gpuBufferManager->readbackEvents(lastFrameEventCount);
+        processEvents();
+        cleanupFinishedSubEmitters(deltaTime);
 
         for (auto& [id, instance] : instances)
         {
@@ -376,6 +385,9 @@ namespace controllers
         gpuConfig.uvScrollSpeedU = cpuConfig.uvScrollSpeedU;
         gpuConfig.uvScrollSpeedV = cpuConfig.uvScrollSpeedV;
 
+        gpuConfig.eventFlags = cpuConfig.events.toEventFlags();
+        gpuConfig.lifetimeThreshold = cpuConfig.events.lifetimeThreshold;
+
         return gpuConfig;
     }
 
@@ -448,6 +460,7 @@ namespace controllers
         );
 
         gpuBufferManager->resetAllActiveCounts(cmd);
+        gpuBufferManager->clearEventBuffer(cmd);
 
         gpuComputePipeline->insertBarriersBeforeCompute(
             cmd,
@@ -473,6 +486,8 @@ namespace controllers
         }
 
         gpuComputePipeline->insertBarriersAfterCompute(cmd, gpuBufferManager->getBufferSet());
+
+        gpuBufferManager->copyEventBufferToReadback(cmd);
     }
 
     void VFXSceneRenderer::recordGPUDrawCommands(vk::CommandBuffer cmd)
@@ -519,5 +534,152 @@ namespace controllers
                 gpuBufferManager->getMaxEmitters()
             );
         }
+    }
+
+    void VFXSceneRenderer::processEvents()
+    {
+        if (lastFrameEventCount == 0)
+        {
+            return;
+        }
+
+        for (uint32_t i = 0; i < lastFrameEventCount; ++i)
+        {
+            const auto& event = lastFrameEvents[i];
+
+            // Find parent instance by emitter index
+            VFXInstanceId parentId = 0;
+            const VFXRuntimeInstance* parentInstance = nullptr;
+            for (const auto& [id, inst] : instances)
+            {
+                if (inst.gpuDriven && inst.gpuEmitterIndex == event.emitterIndex)
+                {
+                    parentId = id;
+                    parentInstance = &inst;
+                    break;
+                }
+            }
+
+            if (!parentInstance)
+            {
+                continue;
+            }
+
+            // Prevent recursion: skip events from sub-emitter instances
+            bool isSubEmitter = false;
+            for (const auto& sub : activeSubEmitters)
+            {
+                if (sub.subId == parentId)
+                {
+                    isSubEmitter = true;
+                    break;
+                }
+            }
+            if (isSubEmitter)
+            {
+                continue;
+            }
+
+            // Resolve .vfx path from event type
+            std::string vfxPath;
+            const auto& eventConfig = parentInstance->config.events;
+
+            switch (event.eventType)
+            {
+            case 0: // OnSpawn
+                if (eventConfig.onSpawnEnabled) vfxPath = eventConfig.onSpawnVFXPath;
+                break;
+            case 1: // OnDeath
+                if (eventConfig.onDeathEnabled) vfxPath = eventConfig.onDeathVFXPath;
+                break;
+            case 2: // OnCollision
+                if (eventConfig.onCollisionEnabled) vfxPath = eventConfig.onCollisionVFXPath;
+                break;
+            case 3: // OnLifetimeThreshold
+                if (eventConfig.onLifetimeThresholdEnabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath;
+                break;
+            }
+
+            if (vfxPath.empty())
+            {
+                continue;
+            }
+
+            // Count existing sub-emitters for this parent
+            uint32_t parentSubCount = 0;
+            for (const auto& sub : activeSubEmitters)
+            {
+                if (sub.parentId == parentId && !sub.finished)
+                {
+                    parentSubCount++;
+                }
+            }
+
+            if (parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
+            {
+                continue;
+            }
+
+            // Create sub-emitter instance at event position
+            VFXRuntimeParams subParams;
+            subParams.vfxAssetPath = vfxPath;
+            subParams.worldTransform = glm::translate(glm::mat4(1.0f),
+                glm::vec3(event.position.x, event.position.y, event.position.z));
+            subParams.loop = false;
+
+            VFXInstanceId subId = createInstance(subParams);
+            if (subId != 0)
+            {
+                playInstance(subId);
+
+                SubEmitterInstance subEmitter;
+                subEmitter.parentId = parentId;
+                subEmitter.subId = subId;
+                subEmitter.lifetime = 0.0f;
+
+                // Use the sub-emitter's configured lifetime as max lifetime
+                auto subIt = instances.find(subId);
+                if (subIt != instances.end())
+                {
+                    subEmitter.maxLifetime = subIt->second.config.lifetime * 2.0f;
+                }
+
+                activeSubEmitters.push_back(subEmitter);
+            }
+
+            // Publish CQRS notification for external systems
+            services::events::vfxruntime::VFXParticleEventNotification notification;
+            notification.eventType = event.eventType;
+            notification.position = glm::vec3(event.position.x, event.position.y, event.position.z);
+            notification.velocity = glm::vec3(event.velocity.x, event.velocity.y, event.velocity.z);
+            notification.emitterIndex = event.emitterIndex;
+            notification.parentInstanceId = parentId;
+            notification.vfxAssetPath = vfxPath;
+            events::EventDispatcher::instance().publish(notification);
+        }
+    }
+
+    void VFXSceneRenderer::cleanupFinishedSubEmitters(float deltaTime)
+    {
+        for (auto& sub : activeSubEmitters)
+        {
+            if (sub.finished)
+            {
+                continue;
+            }
+
+            sub.lifetime += deltaTime;
+
+            if (sub.lifetime >= sub.maxLifetime)
+            {
+                sub.finished = true;
+                destroyInstance(sub.subId);
+            }
+        }
+
+        activeSubEmitters.erase(
+            std::remove_if(activeSubEmitters.begin(), activeSubEmitters.end(),
+                [](const SubEmitterInstance& s) { return s.finished; }),
+            activeSubEmitters.end());
     }
 }

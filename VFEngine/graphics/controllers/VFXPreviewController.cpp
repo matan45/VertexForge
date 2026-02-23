@@ -216,6 +216,7 @@ namespace controllers
             config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
             config.ribbonWidth = params.ribbonWidth;
             config.ribbonMinDistance = params.ribbonMinDistance;
+            config.events = params.events;
             particleSystem->setEmitterConfig(config);
         }
 

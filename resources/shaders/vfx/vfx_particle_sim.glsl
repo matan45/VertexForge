@@ -87,9 +87,9 @@ struct GPUEmitterConfig
     float ribbonMinDistance;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
-    float _uvPad1;
-    float _uvPad2;
-    float _uvPad3;
+    uint eventFlags;
+    float lifetimeThreshold;
+    float _eventPad1;
 };
 
 struct GPUEmitterState
@@ -141,6 +141,25 @@ layout(std430, set = 0, binding = 5) buffer RibbonRingBuffer {
 layout(std430, set = 0, binding = 6) buffer RibbonHeadBuffer {
     uint ribbonHeads[];
 };
+
+struct GPUVFXEvent
+{
+    vec3 position;
+    uint eventType;
+    vec3 velocity;
+    uint emitterIndex;
+};
+
+layout(std430, set = 0, binding = 7) buffer EventBuffer {
+    uint eventCount;
+    GPUVFXEvent events[];
+};
+
+const uint EVENT_FLAG_ON_SPAWN = 1u;
+const uint EVENT_FLAG_ON_DEATH = 2u;
+const uint EVENT_FLAG_ON_COLLISION = 4u;
+const uint EVENT_FLAG_ON_LIFETIME_THRESHOLD = 8u;
+const uint MAX_VFX_EVENTS = 256u;
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
@@ -603,6 +622,18 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
     }
 }
 
+void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
+{
+    uint idx = atomicAdd(eventCount, 1u);
+    if (idx < MAX_VFX_EVENTS)
+    {
+        events[idx].position = pos;
+        events[idx].eventType = type;
+        events[idx].velocity = vel;
+        events[idx].emitterIndex = emitterIdx;
+    }
+}
+
 void main()
 {
     uint localIdx = gl_GlobalInvocationID.x;
@@ -637,6 +668,10 @@ void main()
 
         if (p.lifetime >= p.maxLifetime)
         {
+            if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
+            {
+                emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+            }
             p.size = 0.0;
             isActive = false;
         }
@@ -659,6 +694,15 @@ void main()
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
                     p.color.a = config.startColor.a * (1.0 - fadeProgress);
+                }
+            }
+
+            if ((config.eventFlags & EVENT_FLAG_ON_LIFETIME_THRESHOLD) != 0u)
+            {
+                float prevRatio = (p.lifetime - config.deltaTime) / p.maxLifetime;
+                if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
+                {
+                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex);
                 }
             }
         }
@@ -697,6 +741,11 @@ void main()
                 uint head = atomicAdd(ribbonHeads[pc.emitterIndex], 1u);
                 uint slot = head % config.maxTrailPoints;
                 ribbonRing[pc.emitterIndex * MAX_TRAIL_POINTS_STRIDE + slot] = particleIdx;
+            }
+
+            if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
+            {
+                emitEvent(0u, p.position, p.velocity, pc.emitterIndex);
             }
         }
     }
