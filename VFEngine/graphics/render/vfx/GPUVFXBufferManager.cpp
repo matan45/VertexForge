@@ -80,13 +80,21 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createColliderBuffer())
+            {
+                loggerError("GPUVFXBufferManager: Failed to create collider buffer");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
                            getStateBufferSize() + getDrawCommandBufferSize() +
                            getLUTBufferSize() + getRibbonRingBufferSize() +
-                           getRibbonHeadBufferSize() + getEventBufferSize()) / (1024.0f * 1024.0f));
+                           getRibbonHeadBufferSize() + getEventBufferSize() +
+                           getColliderBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -235,6 +243,12 @@ namespace render::vfx
     {
         auto& vkDevice = device.getLogicalDevice();
 
+        if (colliderMapped && colliderMemory)
+        {
+            vkDevice.unmapMemory(colliderMemory);
+            colliderMapped = nullptr;
+        }
+
         if (lutMapped && lutMemory)
         {
             vkDevice.unmapMemory(lutMemory);
@@ -275,6 +289,7 @@ namespace render::vfx
             core::BufferUtilities::destroyBuffer(vkDevice, eventReadbackBuffers[i], eventReadbackMemories[i]);
         }
         core::BufferUtilities::destroyBuffer(vkDevice, eventBuffer, eventMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, colliderBuffer, colliderMemory);
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const
@@ -322,6 +337,56 @@ namespace render::vfx
         constexpr vk::DeviceSize EVENT_DATA_OFFSET = 16;
         return EVENT_DATA_OFFSET +
                static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME) * sizeof(GPUVFXEvent);
+    }
+
+    vk::DeviceSize GPUVFXBufferManager::getColliderBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_SCENE_COLLIDERS) * sizeof(GPUCollider);
+    }
+
+    bool GPUVFXBufferManager::createColliderBuffer()
+    {
+        core::BufferInfoRequest request(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getColliderBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible |
+            vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+
+        core::BufferUtilities::createBuffer(request, colliderBuffer, colliderMemory);
+
+        if (colliderBuffer && colliderMemory)
+        {
+            colliderMapped = device.getLogicalDevice().mapMemory(
+                colliderMemory, 0, getColliderBufferSize(), vk::MemoryMapFlags{}
+            );
+            std::memset(colliderMapped, 0, getColliderBufferSize());
+            return true;
+        }
+        return false;
+    }
+
+    void GPUVFXBufferManager::updateSceneColliders(const std::vector<GPUCollider>& colliders, uint32_t count)
+    {
+        if (!initialized || !colliderMapped)
+        {
+            return;
+        }
+
+        uint32_t copyCount = std::min(count, GPUVFXConstants::MAX_SCENE_COLLIDERS);
+        if (copyCount > 0)
+        {
+            std::memcpy(colliderMapped, colliders.data(), copyCount * sizeof(GPUCollider));
+        }
+
+        // Zero remaining slots
+        if (copyCount < GPUVFXConstants::MAX_SCENE_COLLIDERS)
+        {
+            auto* dst = static_cast<uint8_t*>(colliderMapped) + copyCount * sizeof(GPUCollider);
+            std::memset(dst, 0, (GPUVFXConstants::MAX_SCENE_COLLIDERS - copyCount) * sizeof(GPUCollider));
+        }
     }
 
     bool GPUVFXBufferManager::createLUTBuffer()

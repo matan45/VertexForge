@@ -113,6 +113,9 @@ namespace controllers
         glm::vec3 currentCameraPos{0.0f};
         float currentTime = 0.0f;
 
+        std::vector<render::vfx::GPUCollider> sceneColliders;
+        uint32_t sceneColliderCount = 0;
+
     public:
         explicit VFXSceneRenderer(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneRenderer();
@@ -141,6 +144,7 @@ namespace controllers
         void setCamera(const services::VFXCameraParams& camera);
 
         void setSceneDepthImageView(vk::ImageView depthView);
+        void setSceneColliders(const std::vector<render::vfx::GPUCollider>& colliders);
 
         void recordComputeCommands(vk::CommandBuffer cmd);
 

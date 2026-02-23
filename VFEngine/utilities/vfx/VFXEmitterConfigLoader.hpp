@@ -153,6 +153,15 @@ namespace vfx
         config.events.lifetimeThreshold = std::clamp(
             getFloat(*emitterNode, "eventLifetimeThreshold", EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
 
+        // Collision
+        config.collisionEnabled = getBool(*emitterNode, "collisionEnabled", EmitterDefaults::COLLISION_ENABLED);
+        config.collisionBounce = std::clamp(
+            getFloat(*emitterNode, "collisionBounce", EmitterDefaults::COLLISION_BOUNCE), 0.0f, 1.0f);
+        config.collisionFriction = std::clamp(
+            getFloat(*emitterNode, "collisionFriction", EmitterDefaults::COLLISION_FRICTION), 0.0f, 1.0f);
+        config.collisionLifetimeLoss = std::clamp(
+            getFloat(*emitterNode, "collisionLifetimeLoss", EmitterDefaults::COLLISION_LIFETIME_LOSS), 0.0f, 1.0f);
+
         return config;
     }
 }

@@ -217,6 +217,10 @@ namespace controllers
             config.ribbonWidth = params.ribbonWidth;
             config.ribbonMinDistance = params.ribbonMinDistance;
             config.events = params.events;
+            config.collisionEnabled = params.collisionEnabled;
+            config.collisionBounce = params.collisionBounce;
+            config.collisionFriction = params.collisionFriction;
+            config.collisionLifetimeLoss = params.collisionLifetimeLoss;
             particleSystem->setEmitterConfig(config);
         }
 

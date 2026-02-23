@@ -47,6 +47,11 @@ namespace services
         float uvScrollSpeedV = 0.0f;
 
         ::vfx::VFXEventConfig events;
+
+        bool collisionEnabled = false;
+        float collisionBounce = 0.5f;
+        float collisionFriction = 0.1f;
+        float collisionLifetimeLoss = 0.0f;
     };
 
     class IVFXPreviewProvider

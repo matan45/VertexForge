@@ -125,9 +125,13 @@ namespace render::vfx
         float uvScrollSpeedV = 0.0f;
         uint32_t eventFlags = 0;
         float lifetimeThreshold = 0.5f;
-        float _eventPad1 = 0.0f;
+        uint32_t colliderCount = 0;
+        float collisionBounce = 0.5f;
+        float collisionFriction = 0.1f;
+        float collisionLifetimeLoss = 0.0f;
+        float _collisionPad = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 304, "GPUEmitterConfig must be 304 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 320, "GPUEmitterConfig must be 320 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -164,6 +168,10 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedV) == 288, "GPUEmitterConfig::uvScrollSpeedV offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, eventFlags) == 292, "GPUEmitterConfig::eventFlags offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, lifetimeThreshold) == 296, "GPUEmitterConfig::lifetimeThreshold offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, colliderCount) == 300, "GPUEmitterConfig::colliderCount offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, collisionBounce) == 304, "GPUEmitterConfig::collisionBounce offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, collisionFriction) == 308, "GPUEmitterConfig::collisionFriction offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, collisionLifetimeLoss) == 312, "GPUEmitterConfig::collisionLifetimeLoss offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -225,6 +233,14 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXEvent, velocity) == 16, "GPUVFXEvent::velocity offset mismatch");
     static_assert(offsetof(GPUVFXEvent, emitterIndex) == 28, "GPUVFXEvent::emitterIndex offset mismatch");
 
+    struct alignas(16) GPUCollider
+    {
+        glm::vec4 positionAndType;  // xyz=world center, w=float(type: 0=Sphere, 1=Box, 2=Capsule)
+        glm::vec4 rotation;         // quaternion (x,y,z,w)
+        glm::vec4 dimensions;       // Sphere: x=radius; Box: xyz=halfExtents; Capsule: x=radius, y=halfHeight
+    };
+    static_assert(sizeof(GPUCollider) == 48, "GPUCollider must be 48 bytes for GPU alignment");
+
     namespace GPUVFXConstants
     {
         inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;
@@ -236,6 +252,7 @@ namespace render::vfx
         inline constexpr uint32_t LUT_CHANNELS = 5;
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
+        inline constexpr uint32_t MAX_SCENE_COLLIDERS = 32;
     }
 
     namespace EmitterFlags
@@ -295,6 +312,7 @@ namespace render::vfx
         vk::Buffer ribbonRingBuffer;
         vk::Buffer ribbonHeadBuffer;
         vk::Buffer eventBuffer;
+        vk::Buffer colliderBuffer;
     };
 
     struct VFXFlipbookPushConstants

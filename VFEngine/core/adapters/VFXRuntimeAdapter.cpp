@@ -1,6 +1,11 @@
 #include "VFXRuntimeAdapter.hpp"
 #include "VFXSceneRenderer.hpp"
 #include "../../graphics/core/VulkanContext.hpp"
+#include "../../graphics/render/vfx/GPUVFXTypes.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/CoreComponents.hpp"
+#include "components/PhysicsComponents.hpp"
+#include <glm/gtc/quaternion.hpp>
 #include "print/Logger.hpp"
 
 namespace core
@@ -114,6 +119,7 @@ namespace core
     {
         if (renderer)
         {
+            updateSceneColliders();
             renderer->update(deltaTime);
         }
     }
@@ -153,5 +159,58 @@ namespace core
     size_t VFXRuntimeAdapter::getInstanceCount() const
     {
         return renderer ? renderer->getInstanceCount() : 0;
+    }
+
+    void VFXRuntimeAdapter::updateSceneColliders()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
+
+        std::vector<render::vfx::GPUCollider> gpuColliders;
+        gpuColliders.reserve(render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS);
+
+        for (auto entity : view)
+        {
+            if (gpuColliders.size() >= render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS)
+                break;
+
+            const auto& collider = view.get<components::ColliderComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            render::vfx::GPUCollider gpu{};
+            glm::vec3 worldPos = transform.position + collider.offset;
+
+            // Convert Euler rotation (degrees) to quaternion
+            glm::vec3 radians = glm::radians(transform.rotation);
+            glm::quat quat = glm::quat(radians);
+
+            gpu.rotation = glm::vec4(quat.x, quat.y, quat.z, quat.w);
+
+            switch (collider.shape)
+            {
+                case components::ColliderShape::Box:
+                    gpu.positionAndType = glm::vec4(worldPos, 1.0f);  // type 1 = Box
+                    gpu.dimensions = glm::vec4(collider.size * 0.5f, 0.0f);
+                    break;
+
+                case components::ColliderShape::Sphere:
+                    gpu.positionAndType = glm::vec4(worldPos, 0.0f);  // type 0 = Sphere
+                    gpu.dimensions = glm::vec4(collider.size.x, 0.0f, 0.0f, 0.0f);
+                    break;
+
+                case components::ColliderShape::Capsule:
+                    gpu.positionAndType = glm::vec4(worldPos, 2.0f);  // type 2 = Capsule
+                    gpu.dimensions = glm::vec4(collider.size.x, collider.height * 0.5f, 0.0f, 0.0f);
+                    break;
+
+                default:
+                    // Skip unsupported shapes (ConvexMesh, TriangleMesh, HeightField)
+                    continue;
+            }
+
+            gpuColliders.push_back(gpu);
+        }
+
+        renderer->setSceneColliders(gpuColliders);
     }
 }

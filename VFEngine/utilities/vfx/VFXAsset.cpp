@@ -234,6 +234,24 @@ namespace vfx
                 EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
             };
 
+            // Collision
+            emitterNode.properties["collisionEnabled"] = VFXProperty{
+                "collisionEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::COLLISION_ENABLED, 0.0f, 1.0f
+            };
+            emitterNode.properties["collisionBounce"] = VFXProperty{
+                "collisionBounce", VFXPropertyType::Float,
+                EmitterDefaults::COLLISION_BOUNCE, 0.0f, 1.0f
+            };
+            emitterNode.properties["collisionFriction"] = VFXProperty{
+                "collisionFriction", VFXPropertyType::Float,
+                EmitterDefaults::COLLISION_FRICTION, 0.0f, 1.0f
+            };
+            emitterNode.properties["collisionLifetimeLoss"] = VFXProperty{
+                "collisionLifetimeLoss", VFXPropertyType::Float,
+                EmitterDefaults::COLLISION_LIFETIME_LOSS, 0.0f, 1.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

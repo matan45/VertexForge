@@ -89,7 +89,11 @@ struct GPUEmitterConfig
     float uvScrollSpeedV;
     uint eventFlags;
     float lifetimeThreshold;
-    float _eventPad1;
+    uint colliderCount;
+    float collisionBounce;
+    float collisionFriction;
+    float collisionLifetimeLoss;
+    float _collisionPad;
 };
 
 struct GPUEmitterState
@@ -154,6 +158,22 @@ layout(std430, set = 0, binding = 7) buffer EventBuffer {
     uint eventCount;
     GPUVFXEvent events[];
 };
+
+struct GPUCollider
+{
+    vec4 positionAndType;   // xyz=center, w=type (0=Sphere, 1=Box, 2=Capsule)
+    vec4 rotation;          // quaternion xyzw
+    vec4 dimensions;        // Sphere: x=radius; Box: xyz=halfExtents; Capsule: x=radius, y=halfHeight
+};
+
+layout(std430, set = 0, binding = 8) readonly buffer ColliderBuffer {
+    GPUCollider colliders[];
+};
+
+const uint COLLIDER_SPHERE  = 0u;
+const uint COLLIDER_BOX     = 1u;
+const uint COLLIDER_CAPSULE = 2u;
+const uint MAX_SCENE_COLLIDERS = 32u;
 
 const uint EVENT_FLAG_ON_SPAWN = 1u;
 const uint EVENT_FLAG_ON_DEATH = 2u;
@@ -634,6 +654,155 @@ void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
     }
 }
 
+// --- Quaternion helpers ---
+vec3 rotateByQuat(vec3 v, vec4 q)
+{
+    vec3 u = q.xyz;
+    float s = q.w;
+    return 2.0 * dot(u, v) * u
+         + (s * s - dot(u, u)) * v
+         + 2.0 * s * cross(u, v);
+}
+
+vec3 rotateByQuatInverse(vec3 v, vec4 q)
+{
+    return rotateByQuat(v, vec4(-q.xyz, q.w));
+}
+
+// --- Collision detection per shape ---
+bool resolveCollisionSphere(vec3 particlePos, GPUCollider col, out vec3 hitNormal, out float penetration)
+{
+    vec3 center = col.positionAndType.xyz;
+    float radius = col.dimensions.x;
+    vec3 diff = particlePos - center;
+    float dist = length(diff);
+
+    if (dist < radius)
+    {
+        if (dist > 0.0001)
+            hitNormal = diff / dist;
+        else
+            hitNormal = vec3(0.0, 1.0, 0.0);
+        penetration = radius - dist;
+        return true;
+    }
+    return false;
+}
+
+bool resolveCollisionBox(vec3 particlePos, GPUCollider col, out vec3 hitNormal, out float penetration)
+{
+    vec3 center = col.positionAndType.xyz;
+    vec4 quat = col.rotation;
+    vec3 halfExtents = col.dimensions.xyz;
+
+    // Transform particle to collider local space
+    vec3 localPos = rotateByQuatInverse(particlePos - center, quat);
+
+    // AABB check in local space
+    vec3 absLocal = abs(localPos);
+    if (absLocal.x > halfExtents.x || absLocal.y > halfExtents.y || absLocal.z > halfExtents.z)
+        return false;
+
+    // Find closest face (minimum penetration axis)
+    vec3 depths = halfExtents - absLocal;
+    float minDepth = depths.x;
+    vec3 localNormal = vec3(sign(localPos.x), 0.0, 0.0);
+
+    if (depths.y < minDepth)
+    {
+        minDepth = depths.y;
+        localNormal = vec3(0.0, sign(localPos.y), 0.0);
+    }
+    if (depths.z < minDepth)
+    {
+        minDepth = depths.z;
+        localNormal = vec3(0.0, 0.0, sign(localPos.z));
+    }
+
+    penetration = minDepth;
+    hitNormal = rotateByQuat(localNormal, quat);
+    return true;
+}
+
+bool resolveCollisionCapsule(vec3 particlePos, GPUCollider col, out vec3 hitNormal, out float penetration)
+{
+    vec3 center = col.positionAndType.xyz;
+    vec4 quat = col.rotation;
+    float radius = col.dimensions.x;
+    float halfHeight = col.dimensions.y;
+
+    vec3 axisDir = rotateByQuat(vec3(0.0, 1.0, 0.0), quat);
+    vec3 diff = particlePos - center;
+
+    float proj = dot(diff, axisDir);
+    proj = clamp(proj, -halfHeight, halfHeight);
+    vec3 closest = center + axisDir * proj;
+
+    vec3 toParticle = particlePos - closest;
+    float dist = length(toParticle);
+
+    if (dist < radius)
+    {
+        if (dist > 0.0001)
+            hitNormal = toParticle / dist;
+        else
+            hitNormal = vec3(0.0, 1.0, 0.0);
+        penetration = radius - dist;
+        return true;
+    }
+    return false;
+}
+
+void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx)
+{
+    if (config.colliderCount == 0u)
+        return;
+
+    uint count = min(config.colliderCount, MAX_SCENE_COLLIDERS);
+
+    for (uint i = 0u; i < count; ++i)
+    {
+        GPUCollider col = colliders[i];
+        uint colType = uint(col.positionAndType.w);
+
+        vec3 hitNormal;
+        float penetration;
+        bool hit = false;
+
+        if (colType == COLLIDER_SPHERE)
+            hit = resolveCollisionSphere(p.position, col, hitNormal, penetration);
+        else if (colType == COLLIDER_BOX)
+            hit = resolveCollisionBox(p.position, col, hitNormal, penetration);
+        else if (colType == COLLIDER_CAPSULE)
+            hit = resolveCollisionCapsule(p.position, col, hitNormal, penetration);
+
+        if (hit)
+        {
+            p.position += hitNormal * penetration;
+
+            float vn = dot(p.velocity, hitNormal);
+            if (vn < 0.0)
+            {
+                vec3 vNormal = hitNormal * vn;
+                vec3 vTangent = p.velocity - vNormal;
+
+                p.velocity = vTangent * (1.0 - config.collisionFriction)
+                           - vNormal * config.collisionBounce;
+            }
+
+            if (config.collisionLifetimeLoss > 0.0)
+            {
+                p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
+            }
+
+            if ((config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+            {
+                emitEvent(2u, p.position, p.velocity, emitterIdx);
+            }
+        }
+    }
+}
+
 void main()
 {
     uint localIdx = gl_GlobalInvocationID.x;
@@ -681,6 +850,8 @@ void main()
             applyForces(p, config, time);
 
             p.position += p.velocity * config.deltaTime;
+
+            applyCollisions(p, config, pc.emitterIndex);
 
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 

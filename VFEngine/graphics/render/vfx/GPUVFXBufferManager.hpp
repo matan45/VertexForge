@@ -51,6 +51,10 @@ namespace render::vfx
         std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMemories{};
         std::array<void*, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMapped{};
 
+        vk::Buffer colliderBuffer;
+        vk::DeviceMemory colliderMemory;
+        void* colliderMapped = nullptr;
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -83,11 +87,12 @@ namespace render::vfx
         vk::Buffer getRibbonRingBuffer() const { return ribbonRingBuffer; }
         vk::Buffer getRibbonHeadBuffer() const { return ribbonHeadBuffer; }
         vk::Buffer getEventBuffer() const { return eventBuffer; }
+        vk::Buffer getColliderBuffer() const { return colliderBuffer; }
 
         GPUVFXBufferSet getBufferSet() const
         {
             return {particleBuffer, configBuffer, stateBuffer, drawCommandBuffer,
-                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer};
+                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer, colliderBuffer};
         }
 
         vk::DeviceSize getParticleBufferSize() const;
@@ -98,6 +103,9 @@ namespace render::vfx
         vk::DeviceSize getRibbonRingBufferSize() const;
         vk::DeviceSize getRibbonHeadBufferSize() const;
         vk::DeviceSize getEventBufferSize() const;
+        vk::DeviceSize getColliderBufferSize() const;
+
+        void updateSceneColliders(const std::vector<GPUCollider>& colliders, uint32_t count);
 
         void clearEventBuffer(vk::CommandBuffer cmd);
         void copyEventBufferToReadback(vk::CommandBuffer cmd);
@@ -142,6 +150,7 @@ namespace render::vfx
         bool createLUTBuffer();
         bool createRibbonBuffers();
         bool createEventBuffers();
+        bool createColliderBuffer();
         void destroyBuffers();
     };
 }

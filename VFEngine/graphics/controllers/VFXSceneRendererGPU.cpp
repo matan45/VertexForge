@@ -160,11 +160,24 @@ namespace controllers
         }
     }
 
+    void VFXSceneRenderer::setSceneColliders(const std::vector<render::vfx::GPUCollider>& colliders)
+    {
+        sceneColliders = colliders;
+        sceneColliderCount = static_cast<uint32_t>(
+            std::min(colliders.size(), static_cast<size_t>(render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS)));
+    }
+
     void VFXSceneRenderer::updateGPU(float deltaTime)
     {
         if (!gpuBufferManager)
         {
             return;
+        }
+
+        // Upload scene colliders to GPU
+        if (sceneColliderCount > 0)
+        {
+            gpuBufferManager->updateSceneColliders(sceneColliders, sceneColliderCount);
         }
 
         lastFrameEvents = gpuBufferManager->readbackEvents(lastFrameEventCount);
@@ -208,7 +221,10 @@ namespace controllers
                 instance.gpuParticleCount,
                 dist(gen)
             );
-            
+
+            // Set collider count based on collision enabled per emitter
+            gpuConfig.colliderCount = instance.config.collisionEnabled ? sceneColliderCount : 0;
+
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
             {
                 gpuConfig.drawIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
@@ -387,6 +403,11 @@ namespace controllers
 
         gpuConfig.eventFlags = cpuConfig.events.toEventFlags();
         gpuConfig.lifetimeThreshold = cpuConfig.events.lifetimeThreshold;
+
+        // Collision response properties (colliderCount set separately from scene query)
+        gpuConfig.collisionBounce = cpuConfig.collisionBounce;
+        gpuConfig.collisionFriction = cpuConfig.collisionFriction;
+        gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
 
         return gpuConfig;
     }

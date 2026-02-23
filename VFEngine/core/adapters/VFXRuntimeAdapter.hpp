@@ -16,6 +16,8 @@ namespace core
     private:
         std::unique_ptr<controllers::VFXSceneRenderer> renderer;
 
+        void updateSceneColliders();
+
     public:
         explicit VFXRuntimeAdapter();
         ~VFXRuntimeAdapter() noexcept override;

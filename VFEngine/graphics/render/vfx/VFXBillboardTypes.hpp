@@ -248,6 +248,11 @@ namespace render::vfx
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
 
         ::vfx::VFXEventConfig events;
+
+        bool collisionEnabled = false;
+        float collisionBounce = 0.5f;
+        float collisionFriction = 0.1f;
+        float collisionLifetimeLoss = 0.0f;
     };
 
     struct VFXFlipbookConfig

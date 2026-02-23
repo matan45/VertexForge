@@ -160,6 +160,12 @@ namespace vfx
         inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
 
+        // Collision
+        inline constexpr bool COLLISION_ENABLED = false;
+        inline constexpr float COLLISION_BOUNCE = 0.5f;
+        inline constexpr float COLLISION_FRICTION = 0.1f;
+        inline constexpr float COLLISION_LIFETIME_LOSS = 0.0f;
+
         // Events
         inline constexpr bool EVENT_ON_SPAWN_ENABLED = false;
         inline constexpr bool EVENT_ON_DEATH_ENABLED = false;

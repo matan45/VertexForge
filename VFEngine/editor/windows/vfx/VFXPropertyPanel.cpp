@@ -637,6 +637,61 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawCollisionProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        ImGui::Text("Collision");
+        ImGui::Separator();
+
+        auto enableIt = node.properties.find("collisionEnabled");
+        if (enableIt == node.properties.end()) return;
+
+        auto* enableVal = std::get_if<bool>(&enableIt->second.value);
+        if (!enableVal) return;
+
+        ImGui::Text("Enable");
+        ImGui::SameLine();
+        if (ImGui::Checkbox("##collisionEnable", enableVal))
+        {
+            notifyChanged();
+        }
+
+        if (*enableVal)
+        {
+            ImGui::TextDisabled("Collides with scene physics colliders (Box, Sphere, Capsule)");
+
+            struct SliderEntry
+            {
+                const char* key;
+                const char* label;
+            };
+
+            static constexpr SliderEntry sliders[] = {
+                {"collisionBounce",       "Bounce"},
+                {"collisionFriction",     "Friction"},
+                {"collisionLifetimeLoss", "Life Loss"},
+            };
+
+            for (const auto& s : sliders)
+            {
+                auto it = node.properties.find(s.key);
+                if (it == node.properties.end()) continue;
+
+                auto* val = std::get_if<float>(&it->second.value);
+                if (!val) continue;
+
+                ImGui::Text("%s", s.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                ImGui::PushID(s.key);
+                if (ImGui::SliderFloat("##slider", val, 0.0f, 1.0f, "%.2f"))
+                {
+                    notifyChanged();
+                }
+                ImGui::PopID();
+            }
+        }
+    }
+
     void VFXPropertyPanel::draw(vfx::VFXGraph* graph, uint32_t selectedNodeId)
     {
         if (!graph || selectedNodeId == 0)
@@ -665,6 +720,8 @@ namespace editor::vfxeditor
             drawRenderingProperties(*node);
             ImGui::Spacing();
             drawEventsProperties(*node, 80.0f);
+            ImGui::Spacing();
+            drawCollisionProperties(*node, 80.0f);
             return;
         }
 

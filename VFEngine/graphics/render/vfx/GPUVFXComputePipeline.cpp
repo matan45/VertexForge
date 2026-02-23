@@ -76,7 +76,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 9> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -117,6 +117,11 @@ namespace render::vfx
         bindings[7].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[7].descriptorCount = 1;
         bindings[7].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        bindings[8].binding = 8;
+        bindings[8].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[8].descriptorCount = 1;
+        bindings[8].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -178,7 +183,7 @@ namespace render::vfx
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 8;
+        poolSizes[0].descriptorCount = 9;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -210,7 +215,8 @@ namespace render::vfx
             buffers.lutBuffer != cachedBuffers.lutBuffer ||
             buffers.ribbonRingBuffer != cachedBuffers.ribbonRingBuffer ||
             buffers.ribbonHeadBuffer != cachedBuffers.ribbonHeadBuffer ||
-            buffers.eventBuffer != cachedBuffers.eventBuffer)
+            buffers.eventBuffer != cachedBuffers.eventBuffer ||
+            buffers.colliderBuffer != cachedBuffers.colliderBuffer)
         {
             cachedBuffers = buffers;
             descriptorsNeedUpdate = true;
@@ -266,7 +272,12 @@ namespace render::vfx
         eventInfo.offset = 0;
         eventInfo.range = VK_WHOLE_SIZE;
 
-        std::array<vk::WriteDescriptorSet, 8> writes{};
+        vk::DescriptorBufferInfo colliderInfo{};
+        colliderInfo.buffer = cachedBuffers.colliderBuffer;
+        colliderInfo.offset = 0;
+        colliderInfo.range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 9> writes{};
 
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
@@ -315,6 +326,12 @@ namespace render::vfx
         writes[7].descriptorCount = 1;
         writes[7].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[7].pBufferInfo = &eventInfo;
+
+        writes[8].dstSet = descriptorSet;
+        writes[8].dstBinding = 8;
+        writes[8].descriptorCount = 1;
+        writes[8].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[8].pBufferInfo = &colliderInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
 
