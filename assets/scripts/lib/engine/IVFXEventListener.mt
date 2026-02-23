@@ -1,6 +1,6 @@
 // IVFXEventListener - Interface for receiving VFX particle events
 // Implement this interface in @Script classes to receive callbacks when
-// particle lifecycle events fire (spawn, death, lifetime threshold)
+// particle lifecycle events fire (spawn, death, collision, lifetime threshold)
 //
 // Events are emitted from the GPU particle simulation and dispatched
 // one frame later via readback. Each event carries position and velocity
@@ -9,7 +9,7 @@
 // Event types:
 //   0 = OnSpawn     - particle was just spawned
 //   1 = OnDeath     - particle reached end of lifetime
-//   2 = OnCollision - (reserved for future use)
+//   2 = OnCollision - particle collided with a scene collider or terrain
 //   3 = OnLifetimeThreshold - particle crossed the configured lifetime ratio
 //
 // Usage:

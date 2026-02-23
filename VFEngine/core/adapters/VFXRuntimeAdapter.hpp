@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 #include <memory>
+#include <vector>
 
 namespace controllers
 {
@@ -10,7 +12,7 @@ namespace controllers
 
 namespace core
 {
-   
+
     class VFXRuntimeAdapter : public services::IVFXRuntimeProvider
     {
     private:
@@ -18,7 +20,13 @@ namespace core
 
         void updateSceneColliders();
         void updateTerrainHeightfield();
+        void subscribeTerrainNotifications();
+        void unsubscribeTerrainNotifications();
+
         bool terrainHeightfieldCached = false;
+        uint32_t cachedMaxColliders = 32;
+        uint32_t colliderSettingsRefreshCounter = 0;
+        std::vector<events::SubscriptionToken> terrainSubscriptions;
 
     public:
         explicit VFXRuntimeAdapter();

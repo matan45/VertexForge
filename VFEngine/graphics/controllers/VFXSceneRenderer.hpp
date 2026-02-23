@@ -80,6 +80,7 @@ namespace controllers
         std::unique_ptr<render::mesh::MeshGPUCache> gpuMeshCache;
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
+        std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
 
         // Deferred destruction queue to avoid per-instance waitIdle()
         // Each entry is (emitterIndex, frameWhenDestroyed)
@@ -106,7 +107,6 @@ namespace controllers
         };
 
         std::vector<SubEmitterInstance> activeSubEmitters;
-        std::unordered_map<std::string, render::vfx::VFXEmitterConfig> subEmitterConfigCache;
 
         glm::mat4 currentView{1.0f};
         glm::mat4 currentProjection{1.0f};

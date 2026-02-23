@@ -8,16 +8,21 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/BrushEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include "print/Logger.hpp"
 
 namespace core
 {
-    VFXRuntimeAdapter::VFXRuntimeAdapter() = default;
+    VFXRuntimeAdapter::VFXRuntimeAdapter()
+    {
+        subscribeTerrainNotifications();
+    }
 
     VFXRuntimeAdapter::~VFXRuntimeAdapter() noexcept
     {
+        unsubscribeTerrainNotifications();
         if (renderer)
         {
             renderer->cleanUp();
@@ -168,18 +173,26 @@ namespace core
 
     void VFXRuntimeAdapter::updateSceneColliders()
     {
-        // Query configurable max colliders from physics settings
-        uint32_t maxColliders = 32;
-        try
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::scene::GetPhysicsSettingsQuery query;
-            auto physSettings = dispatcher.query(query);
-            maxColliders = std::min(physSettings.maxVFXSceneColliders,
-                                    render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS);
-        }
-        catch (...) {}
+        // Skip if no VFX instances are active
+        if (renderer->getInstanceCount() == 0)
+            return;
 
+        // Refresh max colliders from physics settings periodically (~every 2 seconds at 60fps)
+        if (++colliderSettingsRefreshCounter >= 120)
+        {
+            colliderSettingsRefreshCounter = 0;
+            try
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::scene::GetPhysicsSettingsQuery query;
+                auto physSettings = dispatcher.query(query);
+                cachedMaxColliders = std::min(physSettings.maxVFXSceneColliders,
+                                              render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS);
+            }
+            catch (...) {}
+        }
+
+        uint32_t maxColliders = cachedMaxColliders;
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
 
@@ -269,5 +282,48 @@ namespace core
         {
             // No terrain service registered — disable terrain collision
         }
+    }
+
+    void VFXRuntimeAdapter::subscribeTerrainNotifications()
+    {
+        if (!terrainSubscriptions.empty())
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        terrainSubscriptions.push_back(
+            dispatcher.subscribe<events::terrain::TerrainCreatedNotification>(
+                [this](const events::terrain::TerrainCreatedNotification&) {
+                    terrainHeightfieldCached = false;
+                }));
+
+        terrainSubscriptions.push_back(
+            dispatcher.subscribe<events::terrain::TerrainDeletedNotification>(
+                [this](const events::terrain::TerrainDeletedNotification&) {
+                    terrainHeightfieldCached = false;
+                }));
+
+        terrainSubscriptions.push_back(
+            dispatcher.subscribe<events::terrain::TerrainLoadedNotification>(
+                [this](const events::terrain::TerrainLoadedNotification&) {
+                    terrainHeightfieldCached = false;
+                }));
+
+        terrainSubscriptions.push_back(
+            dispatcher.subscribe<events::brush::BrushAppliedNotification>(
+                [this](const events::brush::BrushAppliedNotification&) {
+                    terrainHeightfieldCached = false;
+                }));
+    }
+
+    void VFXRuntimeAdapter::unsubscribeTerrainNotifications()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        for (auto& token : terrainSubscriptions)
+        {
+            if (token.isValid())
+                dispatcher.unsubscribe(token);
+        }
+        terrainSubscriptions.clear();
     }
 }

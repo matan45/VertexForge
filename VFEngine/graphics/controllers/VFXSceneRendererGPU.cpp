@@ -594,23 +594,17 @@ namespace controllers
         {
             const auto& event = lastFrameEvents[i];
 
-            // Find parent instance by emitter index
-            VFXInstanceId parentId = 0;
-            const VFXRuntimeInstance* parentInstance = nullptr;
-            for (const auto& [id, inst] : instances)
-            {
-                if (inst.gpuDriven && inst.gpuEmitterIndex == event.emitterIndex)
-                {
-                    parentId = id;
-                    parentInstance = &inst;
-                    break;
-                }
-            }
-
-            if (!parentInstance)
-            {
+            // Find parent instance by emitter index via reverse map
+            auto mapIt = emitterIndexToInstanceId.find(event.emitterIndex);
+            if (mapIt == emitterIndexToInstanceId.end())
                 continue;
-            }
+
+            VFXInstanceId parentId = mapIt->second;
+            auto instIt = instances.find(parentId);
+            if (instIt == instances.end())
+                continue;
+
+            const VFXRuntimeInstance* parentInstance = &instIt->second;
 
             // Prevent recursion: skip events from sub-emitter instances
             bool isSubEmitter = false;

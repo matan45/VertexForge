@@ -167,6 +167,10 @@ namespace controllers
         }
 
         instances[id] = std::move(instance);
+        if (instances[id].gpuDriven)
+        {
+            emitterIndexToInstanceId[instances[id].gpuEmitterIndex] = id;
+        }
         const auto& storedConfig = instances[id].config;
         if (!storedConfig.texturePath.empty() && cpuPipeline)
         {
@@ -230,19 +234,16 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
-            if (it->second.gpuDriven && gpuBufferManager)
+            if (it->second.gpuDriven)
             {
-                pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
-            }
-            
-            if (it->second.gpuDriven && gpuMeshPipeline)
-            {
-                gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
-            }
-            
-            if (it->second.gpuDriven && gpuRibbonPipeline)
-            {
-                gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
+                emitterIndexToInstanceId.erase(it->second.gpuEmitterIndex);
+
+                if (gpuBufferManager)
+                    pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
+                if (gpuMeshPipeline)
+                    gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
+                if (gpuRibbonPipeline)
+                    gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
 
             loggerInfo("Destroyed VFX instance {}", id);
@@ -255,7 +256,6 @@ namespace controllers
         device.getLogicalDevice().waitIdle();
 
         activeSubEmitters.clear();
-        subEmitterConfigCache.clear();
         pendingEmitterFrees.clear();
 
         for (auto& [id, instance] : instances)
@@ -266,6 +266,7 @@ namespace controllers
             }
         }
         instances.clear();
+        emitterIndexToInstanceId.clear();
 
         if (gpuBufferManager)
         {

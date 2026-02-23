@@ -185,7 +185,7 @@ layout(std430, set = 0, binding = 9) readonly buffer TerrainHeightfieldBuffer {
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
 const uint COLLIDER_CAPSULE = 2u;
-const uint MAX_SCENE_COLLIDERS = 128u;
+const uint MAX_SCENE_COLLIDERS = 256u;
 
 const uint EVENT_FLAG_ON_SPAWN = 1u;
 const uint EVENT_FLAG_ON_DEATH = 2u;
@@ -729,7 +729,7 @@ vec3 getTerrainNormal(vec3 worldPos)
     return normalize(normal);
 }
 
-void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx)
+void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx, inout bool collisionEventFired)
 {
     if (config.terrainCollisionEnabled == 0u || terrainEnabled == 0u)
         return;
@@ -740,12 +740,13 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
     if (terrainY < -1e9)
         return;
 
-    float penetration = terrainY - p.position.y;
+    // Compute penetration along surface normal (not vertical)
+    vec3 terrainPoint = vec3(p.position.x, terrainY, p.position.z);
+    vec3 normal = getTerrainNormal(p.position);
+    float penetration = dot(terrainPoint - p.position, normal);
 
     if (penetration > 0.0)
     {
-        vec3 normal = getTerrainNormal(p.position);
-
         // Push particle out of terrain
         p.position += normal * penetration;
 
@@ -766,10 +767,11 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
             p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
         }
 
-        // OnCollision event
-        if ((config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+        // OnCollision event (once per particle per frame)
+        if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
             emitEvent(2u, p.position, p.velocity, emitterIdx);
+            collisionEventFired = true;
         }
     }
 }
@@ -873,7 +875,7 @@ bool resolveCollisionCapsule(vec3 particlePos, GPUCollider col, out vec3 hitNorm
     return false;
 }
 
-void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx)
+void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx, inout bool collisionEventFired)
 {
     if (config.colliderCount == 0u)
         return;
@@ -915,9 +917,10 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
                 p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
             }
 
-            if ((config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+            if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
             {
                 emitEvent(2u, p.position, p.velocity, emitterIdx);
+                collisionEventFired = true;
             }
         }
     }
@@ -971,8 +974,9 @@ void main()
 
             p.position += p.velocity * config.deltaTime;
 
-            applyCollisions(p, config, pc.emitterIndex);
-            applyTerrainCollision(p, config, pc.emitterIndex);
+            bool collisionEventFired = false;
+            applyCollisions(p, config, pc.emitterIndex, collisionEventFired);
+            applyTerrainCollision(p, config, pc.emitterIndex, collisionEventFired);
 
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 

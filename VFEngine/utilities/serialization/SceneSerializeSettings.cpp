@@ -273,7 +273,7 @@ namespace serialization
             const auto& vfx = j["vfxCollision"];
             if (vfx.contains("maxSceneColliders"))
                 settings.maxVFXSceneColliders = std::clamp(
-                    vfx["maxSceneColliders"].get<uint32_t>(), 1u, 128u);
+                    vfx["maxSceneColliders"].get<uint32_t>(), 1u, 256u);
         }
     }
 
