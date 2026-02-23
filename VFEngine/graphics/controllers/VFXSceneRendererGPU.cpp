@@ -7,6 +7,7 @@
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/vfx/VFXLUTBaker.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
+#include "../core/RenderManager.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
@@ -42,6 +43,7 @@ namespace controllers
                 loggerError("Failed to initialize GPU VFX render pipeline");
                 return false;
             }
+            gpuRenderPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             // VK-496: Mesh particle pipeline
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
@@ -52,6 +54,7 @@ namespace controllers
                 loggerError("Failed to initialize GPU VFX mesh pipeline");
                 return false;
             }
+            gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             // VK-624: Ribbon pipeline
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
@@ -61,6 +64,7 @@ namespace controllers
                 loggerError("Failed to initialize GPU VFX ribbon pipeline");
                 return false;
             }
+            gpuRibbonPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuComputePipeline->updateDescriptors(
                 gpuBufferManager->getParticleBuffer(),
@@ -208,10 +212,10 @@ namespace controllers
                 dist(gen)
             );
 
-            // VK-496: Set mesh index count for mesh particle emitters
+            // VK-496: Set draw index count for mesh particle emitters
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
             {
-                gpuConfig.meshIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
+                gpuConfig.drawIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
             }
 
             auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
@@ -377,8 +381,8 @@ namespace controllers
         gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;
         gpuConfig.stretchMultiplier = cpuConfig.stretchMultiplier;
 
-        // VK-496: meshIndexCount defaults to 6 (billboard quad), overridden for mesh particles
-        gpuConfig.meshIndexCount = 6;
+        // VK-496: drawIndexCount defaults to 6 (billboard quad), overridden for mesh particles
+        gpuConfig.drawIndexCount = 6;
 
         // VK-624: Ribbon params
         gpuConfig.maxTrailPoints = cpuConfig.maxTrailPoints;

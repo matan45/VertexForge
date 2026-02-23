@@ -59,6 +59,7 @@ namespace render::mesh
         std::shared_ptr<core::Shader> meshShader;
 
         vk::RenderPass renderPass;
+        vk::RenderPass vfxRenderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -110,12 +111,14 @@ namespace render::mesh
         void cleanUpForReinit();
 
         vk::RenderPass getRenderPass() const { return renderPass; }
+        vk::RenderPass getVFXRenderPass() const { return vfxRenderPass; }
 
         vk::DescriptorSetLayout getIBLDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getIBLDescriptorSet(uint32_t /*imageIndex*/) const { return descriptorSet; }
         MaterialTextureCache& getMaterialTextureCache() { return *textureCache; }
 
         void beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
 
         void injectMaterialForPreview(const std::string& materialPath,
@@ -163,6 +166,7 @@ namespace render::mesh
 
         void loadShaders();
         void createRenderPass();
+        void createVFXRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet(const ibl::ImageData& irradianceMap,

@@ -6,58 +6,11 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/Utilities.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include "print/Logger.hpp"
 #include "GPUVFXTypes.hpp"
 
-namespace
-{
-    void uploadStagedPixelData(core::Device& device, vk::Image image,
-                               const void* pixelData, vk::DeviceSize imageSize,
-                               uint32_t width, uint32_t height)
-    {
-        auto vkDevice = device.getLogicalDevice();
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        core::BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
-        stagingRequest.size = imageSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                    vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data = vkDevice.mapMemory(stagingMemory, 0, imageSize);
-        std::memcpy(data, pixelData, imageSize);
-        vkDevice.unmapMemory(stagingMemory);
-
-        auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
-
-        core::ImageUtilities::transitionImageLayout(
-            cmd.get(), image,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        vk::BufferImageCopy region{};
-        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        region.imageSubresource.layerCount = 1;
-        region.imageExtent = vk::Extent3D{width, height, 1};
-
-        cmd->copyBufferToImage(stagingBuffer, image,
-                               vk::ImageLayout::eTransferDstOptimal, region);
-
-        core::ImageUtilities::transitionImageLayout(
-            cmd.get(), image,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-
-        vkDevice.destroyBuffer(stagingBuffer);
-        vkDevice.freeMemory(stagingMemory);
-    }
-}
 
 namespace render::vfx
 {
@@ -320,6 +273,17 @@ namespace render::vfx
 
     vk::DescriptorSet VFXMeshGPUPipeline::allocateDescriptorSetFromPool()
     {
+        // Recycle descriptor sets that have aged past the deferred deletion window
+        for (auto it = pendingDescriptorSets.begin(); it != pendingDescriptorSets.end(); ++it)
+        {
+            if (frameCounter - it->frameRetired >= core::DeferredDeletionQueue::FRAMES_BEFORE_DELETE)
+            {
+                auto recycled = it->set;
+                pendingDescriptorSets.erase(it);
+                return recycled;
+            }
+        }
+
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -346,7 +310,7 @@ namespace render::vfx
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eBack,
             .depthTestEnable = true,
-            .depthWriteEnable = true,
+            .depthWriteEnable = false,
             .blendEnable = true
         };
 
@@ -392,50 +356,16 @@ namespace render::vfx
         core::ImageUtilities::createImageView(viewInfo, defaultTextureImageView);
 
         const std::array<uint8_t, 4> whitePixel = {255, 255, 255, 255};
-        uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
+        core::ImageUtilities::uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
     }
 
     void VFXMeshGPUPipeline::createSampler()
     {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        textureSampler = device.getLogicalDevice().createSampler(samplerInfo);
+        textureSampler = core::ImageUtilities::createVFXSampler(device.getLogicalDevice());
     }
 
     void VFXMeshGPUPipeline::createDepthSampler()
     {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eNearest;
-        samplerInfo.minFilter = vk::Filter::eNearest;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        depthSampler = device.getLogicalDevice().createSampler(samplerInfo);
+        depthSampler = core::ImageUtilities::createVFXDepthSampler(device.getLogicalDevice());
     }
 }

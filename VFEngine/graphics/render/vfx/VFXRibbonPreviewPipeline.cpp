@@ -52,8 +52,29 @@ namespace render::vfx
             }
 
             createDescriptorSetLayout();
+            if (!descriptorSetLayout)
+            {
+                loggerError("VFXRibbonPreviewPipeline: Failed to create descriptor set layout");
+                cleanUp();
+                return;
+            }
+
             createDescriptorPool();
+            if (!descriptorPool)
+            {
+                loggerError("VFXRibbonPreviewPipeline: Failed to create descriptor pool");
+                cleanUp();
+                return;
+            }
+
             createBuffers();
+            if (!cameraUBO || !instanceBuffer)
+            {
+                loggerError("VFXRibbonPreviewPipeline: Failed to create buffers");
+                cleanUp();
+                return;
+            }
+
             createDefaultTexture();
             createSampler();
             createDescriptorSet();

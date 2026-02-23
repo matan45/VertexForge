@@ -24,6 +24,9 @@ namespace render::vfx
         std::vector<uint32_t> ribbonRing;
         uint32_t ribbonHead = 0;
 
+        // Reusable segment buffer to avoid per-frame heap allocation
+        mutable std::vector<VFXRibbonSegmentData> cachedSegments;
+
     public:
         explicit VFXParticleSystem();
         ~VFXParticleSystem() = default;
@@ -39,7 +42,7 @@ namespace render::vfx
 
         const std::vector<VFXParticle>& getParticles() const { return particles; }
         std::vector<VFXInstanceData> getInstanceData() const;
-        std::vector<VFXRibbonSegmentData> getRibbonSegments() const;
+        const std::vector<VFXRibbonSegmentData>& getRibbonSegments() const;
         size_t getActiveParticleCount() const;
 
     private:

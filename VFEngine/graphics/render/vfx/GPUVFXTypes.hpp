@@ -116,7 +116,7 @@ namespace render::vfx
         uint32_t renderMode = RenderModeFlags::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-        uint32_t meshIndexCount = 6; // VK-496: defaults to 6 for billboard quad, set to mesh index count for mesh particles
+        uint32_t drawIndexCount = 6; // Index count for the draw command: 6 for billboard quad, overridden for mesh particles
 
         // Ribbon (VK-624)
         uint32_t maxTrailPoints = 0;
@@ -159,6 +159,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, renderMode) == 256, "GPUEmitterConfig::renderMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, softParticleDistance) == 260, "GPUEmitterConfig::softParticleDistance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, stretchMultiplier) == 264, "GPUEmitterConfig::stretchMultiplier offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, drawIndexCount) == 268, "GPUEmitterConfig::drawIndexCount offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, maxTrailPoints) == 272, "GPUEmitterConfig::maxTrailPoints offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ribbonWidth) == 276, "GPUEmitterConfig::ribbonWidth offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ribbonMinDistance) == 280, "GPUEmitterConfig::ribbonMinDistance offset mismatch");

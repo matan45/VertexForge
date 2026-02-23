@@ -356,19 +356,20 @@ namespace controllers
         (void)result;
 
         // Route to appropriate pipeline based on render mode
-        bool useMeshPipeline = currentParams.renderMode == 3 &&
+        auto renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
+        bool useMeshPipeline = renderMode == render::vfx::VFXRenderMode::MeshParticle &&
                                meshPipeline && meshPipeline->isInitialized() &&
                                meshPipeline->hasMesh();
 
         // VK-624: Ribbon pipeline
-        bool useRibbonPipeline = currentParams.renderMode == 4 &&
+        bool useRibbonPipeline = renderMode == render::vfx::VFXRenderMode::Ribbon &&
                                  ribbonPipeline && ribbonPipeline->isInitialized();
 
         if (particleSystem)
         {
             if (useRibbonPipeline)
             {
-                auto segments = particleSystem->getRibbonSegments();
+                const auto& segments = particleSystem->getRibbonSegments();
                 ribbonPipeline->setRibbonSegments(segments);
             }
             else

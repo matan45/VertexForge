@@ -4,6 +4,8 @@
 
 namespace core
 {
+	class Device;
+
 	struct ImageInfoRequest
 	{
 		const vk::Device& logicalDevice;
@@ -89,5 +91,12 @@ namespace core
 		static void transitionImageLayout(const vk::CommandBuffer& commandBuffer, vk::Image image,
 			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
 			vk::ImageAspectFlags aspectMask, uint32_t layer = 1, uint32_t numMips = 1);
+
+		static void uploadStagedPixelData(Device& device, vk::Image image,
+			const void* pixelData, vk::DeviceSize imageSize,
+			uint32_t width, uint32_t height);
+
+		static vk::Sampler createVFXSampler(const vk::Device& device);
+		static vk::Sampler createVFXDepthSampler(const vk::Device& device);
 	};
 }

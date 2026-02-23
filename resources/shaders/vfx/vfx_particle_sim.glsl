@@ -81,7 +81,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    uint meshIndexCount;
+    uint drawIndexCount;
 
     // Ribbon (VK-624)
     uint maxTrailPoints;
@@ -728,7 +728,7 @@ void main()
         }
         else
         {
-            drawCommands[pc.emitterIndex].indexCount = configs[pc.emitterIndex].meshIndexCount;
+            drawCommands[pc.emitterIndex].indexCount = configs[pc.emitterIndex].drawIndexCount;
             drawCommands[pc.emitterIndex].instanceCount = maxParts;
             drawCommands[pc.emitterIndex].firstIndex = 0u;
             drawCommands[pc.emitterIndex].vertexOffset = 0;

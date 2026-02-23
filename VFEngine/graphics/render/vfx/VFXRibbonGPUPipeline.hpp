@@ -12,6 +12,7 @@ namespace core
     class SwapChain;
     class Shader;
     class Texture;
+    class DeferredDeletionQueue;
 }
 
 namespace render::vfx
@@ -81,11 +82,23 @@ namespace render::vfx
         {
             std::unique_ptr<core::Texture> texture;
             vk::DescriptorSet descriptorSet;
+            uint32_t refCount = 0;
         };
 
         std::unordered_map<uint32_t, EmitterRenderConfig> emitterConfigs;
         std::unordered_map<std::string, TextureEntry> textureEntries;
         vk::DescriptorSet defaultDescriptorSet;
+
+        // Deferred texture cleanup (avoids waitIdle GPU stall)
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
+
+        struct PendingDescriptorSet
+        {
+            vk::DescriptorSet set;
+            uint32_t frameRetired;
+        };
+        mutable uint32_t frameCounter = 0;
+        mutable std::vector<PendingDescriptorSet> pendingDescriptorSets;
 
     public:
         explicit VFXRibbonGPUPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -114,6 +127,8 @@ namespace render::vfx
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
                                        const glm::vec3& glowColor = glm::vec3(1.0f));
         void removeEmitter(uint32_t emitterIndex);
+
+        void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
 
         void recordCommandsInline(
             vk::CommandBuffer cmd,

@@ -1,6 +1,7 @@
 #include "VFXSceneGPUPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include "print/Logger.hpp"
 #include "GPUVFXTypes.hpp"
 #include <filesystem>
@@ -111,8 +112,10 @@ namespace render::vfx
 
         // Scene depth for soft particles (VK-494)
         vk::DescriptorImageInfo depthInfo{};
-        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthInfo.imageView = sceneDepthImageView ? sceneDepthImageView : defaultTextureImageView;
+        depthInfo.imageLayout = sceneDepthImageView
+            ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
+            : vk::ImageLayout::eShaderReadOnlyOptimal;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
         std::array<vk::WriteDescriptorSet, 5> writes{};
@@ -152,7 +155,31 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
-        emitterConfigs[emitterIndex].texturePath = texturePath;
+        auto& config = emitterConfigs[emitterIndex];
+        const std::string oldPath = config.texturePath;
+        config.texturePath = texturePath;
+
+        // No change — skip ref-counting work
+        if (oldPath == texturePath)
+            return;
+
+        // Release old texture ref
+        if (!oldPath.empty())
+        {
+            auto it = textureEntries.find(oldPath);
+            if (it != textureEntries.end() && --it->second.refCount == 0)
+            {
+                if (deletionQueue && it->second.texture)
+                {
+                    it->second.texture->extractResources(*deletionQueue);
+                }
+                if (it->second.descriptorSet)
+                {
+                    pendingDescriptorSets.push_back({it->second.descriptorSet, frameCounter});
+                }
+                textureEntries.erase(it);
+            }
+        }
 
         if (texturePath.empty())
         {
@@ -161,6 +188,7 @@ namespace render::vfx
 
         if (textureEntries.count(texturePath))
         {
+            textureEntries[texturePath].refCount++;
             return;
         }
 
@@ -179,7 +207,10 @@ namespace render::vfx
             return;
         }
 
-        device.getLogicalDevice().waitIdle();
+        if (!deletionQueue)
+        {
+            device.getLogicalDevice().waitIdle();
+        }
 
         try
         {
@@ -187,6 +218,7 @@ namespace render::vfx
             entry.texture = std::make_unique<core::Texture>(device);
             entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
             entry.descriptorSet = allocateDescriptorSetFromPool();
+            entry.refCount = 1;
 
             if (cachedParticleBuffer && cachedConfigBuffer)
             {
@@ -223,7 +255,28 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
     {
-        emitterConfigs.erase(emitterIndex);
+        auto configIt = emitterConfigs.find(emitterIndex);
+        if (configIt != emitterConfigs.end())
+        {
+            const auto& texPath = configIt->second.texturePath;
+            if (!texPath.empty())
+            {
+                auto texIt = textureEntries.find(texPath);
+                if (texIt != textureEntries.end() && --texIt->second.refCount == 0)
+                {
+                    if (deletionQueue && texIt->second.texture)
+                    {
+                        texIt->second.texture->extractResources(*deletionQueue);
+                    }
+                    if (texIt->second.descriptorSet)
+                    {
+                        pendingDescriptorSets.push_back({texIt->second.descriptorSet, frameCounter});
+                    }
+                    textureEntries.erase(texIt);
+                }
+            }
+            emitterConfigs.erase(configIt);
+        }
     }
 
     void VFXSceneGPUPipeline::recordCommandsInline(
@@ -231,6 +284,8 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount) const
     {
+        ++frameCounter;
+
         if (!initialized || emitterCount == 0 || !cachedParticleBuffer)
         {
             return;

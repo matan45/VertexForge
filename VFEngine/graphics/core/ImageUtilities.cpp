@@ -1,5 +1,9 @@
 #include "ImageUtilities.hpp"
 #include "MemoryUtilities.hpp"
+#include "BufferUtilities.hpp"
+#include "Device.hpp"
+#include "Utilities.hpp"
+#include <cstring>
 
 namespace core
 {
@@ -156,5 +160,94 @@ namespace core
 			vk::DependencyFlags{},
 			nullptr, nullptr, barrier
 		);
+	}
+
+	void ImageUtilities::uploadStagedPixelData(Device& device, vk::Image image,
+		const void* pixelData, vk::DeviceSize imageSize,
+		uint32_t width, uint32_t height)
+	{
+		auto vkDevice = device.getLogicalDevice();
+
+		vk::Buffer stagingBuffer;
+		vk::DeviceMemory stagingMemory;
+		BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
+		stagingRequest.size = imageSize;
+		stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+		stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+		                            vk::MemoryPropertyFlagBits::eHostCoherent;
+		BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+		void* data = vkDevice.mapMemory(stagingMemory, 0, imageSize);
+		std::memcpy(data, pixelData, imageSize);
+		vkDevice.unmapMemory(stagingMemory);
+
+		auto cmd = Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
+
+		transitionImageLayout(
+			cmd.get(), image,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+			vk::ImageAspectFlagBits::eColor);
+
+		vk::BufferImageCopy region{};
+		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.imageSubresource.layerCount = 1;
+		region.imageExtent = vk::Extent3D{width, height, 1};
+
+		cmd->copyBufferToImage(stagingBuffer, image,
+		                       vk::ImageLayout::eTransferDstOptimal, region);
+
+		transitionImageLayout(
+			cmd.get(), image,
+			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::ImageAspectFlagBits::eColor);
+
+		Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+
+		vkDevice.destroyBuffer(stagingBuffer);
+		vkDevice.freeMemory(stagingMemory);
+	}
+
+	vk::Sampler ImageUtilities::createVFXSampler(const vk::Device& device)
+	{
+		vk::SamplerCreateInfo samplerInfo{};
+		samplerInfo.magFilter = vk::Filter::eLinear;
+		samplerInfo.minFilter = vk::Filter::eLinear;
+		samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.anisotropyEnable = VK_FALSE;
+		samplerInfo.maxAnisotropy = 1.0f;
+		samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = vk::CompareOp::eAlways;
+		samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = 0.0f;
+
+		return device.createSampler(samplerInfo);
+	}
+
+	vk::Sampler ImageUtilities::createVFXDepthSampler(const vk::Device& device)
+	{
+		vk::SamplerCreateInfo samplerInfo{};
+		samplerInfo.magFilter = vk::Filter::eNearest;
+		samplerInfo.minFilter = vk::Filter::eNearest;
+		samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+		samplerInfo.anisotropyEnable = VK_FALSE;
+		samplerInfo.maxAnisotropy = 1.0f;
+		samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = vk::CompareOp::eAlways;
+		samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = 0.0f;
+
+		return device.createSampler(samplerInfo);
 	}
 }

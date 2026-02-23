@@ -126,19 +126,22 @@ namespace render::vfx
         return instances;
     }
 
-    std::vector<VFXRibbonSegmentData> VFXParticleSystem::getRibbonSegments() const
+    const std::vector<VFXRibbonSegmentData>& VFXParticleSystem::getRibbonSegments() const
     {
-        std::vector<VFXRibbonSegmentData> segments;
+        cachedSegments.clear();
 
         if (config.renderMode != VFXRenderMode::Ribbon || config.maxTrailPoints < 2)
-            return segments;
+            return cachedSegments;
 
         uint32_t usedPoints = std::min(ribbonHead, config.maxTrailPoints);
         if (usedPoints < 2 || ribbonRing.size() != config.maxTrailPoints)
-            return segments;
+            return cachedSegments;
 
-        segments.reserve(usedPoints - 1);
+        cachedSegments.reserve(usedPoints - 1);
 
+        // Safe from unsigned underflow: usedPoints >= 2 (guarded above) and
+        // usedPoints <= ribbonHead (from std::min), so ribbonHead >= 2.
+        // Minimum value of (ribbonHead - 2 - i) is ribbonHead - usedPoints >= 0.
         for (uint32_t i = 0; i < usedPoints - 1; i++)
         {
             // Walk from newest to oldest
@@ -175,10 +178,10 @@ namespace render::vfx
             seg.glowIntensityB = pB.glowIntensity;
             seg._pad = 0.0f;
 
-            segments.push_back(seg);
+            cachedSegments.push_back(seg);
         }
 
-        return segments;
+        return cachedSegments;
     }
 
     size_t VFXParticleSystem::getActiveParticleCount() const

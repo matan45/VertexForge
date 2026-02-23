@@ -1,5 +1,6 @@
 #include "Texture.hpp"
 #include "Device.hpp"
+#include "DeferredDeletionQueue.hpp"
 #include "BufferUtilities.hpp"
 #include "ImageUtilities.hpp"
 #include "Utilities.hpp"
@@ -22,6 +23,12 @@ namespace core
 
     Texture::~Texture()
     {
+        // If resources were extracted via extractResources(), all handles are null — nothing to do
+        if (!image && !imageView && !sampler && !imageMemory && mipImageViews.empty())
+        {
+            return;
+        }
+
         device.getLogicalDevice().waitIdle();
 
         if (isEditorTexture && descriptorSet)
@@ -55,6 +62,41 @@ namespace core
         device.getLogicalDevice().destroyImage(image);
         device.getLogicalDevice().freeMemory(imageMemory);
         device.getLogicalDevice().destroySampler(sampler);
+    }
+
+    void Texture::extractResources(DeferredDeletionQueue& queue)
+    {
+        // Queue image, memory, and primary imageView together
+        if (image || imageMemory || imageView)
+        {
+            std::vector<vk::ImageView> views;
+            if (imageView) views.push_back(imageView);
+            queue.queueImage(image, imageMemory, views);
+        }
+
+        // Queue primary sampler
+        if (sampler)
+        {
+            queue.queueSampler(sampler);
+        }
+
+        // Queue mip-level views and samplers
+        for (auto& v : mipImageViews)
+        {
+            if (v) queue.queueImageView(v);
+        }
+        for (auto& s : mipSamplers)
+        {
+            if (s) queue.queueSampler(s);
+        }
+
+        // Null all handles so destructor becomes a no-op
+        image = nullptr;
+        imageMemory = nullptr;
+        imageView = nullptr;
+        sampler = nullptr;
+        mipImageViews.clear();
+        mipSamplers.clear();
     }
 
     void Texture::loadHDRFromFile(std::string_view filePath, bool isEditor)

@@ -67,7 +67,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    uint meshIndexCount;
+    uint drawIndexCount;
 
     // Ribbon (VK-624)
     uint maxTrailPoints;
@@ -260,7 +260,7 @@ struct GPUEmitterConfig
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
-    uint meshIndexCount;
+    uint drawIndexCount;
 
     // Ribbon (VK-624)
     uint maxTrailPoints;

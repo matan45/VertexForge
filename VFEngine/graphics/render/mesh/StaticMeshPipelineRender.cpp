@@ -7,6 +7,7 @@
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/OffScreen.hpp"
 #include "material/MaterialTypes.hpp"
 #include "math/Frustum.hpp"
 #include <algorithm>
@@ -447,6 +448,43 @@ namespace render::mesh
         std::array<vk::ClearValue, 2> clearValues{};
         clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
         clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    }
+
+    void StaticMeshPipeline::beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        // Transition depth from attachment-optimal to read-only for VFX sampling
+        vk::ImageMemoryBarrier depthBarrier{};
+        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthBarrier.newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        depthBarrier.image = offscreenResources.depthImage.depthImage;
+        depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
+            | vk::ImageAspectFlagBits::eStencil;
+        depthBarrier.subresourceRange.baseMipLevel = 0;
+        depthBarrier.subresourceRange.levelCount = 1;
+        depthBarrier.subresourceRange.baseArrayLayer = 0;
+        depthBarrier.subresourceRange.layerCount = 1;
+        depthBarrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
+            | vk::AccessFlagBits::eShaderRead;
+
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eLateFragmentTests,
+            vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
+            {}, {}, {}, depthBarrier);
+
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = vfxRenderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        std::array<vk::ClearValue, 2> clearValues{};
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 

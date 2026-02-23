@@ -471,10 +471,6 @@ namespace editor::vfxeditor
             }
         }
 
-        // Disable flipbook/stretch in mesh/ribbon mode
-        bool isMeshMode = (currentRenderMode == 3);
-        bool isRibbonMode = (currentRenderMode == 4);
-
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
             {"alphaClipThreshold",   "Alpha Clip"},
@@ -491,10 +487,8 @@ namespace editor::vfxeditor
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
 
-            // Disable stretch unless StretchedBillboard; disable in mesh/ribbon mode (VK-494, VK-496, VK-624)
+            // Disable stretch unless StretchedBillboard (mode 1)
             bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
-            if ((isMeshMode || isRibbonMode) && (strcmp(entry.key, "stretchMultiplier") == 0))
-                disableWidget = true;
             if (disableWidget) ImGui::BeginDisabled();
 
             if (prop.type == vfx::VFXPropertyType::Float)

@@ -1,6 +1,7 @@
 #include "VFXRibbonGPUPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include "print/Logger.hpp"
 #include "GPUVFXTypes.hpp"
 #include <filesystem>
@@ -125,8 +126,10 @@ namespace render::vfx
         configInfo.range = cachedConfigBufferSize;
 
         vk::DescriptorImageInfo depthInfo{};
-        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthInfo.imageView = sceneDepthImageView ? sceneDepthImageView : defaultTextureImageView;
+        depthInfo.imageLayout = sceneDepthImageView
+            ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
+            : vk::ImageLayout::eShaderReadOnlyOptimal;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
         vk::DescriptorBufferInfo ringInfo{};
@@ -188,7 +191,31 @@ namespace render::vfx
 
     void VFXRibbonGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
-        emitterConfigs[emitterIndex].texturePath = texturePath;
+        auto& config = emitterConfigs[emitterIndex];
+        const std::string oldPath = config.texturePath;
+        config.texturePath = texturePath;
+
+        // No change — skip ref-counting work
+        if (oldPath == texturePath)
+            return;
+
+        // Release old texture ref
+        if (!oldPath.empty())
+        {
+            auto it = textureEntries.find(oldPath);
+            if (it != textureEntries.end() && --it->second.refCount == 0)
+            {
+                if (deletionQueue && it->second.texture)
+                {
+                    it->second.texture->extractResources(*deletionQueue);
+                }
+                if (it->second.descriptorSet)
+                {
+                    pendingDescriptorSets.push_back({it->second.descriptorSet, frameCounter});
+                }
+                textureEntries.erase(it);
+            }
+        }
 
         if (texturePath.empty())
         {
@@ -197,6 +224,7 @@ namespace render::vfx
 
         if (textureEntries.count(texturePath))
         {
+            textureEntries[texturePath].refCount++;
             return;
         }
 
@@ -215,7 +243,10 @@ namespace render::vfx
             return;
         }
 
-        device.getLogicalDevice().waitIdle();
+        if (!deletionQueue)
+        {
+            device.getLogicalDevice().waitIdle();
+        }
 
         try
         {
@@ -223,6 +254,7 @@ namespace render::vfx
             entry.texture = std::make_unique<core::Texture>(device);
             entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
             entry.descriptorSet = allocateDescriptorSetFromPool();
+            entry.refCount = 1;
 
             if (cachedParticleBuffer && cachedConfigBuffer &&
                 cachedRibbonRingBuffer && cachedRibbonHeadBuffer)
@@ -255,7 +287,28 @@ namespace render::vfx
 
     void VFXRibbonGPUPipeline::removeEmitter(uint32_t emitterIndex)
     {
-        emitterConfigs.erase(emitterIndex);
+        auto configIt = emitterConfigs.find(emitterIndex);
+        if (configIt != emitterConfigs.end())
+        {
+            const auto& texPath = configIt->second.texturePath;
+            if (!texPath.empty())
+            {
+                auto texIt = textureEntries.find(texPath);
+                if (texIt != textureEntries.end() && --texIt->second.refCount == 0)
+                {
+                    if (deletionQueue && texIt->second.texture)
+                    {
+                        texIt->second.texture->extractResources(*deletionQueue);
+                    }
+                    if (texIt->second.descriptorSet)
+                    {
+                        pendingDescriptorSets.push_back({texIt->second.descriptorSet, frameCounter});
+                    }
+                    textureEntries.erase(texIt);
+                }
+            }
+            emitterConfigs.erase(configIt);
+        }
     }
 
     void VFXRibbonGPUPipeline::recordCommandsInline(
@@ -263,8 +316,10 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount) const
     {
+        ++frameCounter;
+
         if (!initialized || emitterCount == 0 || !cachedParticleBuffer ||
-            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer)
+            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer || emitterConfigs.empty())
         {
             return;
         }
@@ -280,23 +335,20 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        for (uint32_t i = 0; i < emitterCount; ++i)
+        // Iterate only over emitters that have ribbon config registered
+        for (const auto& [emitterIdx, config] : emitterConfigs)
         {
-            // Only render emitters that have ribbon config
-            auto configIt = emitterConfigs.find(i);
-            if (configIt == emitterConfigs.end())
-            {
+            if (emitterIdx >= emitterCount)
                 continue;
-            }
 
             vk::DescriptorSet setToBind = defaultDescriptorSet;
-            float alphaClip = configIt->second.alphaClipThreshold;
-            uint32_t blendMode = configIt->second.blendMode;
-            glm::vec3 gc = configIt->second.glowColor;
+            float alphaClip = config.alphaClipThreshold;
+            uint32_t blendMode = config.blendMode;
+            glm::vec3 gc = config.glowColor;
 
-            if (!configIt->second.texturePath.empty())
+            if (!config.texturePath.empty())
             {
-                auto texIt = textureEntries.find(configIt->second.texturePath);
+                auto texIt = textureEntries.find(config.texturePath);
                 if (texIt != textureEntries.end())
                 {
                     setToBind = texIt->second.descriptorSet;
@@ -311,7 +363,7 @@ namespace render::vfx
             }
 
             GPUVFXBillboardPushConstants pushConstants{};
-            pushConstants.emitterIndex = i;
+            pushConstants.emitterIndex = emitterIdx;
             pushConstants.alphaClipThreshold = alphaClip;
             pushConstants.blendMode = blendMode;
             pushConstants.glowColorR = gc.r;
@@ -323,7 +375,7 @@ namespace render::vfx
 
             // Use drawIndexedIndirect from shared draw command buffer
             // Compute shader sets instanceCount = min(head, maxTP) - 1 for ribbon emitters
-            vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
+            vk::DeviceSize offset = emitterIdx * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
         }
     }
