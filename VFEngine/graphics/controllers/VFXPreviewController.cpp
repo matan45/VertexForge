@@ -91,13 +91,13 @@ namespace controllers
         fbConfig.columns = currentParams.flipbookColumns;
         fbConfig.alphaClipThreshold = currentParams.alphaClipThreshold;
         fbConfig.additiveBlend = currentParams.additiveBlend;
-        fbConfig.renderMode = currentParams.renderMode;
+        fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
         fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
         fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
         pipeline->setFlipbookConfig(fbConfig);
-        
+
         if (!currentParams.meshPath.empty())
         {
             meshPipeline->setMesh(currentParams.meshPath);
@@ -224,7 +224,7 @@ namespace controllers
         fbConfig.columns = params.flipbookColumns;
         fbConfig.alphaClipThreshold = params.alphaClipThreshold;
         fbConfig.additiveBlend = params.additiveBlend;
-        fbConfig.renderMode = params.renderMode;
+        fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;

@@ -484,9 +484,8 @@ namespace render::mesh
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        renderPassInfo.clearValueCount = 0;
+        renderPassInfo.pClearValues = nullptr;
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     }

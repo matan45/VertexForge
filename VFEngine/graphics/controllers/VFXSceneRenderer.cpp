@@ -181,7 +181,7 @@ namespace controllers
             fbConfig.columns = storedConfig.flipbookColumns;
             fbConfig.alphaClipThreshold = storedConfig.alphaClipThreshold;
             fbConfig.additiveBlend = storedConfig.additiveBlend;
-            fbConfig.renderMode = static_cast<int>(storedConfig.renderMode);
+            fbConfig.renderMode = storedConfig.renderMode;
             fbConfig.stretchMultiplier = storedConfig.stretchMultiplier;
             fbConfig.glowColor = glowColor;
             cpuPipeline->setFlipbookConfig(fbConfig);

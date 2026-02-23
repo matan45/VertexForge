@@ -8,7 +8,6 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 
 namespace render::vfx
@@ -489,70 +488,13 @@ namespace render::vfx
         );
         core::ImageUtilities::createImageView(viewInfo, defaultTextureImageView);
 
-        std::vector<uint8_t> pixelData = {255, 255, 255, 255};
-        vk::DeviceSize imageSize = pixelData.size();
-
-        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        stagingRequest.size = imageSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                    vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data;
-        vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        if (mapResult == vk::Result::eSuccess)
-        {
-            std::memcpy(data, pixelData.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
-        }
-
-        auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
-
-        core::ImageUtilities::transitionImageLayout(cmd.get(), defaultTextureImage,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        vk::BufferImageCopy region{};
-        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        region.imageSubresource.layerCount = 1;
-        region.imageExtent = vk::Extent3D{texSize, texSize, 1};
-
-        cmd->copyBufferToImage(stagingBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, region);
-
-        core::ImageUtilities::transitionImageLayout(cmd.get(), defaultTextureImage,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        const std::array<uint8_t, 4> whitePixel = {255, 255, 255, 255};
+        core::ImageUtilities::uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
     }
 
     void VFXMeshPreviewPipeline::createSampler()
     {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        textureSampler = device.getLogicalDevice().createSampler(samplerInfo);
+        textureSampler = core::ImageUtilities::createVFXSampler(device.getLogicalDevice());
     }
 
 }

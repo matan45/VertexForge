@@ -11,6 +11,11 @@ namespace render::vfx
     void VFXMeshPreviewPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                                    const glm::vec3& cameraPos, float time) const
     {
+        if (!cameraUBOMapped)
+        {
+            return;
+        }
+
         VFXCameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;

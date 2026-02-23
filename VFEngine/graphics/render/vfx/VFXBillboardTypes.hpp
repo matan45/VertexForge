@@ -253,7 +253,7 @@ namespace render::vfx
         int columns = 1;
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
-        int renderMode = 0;
+        VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float stretchMultiplier = 1.0f;
         glm::vec3 glowColor{1.0f};
         float uvScrollSpeedU = 0.0f;

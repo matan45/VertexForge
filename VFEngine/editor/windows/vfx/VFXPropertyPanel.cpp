@@ -273,7 +273,7 @@ namespace editor::vfxeditor
             if (it == node.properties.end()) continue;
 
             auto& prop = it->second;
-            std::string widgetId = std::string("##panel_") + entry.key;
+            ImGui::PushID(entry.key);
 
             if (prop.type == vfx::VFXPropertyType::Int)
             {
@@ -284,7 +284,7 @@ namespace editor::vfxeditor
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth);
                     int v = *val;
-                    if (ImGui::DragInt(widgetId.c_str(), &v,
+                    if (ImGui::DragInt("##v", &v,
                                        1.0f, static_cast<int>(prop.min), static_cast<int>(prop.max)))
                     {
                         *val = v;
@@ -300,7 +300,7 @@ namespace editor::vfxeditor
                     ImGui::Text("%s", entry.label);
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth);
-                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.2f"))
+                    if (ImGui::DragFloat("##v", val, 0.1f, prop.min, prop.max, "%.2f"))
                     {
                         notifyChanged();
                     }
@@ -313,12 +313,14 @@ namespace editor::vfxeditor
                 {
                     ImGui::Text("%s", entry.label);
                     ImGui::SameLine();
-                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                    if (ImGui::Checkbox("##v", val))
                     {
                         notifyChanged();
                     }
                 }
             }
+
+            ImGui::PopID();
         }
     }
 
@@ -394,14 +396,15 @@ namespace editor::vfxeditor
             auto* val = std::get_if<float>(&prop.value);
             if (val)
             {
+                ImGui::PushID(re.key);
                 ImGui::Text("%s", re.label);
                 ImGui::SameLine(100.0f);
                 ImGui::SetNextItemWidth(inputWidth);
-                std::string wid = std::string("##panel_") + re.key;
-                if (ImGui::DragFloat(wid.c_str(), val, re.step, prop.min, prop.max, re.fmt))
+                if (ImGui::DragFloat("##v", val, re.step, prop.min, prop.max, re.fmt))
                 {
                     notifyChanged();
                 }
+                ImGui::PopID();
             }
         }
     }
@@ -422,14 +425,15 @@ namespace editor::vfxeditor
             auto* val = std::get_if<float>(&prop.value);
             if (val)
             {
+                ImGui::PushID(entry.key);
                 ImGui::Text("%s", entry.label);
                 ImGui::SameLine(100.0f);
                 ImGui::SetNextItemWidth(inputWidth);
-                std::string wid = std::string("##panel_") + entry.key;
-                if (ImGui::DragFloat(wid.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                if (ImGui::DragFloat("##v", val, 0.01f, prop.min, prop.max, "%.2f"))
                 {
                     notifyChanged();
                 }
+                ImGui::PopID();
             }
         }
     }
@@ -487,7 +491,7 @@ namespace editor::vfxeditor
             if (it == node.properties.end()) continue;
 
             auto& prop = it->second;
-            std::string widgetId = std::string("##panel_") + entry.key;
+            ImGui::PushID(entry.key);
 
             bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
             if (disableWidget) ImGui::BeginDisabled();
@@ -500,7 +504,7 @@ namespace editor::vfxeditor
                     ImGui::Text("%s", entry.label);
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth);
-                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                    if (ImGui::DragFloat("##v", val, 0.01f, prop.min, prop.max, "%.2f"))
                     {
                         notifyChanged();
                     }
@@ -513,7 +517,7 @@ namespace editor::vfxeditor
                 {
                     ImGui::Text("%s", entry.label);
                     ImGui::SameLine();
-                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                    if (ImGui::Checkbox("##v", val))
                     {
                         notifyChanged();
                     }
@@ -521,6 +525,7 @@ namespace editor::vfxeditor
             }
 
             if (disableWidget) ImGui::EndDisabled();
+            ImGui::PopID();
         }
     }
 
