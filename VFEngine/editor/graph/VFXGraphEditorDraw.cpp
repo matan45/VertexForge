@@ -262,7 +262,7 @@ namespace editor::graph {
 
         ImGui::Spacing();
 
-        drawNodeProperties(node, "", 70, 50);
+        drawNodeProperties(node, "", 140, 50);
 
         ImGui::Spacing();
 
