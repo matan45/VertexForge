@@ -82,6 +82,12 @@ struct GPUEmitterConfig
     float softParticleDistance;
     float stretchMultiplier;
     uint meshIndexCount;
+
+    // Ribbon (VK-624)
+    uint maxTrailPoints;
+    float ribbonWidth;
+    float ribbonMinDistance;
+    float _ribbonPad;
 };
 
 struct GPUEmitterState
@@ -125,6 +131,18 @@ layout(std430, set = 0, binding = 3) writeonly buffer DrawCommandBuffer {
 layout(std430, set = 0, binding = 4) readonly buffer LUTBuffer {
     vec4 lutData[];
 };
+
+// VK-624: Ribbon ring buffer - stores particle indices in spawn order per emitter
+layout(std430, set = 0, binding = 5) buffer RibbonRingBuffer {
+    uint ribbonRing[];
+};
+
+layout(std430, set = 0, binding = 6) buffer RibbonHeadBuffer {
+    uint ribbonHeads[];
+};
+
+const uint MAX_TRAIL_POINTS_STRIDE = 256u;
+const uint RENDER_MODE_RIBBON = 4u;
 
 const uint LUT_FLAG_COLOR = 1u;
 const uint LUT_FLAG_SIZE = 2u;
@@ -673,6 +691,13 @@ void main()
             p.velocity = dir * config.startSpeed;
 
             p.velocity = rotation * p.velocity;
+
+            // Ribbon (VK-624): record spawn order in ring buffer
+            if (config.renderMode == RENDER_MODE_RIBBON && config.maxTrailPoints > 0u) {
+                uint head = atomicAdd(ribbonHeads[pc.emitterIndex], 1u);
+                uint slot = head % config.maxTrailPoints;
+                ribbonRing[pc.emitterIndex * MAX_TRAIL_POINTS_STRIDE + slot] = particleIdx;
+            }
         }
     }
 
@@ -685,10 +710,25 @@ void main()
 
     if (gl_GlobalInvocationID.x == 0u)
     {
-        drawCommands[pc.emitterIndex].indexCount = configs[pc.emitterIndex].meshIndexCount;
-        drawCommands[pc.emitterIndex].instanceCount = maxParts;
-        drawCommands[pc.emitterIndex].firstIndex = 0u;
-        drawCommands[pc.emitterIndex].vertexOffset = 0;
-        drawCommands[pc.emitterIndex].firstInstance = particleOffset;
+        if (config.renderMode == RENDER_MODE_RIBBON && config.maxTrailPoints > 0u)
+        {
+            // Ribbon: each instance = one quad segment between two trail points
+            uint head = ribbonHeads[pc.emitterIndex];
+            uint usedPoints = min(head, config.maxTrailPoints);
+            uint segments = (usedPoints > 1u) ? (usedPoints - 1u) : 0u;
+            drawCommands[pc.emitterIndex].indexCount = 6u;
+            drawCommands[pc.emitterIndex].instanceCount = segments;
+            drawCommands[pc.emitterIndex].firstIndex = 0u;
+            drawCommands[pc.emitterIndex].vertexOffset = 0;
+            drawCommands[pc.emitterIndex].firstInstance = 0u;
+        }
+        else
+        {
+            drawCommands[pc.emitterIndex].indexCount = configs[pc.emitterIndex].meshIndexCount;
+            drawCommands[pc.emitterIndex].instanceCount = maxParts;
+            drawCommands[pc.emitterIndex].firstIndex = 0u;
+            drawCommands[pc.emitterIndex].vertexOffset = 0;
+            drawCommands[pc.emitterIndex].firstInstance = particleOffset;
+        }
     }
 }

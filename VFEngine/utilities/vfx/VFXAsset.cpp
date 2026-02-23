@@ -160,7 +160,7 @@ namespace vfx
             // Render mode & soft particles (VK-494)
             emitterNode.properties["renderMode"] = VFXProperty{
                 "renderMode", VFXPropertyType::Int,
-                EmitterDefaults::RENDER_MODE, 0.0f, 3.0f
+                EmitterDefaults::RENDER_MODE, 0.0f, 4.0f
             };
             emitterNode.properties["softParticleDistance"] = VFXProperty{
                 "softParticleDistance", VFXPropertyType::Float,
@@ -175,6 +175,20 @@ namespace vfx
             emitterNode.properties["meshPath"] = VFXProperty{
                 "meshPath", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
+            };
+
+            // Ribbon (VK-624)
+            emitterNode.properties["maxTrailPoints"] = VFXProperty{
+                "maxTrailPoints", VFXPropertyType::Int,
+                EmitterDefaults::MAX_TRAIL_POINTS, 2.0f, 256.0f
+            };
+            emitterNode.properties["ribbonWidth"] = VFXProperty{
+                "ribbonWidth", VFXPropertyType::Float,
+                EmitterDefaults::RIBBON_WIDTH, 0.01f, 10.0f
+            };
+            emitterNode.properties["ribbonMinDistance"] = VFXProperty{
+                "ribbonMinDistance", VFXPropertyType::Float,
+                EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
             };
 
             return emitterNode;

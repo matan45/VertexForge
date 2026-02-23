@@ -338,13 +338,13 @@ namespace editor::vfxeditor
                 auto& prop = rmIt->second;
                 if (auto* val = std::get_if<int32_t>(&prop.value))
                 {
-                    currentRenderMode = std::clamp(*val, 0, 3);
+                    currentRenderMode = std::clamp(*val, 0, 4);
                     ImGui::Text("Render Mode");
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    const char* modes[] = {"Billboard", "Stretched", "Horizontal", "Mesh Particle"};
+                    const char* modes[] = {"Billboard", "Stretched", "Horizontal", "Mesh Particle", "Ribbon"};
                     int current = currentRenderMode;
-                    if (ImGui::Combo("##panel_renderMode", &current, modes, 4))
+                    if (ImGui::Combo("##panel_renderMode", &current, modes, 5))
                     {
                         *val = current;
                         currentRenderMode = current;
@@ -397,8 +397,55 @@ namespace editor::vfxeditor
             }
         }
 
-        // Disable flipbook/stretch in mesh mode
+        // Ribbon properties (VK-624) - shown only in Ribbon mode
+        if (currentRenderMode == 4)
+        {
+            struct RibbonEntry { const char* key; const char* label; float step; const char* fmt; };
+            static constexpr RibbonEntry ribbonEntries[] = {
+                {"ribbonWidth",       "Width",        0.01f, "%.2f"},
+                {"ribbonMinDistance",  "Min Distance", 0.01f, "%.2f"},
+            };
+
+            // Max trail points (int slider)
+            auto tpIt = node.properties.find("maxTrailPoints");
+            if (tpIt != node.properties.end())
+            {
+                auto* val = std::get_if<int32_t>(&tpIt->second.value);
+                if (val)
+                {
+                    ImGui::Text("Trail Points");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::SliderInt("##panel_maxTrailPoints", val, 2, 256))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+
+            for (const auto& re : ribbonEntries)
+            {
+                auto it = node.properties.find(re.key);
+                if (it == node.properties.end()) continue;
+                auto& prop = it->second;
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", re.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    std::string wid = std::string("##panel_") + re.key;
+                    if (ImGui::DragFloat(wid.c_str(), val, re.step, prop.min, prop.max, re.fmt))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
+        // Disable flipbook/stretch in mesh/ribbon mode
         bool isMeshMode = (currentRenderMode == 3);
+        bool isRibbonMode = (currentRenderMode == 4);
 
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
@@ -416,9 +463,9 @@ namespace editor::vfxeditor
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
 
-            // Disable stretch unless StretchedBillboard; disable flipbook-related in mesh mode (VK-494, VK-496)
+            // Disable stretch unless StretchedBillboard; disable in mesh/ribbon mode (VK-494, VK-496, VK-624)
             bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
-            if (isMeshMode && (strcmp(entry.key, "stretchMultiplier") == 0))
+            if ((isMeshMode || isRibbonMode) && (strcmp(entry.key, "stretchMultiplier") == 0))
                 disableWidget = true;
             if (disableWidget) ImGui::BeginDisabled();
 

@@ -39,6 +39,11 @@ namespace services
 
         // Mesh particle (VK-496)
         std::string meshPath;
+
+        // Ribbon (VK-624)
+        int maxTrailPoints = 64;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
     };
 
     class IVFXPreviewProvider

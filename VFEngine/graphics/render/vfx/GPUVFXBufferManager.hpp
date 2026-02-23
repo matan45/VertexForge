@@ -40,6 +40,12 @@ namespace render::vfx
         vk::DeviceMemory lutMemory;
         void* lutMapped = nullptr;
 
+        // Ribbon (VK-624)
+        vk::Buffer ribbonRingBuffer;
+        vk::DeviceMemory ribbonRingMemory;
+        vk::Buffer ribbonHeadBuffer;
+        vk::DeviceMemory ribbonHeadMemory;
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -69,12 +75,16 @@ namespace render::vfx
         vk::Buffer getStateBuffer() const { return stateBuffer; }
         vk::Buffer getDrawCommandBuffer() const { return drawCommandBuffer; }
         vk::Buffer getLUTBuffer() const { return lutBuffer; }
+        vk::Buffer getRibbonRingBuffer() const { return ribbonRingBuffer; }
+        vk::Buffer getRibbonHeadBuffer() const { return ribbonHeadBuffer; }
 
         vk::DeviceSize getParticleBufferSize() const;
         vk::DeviceSize getConfigBufferSize() const;
         vk::DeviceSize getStateBufferSize() const;
         vk::DeviceSize getDrawCommandBufferSize() const;
         vk::DeviceSize getLUTBufferSize() const;
+        vk::DeviceSize getRibbonRingBufferSize() const;
+        vk::DeviceSize getRibbonHeadBufferSize() const;
 
         void updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config);
         void updateEmitterState(uint32_t emitterIndex, const GPUEmitterState& state);
@@ -84,6 +94,7 @@ namespace render::vfx
         void resetAllActiveCounts(vk::CommandBuffer cmd);
         void uploadStateBuffer(vk::CommandBuffer cmd);
         void clearDrawCommands(vk::CommandBuffer cmd);
+        void clearRibbonHead(vk::CommandBuffer cmd, uint32_t emitterIndex);
         void clearParticleBufferIfNeeded(vk::CommandBuffer cmd);
 
         struct EmitterAllocation
@@ -112,6 +123,7 @@ namespace render::vfx
         bool createStateBuffer();
         bool createDrawCommandBuffer();
         bool createLUTBuffer();
+        bool createRibbonBuffers();
         void destroyBuffers();
     };
 }

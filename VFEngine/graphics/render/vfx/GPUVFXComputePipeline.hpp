@@ -33,6 +33,8 @@ namespace render::vfx
         vk::Buffer cachedStateBuffer;
         vk::Buffer cachedDrawCommandBuffer;
         vk::Buffer cachedLUTBuffer;
+        vk::Buffer cachedRibbonRingBuffer;
+        vk::Buffer cachedRibbonHeadBuffer;
 
     public:
         explicit GPUVFXComputePipeline(core::Device& device);
@@ -50,7 +52,9 @@ namespace render::vfx
             vk::Buffer configBuffer,
             vk::Buffer stateBuffer,
             vk::Buffer drawCommandBuffer,
-            vk::Buffer lutBuffer
+            vk::Buffer lutBuffer,
+            vk::Buffer ribbonRingBuffer,
+            vk::Buffer ribbonHeadBuffer
         );
 
         void dispatch(
@@ -65,7 +69,9 @@ namespace render::vfx
             vk::CommandBuffer cmd,
             vk::Buffer particleBuffer,
             vk::Buffer stateBuffer,
-            vk::Buffer drawCommandBuffer
+            vk::Buffer drawCommandBuffer,
+            vk::Buffer ribbonRingBuffer = nullptr,
+            vk::Buffer ribbonHeadBuffer = nullptr
         );
 
         void insertBarriersBeforeCompute(

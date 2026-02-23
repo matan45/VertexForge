@@ -76,7 +76,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -102,6 +102,18 @@ namespace render::vfx
         bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // VK-624: Ribbon ring buffer
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[5].descriptorCount = 1;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // VK-624: Ribbon head buffer
+        bindings[6].binding = 6;
+        bindings[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[6].descriptorCount = 1;
+        bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -163,7 +175,7 @@ namespace render::vfx
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 5;
+        poolSizes[0].descriptorCount = 7;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -191,19 +203,25 @@ namespace render::vfx
         vk::Buffer configBuffer,
         vk::Buffer stateBuffer,
         vk::Buffer drawCommandBuffer,
-        vk::Buffer lutBuffer)
+        vk::Buffer lutBuffer,
+        vk::Buffer ribbonRingBuffer,
+        vk::Buffer ribbonHeadBuffer)
     {
         if (particleBuffer != cachedParticleBuffer ||
             configBuffer != cachedConfigBuffer ||
             stateBuffer != cachedStateBuffer ||
             drawCommandBuffer != cachedDrawCommandBuffer ||
-            lutBuffer != cachedLUTBuffer)
+            lutBuffer != cachedLUTBuffer ||
+            ribbonRingBuffer != cachedRibbonRingBuffer ||
+            ribbonHeadBuffer != cachedRibbonHeadBuffer)
         {
             cachedParticleBuffer = particleBuffer;
             cachedConfigBuffer = configBuffer;
             cachedStateBuffer = stateBuffer;
             cachedDrawCommandBuffer = drawCommandBuffer;
             cachedLUTBuffer = lutBuffer;
+            cachedRibbonRingBuffer = ribbonRingBuffer;
+            cachedRibbonHeadBuffer = ribbonHeadBuffer;
             descriptorsNeedUpdate = true;
         }
     }
@@ -242,7 +260,17 @@ namespace render::vfx
         lutInfo.offset = 0;
         lutInfo.range = VK_WHOLE_SIZE;
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        vk::DescriptorBufferInfo ribbonRingInfo{};
+        ribbonRingInfo.buffer = cachedRibbonRingBuffer;
+        ribbonRingInfo.offset = 0;
+        ribbonRingInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo ribbonHeadInfo{};
+        ribbonHeadInfo.buffer = cachedRibbonHeadBuffer;
+        ribbonHeadInfo.offset = 0;
+        ribbonHeadInfo.range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 7> writes{};
 
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
@@ -273,6 +301,18 @@ namespace render::vfx
         writes[4].descriptorCount = 1;
         writes[4].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[4].pBufferInfo = &lutInfo;
+
+        writes[5].dstSet = descriptorSet;
+        writes[5].dstBinding = 5;
+        writes[5].descriptorCount = 1;
+        writes[5].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[5].pBufferInfo = &ribbonRingInfo;
+
+        writes[6].dstSet = descriptorSet;
+        writes[6].dstBinding = 6;
+        writes[6].descriptorCount = 1;
+        writes[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[6].pBufferInfo = &ribbonHeadInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
 
@@ -351,27 +391,59 @@ namespace render::vfx
         vk::CommandBuffer cmd,
         vk::Buffer particleBuffer,
         vk::Buffer stateBuffer,
-        vk::Buffer drawCommandBuffer)
+        vk::Buffer drawCommandBuffer,
+        vk::Buffer ribbonRingBuffer,
+        vk::Buffer ribbonHeadBuffer)
     {
-        std::array<vk::BufferMemoryBarrier, 3> barriers{};
+        std::vector<vk::BufferMemoryBarrier> barriers;
+        barriers.reserve(5);
 
-        barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        barriers[0].buffer = particleBuffer;
-        barriers[0].offset = 0;
-        barriers[0].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier particleBarrier{};
+        particleBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        particleBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        particleBarrier.buffer = particleBuffer;
+        particleBarrier.offset = 0;
+        particleBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(particleBarrier);
 
-        barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        barriers[1].buffer = stateBuffer;
-        barriers[1].offset = 0;
-        barriers[1].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier stateBarrier{};
+        stateBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        stateBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        stateBarrier.buffer = stateBuffer;
+        stateBarrier.offset = 0;
+        stateBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(stateBarrier);
 
-        barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barriers[2].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
-        barriers[2].buffer = drawCommandBuffer;
-        barriers[2].offset = 0;
-        barriers[2].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier drawCmdBarrier{};
+        drawCmdBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        drawCmdBarrier.dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
+        drawCmdBarrier.buffer = drawCommandBuffer;
+        drawCmdBarrier.offset = 0;
+        drawCmdBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(drawCmdBarrier);
+
+        // VK-624: Ribbon buffers (compute write -> vertex shader read)
+        if (ribbonRingBuffer)
+        {
+            vk::BufferMemoryBarrier ringBarrier{};
+            ringBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            ringBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            ringBarrier.buffer = ribbonRingBuffer;
+            ringBarrier.offset = 0;
+            ringBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(ringBarrier);
+        }
+
+        if (ribbonHeadBuffer)
+        {
+            vk::BufferMemoryBarrier headBarrier{};
+            headBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            headBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            headBarrier.buffer = ribbonHeadBuffer;
+            headBarrier.offset = 0;
+            headBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(headBarrier);
+        }
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,

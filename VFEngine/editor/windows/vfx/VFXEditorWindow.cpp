@@ -184,6 +184,11 @@ namespace windows
         // Mesh particle (VK-496)
         params.meshPath = getString(*emitterNode, "meshPath", "");
 
+        // Ribbon (VK-624)
+        params.maxTrailPoints = getInt(*emitterNode, "maxTrailPoints", vfx::EmitterDefaults::MAX_TRAIL_POINTS);
+        params.ribbonWidth = getFloat(*emitterNode, "ribbonWidth", vfx::EmitterDefaults::RIBBON_WIDTH);
+        params.ribbonMinDistance = getFloat(*emitterNode, "ribbonMinDistance", vfx::EmitterDefaults::RIBBON_MIN_DISTANCE);
+
         previewPanel->setParams(params);
     }
 

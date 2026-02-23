@@ -7,6 +7,7 @@
 #include "../core/VulkanContext.hpp"
 #include "../render/vfx/VFXBillboardPipeline.hpp"
 #include "../render/vfx/VFXMeshPreviewPipeline.hpp"
+#include "../render/vfx/VFXRibbonPreviewPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
@@ -53,6 +54,10 @@ namespace controllers
         meshPipeline = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources, *previewMeshCache);
         meshPipeline->init();
 
+        // VK-624: Ribbon preview pipeline
+        ribbonPipeline = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
+        ribbonPipeline->init();
+
         render::vfx::VFXEmitterConfig config;
         config.spawnRate = currentParams.spawnRate;
         config.lifetime = currentParams.lifetime;
@@ -74,6 +79,9 @@ namespace controllers
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
         config.softParticleDistance = currentParams.softParticleDistance;
         config.stretchMultiplier = currentParams.stretchMultiplier;
+        config.maxTrailPoints = static_cast<uint32_t>(currentParams.maxTrailPoints);
+        config.ribbonWidth = currentParams.ribbonWidth;
+        config.ribbonMinDistance = currentParams.ribbonMinDistance;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -96,6 +104,14 @@ namespace controllers
         }
         meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, glowColor);
 
+        // VK-624: Configure ribbon preview pipeline
+        if (!currentParams.texturePath.empty())
+        {
+            ribbonPipeline->setTexture(currentParams.texturePath);
+        }
+        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
+                                            currentParams.ribbonWidth, glowColor);
+
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
@@ -109,6 +125,12 @@ namespace controllers
         }
 
         device.getLogicalDevice().waitIdle();
+
+        if (ribbonPipeline)
+        {
+            ribbonPipeline->cleanUp();
+            ribbonPipeline.reset();
+        }
 
         if (meshPipeline)
         {
@@ -186,6 +208,9 @@ namespace controllers
             config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
             config.softParticleDistance = params.softParticleDistance;
             config.stretchMultiplier = params.stretchMultiplier;
+            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
+            config.ribbonWidth = params.ribbonWidth;
+            config.ribbonMinDistance = params.ribbonMinDistance;
             particleSystem->setEmitterConfig(config);
         }
 
@@ -206,6 +231,14 @@ namespace controllers
             meshPipeline->setTexture(params.texturePath);
             meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, glowColor);
         }
+
+        // VK-624: Update ribbon preview pipeline
+        if (ribbonPipeline && ribbonPipeline->isInitialized())
+        {
+            ribbonPipeline->setTexture(params.texturePath);
+            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+                                                params.ribbonWidth, glowColor);
+        }
     }
 
     void VFXPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
@@ -219,6 +252,11 @@ namespace controllers
         if (meshPipeline && meshPipeline->isInitialized())
         {
             meshPipeline->updateCameraUBO(view, projection, cameraPos, time);
+        }
+
+        if (ribbonPipeline && ribbonPipeline->isInitialized())
+        {
+            ribbonPipeline->updateCameraUBO(view, projection, cameraPos, time);
         }
     }
 
@@ -283,6 +321,11 @@ namespace controllers
             meshPipeline->recreate();
         }
 
+        if (ribbonPipeline)
+        {
+            ribbonPipeline->recreate();
+        }
+
         lastExtent = swapChain.getSwapchainExtent();
     }
 
@@ -306,21 +349,33 @@ namespace controllers
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // VK-496: Route to mesh or billboard pipeline based on render mode
+        // Route to appropriate pipeline based on render mode
         bool useMeshPipeline = currentParams.renderMode == 3 &&
                                meshPipeline && meshPipeline->isInitialized() &&
                                meshPipeline->hasMesh();
 
+        // VK-624: Ribbon pipeline
+        bool useRibbonPipeline = currentParams.renderMode == 4 &&
+                                 ribbonPipeline && ribbonPipeline->isInitialized();
+
         if (particleSystem)
         {
-            auto instances = particleSystem->getInstanceData();
-            if (useMeshPipeline)
+            if (useRibbonPipeline)
             {
-                meshPipeline->setParticleInstances(instances);
+                auto segments = particleSystem->getRibbonSegments();
+                ribbonPipeline->setRibbonSegments(segments);
             }
             else
             {
-                pipeline->setParticleInstances(instances);
+                auto instances = particleSystem->getInstanceData();
+                if (useMeshPipeline)
+                {
+                    meshPipeline->setParticleInstances(instances);
+                }
+                else
+                {
+                    pipeline->setParticleInstances(instances);
+                }
             }
         }
 
@@ -328,7 +383,11 @@ namespace controllers
         commandBuffer.reset();
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
-        if (useMeshPipeline)
+        if (useRibbonPipeline)
+        {
+            ribbonPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+        else if (useMeshPipeline)
         {
             meshPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }

@@ -154,6 +154,11 @@ namespace vfx
         inline constexpr int RENDER_MODE = 0;
         inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
         inline constexpr float STRETCH_MULTIPLIER = 1.0f;
+
+        // Ribbon (VK-624)
+        inline constexpr int MAX_TRAIL_POINTS = 64;
+        inline constexpr float RIBBON_WIDTH = 1.0f;
+        inline constexpr float RIBBON_MIN_DISTANCE = 0.1f;
     }
 
     namespace ModifierDefaults

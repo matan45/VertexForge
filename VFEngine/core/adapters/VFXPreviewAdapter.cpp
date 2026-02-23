@@ -65,6 +65,9 @@ namespace core
         controllerParams.softParticleDistance = params.softParticleDistance;
         controllerParams.stretchMultiplier = params.stretchMultiplier;
         controllerParams.meshPath = params.meshPath;
+        controllerParams.maxTrailPoints = params.maxTrailPoints;
+        controllerParams.ribbonWidth = params.ribbonWidth;
+        controllerParams.ribbonMinDistance = params.ribbonMinDistance;
 
         controller->setParams(controllerParams);
     }

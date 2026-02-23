@@ -66,12 +66,20 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createRibbonBuffers())
+            {
+                loggerError("GPUVFXBufferManager: Failed to create ribbon buffers");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
                            getStateBufferSize() + getDrawCommandBufferSize() +
-                           getLUTBufferSize()) / (1024.0f * 1024.0f));
+                           getLUTBufferSize() + getRibbonRingBufferSize() +
+                           getRibbonHeadBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -247,6 +255,8 @@ namespace render::vfx
         core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, drawCommandBuffer, drawCommandMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, lutBuffer, lutMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, ribbonRingBuffer, ribbonRingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, ribbonHeadBuffer, ribbonHeadMemory);
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const
@@ -276,6 +286,17 @@ namespace render::vfx
                sizeof(glm::vec4);
     }
 
+    vk::DeviceSize GPUVFXBufferManager::getRibbonRingBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(maxEmitters) *
+               GPUVFXConstants::MAX_TRAIL_POINTS * sizeof(uint32_t);
+    }
+
+    vk::DeviceSize GPUVFXBufferManager::getRibbonHeadBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(maxEmitters) * sizeof(uint32_t);
+    }
+
     bool GPUVFXBufferManager::createLUTBuffer()
     {
         core::BufferInfoRequest request(
@@ -298,6 +319,49 @@ namespace render::vfx
             return true;
         }
         return false;
+    }
+
+    bool GPUVFXBufferManager::createRibbonBuffers()
+    {
+        // Ring buffer: stores particle indices in spawn order per emitter
+        core::BufferInfoRequest ringRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getRibbonRingBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        core::BufferUtilities::createBuffer(ringRequest, ribbonRingBuffer, ribbonRingMemory);
+        if (!ribbonRingBuffer || !ribbonRingMemory)
+        {
+            return false;
+        }
+
+        // Head buffer: write head position per emitter
+        core::BufferInfoRequest headRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getRibbonHeadBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        core::BufferUtilities::createBuffer(headRequest, ribbonHeadBuffer, ribbonHeadMemory);
+        return ribbonHeadBuffer && ribbonHeadMemory;
+    }
+
+    void GPUVFXBufferManager::clearRibbonHead(vk::CommandBuffer cmd, uint32_t emitterIndex)
+    {
+        if (!initialized || emitterIndex >= maxEmitters || !ribbonHeadBuffer)
+        {
+            return;
+        }
+
+        vk::DeviceSize offset = static_cast<vk::DeviceSize>(emitterIndex) * sizeof(uint32_t);
+        cmd.fillBuffer(ribbonHeadBuffer, offset, sizeof(uint32_t), 0);
     }
 
     void GPUVFXBufferManager::updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config)

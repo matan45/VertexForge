@@ -1,4 +1,4 @@
-#include "VFXSceneGPUPipeline.hpp"
+#include "VFXRibbonGPUPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
 #include "print/Logger.hpp"
@@ -7,7 +7,7 @@
 
 namespace render::vfx
 {
-    void VFXSceneGPUPipeline::updateCameraUBO(
+    void VFXRibbonGPUPipeline::updateCameraUBO(
         const glm::mat4& view,
         const glm::mat4& projection,
         const glm::vec3& cameraPos,
@@ -31,7 +31,7 @@ namespace render::vfx
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
-    void VFXSceneGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
+    void VFXRibbonGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
     {
         if (sceneDepthImageView != depthView)
         {
@@ -40,7 +40,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
+    void VFXRibbonGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
     {
         if (particleBuffer != cachedParticleBuffer || particleBufferSize != cachedParticleBufferSize)
         {
@@ -50,7 +50,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
+    void VFXRibbonGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
     {
         if (configBuffer != cachedConfigBuffer || configBufferSize != cachedConfigBufferSize)
         {
@@ -60,9 +60,24 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::writeDescriptors() const
+    void VFXRibbonGPUPipeline::updateRibbonBuffers(vk::Buffer ringBuffer, vk::DeviceSize ringBufferSize,
+                                                      vk::Buffer headBuffer, vk::DeviceSize headBufferSize)
     {
-        if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer)
+        if (ringBuffer != cachedRibbonRingBuffer || ringBufferSize != cachedRibbonRingBufferSize ||
+            headBuffer != cachedRibbonHeadBuffer || headBufferSize != cachedRibbonHeadBufferSize)
+        {
+            cachedRibbonRingBuffer = ringBuffer;
+            cachedRibbonRingBufferSize = ringBufferSize;
+            cachedRibbonHeadBuffer = headBuffer;
+            cachedRibbonHeadBufferSize = headBufferSize;
+            descriptorsNeedUpdate = true;
+        }
+    }
+
+    void VFXRibbonGPUPipeline::writeDescriptors() const
+    {
+        if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer ||
+            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer)
         {
             return;
         }
@@ -77,7 +92,7 @@ namespace render::vfx
         descriptorsNeedUpdate = false;
     }
 
-    void VFXSceneGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
+    void VFXRibbonGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -109,13 +124,22 @@ namespace render::vfx
         configInfo.offset = 0;
         configInfo.range = cachedConfigBufferSize;
 
-        // Scene depth for soft particles (VK-494)
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthInfo.imageView = sceneDepthImageView ? sceneDepthImageView : defaultTextureImageView;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        vk::DescriptorBufferInfo ringInfo{};
+        ringInfo.buffer = cachedRibbonRingBuffer;
+        ringInfo.offset = 0;
+        ringInfo.range = cachedRibbonRingBufferSize;
+
+        vk::DescriptorBufferInfo headInfo{};
+        headInfo.buffer = cachedRibbonHeadBuffer;
+        headInfo.offset = 0;
+        headInfo.range = cachedRibbonHeadBufferSize;
+
+        std::array<vk::WriteDescriptorSet, 7> writes{};
 
         writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
@@ -147,10 +171,22 @@ namespace render::vfx
         writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[4].pImageInfo = &depthInfo;
 
+        writes[5].dstSet = dstSet;
+        writes[5].dstBinding = 5;
+        writes[5].descriptorCount = 1;
+        writes[5].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[5].pBufferInfo = &ringInfo;
+
+        writes[6].dstSet = dstSet;
+        writes[6].dstBinding = 6;
+        writes[6].descriptorCount = 1;
+        writes[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[6].pBufferInfo = &headInfo;
+
         vkDevice.updateDescriptorSets(writes, {});
     }
 
-    void VFXSceneGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
+    void VFXRibbonGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
         emitterConfigs[emitterIndex].texturePath = texturePath;
 
@@ -166,7 +202,7 @@ namespace render::vfx
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("VFX GPU texture not found: {}", texturePath);
+            loggerWarning("VFX ribbon texture not found: {}", texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
@@ -188,7 +224,8 @@ namespace render::vfx
             entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
             entry.descriptorSet = allocateDescriptorSetFromPool();
 
-            if (cachedParticleBuffer && cachedConfigBuffer)
+            if (cachedParticleBuffer && cachedConfigBuffer &&
+                cachedRibbonRingBuffer && cachedRibbonHeadBuffer)
             {
                 writeDescriptorSet(entry.descriptorSet, entry.texture.get());
             }
@@ -197,41 +234,37 @@ namespace render::vfx
                 descriptorsNeedUpdate = true;
             }
 
-            loggerInfo("VFX GPU texture loaded: {}", texturePath);
+            loggerInfo("VFX ribbon texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX GPU texture '{}': {}", texturePath, e.what());
+            loggerError("Failed to load VFX ribbon texture '{}': {}", texturePath, e.what());
             textureEntries.erase(texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
         }
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
-                                                         float alphaClipThreshold, bool additiveBlend,
-                                                         const glm::vec3& glowColor)
+    void VFXRibbonGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
+                                                           float alphaClipThreshold, bool additiveBlend,
+                                                           const glm::vec3& glowColor)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
         emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
         emitterConfigs[emitterIndex].glowColor = glowColor;
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode)
-    {
-        emitterConfigs[emitterIndex].renderMode = renderMode;
-    }
-
-    void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
+    void VFXRibbonGPUPipeline::removeEmitter(uint32_t emitterIndex)
     {
         emitterConfigs.erase(emitterIndex);
     }
 
-    void VFXSceneGPUPipeline::recordCommandsInline(
+    void VFXRibbonGPUPipeline::recordCommandsInline(
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount) const
     {
-        if (!initialized || emitterCount == 0 || !cachedParticleBuffer)
+        if (!initialized || emitterCount == 0 || !cachedParticleBuffer ||
+            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer)
         {
             return;
         }
@@ -249,34 +282,24 @@ namespace render::vfx
 
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
-            // VK-496: Skip mesh particle emitters (rendered by VFXMeshGPUPipeline)
-            // VK-624: Skip ribbon emitters (rendered by VFXRibbonGPUPipeline)
+            // Only render emitters that have ribbon config
             auto configIt = emitterConfigs.find(i);
-            if (configIt != emitterConfigs.end() &&
-                (configIt->second.renderMode == RenderModeFlags::MeshParticle ||
-                 configIt->second.renderMode == RenderModeFlags::Ribbon))
+            if (configIt == emitterConfigs.end())
             {
                 continue;
             }
 
             vk::DescriptorSet setToBind = defaultDescriptorSet;
-            float alphaClip = 0.1f;
-            uint32_t blendMode = 0;
-            glm::vec3 gc(1.0f);
+            float alphaClip = configIt->second.alphaClipThreshold;
+            uint32_t blendMode = configIt->second.blendMode;
+            glm::vec3 gc = configIt->second.glowColor;
 
-            if (configIt != emitterConfigs.end())
+            if (!configIt->second.texturePath.empty())
             {
-                alphaClip = configIt->second.alphaClipThreshold;
-                blendMode = configIt->second.blendMode;
-                gc = configIt->second.glowColor;
-
-                if (!configIt->second.texturePath.empty())
+                auto texIt = textureEntries.find(configIt->second.texturePath);
+                if (texIt != textureEntries.end())
                 {
-                    auto texIt = textureEntries.find(configIt->second.texturePath);
-                    if (texIt != textureEntries.end())
-                    {
-                        setToBind = texIt->second.descriptorSet;
-                    }
+                    setToBind = texIt->second.descriptorSet;
                 }
             }
 
@@ -298,6 +321,8 @@ namespace render::vfx
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
 
+            // Use drawIndexedIndirect from shared draw command buffer
+            // Compute shader sets instanceCount = min(head, maxTP) - 1 for ribbon emitters
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
         }

@@ -255,6 +255,8 @@
     <ClInclude Include="render\vfx\VFXMeshPreviewPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
     <ClInclude Include="render\vfx\VFXQuadData.hpp" />
+    <ClInclude Include="render\vfx\VFXRibbonGPUPipeline.hpp" />
+    <ClInclude Include="render\vfx\VFXRibbonPreviewPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
     <ClInclude Include="render\volumetric\VolumetricFogComposite.hpp" />
@@ -429,6 +431,9 @@
     <ClCompile Include="render\vfx\VFXMeshGPUPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXMeshPreviewPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
+    <ClCompile Include="render\vfx\VFXRibbonGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXRibbonGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\VFXRibbonPreviewPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipelineSetup.cpp" />
@@ -506,6 +511,8 @@
     <None Include="..\..\resources\shaders\vfx\vfx_mesh_particle.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_mesh_preview.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_ribbon_gpu.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_ribbon_preview.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_temporal.glsl" />

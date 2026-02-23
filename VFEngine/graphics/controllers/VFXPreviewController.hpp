@@ -19,6 +19,7 @@ namespace render::vfx
 {
     class VFXBillboardPipeline;
     class VFXMeshPreviewPipeline;
+    class VFXRibbonPreviewPipeline;
     class VFXParticleSystem;
 }
 
@@ -61,6 +62,11 @@ namespace controllers
 
         // Mesh particle (VK-496)
         std::string meshPath;
+
+        // Ribbon (VK-624)
+        int maxTrailPoints = 64;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
     };
 
     class VFXPreviewController
@@ -71,6 +77,7 @@ namespace controllers
         std::unique_ptr<core::CommandPool> commandPool;
         std::unique_ptr<render::vfx::VFXBillboardPipeline> pipeline;
         std::unique_ptr<render::vfx::VFXMeshPreviewPipeline> meshPipeline;
+        std::unique_ptr<render::vfx::VFXRibbonPreviewPipeline> ribbonPipeline;
         std::unique_ptr<render::mesh::MeshGPUCache> previewMeshCache;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
 

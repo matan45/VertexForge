@@ -72,6 +72,7 @@ namespace render::vfx
         inline constexpr uint32_t StretchedBillboard = 1;
         inline constexpr uint32_t HorizontalBillboard = 2;
         inline constexpr uint32_t MeshParticle = 3;
+        inline constexpr uint32_t Ribbon = 4;
     }
 
     struct alignas(16) GPUEmitterConfig
@@ -116,8 +117,14 @@ namespace render::vfx
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
         uint32_t meshIndexCount = 6; // VK-496: defaults to 6 for billboard quad, set to mesh index count for mesh particles
+
+        // Ribbon (VK-624)
+        uint32_t maxTrailPoints = 0;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
+        float _ribbonPad = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 272, "GPUEmitterConfig must be 272 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 288, "GPUEmitterConfig must be 288 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -146,6 +153,9 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, renderMode) == 256, "GPUEmitterConfig::renderMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, softParticleDistance) == 260, "GPUEmitterConfig::softParticleDistance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, stretchMultiplier) == 264, "GPUEmitterConfig::stretchMultiplier offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, maxTrailPoints) == 272, "GPUEmitterConfig::maxTrailPoints offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, ribbonWidth) == 276, "GPUEmitterConfig::ribbonWidth offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, ribbonMinDistance) == 280, "GPUEmitterConfig::ribbonMinDistance offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -203,6 +213,7 @@ namespace render::vfx
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
         inline constexpr uint32_t LUT_CHANNELS = 5;
+        inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
     }
 
     namespace EmitterFlags

@@ -7,6 +7,7 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXMeshGPUPipeline.hpp"
+#include "../render/vfx/VFXRibbonGPUPipeline.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
@@ -68,6 +69,11 @@ namespace controllers
         if (gpuMeshPipeline)
         {
             gpuMeshPipeline->recreate(sceneRenderPass);
+        }
+
+        if (gpuRibbonPipeline)
+        {
+            gpuRibbonPipeline->recreate(sceneRenderPass);
         }
     }
 
@@ -205,6 +211,17 @@ namespace controllers
                                                         glowColor);
         }
 
+        // VK-624: Ribbon pipeline setup
+        if (gpuRibbonPipeline && instances[id].gpuDriven &&
+            storedConfig.renderMode == render::vfx::VFXRenderMode::Ribbon)
+        {
+            gpuRibbonPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
+            gpuRibbonPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
+                                                          storedConfig.alphaClipThreshold,
+                                                          storedConfig.additiveBlend,
+                                                          glowColor);
+        }
+
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
@@ -224,6 +241,12 @@ namespace controllers
             if (it->second.gpuDriven && gpuMeshPipeline)
             {
                 gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
+            }
+
+            // VK-624: Remove from ribbon pipeline
+            if (it->second.gpuDriven && gpuRibbonPipeline)
+            {
+                gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
 
             loggerInfo("Destroyed VFX instance {}", id);
@@ -436,6 +459,11 @@ namespace controllers
         {
             gpuMeshPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
         }
+
+        if (gpuRibbonPipeline && gpuRibbonPipeline->isInitialized())
+        {
+            gpuRibbonPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+        }
     }
 
     void VFXSceneRenderer::setSceneDepthImageView(vk::ImageView depthView)
@@ -448,6 +476,11 @@ namespace controllers
         if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
         {
             gpuMeshPipeline->setSceneDepthImageView(depthView);
+        }
+
+        if (gpuRibbonPipeline && gpuRibbonPipeline->isInitialized())
+        {
+            gpuRibbonPipeline->setSceneDepthImageView(depthView);
         }
     }
 

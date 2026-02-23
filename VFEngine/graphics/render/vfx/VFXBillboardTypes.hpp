@@ -15,7 +15,8 @@ namespace render::vfx
         Billboard = 0,
         StretchedBillboard = 1,
         HorizontalBillboard = 2,
-        MeshParticle = 3
+        MeshParticle = 3,
+        Ribbon = 4
     };
 
     struct VFXParticle
@@ -135,6 +136,78 @@ namespace render::vfx
         alignas(4) float time;
     };
 
+    struct VFXRibbonSegmentData
+    {
+        glm::vec3 posA;
+        float sizeA;
+        glm::vec3 posB;
+        float sizeB;
+        glm::vec4 colorA;
+        glm::vec4 colorB;
+        float trailT;
+        float glowIntensityA;
+        float glowIntensityB;
+        float _pad;
+
+        static vk::VertexInputBindingDescription getBindingDescription()
+        {
+            vk::VertexInputBindingDescription bindingDescription{};
+            bindingDescription.binding = 1;
+            bindingDescription.stride = sizeof(VFXRibbonSegmentData);
+            bindingDescription.inputRate = vk::VertexInputRate::eInstance;
+            return bindingDescription;
+        }
+
+        static std::array<vk::VertexInputAttributeDescription, 7> getAttributeDescriptions()
+        {
+            std::array<vk::VertexInputAttributeDescription, 7> attributes{};
+
+            // location 2: posA + sizeA (vec4)
+            attributes[0].binding = 1;
+            attributes[0].location = 2;
+            attributes[0].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[0].offset = offsetof(VFXRibbonSegmentData, posA);
+
+            // location 3: posB + sizeB (vec4)
+            attributes[1].binding = 1;
+            attributes[1].location = 3;
+            attributes[1].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[1].offset = offsetof(VFXRibbonSegmentData, posB);
+
+            // location 4: colorA (vec4)
+            attributes[2].binding = 1;
+            attributes[2].location = 4;
+            attributes[2].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[2].offset = offsetof(VFXRibbonSegmentData, colorA);
+
+            // location 5: colorB (vec4)
+            attributes[3].binding = 1;
+            attributes[3].location = 5;
+            attributes[3].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[3].offset = offsetof(VFXRibbonSegmentData, colorB);
+
+            // location 6: trailT (float)
+            attributes[4].binding = 1;
+            attributes[4].location = 6;
+            attributes[4].format = vk::Format::eR32Sfloat;
+            attributes[4].offset = offsetof(VFXRibbonSegmentData, trailT);
+
+            // location 7: glowIntensityA (float)
+            attributes[5].binding = 1;
+            attributes[5].location = 7;
+            attributes[5].format = vk::Format::eR32Sfloat;
+            attributes[5].offset = offsetof(VFXRibbonSegmentData, glowIntensityA);
+
+            // location 8: glowIntensityB (float)
+            attributes[6].binding = 1;
+            attributes[6].location = 8;
+            attributes[6].format = vk::Format::eR32Sfloat;
+            attributes[6].offset = offsetof(VFXRibbonSegmentData, glowIntensityB);
+
+            return attributes;
+        }
+    };
+
     struct VFXEmitterConfig
     {
         float spawnRate = 10.0f;
@@ -165,6 +238,11 @@ namespace render::vfx
 
         // Mesh particle (VK-496)
         std::string meshPath;
+
+        // Ribbon (VK-624)
+        uint32_t maxTrailPoints = 64;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
 
         // Glow color
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};

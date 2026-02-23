@@ -14,6 +14,13 @@ namespace render::vfx
 
     void VFXParticleSystem::setEmitterConfig(const VFXEmitterConfig& emitterConfig)
     {
+        // If render mode or trail points changed, reset ring buffer
+        if (config.renderMode != emitterConfig.renderMode ||
+            config.maxTrailPoints != emitterConfig.maxTrailPoints)
+        {
+            ribbonRing.clear();
+            ribbonHead = 0;
+        }
         config = emitterConfig;
     }
 
@@ -60,6 +67,10 @@ namespace render::vfx
         }
         spawnAccumulator = 0.0f;
         emissionTime = 0.0f;
+
+        // Ribbon (VK-624): reset ring buffer
+        ribbonRing.clear();
+        ribbonHead = 0;
     }
 
     std::vector<VFXInstanceData> VFXParticleSystem::getInstanceData() const
@@ -115,6 +126,61 @@ namespace render::vfx
         return instances;
     }
 
+    std::vector<VFXRibbonSegmentData> VFXParticleSystem::getRibbonSegments() const
+    {
+        std::vector<VFXRibbonSegmentData> segments;
+
+        if (config.renderMode != VFXRenderMode::Ribbon || config.maxTrailPoints < 2)
+            return segments;
+
+        uint32_t usedPoints = std::min(ribbonHead, config.maxTrailPoints);
+        if (usedPoints < 2 || ribbonRing.size() != config.maxTrailPoints)
+            return segments;
+
+        segments.reserve(usedPoints - 1);
+
+        for (uint32_t i = 0; i < usedPoints - 1; i++)
+        {
+            // Walk from newest to oldest
+            uint32_t slotA = (ribbonHead - 1 - i) % config.maxTrailPoints;
+            uint32_t slotB = (ribbonHead - 2 - i) % config.maxTrailPoints;
+
+            uint32_t pidxA = ribbonRing[slotA];
+            uint32_t pidxB = ribbonRing[slotB];
+
+            if (pidxA >= particles.size() || pidxB >= particles.size())
+                continue;
+
+            const VFXParticle& pA = particles[pidxA];
+            const VFXParticle& pB = particles[pidxB];
+
+            // Skip segments with dead endpoints
+            if (!pA.active || !pB.active)
+                continue;
+
+            // Skip segments where points are too close (minDistance check)
+            float dist = glm::length(pA.position - pB.position);
+            if (dist < config.ribbonMinDistance * 0.01f)
+                continue;
+
+            VFXRibbonSegmentData seg{};
+            seg.posA = pA.position;
+            seg.sizeA = pA.size;
+            seg.posB = pB.position;
+            seg.sizeB = pB.size;
+            seg.colorA = pA.color;
+            seg.colorB = pB.color;
+            seg.trailT = static_cast<float>(i) / static_cast<float>(usedPoints - 1);
+            seg.glowIntensityA = pA.glowIntensity;
+            seg.glowIntensityB = pB.glowIntensity;
+            seg._pad = 0.0f;
+
+            segments.push_back(seg);
+        }
+
+        return segments;
+    }
+
     size_t VFXParticleSystem::getActiveParticleCount() const
     {
         return static_cast<size_t>(std::count_if(particles.begin(), particles.end(),
@@ -149,6 +215,19 @@ namespace render::vfx
 
         // Assign deterministic seed for flipbook random start (VK-493)
         particle->spawnSeed = rng();
+
+        // Ribbon (VK-624): record spawn order in ring buffer
+        if (config.renderMode == VFXRenderMode::Ribbon && config.maxTrailPoints > 0)
+        {
+            if (ribbonRing.size() != config.maxTrailPoints)
+            {
+                ribbonRing.resize(config.maxTrailPoints, 0);
+            }
+            uint32_t particleIndex = static_cast<uint32_t>(particle - particles.data());
+            uint32_t slot = ribbonHead % config.maxTrailPoints;
+            ribbonRing[slot] = particleIndex;
+            ribbonHead++;
+        }
     }
 
     void VFXParticleSystem::updateParticle(VFXParticle& particle, float deltaTime)

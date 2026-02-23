@@ -69,6 +69,12 @@ struct GPUEmitterConfig
     float softParticleDistance;
     float stretchMultiplier;
     uint meshIndexCount;
+
+    // Ribbon (VK-624)
+    uint maxTrailPoints;
+    float ribbonWidth;
+    float ribbonMinDistance;
+    float _ribbonPad;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -264,6 +270,12 @@ struct GPUEmitterConfig
     float softParticleDistance;
     float stretchMultiplier;
     uint meshIndexCount;
+
+    // Ribbon (VK-624)
+    uint maxTrailPoints;
+    float ribbonWidth;
+    float ribbonMinDistance;
+    float _ribbonPad;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

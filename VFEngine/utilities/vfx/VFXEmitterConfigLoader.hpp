@@ -121,7 +121,7 @@ namespace vfx
 
         // Render mode & soft particles (VK-494)
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(
-            std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 3));
+            std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 4));
         config.softParticleDistance = std::max(0.0f,
             getFloat(*emitterNode, "softParticleDistance", EmitterDefaults::SOFT_PARTICLE_DISTANCE));
         config.stretchMultiplier = std::max(0.1f,
@@ -129,6 +129,14 @@ namespace vfx
 
         // Mesh particle (VK-496)
         config.meshPath = getString(*emitterNode, "meshPath", "");
+
+        // Ribbon (VK-624)
+        config.maxTrailPoints = static_cast<uint32_t>(
+            std::clamp(getInt(*emitterNode, "maxTrailPoints", EmitterDefaults::MAX_TRAIL_POINTS), 2, 256));
+        config.ribbonWidth = std::max(0.01f,
+            getFloat(*emitterNode, "ribbonWidth", EmitterDefaults::RIBBON_WIDTH));
+        config.ribbonMinDistance = std::max(0.0f,
+            getFloat(*emitterNode, "ribbonMinDistance", EmitterDefaults::RIBBON_MIN_DISTANCE));
 
         // Glow color
         config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);

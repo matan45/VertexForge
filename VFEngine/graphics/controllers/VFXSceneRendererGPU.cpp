@@ -3,6 +3,7 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXMeshGPUPipeline.hpp"
+#include "../render/vfx/VFXRibbonGPUPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/vfx/VFXLUTBaker.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
@@ -52,12 +53,23 @@ namespace controllers
                 return false;
             }
 
+            // VK-624: Ribbon pipeline
+            gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
+            gpuRibbonPipeline->init(renderPass);
+            if (!gpuRibbonPipeline->isInitialized())
+            {
+                loggerError("Failed to initialize GPU VFX ribbon pipeline");
+                return false;
+            }
+
             gpuComputePipeline->updateDescriptors(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getConfigBuffer(),
                 gpuBufferManager->getStateBuffer(),
                 gpuBufferManager->getDrawCommandBuffer(),
-                gpuBufferManager->getLUTBuffer()
+                gpuBufferManager->getLUTBuffer(),
+                gpuBufferManager->getRibbonRingBuffer(),
+                gpuBufferManager->getRibbonHeadBuffer()
             );
 
             gpuRenderPipeline->updateParticleBuffer(
@@ -81,6 +93,24 @@ namespace controllers
                 gpuBufferManager->getConfigBufferSize()
             );
 
+            // VK-624: Pass shared buffers to ribbon pipeline
+            gpuRibbonPipeline->updateParticleBuffer(
+                gpuBufferManager->getParticleBuffer(),
+                gpuBufferManager->getParticleBufferSize()
+            );
+
+            gpuRibbonPipeline->updateConfigBuffer(
+                gpuBufferManager->getConfigBuffer(),
+                gpuBufferManager->getConfigBufferSize()
+            );
+
+            gpuRibbonPipeline->updateRibbonBuffers(
+                gpuBufferManager->getRibbonRingBuffer(),
+                gpuBufferManager->getRibbonRingBufferSize(),
+                gpuBufferManager->getRibbonHeadBuffer(),
+                gpuBufferManager->getRibbonHeadBufferSize()
+            );
+
             loggerInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
                        gpuBufferManager->getMaxParticles(),
                        gpuBufferManager->getMaxEmitters());
@@ -96,6 +126,12 @@ namespace controllers
 
     void VFXSceneRenderer::cleanupGPUMode()
     {
+        if (gpuRibbonPipeline)
+        {
+            gpuRibbonPipeline->cleanup();
+            gpuRibbonPipeline.reset();
+        }
+
         if (gpuMeshPipeline)
         {
             gpuMeshPipeline->cleanup();
@@ -344,6 +380,11 @@ namespace controllers
         // VK-496: meshIndexCount defaults to 6 (billboard quad), overridden for mesh particles
         gpuConfig.meshIndexCount = 6;
 
+        // VK-624: Ribbon params
+        gpuConfig.maxTrailPoints = cpuConfig.maxTrailPoints;
+        gpuConfig.ribbonWidth = cpuConfig.ribbonWidth;
+        gpuConfig.ribbonMinDistance = cpuConfig.ribbonMinDistance;
+
         return gpuConfig;
     }
 
@@ -444,7 +485,9 @@ namespace controllers
             cmd,
             gpuBufferManager->getParticleBuffer(),
             gpuBufferManager->getStateBuffer(),
-            gpuBufferManager->getDrawCommandBuffer()
+            gpuBufferManager->getDrawCommandBuffer(),
+            gpuBufferManager->getRibbonRingBuffer(),
+            gpuBufferManager->getRibbonHeadBuffer()
         );
     }
 
@@ -479,6 +522,16 @@ namespace controllers
         if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
         {
             gpuMeshPipeline->recordCommandsInline(
+                cmd,
+                gpuBufferManager->getDrawCommandBuffer(),
+                gpuBufferManager->getMaxEmitters()
+            );
+        }
+
+        // VK-624: Record ribbon draw commands
+        if (gpuRibbonPipeline && gpuRibbonPipeline->isInitialized())
+        {
+            gpuRibbonPipeline->recordCommandsInline(
                 cmd,
                 gpuBufferManager->getDrawCommandBuffer(),
                 gpuBufferManager->getMaxEmitters()
