@@ -60,6 +60,7 @@ namespace core
         controllerParams.vfxAssetPath = params.vfxAssetPath;
         controllerParams.worldTransform = params.worldTransform;
         controllerParams.loop = params.loop;
+        controllerParams.entityId = params.entityId;
 
         return renderer->createInstance(controllerParams);
     }

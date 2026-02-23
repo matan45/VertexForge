@@ -131,6 +131,7 @@ namespace services
             createCmd.params.vfxAssetPath = vfxComp.vfxPath;
             createCmd.params.worldTransform = worldTransform.worldMatrix;
             createCmd.params.loop = vfxComp.loop;
+            createCmd.params.entityId = static_cast<uint32_t>(entity);
 
             VFXInstanceId instanceId = dispatcher.execute(createCmd);
 

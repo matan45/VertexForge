@@ -125,6 +125,7 @@ namespace controllers
         instance.id = id;
         instance.worldTransform = params.worldTransform;
         instance.loop = params.loop;
+        instance.entityId = params.entityId;
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())

@@ -42,6 +42,7 @@ namespace controllers
         std::string vfxAssetPath;
         glm::mat4 worldTransform{1.0f};
         bool loop = true;
+        uint32_t entityId = 0;
     };
 
     struct VFXRuntimeInstance
@@ -52,6 +53,7 @@ namespace controllers
         render::vfx::VFXEmitterConfig config;
         bool loop = true;
         bool active = true;
+        uint32_t entityId = 0;
 
         bool gpuDriven = false;
         uint32_t gpuEmitterIndex = UINT32_MAX;

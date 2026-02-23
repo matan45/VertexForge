@@ -655,6 +655,7 @@ namespace controllers
             notification.velocity = glm::vec3(event.velocity.x, event.velocity.y, event.velocity.z);
             notification.emitterIndex = event.emitterIndex;
             notification.parentInstanceId = parentId;
+            notification.entityId = parentInstance->entityId;
             notification.vfxAssetPath = vfxPath;
             events::EventDispatcher::instance().publish(notification);
         }

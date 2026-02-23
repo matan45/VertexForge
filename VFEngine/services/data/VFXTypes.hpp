@@ -13,6 +13,7 @@ namespace services
         std::string vfxAssetPath;
         glm::mat4 worldTransform{1.0f};
         bool loop = true;
+        uint32_t entityId = 0;
     };
 
     struct VFXCameraParams

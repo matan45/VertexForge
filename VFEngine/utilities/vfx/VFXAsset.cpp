@@ -546,8 +546,6 @@ namespace vfx
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX '{}' with {} warning(s)", vfxData.name, warningCount);
 
-            vfLogInfo("Loaded VFX '{}': {} nodes, {} links",
-                      vfxData.name, vfxData.graph.nodes.size(), vfxData.graph.links.size());
             return vfxData;
         }
         catch (const json::exception& e)

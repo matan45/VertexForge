@@ -115,6 +115,7 @@
     <ClInclude Include="adapters\ScriptPhysicsEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptUIEventBridge.hpp" />
+    <ClInclude Include="adapters\ScriptVFXEventBridge.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\SocketAdapter.hpp" />
     <ClInclude Include="adapters\TerrainBrushComputeAdapter.hpp" />
@@ -191,6 +192,7 @@
     <ClCompile Include="adapters\ScriptPhysicsEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptUIEventBridge.cpp" />
+    <ClCompile Include="adapters\ScriptVFXEventBridge.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\SocketAdapter.cpp" />
     <ClCompile Include="adapters\TerrainBrushComputeAdapter.cpp" />
