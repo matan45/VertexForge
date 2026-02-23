@@ -158,9 +158,9 @@ namespace render::vfx
             if (!pA.active || !pB.active)
                 continue;
 
-            // Skip segments where points are too close (minDistance check)
+            // Skip segments where points are too close
             float dist = glm::length(pA.position - pB.position);
-            if (dist < config.ribbonMinDistance * 0.01f)
+            if (dist < config.ribbonMinDistance)
                 continue;
 
             VFXRibbonSegmentData seg{};
