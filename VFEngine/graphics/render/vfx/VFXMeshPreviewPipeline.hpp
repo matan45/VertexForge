@@ -21,7 +21,6 @@ namespace render::mesh
 
 namespace render::vfx
 {
-    // Push constants for mesh preview shader
     struct VFXMeshPreviewPushConstants
     {
         float alphaClipThreshold = 0.1f;
@@ -64,7 +63,6 @@ namespace render::vfx
         uint32_t maxInstances = 1024;
         uint32_t currentInstanceCount = 0;
 
-        // Mesh data from cache
         std::string currentMeshPath;
         std::string currentMeshId;
         vk::Buffer meshVertexBuffer;

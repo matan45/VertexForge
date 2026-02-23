@@ -53,7 +53,6 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        // Binding 4: Scene depth texture (VK-494 soft particles)
         bindings[4].binding = 4;
         bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[4].descriptorCount = 1;

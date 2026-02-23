@@ -67,7 +67,6 @@ void main() {
     // UV: x = trail position, y = across width
     fragTexCoord = vec2(inTrailT, inTexCoord.x);
 
-    // UV scrolling (VK-623)
     fragTexCoord += vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
 
     // Interpolate color and glow between endpoints

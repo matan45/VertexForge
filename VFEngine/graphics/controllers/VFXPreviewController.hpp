@@ -44,8 +44,7 @@ namespace controllers
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
-
-        // Flipbook (VK-493)
+        
         int flipbookRows = 1;
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
@@ -54,21 +53,17 @@ namespace controllers
         // Rendering
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
-
-        // Render mode & soft particles (VK-494)
+        
         int renderMode = 0;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-
-        // Mesh particle (VK-496)
+        
         std::string meshPath;
-
-        // Ribbon (VK-624)
+        
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-
-        // UV Scrolling (VK-623)
+        
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
     };

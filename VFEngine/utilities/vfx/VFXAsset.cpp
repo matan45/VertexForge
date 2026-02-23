@@ -129,7 +129,6 @@ namespace vfx
                 std::string(""), 0.0f, 0.0f
             };
 
-            // Flipbook / Texture Sheet Animation (VK-493)
             emitterNode.properties["flipbookRows"] = VFXProperty{
                 "flipbookRows", VFXPropertyType::Int,
                 EmitterDefaults::FLIPBOOK_ROWS, 1.0f, 16.0f
@@ -157,7 +156,6 @@ namespace vfx
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
             };
 
-            // Render mode & soft particles (VK-494)
             emitterNode.properties["renderMode"] = VFXProperty{
                 "renderMode", VFXPropertyType::Int,
                 EmitterDefaults::RENDER_MODE, 0.0f, 4.0f
@@ -171,13 +169,11 @@ namespace vfx
                 EmitterDefaults::STRETCH_MULTIPLIER, 0.1f, 10.0f
             };
 
-            // Mesh particle (VK-496)
             emitterNode.properties["meshPath"] = VFXProperty{
                 "meshPath", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
             };
 
-            // Ribbon (VK-624)
             emitterNode.properties["maxTrailPoints"] = VFXProperty{
                 "maxTrailPoints", VFXPropertyType::Int,
                 EmitterDefaults::MAX_TRAIL_POINTS, 2.0f, 256.0f
@@ -191,7 +187,6 @@ namespace vfx
                 EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
             };
 
-            // UV Scrolling (VK-623)
             emitterNode.properties["uvScrollSpeedU"] = VFXProperty{
                 "uvScrollSpeedU", VFXPropertyType::Float,
                 EmitterDefaults::UV_SCROLL_SPEED_U, -10.0f, 10.0f

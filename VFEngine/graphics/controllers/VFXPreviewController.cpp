@@ -48,13 +48,11 @@ namespace controllers
 
         pipeline = std::make_unique<render::vfx::VFXBillboardPipeline>(device, swapChain, offscreenResources);
         pipeline->init();
-
-        // VK-496: Mesh preview pipeline
+        
         previewMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
         meshPipeline = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources, *previewMeshCache);
         meshPipeline->init();
-
-        // VK-624: Ribbon preview pipeline
+        
         ribbonPipeline = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
         ribbonPipeline->init();
 
@@ -88,13 +86,18 @@ namespace controllers
         {
             pipeline->setTexture(currentParams.texturePath);
         }
-        glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
-        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
-                                    currentParams.alphaClipThreshold, currentParams.additiveBlend,
-                                    currentParams.renderMode, currentParams.stretchMultiplier, glowColor,
-                                    currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
-
-        // VK-496: Set mesh and texture on mesh preview pipeline
+        render::vfx::VFXFlipbookConfig fbConfig;
+        fbConfig.rows = currentParams.flipbookRows;
+        fbConfig.columns = currentParams.flipbookColumns;
+        fbConfig.alphaClipThreshold = currentParams.alphaClipThreshold;
+        fbConfig.additiveBlend = currentParams.additiveBlend;
+        fbConfig.renderMode = currentParams.renderMode;
+        fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
+        fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
+        fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
+        fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
+        pipeline->setFlipbookConfig(fbConfig);
+        
         if (!currentParams.meshPath.empty())
         {
             meshPipeline->setMesh(currentParams.meshPath);
@@ -103,16 +106,15 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
-        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, glowColor,
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, fbConfig.glowColor,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
-        // VK-624: Configure ribbon preview pipeline
         if (!currentParams.texturePath.empty())
         {
             ribbonPipeline->setTexture(currentParams.texturePath);
         }
         ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
-                                            currentParams.ribbonWidth, glowColor,
+                                            currentParams.ribbonWidth, fbConfig.glowColor,
                                             currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         lastExtent = swapChain.getSwapchainExtent();
@@ -217,32 +219,36 @@ namespace controllers
             particleSystem->setEmitterConfig(config);
         }
 
-        glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        render::vfx::VFXFlipbookConfig fbConfig;
+        fbConfig.rows = params.flipbookRows;
+        fbConfig.columns = params.flipbookColumns;
+        fbConfig.alphaClipThreshold = params.alphaClipThreshold;
+        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.renderMode = params.renderMode;
+        fbConfig.stretchMultiplier = params.stretchMultiplier;
+        fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
+        fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
 
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
-            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
-                                        params.alphaClipThreshold, params.additiveBlend,
-                                        params.renderMode, params.stretchMultiplier, glowColor,
-                                        params.uvScrollSpeedU, params.uvScrollSpeedV);
+            pipeline->setFlipbookConfig(fbConfig);
         }
-
-        // VK-496: Update mesh preview pipeline
+        
         if (meshPipeline && meshPipeline->isInitialized())
         {
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
-            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, glowColor,
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
 
-        // VK-624: Update ribbon preview pipeline
         if (ribbonPipeline && ribbonPipeline->isInitialized())
         {
             ribbonPipeline->setTexture(params.texturePath);
             ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
-                                                params.ribbonWidth, glowColor,
+                                                params.ribbonWidth, fbConfig.glowColor,
                                                 params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
     }
@@ -361,7 +367,6 @@ namespace controllers
                                meshPipeline && meshPipeline->isInitialized() &&
                                meshPipeline->hasMesh();
 
-        // VK-624: Ribbon pipeline
         bool useRibbonPipeline = renderMode == render::vfx::VFXRenderMode::Ribbon &&
                                  ribbonPipeline && ribbonPipeline->isInitialized();
 

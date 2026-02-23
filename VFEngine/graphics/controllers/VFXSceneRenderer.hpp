@@ -2,6 +2,7 @@
 
 #include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../render/vfx/GPUVFXTypes.hpp"
+#include "../../services/data/VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -57,7 +58,7 @@ namespace controllers
         uint32_t gpuParticleOffset = 0;
         uint32_t gpuParticleCount = 0;
         float spawnAccumulator = 0.0f;
-        float emissionTime = 0.0f;  // Tracks total emission time for looping control
+        float emissionTime = 0.0f;
     };
 
     class VFXSceneRenderer
@@ -118,9 +119,7 @@ namespace controllers
         bool isInstanceActive(VFXInstanceId id) const;
 
         void update(float deltaTime);
-        void setCamera(const glm::mat4& view, const glm::mat4& projection,
-                       const glm::vec3& cameraPos, float time,
-                       float nearPlane = 0.1f, float farPlane = 1000.0f);
+        void setCamera(const services::VFXCameraParams& camera);
 
         void setSceneDepthImageView(vk::ImageView depthView);
 

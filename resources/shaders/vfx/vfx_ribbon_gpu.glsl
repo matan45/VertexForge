@@ -69,7 +69,6 @@ struct GPUEmitterConfig
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
@@ -185,7 +184,6 @@ void main() {
         : 0.0;
     fragTexCoord = vec2(trailT, inTexCoord.x + 0.5);
 
-    // UV scrolling (VK-623)
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
     // Interpolate color and lifetime
@@ -262,7 +260,6 @@ struct GPUEmitterConfig
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;

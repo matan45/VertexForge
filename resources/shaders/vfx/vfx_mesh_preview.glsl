@@ -55,7 +55,6 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(finalPos, 1.0);
 
-    // UV scrolling (VK-623)
     fragTexCoord = inTexCoord + vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;

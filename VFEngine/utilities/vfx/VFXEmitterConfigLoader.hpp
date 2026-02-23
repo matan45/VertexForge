@@ -119,7 +119,6 @@ namespace vfx
         config.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", EmitterDefaults::ALPHA_CLIP_THRESHOLD);
         config.additiveBlend = getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND);
 
-        // Render mode & soft particles (VK-494)
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(
             std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 4));
         config.softParticleDistance = std::max(0.0f,
@@ -127,10 +126,8 @@ namespace vfx
         config.stretchMultiplier = std::max(0.1f,
             getFloat(*emitterNode, "stretchMultiplier", EmitterDefaults::STRETCH_MULTIPLIER));
 
-        // Mesh particle (VK-496)
         config.meshPath = getString(*emitterNode, "meshPath", "");
 
-        // Ribbon (VK-624)
         config.maxTrailPoints = static_cast<uint32_t>(
             std::clamp(getInt(*emitterNode, "maxTrailPoints", EmitterDefaults::MAX_TRAIL_POINTS), 2, 256));
         config.ribbonWidth = std::max(0.01f,
@@ -138,7 +135,6 @@ namespace vfx
         config.ribbonMinDistance = std::max(0.0f,
             getFloat(*emitterNode, "ribbonMinDistance", EmitterDefaults::RIBBON_MIN_DISTANCE));
 
-        // UV Scrolling (VK-623)
         config.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", EmitterDefaults::UV_SCROLL_SPEED_U);
         config.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", EmitterDefaults::UV_SCROLL_SPEED_V);
 

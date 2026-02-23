@@ -70,7 +70,6 @@ namespace editor::graph {
         uint32_t getNodeIdFromPinId(uint32_t pinId) const { return pinId / 2; }
         bool isOutputPin(uint32_t pinId) const { return (pinId % 2) == 0; }
 
-        // VK-240: Shape pin ID helpers - use large offset to avoid conflicts
         static constexpr uint32_t SHAPE_PIN_OFFSET = 1000000;
         uint32_t getShapePinId(uint32_t nodeId) const { return SHAPE_PIN_OFFSET + nodeId; }
         bool isShapePin(uint32_t pinId) const { return pinId >= SHAPE_PIN_OFFSET; }

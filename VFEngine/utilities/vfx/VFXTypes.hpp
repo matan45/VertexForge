@@ -140,7 +140,6 @@ namespace vfx
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
 
-        // Flipbook defaults (VK-493)
         inline constexpr int FLIPBOOK_ROWS = 1;
         inline constexpr int FLIPBOOK_COLUMNS = 1;
         inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
@@ -150,17 +149,14 @@ namespace vfx
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
         inline constexpr bool ADDITIVE_BLEND = false;
 
-        // Render mode & soft particles (VK-494)
         inline constexpr int RENDER_MODE = 0;
         inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
         inline constexpr float STRETCH_MULTIPLIER = 1.0f;
 
-        // Ribbon (VK-624)
         inline constexpr int MAX_TRAIL_POINTS = 64;
         inline constexpr float RIBBON_WIDTH = 1.0f;
         inline constexpr float RIBBON_MIN_DISTANCE = 0.1f;
 
-        // UV Scrolling (VK-623)
         inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
     }

@@ -322,6 +322,118 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawMeshPathSelector(vfx::VFXNode& node, float inputWidth)
+    {
+        auto meshIt = node.properties.find("meshPath");
+        if (meshIt == node.properties.end()) return;
+
+        auto* meshVal = std::get_if<std::string>(&meshIt->second.value);
+        if (!meshVal) return;
+
+        ImGui::Text("Mesh");
+        ImGui::SameLine(100.0f);
+        std::string display = meshVal->empty() ? "(none)" : std::filesystem::path(*meshVal).filename().string();
+        char buf[256];
+        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        ImGui::SetNextItemWidth(inputWidth * 1.5f);
+        ImGui::InputText("##panel_meshPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+        ImGui::SameLine();
+        if (ImGui::Button("...##meshBrowse"))
+        {
+            nfd::FileDialog dialog;
+            std::string path = dialog.openFileDialog({
+                {L"VF Mesh", L"*.vfMesh"}
+            });
+            if (!path.empty())
+            {
+                *meshVal = path;
+                notifyChanged();
+            }
+        }
+        if (!meshVal->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("X##meshClear"))
+            {
+                meshVal->clear();
+                notifyChanged();
+            }
+        }
+    }
+
+    void VFXPropertyPanel::drawRibbonProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        struct RibbonEntry { const char* key; const char* label; float step; const char* fmt; };
+        static constexpr RibbonEntry ribbonEntries[] = {
+            {"ribbonWidth",       "Width",        0.01f, "%.2f"},
+            {"ribbonMinDistance",  "Min Distance", 0.01f, "%.2f"},
+        };
+
+        auto tpIt = node.properties.find("maxTrailPoints");
+        if (tpIt != node.properties.end())
+        {
+            auto* val = std::get_if<int32_t>(&tpIt->second.value);
+            if (val)
+            {
+                ImGui::Text("Trail Points");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                if (ImGui::SliderInt("##panel_maxTrailPoints", val, 2, 256))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+
+        for (const auto& re : ribbonEntries)
+        {
+            auto it = node.properties.find(re.key);
+            if (it == node.properties.end()) continue;
+            auto& prop = it->second;
+            auto* val = std::get_if<float>(&prop.value);
+            if (val)
+            {
+                ImGui::Text("%s", re.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                std::string wid = std::string("##panel_") + re.key;
+                if (ImGui::DragFloat(wid.c_str(), val, re.step, prop.min, prop.max, re.fmt))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+    }
+
+    void VFXPropertyPanel::drawUVScrollProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        struct UVScrollEntry { const char* key; const char* label; };
+        static constexpr UVScrollEntry uvScrollEntries[] = {
+            {"uvScrollSpeedU", "UV Scroll U"},
+            {"uvScrollSpeedV", "UV Scroll V"},
+        };
+
+        for (const auto& entry : uvScrollEntries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+            auto& prop = it->second;
+            auto* val = std::get_if<float>(&prop.value);
+            if (val)
+            {
+                ImGui::Text("%s", entry.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                std::string wid = std::string("##panel_") + entry.key;
+                if (ImGui::DragFloat(wid.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+    }
+
     void VFXPropertyPanel::drawRenderingProperties(vfx::VFXNode& node)
     {
         ImGui::Text("Rendering");
@@ -329,7 +441,6 @@ namespace editor::vfxeditor
 
         float inputWidth = 80.0f;
 
-        // Render mode combo (VK-494, VK-496)
         int currentRenderMode = 0;
         {
             auto rmIt = node.properties.find("renderMode");
@@ -354,122 +465,13 @@ namespace editor::vfxeditor
             }
         }
 
-        // Mesh path selector (VK-496) - shown only in Mesh Particle mode
         if (currentRenderMode == 3)
-        {
-            auto meshIt = node.properties.find("meshPath");
-            if (meshIt != node.properties.end())
-            {
-                auto* meshVal = std::get_if<std::string>(&meshIt->second.value);
-                if (meshVal)
-                {
-                    ImGui::Text("Mesh");
-                    ImGui::SameLine(100.0f);
-                    std::string display = meshVal->empty() ? "(none)" : std::filesystem::path(*meshVal).filename().string();
-                    char buf[256];
-                    std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
-                    buf[sizeof(buf) - 1] = '\0';
-                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    ImGui::InputText("##panel_meshPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
-                    ImGui::SameLine();
-                    if (ImGui::Button("...##meshBrowse"))
-                    {
-                        nfd::FileDialog dialog;
-                        std::string path = dialog.openFileDialog({
-                            {L"VF Mesh", L"*.vfMesh"}
-                        });
-                        if (!path.empty())
-                        {
-                            *meshVal = path;
-                            notifyChanged();
-                        }
-                    }
-                    if (!meshVal->empty())
-                    {
-                        ImGui::SameLine();
-                        if (ImGui::Button("X##meshClear"))
-                        {
-                            meshVal->clear();
-                            notifyChanged();
-                        }
-                    }
-                }
-            }
-        }
+            drawMeshPathSelector(node, inputWidth);
 
-        // Ribbon properties (VK-624) - shown only in Ribbon mode
         if (currentRenderMode == 4)
-        {
-            struct RibbonEntry { const char* key; const char* label; float step; const char* fmt; };
-            static constexpr RibbonEntry ribbonEntries[] = {
-                {"ribbonWidth",       "Width",        0.01f, "%.2f"},
-                {"ribbonMinDistance",  "Min Distance", 0.01f, "%.2f"},
-            };
+            drawRibbonProperties(node, inputWidth);
 
-            // Max trail points (int slider)
-            auto tpIt = node.properties.find("maxTrailPoints");
-            if (tpIt != node.properties.end())
-            {
-                auto* val = std::get_if<int32_t>(&tpIt->second.value);
-                if (val)
-                {
-                    ImGui::Text("Trail Points");
-                    ImGui::SameLine(100.0f);
-                    ImGui::SetNextItemWidth(inputWidth);
-                    if (ImGui::SliderInt("##panel_maxTrailPoints", val, 2, 256))
-                    {
-                        notifyChanged();
-                    }
-                }
-            }
-
-            for (const auto& re : ribbonEntries)
-            {
-                auto it = node.properties.find(re.key);
-                if (it == node.properties.end()) continue;
-                auto& prop = it->second;
-                auto* val = std::get_if<float>(&prop.value);
-                if (val)
-                {
-                    ImGui::Text("%s", re.label);
-                    ImGui::SameLine(100.0f);
-                    ImGui::SetNextItemWidth(inputWidth);
-                    std::string wid = std::string("##panel_") + re.key;
-                    if (ImGui::DragFloat(wid.c_str(), val, re.step, prop.min, prop.max, re.fmt))
-                    {
-                        notifyChanged();
-                    }
-                }
-            }
-        }
-
-        // UV Scrolling (VK-623) - shown for all render modes
-        {
-            struct UVScrollEntry { const char* key; const char* label; };
-            static constexpr UVScrollEntry uvScrollEntries[] = {
-                {"uvScrollSpeedU", "UV Scroll U"},
-                {"uvScrollSpeedV", "UV Scroll V"},
-            };
-
-            for (const auto& entry : uvScrollEntries)
-            {
-                auto it = node.properties.find(entry.key);
-                if (it == node.properties.end()) continue;
-                auto& prop = it->second;
-                auto* val = std::get_if<float>(&prop.value);
-                if (val)
-                {
-                    ImGui::Text("%s", entry.label);
-                    ImGui::SameLine(100.0f);
-                    ImGui::SetNextItemWidth(inputWidth);
-                    std::string wid = std::string("##panel_") + entry.key;
-                    if (ImGui::DragFloat(wid.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
-                    {
-                        notifyChanged();
-                    }
-                }
-            }
-        }
+        drawUVScrollProperties(node, inputWidth);
 
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
@@ -487,7 +489,6 @@ namespace editor::vfxeditor
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
 
-            // Disable stretch unless StretchedBillboard (mode 1)
             bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
             if (disableWidget) ImGui::BeginDisabled();
 

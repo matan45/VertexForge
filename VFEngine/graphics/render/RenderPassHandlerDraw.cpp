@@ -94,8 +94,14 @@ namespace render
 
         if (hasVFX)
         {
-            vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime,
-                                          currentNearPlane, currentFarPlane);
+            services::VFXCameraParams vfxCamera;
+            vfxCamera.view = currentView;
+            vfxCamera.projection = currentProjection;
+            vfxCamera.cameraPos = currentCameraPosition;
+            vfxCamera.time = currentTime;
+            vfxCamera.nearPlane = currentNearPlane;
+            vfxCamera.farPlane = currentFarPlane;
+            vfxRuntimeProvider->setCamera(vfxCamera);
             vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
         }
 

@@ -64,13 +64,11 @@ struct GPUEmitterConfig
     float flipbookRows;
     float flipbookFrameRate;
 
-    // Render mode & soft particles (VK-494)
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
@@ -83,7 +81,6 @@ struct GPUEmitterConfig
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
 
-// Render mode constants (VK-494)
 const uint RENDER_MODE_BILLBOARD = 0u;
 const uint RENDER_MODE_STRETCHED = 1u;
 const uint RENDER_MODE_HORIZONTAL = 2u;
@@ -137,7 +134,7 @@ void main() {
     vec3 vertexPos;
 
     if (config.renderMode == RENDER_MODE_STRETCHED) {
-        // Stretched billboard: stretch along velocity direction (VK-494)
+        // Stretched billboard: stretch along velocity direction
         float speed = length(p.velocity);
         if (speed < 0.001) {
             // Fallback to standard billboard
@@ -165,7 +162,7 @@ void main() {
                 + velDir * rotatedPos.y * p.size * config.stretchMultiplier;
         }
     } else if (config.renderMode == RENDER_MODE_HORIZONTAL) {
-        // Horizontal billboard: flat on XZ plane (VK-494)
+        // Horizontal billboard: flat on XZ plane
         vec3 right = vec3(1.0, 0.0, 0.0);
         vec3 forward = vec3(0.0, 0.0, 1.0);
         vertexPos = p.position
@@ -182,7 +179,7 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
-    // Compute linear view-space depth for soft particles (VK-494)
+    // Compute linear view-space depth for soft particles
     fragViewDepth = -(camera.view * vec4(vertexPos, 1.0)).z;
 
     float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
@@ -204,7 +201,6 @@ void main() {
     vec2 tileSize = vec2(1.0 / config.flipbookColumns, 1.0 / config.flipbookRows);
     fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
 
-    // UV scrolling (VK-623)
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
     fragColor = p.color;
@@ -278,7 +274,6 @@ struct GPUEmitterConfig
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
@@ -309,7 +304,7 @@ void main() {
 
     vec4 finalColor = texColor * fragColor;
 
-    // Soft particles: fade near scene geometry (VK-494)
+    // Soft particles: fade near scene geometry
     GPUEmitterConfig config = configs[pc.emitterIndex];
     if (config.softParticleDistance > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));

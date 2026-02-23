@@ -79,7 +79,6 @@ namespace editor::graph {
             case material::NodeType::OrmSample:
                 return std::make_unique<OrmSampleNode>();
 
-            // Type Conversions (VK-56)
             case material::NodeType::FloatToVec2:
                 return std::make_unique<FloatToVec2Node>();
             case material::NodeType::FloatToVec3:

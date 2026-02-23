@@ -40,7 +40,6 @@ namespace render::vfx
         vk::DeviceMemory lutMemory;
         void* lutMapped = nullptr;
 
-        // Ribbon (VK-624)
         vk::Buffer ribbonRingBuffer;
         vk::DeviceMemory ribbonRingMemory;
         vk::Buffer ribbonHeadBuffer;
@@ -77,6 +76,12 @@ namespace render::vfx
         vk::Buffer getLUTBuffer() const { return lutBuffer; }
         vk::Buffer getRibbonRingBuffer() const { return ribbonRingBuffer; }
         vk::Buffer getRibbonHeadBuffer() const { return ribbonHeadBuffer; }
+
+        GPUVFXBufferSet getBufferSet() const
+        {
+            return {particleBuffer, configBuffer, stateBuffer, drawCommandBuffer,
+                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer};
+        }
 
         vk::DeviceSize getParticleBufferSize() const;
         vk::DeviceSize getConfigBufferSize() const;

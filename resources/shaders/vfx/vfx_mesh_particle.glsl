@@ -1,11 +1,9 @@
 #type VERTEX
 #version 460 core
 
-// Mesh vertex attributes (64-byte Vertex: pos, normal, texCoord, boneIndices, boneWeights)
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexCoord;
-// locations 3-4 are boneIndices/boneWeights - not used for particles
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
@@ -89,12 +87,10 @@ struct GPUEmitterConfig
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
 
-    // UV Scrolling (VK-623)
     float uvScrollSpeedU;
     float uvScrollSpeedV;
     float _uvPad1;
@@ -163,7 +159,6 @@ void main() {
     // View-space depth for soft particles
     fragViewDepth = -(camera.view * vec4(worldPos, 1.0)).z;
 
-    // UV scrolling (VK-623)
     fragTexCoord = inTexCoord + vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
     fragColor = p.color;
     fragLifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
@@ -240,7 +235,6 @@ struct GPUEmitterConfig
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;

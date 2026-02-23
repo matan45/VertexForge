@@ -56,7 +56,6 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
-        // Scene depth texture for soft particles (VK-494)
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
@@ -68,7 +67,7 @@ namespace render::vfx
             std::string texturePath;
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
-            uint32_t renderMode = 0; // VK-496: skip mesh particle emitters
+            uint32_t renderMode = 0; 
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
         };
 

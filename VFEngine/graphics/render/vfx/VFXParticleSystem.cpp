@@ -68,7 +68,6 @@ namespace render::vfx
         spawnAccumulator = 0.0f;
         emissionTime = 0.0f;
 
-        // Ribbon (VK-624): reset ring buffer
         ribbonRing.clear();
         ribbonHead = 0;
     }
@@ -91,7 +90,6 @@ namespace render::vfx
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
                 instance.rotation = particle.rotation;
 
-                // Flipbook frame index computation (VK-493)
                 if (totalFrames > 1)
                 {
                     float frameIndex;
@@ -216,10 +214,8 @@ namespace render::vfx
         particle->initialDirection = direction;
         particle->velocity = direction * config.startSpeed;
 
-        // Assign deterministic seed for flipbook random start (VK-493)
         particle->spawnSeed = rng();
 
-        // Ribbon (VK-624): record spawn order in ring buffer
         if (config.renderMode == VFXRenderMode::Ribbon && config.maxTrailPoints > 0)
         {
             if (ribbonRing.size() != config.maxTrailPoints)

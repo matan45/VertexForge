@@ -112,18 +112,15 @@ namespace render::vfx
         float flipbookRows = 1.0f;
         float flipbookFrameRate = 0.0f;
 
-        // Render mode & soft particles (VK-494)
         uint32_t renderMode = RenderModeFlags::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-        uint32_t drawIndexCount = 6; // Index count for the draw command: 6 for billboard quad, overridden for mesh particles
+        uint32_t drawIndexCount = 6;
 
-        // Ribbon (VK-624)
         uint32_t maxTrailPoints = 0;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
 
-        // UV Scrolling (VK-623)
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
         float _uvPad1 = 0.0f;
@@ -270,6 +267,17 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+    };
+
+    struct GPUVFXBufferSet
+    {
+        vk::Buffer particleBuffer;
+        vk::Buffer configBuffer;
+        vk::Buffer stateBuffer;
+        vk::Buffer drawCommandBuffer;
+        vk::Buffer lutBuffer;
+        vk::Buffer ribbonRingBuffer;
+        vk::Buffer ribbonHeadBuffer;
     };
 
     struct VFXFlipbookPushConstants

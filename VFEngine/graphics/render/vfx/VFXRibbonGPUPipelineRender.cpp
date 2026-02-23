@@ -195,11 +195,9 @@ namespace render::vfx
         const std::string oldPath = config.texturePath;
         config.texturePath = texturePath;
 
-        // No change — skip ref-counting work
         if (oldPath == texturePath)
             return;
 
-        // Release old texture ref
         if (!oldPath.empty())
         {
             auto it = textureEntries.find(oldPath);
@@ -335,7 +333,6 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        // Iterate only over emitters that have ribbon config registered
         for (const auto& [emitterIdx, config] : emitterConfigs)
         {
             if (emitterIdx >= emitterCount)
@@ -373,8 +370,6 @@ namespace render::vfx
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
 
-            // Use drawIndexedIndirect from shared draw command buffer
-            // Compute shader sets instanceCount = min(head, maxTP) - 1 for ribbon emitters
             vk::DeviceSize offset = emitterIdx * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
         }

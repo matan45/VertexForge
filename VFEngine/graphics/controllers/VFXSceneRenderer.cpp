@@ -124,7 +124,7 @@ namespace controllers
         VFXRuntimeInstance instance;
         instance.id = id;
         instance.worldTransform = params.worldTransform;
-        instance.loop = params.loop;  // Component setting takes priority
+        instance.loop = params.loop;
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())
@@ -147,8 +147,7 @@ namespace controllers
                 instance.gpuEmitterIndex = allocation.emitterIndex;
                 instance.gpuParticleOffset = allocation.particleOffset;
                 instance.gpuParticleCount = allocation.particleCount;
-                instance.particleSystem = nullptr;  // No CPU particle system needed
-                instance.active = false;  // Start paused, require explicit playInstance() call
+                instance.active = false;
 
                 loggerInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
@@ -163,31 +162,31 @@ namespace controllers
         {
             instance.particleSystem = std::make_unique<render::vfx::VFXParticleSystem>();
             instance.particleSystem->setEmitterConfig(instance.config);
-            instance.active = false;  // Start paused, require explicit playInstance() call
+            instance.active = false;
         }
 
         instances[id] = std::move(instance);
-
-        // Set texture and config on pipelines
         const auto& storedConfig = instances[id].config;
         if (!storedConfig.texturePath.empty() && cpuPipeline)
         {
             cpuPipeline->setTexture(storedConfig.texturePath);
         }
 
-        // Extract glow color from modifier chain
         glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(storedConfig.modifiers);
 
-        // Set flipbook and rendering config on CPU pipeline (VK-493)
         if (cpuPipeline)
         {
-            cpuPipeline->setFlipbookConfig(storedConfig.flipbookRows, storedConfig.flipbookColumns,
-                                           storedConfig.alphaClipThreshold, storedConfig.additiveBlend,
-                                           static_cast<int>(storedConfig.renderMode), storedConfig.stretchMultiplier,
-                                           glowColor);
+            render::vfx::VFXFlipbookConfig fbConfig;
+            fbConfig.rows = storedConfig.flipbookRows;
+            fbConfig.columns = storedConfig.flipbookColumns;
+            fbConfig.alphaClipThreshold = storedConfig.alphaClipThreshold;
+            fbConfig.additiveBlend = storedConfig.additiveBlend;
+            fbConfig.renderMode = static_cast<int>(storedConfig.renderMode);
+            fbConfig.stretchMultiplier = storedConfig.stretchMultiplier;
+            fbConfig.glowColor = glowColor;
+            cpuPipeline->setFlipbookConfig(fbConfig);
         }
 
-        // Per-emitter GPU texture and rendering config
         if (gpuRenderPipeline && instances[id].gpuDriven)
         {
             gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
@@ -198,8 +197,7 @@ namespace controllers
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
         }
-
-        // VK-496: Mesh particle pipeline setup
+        
         if (gpuMeshPipeline && instances[id].gpuDriven &&
             storedConfig.renderMode == render::vfx::VFXRenderMode::MeshParticle)
         {
@@ -211,7 +209,6 @@ namespace controllers
                                                         glowColor);
         }
 
-        // VK-624: Ribbon pipeline setup
         if (gpuRibbonPipeline && instances[id].gpuDriven &&
             storedConfig.renderMode == render::vfx::VFXRenderMode::Ribbon)
         {
@@ -236,14 +233,12 @@ namespace controllers
             {
                 pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
             }
-
-            // VK-496: Remove from mesh pipeline
+            
             if (it->second.gpuDriven && gpuMeshPipeline)
             {
                 gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
-
-            // VK-624: Remove from ribbon pipeline
+            
             if (it->second.gpuDriven && gpuRibbonPipeline)
             {
                 gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
@@ -436,33 +431,34 @@ namespace controllers
         }
     }
 
-    void VFXSceneRenderer::setCamera(const glm::mat4& view, const glm::mat4& projection,
-                                      const glm::vec3& cameraPos, float time,
-                                      float nearPlane, float farPlane)
+    void VFXSceneRenderer::setCamera(const services::VFXCameraParams& camera)
     {
-        currentView = view;
-        currentProjection = projection;
-        currentCameraPos = cameraPos;
-        currentTime = time;
+        currentView = camera.view;
+        currentProjection = camera.projection;
+        currentCameraPos = camera.cameraPos;
+        currentTime = camera.time;
 
         if (cpuPipeline && cpuPipeline->isInitialized())
         {
-            cpuPipeline->updateCameraUBO(view, projection, cameraPos, time);
+            cpuPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos, camera.time);
         }
 
         if (gpuRenderPipeline && gpuRenderPipeline->isInitialized())
         {
-            gpuRenderPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+            gpuRenderPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
+                                               camera.time, camera.nearPlane, camera.farPlane);
         }
 
         if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
         {
-            gpuMeshPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+            gpuMeshPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
+                                             camera.time, camera.nearPlane, camera.farPlane);
         }
 
         if (gpuRibbonPipeline && gpuRibbonPipeline->isInitialized())
         {
-            gpuRibbonPipeline->updateCameraUBO(view, projection, cameraPos, time, nearPlane, farPlane);
+            gpuRibbonPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
+                                               camera.time, camera.nearPlane, camera.farPlane);
         }
     }
 

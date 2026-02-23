@@ -3,7 +3,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/Texture.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
@@ -243,13 +242,11 @@ namespace render::vfx
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        // Binding 5: Ribbon ring buffer SSBO (VK-624)
         bindings[5].binding = 5;
         bindings[5].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[5].descriptorCount = 1;
         bindings[5].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-        // Binding 6: Ribbon head buffer SSBO (VK-624)
         bindings[6].binding = 6;
         bindings[6].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[6].descriptorCount = 1;

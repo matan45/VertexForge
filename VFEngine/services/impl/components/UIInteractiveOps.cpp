@@ -122,8 +122,7 @@ namespace services {
             return std::nullopt;
         }
 
-        // Stub: actual preferred size calculation requires font metrics
-        // Will be implemented in VK-428 (Frame Preparation)
+
         return std::nullopt;
     }
 

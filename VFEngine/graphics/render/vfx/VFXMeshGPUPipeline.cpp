@@ -6,7 +6,6 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/Texture.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
 #include "print/Logger.hpp"
 #include "GPUVFXTypes.hpp"

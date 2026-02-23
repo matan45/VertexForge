@@ -44,8 +44,7 @@ namespace controllers
                 return false;
             }
             gpuRenderPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
-
-            // VK-496: Mesh particle pipeline
+            
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
             gpuMeshPipeline->init(renderPass);
@@ -56,7 +55,6 @@ namespace controllers
             }
             gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
-            // VK-624: Ribbon pipeline
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
             gpuRibbonPipeline->init(renderPass);
             if (!gpuRibbonPipeline->isInitialized())
@@ -66,15 +64,7 @@ namespace controllers
             }
             gpuRibbonPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
-            gpuComputePipeline->updateDescriptors(
-                gpuBufferManager->getParticleBuffer(),
-                gpuBufferManager->getConfigBuffer(),
-                gpuBufferManager->getStateBuffer(),
-                gpuBufferManager->getDrawCommandBuffer(),
-                gpuBufferManager->getLUTBuffer(),
-                gpuBufferManager->getRibbonRingBuffer(),
-                gpuBufferManager->getRibbonHeadBuffer()
-            );
+            gpuComputePipeline->updateDescriptors(gpuBufferManager->getBufferSet());
 
             gpuRenderPipeline->updateParticleBuffer(
                 gpuBufferManager->getParticleBuffer(),
@@ -85,8 +75,7 @@ namespace controllers
                 gpuBufferManager->getConfigBuffer(),
                 gpuBufferManager->getConfigBufferSize()
             );
-
-            // VK-496: Pass shared buffers to mesh pipeline
+            
             gpuMeshPipeline->updateParticleBuffer(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getParticleBufferSize()
@@ -97,7 +86,6 @@ namespace controllers
                 gpuBufferManager->getConfigBufferSize()
             );
 
-            // VK-624: Pass shared buffers to ribbon pipeline
             gpuRibbonPipeline->updateParticleBuffer(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getParticleBufferSize()
@@ -211,8 +199,7 @@ namespace controllers
                 instance.gpuParticleCount,
                 dist(gen)
             );
-
-            // VK-496: Set draw index count for mesh particle emitters
+            
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
             {
                 gpuConfig.drawIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
@@ -376,20 +363,16 @@ namespace controllers
             gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
         }
 
-        // Render mode & soft particles (VK-494)
         gpuConfig.renderMode = static_cast<uint32_t>(cpuConfig.renderMode);
         gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;
         gpuConfig.stretchMultiplier = cpuConfig.stretchMultiplier;
 
-        // VK-496: drawIndexCount defaults to 6 (billboard quad), overridden for mesh particles
         gpuConfig.drawIndexCount = 6;
 
-        // VK-624: Ribbon params
         gpuConfig.maxTrailPoints = cpuConfig.maxTrailPoints;
         gpuConfig.ribbonWidth = cpuConfig.ribbonWidth;
         gpuConfig.ribbonMinDistance = cpuConfig.ribbonMinDistance;
 
-        // VK-623: UV Scrolling
         gpuConfig.uvScrollSpeedU = cpuConfig.uvScrollSpeedU;
         gpuConfig.uvScrollSpeedV = cpuConfig.uvScrollSpeedV;
 
@@ -489,14 +472,7 @@ namespace controllers
             );
         }
 
-        gpuComputePipeline->insertBarriersAfterCompute(
-            cmd,
-            gpuBufferManager->getParticleBuffer(),
-            gpuBufferManager->getStateBuffer(),
-            gpuBufferManager->getDrawCommandBuffer(),
-            gpuBufferManager->getRibbonRingBuffer(),
-            gpuBufferManager->getRibbonHeadBuffer()
-        );
+        gpuComputePipeline->insertBarriersAfterCompute(cmd, gpuBufferManager->getBufferSet());
     }
 
     void VFXSceneRenderer::recordGPUDrawCommands(vk::CommandBuffer cmd)
@@ -526,7 +502,6 @@ namespace controllers
             gpuBufferManager->getMaxEmitters()
         );
 
-        // VK-496: Record mesh particle draw commands
         if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
         {
             gpuMeshPipeline->recordCommandsInline(
@@ -536,7 +511,6 @@ namespace controllers
             );
         }
 
-        // VK-624: Record ribbon draw commands
         if (gpuRibbonPipeline && gpuRibbonPipeline->isInitialized())
         {
             gpuRibbonPipeline->recordCommandsInline(

@@ -117,13 +117,11 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::setCamera(const glm::mat4& view, const glm::mat4& projection,
-                                       const glm::vec3& cameraPos, float time,
-                                       float nearPlane, float farPlane)
+    void VFXRuntimeAdapter::setCamera(const services::VFXCameraParams& camera)
     {
         if (renderer)
         {
-            renderer->setCamera(view, projection, cameraPos, time, nearPlane, farPlane);
+            renderer->setCamera(camera);
         }
     }
 

@@ -16,7 +16,6 @@ namespace core
 
 namespace render::vfx
 {
-    // Push constants for ribbon preview shader
     struct VFXRibbonPreviewPushConstants
     {
         float alphaClipThreshold = 0.1f;

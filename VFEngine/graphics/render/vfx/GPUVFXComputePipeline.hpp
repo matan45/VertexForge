@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include "GPUVFXTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -28,13 +28,7 @@ namespace render::vfx
         bool initialized = false;
         bool descriptorsNeedUpdate = true;
 
-        vk::Buffer cachedParticleBuffer;
-        vk::Buffer cachedConfigBuffer;
-        vk::Buffer cachedStateBuffer;
-        vk::Buffer cachedDrawCommandBuffer;
-        vk::Buffer cachedLUTBuffer;
-        vk::Buffer cachedRibbonRingBuffer;
-        vk::Buffer cachedRibbonHeadBuffer;
+        GPUVFXBufferSet cachedBuffers{};
 
     public:
         explicit GPUVFXComputePipeline(core::Device& device);
@@ -47,15 +41,7 @@ namespace render::vfx
         void cleanup();
         bool isInitialized() const { return initialized; }
 
-        void updateDescriptors(
-            vk::Buffer particleBuffer,
-            vk::Buffer configBuffer,
-            vk::Buffer stateBuffer,
-            vk::Buffer drawCommandBuffer,
-            vk::Buffer lutBuffer,
-            vk::Buffer ribbonRingBuffer,
-            vk::Buffer ribbonHeadBuffer
-        );
+        void updateDescriptors(const GPUVFXBufferSet& buffers);
 
         void dispatch(
             vk::CommandBuffer cmd,
@@ -65,14 +51,7 @@ namespace render::vfx
             uint32_t emitterCount
         );
 
-        void insertBarriersAfterCompute(
-            vk::CommandBuffer cmd,
-            vk::Buffer particleBuffer,
-            vk::Buffer stateBuffer,
-            vk::Buffer drawCommandBuffer,
-            vk::Buffer ribbonRingBuffer = nullptr,
-            vk::Buffer ribbonHeadBuffer = nullptr
-        );
+        void insertBarriersAfterCompute(vk::CommandBuffer cmd, const GPUVFXBufferSet& buffers);
 
         void insertBarriersBeforeCompute(
             vk::CommandBuffer cmd,

@@ -230,26 +230,34 @@ namespace render::vfx
 
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
-
-        // Render mode & soft particles (VK-494)
+        
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-
-        // Mesh particle (VK-496)
+        
         std::string meshPath;
-
-        // Ribbon (VK-624)
+        
         uint32_t maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-
-        // UV Scrolling (VK-623)
+        
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
-
-        // Glow color
+        
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+    };
+
+    struct VFXFlipbookConfig
+    {
+        int rows = 1;
+        int columns = 1;
+        float alphaClipThreshold = 0.1f;
+        bool additiveBlend = false;
+        int renderMode = 0;
+        float stretchMultiplier = 1.0f;
+        glm::vec3 glowColor{1.0f};
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 
     namespace VFXConstants

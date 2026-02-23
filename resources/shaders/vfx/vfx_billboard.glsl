@@ -23,9 +23,7 @@ layout(binding = 0) uniform CameraUBO {
     float time;
 } camera;
 
-// Render mode constants (VK-494)
 const uint RENDER_MODE_BILLBOARD = 0u;
-const uint RENDER_MODE_STRETCHED = 1u;
 const uint RENDER_MODE_HORIZONTAL = 2u;
 
 layout(push_constant) uniform FlipbookPC {
@@ -56,7 +54,6 @@ void main() {
     vec3 vertexPos;
 
     if (pc.renderMode == RENDER_MODE_HORIZONTAL) {
-        // Horizontal billboard: flat on XZ plane (VK-494)
         vec3 right = vec3(1.0, 0.0, 0.0);
         vec3 forward = vec3(0.0, 0.0, 1.0);
         vertexPos = worldPos
@@ -79,7 +76,6 @@ void main() {
     vec2 tileSize = vec2(1.0 / pc.flipbookColumns, 1.0 / pc.flipbookRows);
     fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
 
-    // UV scrolling (VK-623)
     fragTexCoord += vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
 
     fragColor = inColor;

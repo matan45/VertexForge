@@ -430,10 +430,12 @@
     <ClCompile Include="render\vfx\VFXMeshGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXMeshGPUPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXMeshPreviewPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXMeshPreviewPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
     <ClCompile Include="render\vfx\VFXRibbonGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXRibbonGPUPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXRibbonPreviewPipeline.cpp" />
+    <ClCompile Include="render\vfx\VFXRibbonPreviewPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXSceneGPUPipelineSetup.cpp" />

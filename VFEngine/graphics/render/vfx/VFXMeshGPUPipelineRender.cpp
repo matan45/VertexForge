@@ -176,7 +176,6 @@ namespace render::vfx
             return;
         }
 
-        // Use LOD 0 of first submesh for particle instancing
         const auto& lod0 = meshData->subMeshes[0].getLOD(0);
         if (!lod0.isValid())
         {
@@ -201,11 +200,9 @@ namespace render::vfx
         const std::string oldPath = config.texturePath;
         config.texturePath = texturePath;
 
-        // No change — skip ref-counting work
         if (oldPath == texturePath)
             return;
 
-        // Release old texture ref
         if (!oldPath.empty())
         {
             auto it = textureEntries.find(oldPath);
@@ -345,19 +342,16 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        // Iterate only over emitters that have mesh data registered
         for (const auto& [emitterIdx, meshData] : emitterMeshes)
         {
             if (emitterIdx >= emitterCount || meshData.indexCount == 0)
                 continue;
 
-            // Bind per-emitter mesh vertex/index buffers
             vk::Buffer vertexBuffers[] = {meshData.vertexBuffer};
             vk::DeviceSize offsets[] = {0};
             cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
             cmd.bindIndexBuffer(meshData.indexBuffer, 0, vk::IndexType::eUint32);
 
-            // Resolve descriptor set and rendering config
             vk::DescriptorSet setToBind = defaultDescriptorSet;
             float alphaClip = 0.1f;
             uint32_t blendMode = 0;

@@ -110,7 +110,6 @@ namespace render::vfx
         configInfo.offset = 0;
         configInfo.range = cachedConfigBufferSize;
 
-        // Scene depth for soft particles (VK-494)
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.imageView = sceneDepthImageView ? sceneDepthImageView : defaultTextureImageView;
         depthInfo.imageLayout = sceneDepthImageView
@@ -159,11 +158,9 @@ namespace render::vfx
         const std::string oldPath = config.texturePath;
         config.texturePath = texturePath;
 
-        // No change — skip ref-counting work
         if (oldPath == texturePath)
             return;
 
-        // Release old texture ref
         if (!oldPath.empty())
         {
             auto it = textureEntries.find(oldPath);
@@ -304,8 +301,6 @@ namespace render::vfx
 
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
-            // VK-496: Skip mesh particle emitters (rendered by VFXMeshGPUPipeline)
-            // VK-624: Skip ribbon emitters (rendered by VFXRibbonGPUPipeline)
             auto configIt = emitterConfigs.find(i);
             if (configIt != emitterConfigs.end() &&
                 (configIt->second.renderMode == RenderModeFlags::MeshParticle ||

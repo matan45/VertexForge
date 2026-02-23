@@ -77,13 +77,11 @@ struct GPUEmitterConfig
     float flipbookRows;
     float flipbookFrameRate;
 
-    // Render mode & soft particles (VK-494)
     uint renderMode;
     float softParticleDistance;
     float stretchMultiplier;
     uint drawIndexCount;
 
-    // Ribbon (VK-624)
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
@@ -136,7 +134,6 @@ layout(std430, set = 0, binding = 4) readonly buffer LUTBuffer {
     vec4 lutData[];
 };
 
-// VK-624: Ribbon ring buffer - stores particle indices in spawn order per emitter
 layout(std430, set = 0, binding = 5) buffer RibbonRingBuffer {
     uint ribbonRing[];
 };
@@ -696,7 +693,6 @@ void main()
 
             p.velocity = rotation * p.velocity;
 
-            // Ribbon (VK-624): record spawn order in ring buffer
             if (config.renderMode == RENDER_MODE_RIBBON && config.maxTrailPoints > 0u) {
                 uint head = atomicAdd(ribbonHeads[pc.emitterIndex], 1u);
                 uint slot = head % config.maxTrailPoints;

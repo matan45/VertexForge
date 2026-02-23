@@ -40,29 +40,24 @@ namespace render::vfx
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
 
-        // Buffers
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
         void* cameraUBOMapped = nullptr;
 
-        // Cached particle buffer info
         vk::Buffer cachedParticleBuffer;
         vk::DeviceSize cachedParticleBufferSize = 0;
 
         vk::Buffer cachedConfigBuffer;
         vk::DeviceSize cachedConfigBufferSize = 0;
 
-        // Default texture (white 1x1)
         vk::Image defaultTextureImage;
         vk::DeviceMemory defaultTextureMemory;
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
-        // Scene depth texture for soft particles
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
-        // Per-emitter mesh and rendering config
         static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
 
         struct EmitterMeshData
@@ -94,7 +89,6 @@ namespace render::vfx
         std::unordered_map<std::string, TextureEntry> textureEntries;
         vk::DescriptorSet defaultDescriptorSet;
 
-        // Deferred texture cleanup (avoids waitIdle GPU stall)
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         struct PendingDescriptorSet

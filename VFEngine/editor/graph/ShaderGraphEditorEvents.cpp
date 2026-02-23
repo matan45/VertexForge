@@ -285,7 +285,6 @@ namespace editor::graph {
                 ImGui::EndMenu();
             }
 
-            // Conversion (VK-56: Type casting nodes)
             if (ImGui::BeginMenu("Conversion")) {
                 if (ImGui::BeginMenu("Float To...")) {
                     if (ImGui::MenuItem("Vec2")) {
