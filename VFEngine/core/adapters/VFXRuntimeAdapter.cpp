@@ -7,6 +7,7 @@
 #include "components/PhysicsComponents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/SceneEvents.hpp"
+#include "../../services/events/TerrainEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include "print/Logger.hpp"
@@ -123,6 +124,7 @@ namespace core
         if (renderer)
         {
             updateSceneColliders();
+            updateTerrainHeightfield();
             renderer->update(deltaTime);
         }
     }
@@ -227,5 +229,45 @@ namespace core
         }
 
         renderer->setSceneColliders(gpuColliders);
+    }
+
+    void VFXRuntimeAdapter::updateTerrainHeightfield()
+    {
+        if (terrainHeightfieldCached)
+            return;
+
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::terrain::GetTerrainHeightfieldQuery query;
+            auto result = dispatcher.query(query);
+
+            if (result.valid && !result.heights.empty())
+            {
+                render::vfx::GPUTerrainHeightfield header{};
+                header.worldOriginX = result.worldOriginX;
+                header.worldOriginZ = result.worldOriginZ;
+                header.tileWorldSize = result.tileWorldSize;
+                header.vertexSpacing = result.vertexSpacing;
+                header.gridCountX = result.gridCountX;
+                header.gridCountZ = result.gridCountZ;
+                header.verticesPerTile = result.verticesPerTile;
+                header.enabled = 1;
+
+                renderer->setTerrainHeightfield(header, std::move(result.heights));
+                terrainHeightfieldCached = true;
+            }
+            else
+            {
+                // No terrain yet — will retry next frame
+                render::vfx::GPUTerrainHeightfield header{};
+                header.enabled = 0;
+                renderer->setTerrainHeightfield(header, {});
+            }
+        }
+        catch (...)
+        {
+            // No terrain service registered — disable terrain collision
+        }
     }
 }

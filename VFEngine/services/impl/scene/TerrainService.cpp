@@ -14,6 +14,8 @@
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <algorithm>
+#include <cstring>
 
 namespace services
 {
@@ -321,6 +323,75 @@ namespace services
             }
         }
 
+        return result;
+    }
+
+    events::terrain::TerrainHeightfieldResult TerrainService::getTerrainHeightfield()
+    {
+        events::terrain::TerrainHeightfieldResult result;
+
+        if (terrainGrids.empty())
+            return result;
+
+        // Use the first terrain grid
+        auto& [entityId, grid] = *terrainGrids.begin();
+        auto allTiles = grid->getAllTiles();
+
+        if (allTiles.empty())
+            return result;
+
+        // Determine grid bounds from tile coordinates
+        int32_t minTileX = allTiles[0]->coord.x;
+        int32_t maxTileX = allTiles[0]->coord.x;
+        int32_t minTileZ = allTiles[0]->coord.z;
+        int32_t maxTileZ = allTiles[0]->coord.z;
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile) continue;
+            minTileX = std::min(minTileX, tile->coord.x);
+            maxTileX = std::max(maxTileX, tile->coord.x);
+            minTileZ = std::min(minTileZ, tile->coord.z);
+            maxTileZ = std::max(maxTileZ, tile->coord.z);
+        }
+
+        const auto& config = allTiles[0]->config;
+        int32_t gridCountX = maxTileX - minTileX + 1;
+        int32_t gridCountZ = maxTileZ - minTileZ + 1;
+        uint32_t vpt = config.getQuadCount() + 1;  // vertices per side (33, 65, or 129)
+
+        result.worldOriginX = static_cast<float>(minTileX) * config.worldTileSize;
+        result.worldOriginZ = static_cast<float>(minTileZ) * config.worldTileSize;
+        result.tileWorldSize = config.worldTileSize;
+        result.vertexSpacing = config.getVertexSpacing();
+        result.gridCountX = gridCountX;
+        result.gridCountZ = gridCountZ;
+        result.verticesPerTile = vpt;
+
+        // Allocate heights buffer (zeroed)
+        size_t totalHeights = static_cast<size_t>(gridCountX) * gridCountZ * vpt * vpt;
+        result.heights.resize(totalHeights, 0.0f);
+
+        // Pack each tile's heightData into the correct grid position
+        for (auto* tile : allTiles)
+        {
+            if (!tile || !tile->hasHeightData())
+                continue;
+
+            int32_t tileOffsetX = tile->coord.x - minTileX;
+            int32_t tileOffsetZ = tile->coord.z - minTileZ;
+            uint32_t tileIndex = static_cast<uint32_t>(tileOffsetZ) * static_cast<uint32_t>(gridCountX)
+                               + static_cast<uint32_t>(tileOffsetX);
+            size_t baseOffset = static_cast<size_t>(tileIndex) * vpt * vpt;
+
+            size_t copyCount = std::min(tile->heightData.size(),
+                                        static_cast<size_t>(vpt * vpt));
+            std::memcpy(result.heights.data() + baseOffset,
+                        tile->heightData.data(),
+                        copyCount * sizeof(float));
+        }
+
+        result.valid = true;
         return result;
     }
 }

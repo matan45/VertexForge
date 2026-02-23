@@ -93,7 +93,7 @@ struct GPUEmitterConfig
     float collisionBounce;
     float collisionFriction;
     float collisionLifetimeLoss;
-    float _collisionPad;
+    uint terrainCollisionEnabled;
 };
 
 struct GPUEmitterState
@@ -168,6 +168,18 @@ struct GPUCollider
 
 layout(std430, set = 0, binding = 8) readonly buffer ColliderBuffer {
     GPUCollider colliders[];
+};
+
+layout(std430, set = 0, binding = 9) readonly buffer TerrainHeightfieldBuffer {
+    float terrainWorldOriginX;
+    float terrainWorldOriginZ;
+    float terrainTileWorldSize;
+    float terrainVertexSpacing;
+    int terrainGridCountX;
+    int terrainGridCountZ;
+    uint terrainVerticesPerTile;
+    uint terrainEnabled;
+    float terrainHeights[];
 };
 
 const uint COLLIDER_SPHERE  = 0u;
@@ -654,6 +666,114 @@ void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
     }
 }
 
+// --- Terrain heightfield sampling ---
+float sampleTerrainHeight(vec3 worldPos)
+{
+    // Convert world position to terrain-local coordinates
+    float localX = worldPos.x - terrainWorldOriginX;
+    float localZ = worldPos.z - terrainWorldOriginZ;
+
+    // Which tile are we in?
+    float tileSize = terrainTileWorldSize;
+    int tileX = int(floor(localX / tileSize));
+    int tileZ = int(floor(localZ / tileSize));
+
+    // Bounds check
+    if (tileX < 0 || tileX >= terrainGridCountX || tileZ < 0 || tileZ >= terrainGridCountZ)
+        return -1e10;
+
+    // Position within the tile [0, tileSize]
+    float inTileX = localX - float(tileX) * tileSize;
+    float inTileZ = localZ - float(tileZ) * tileSize;
+
+    // Convert to grid coordinates
+    float spacing = terrainVertexSpacing;
+    float gx = inTileX / spacing;
+    float gz = inTileZ / spacing;
+
+    uint vpt = terrainVerticesPerTile;
+    int maxIdx = int(vpt) - 1;
+
+    int ix = clamp(int(floor(gx)), 0, maxIdx - 1);
+    int iz = clamp(int(floor(gz)), 0, maxIdx - 1);
+
+    float fx = gx - float(ix);
+    float fz = gz - float(iz);
+    fx = clamp(fx, 0.0, 1.0);
+    fz = clamp(fz, 0.0, 1.0);
+
+    // Tile offset in the heights array
+    uint tileIndex = uint(tileZ) * uint(terrainGridCountX) + uint(tileX);
+    uint tileOffset = tileIndex * vpt * vpt;
+
+    // Bilinear sample
+    float h00 = terrainHeights[tileOffset + uint(iz) * vpt + uint(ix)];
+    float h10 = terrainHeights[tileOffset + uint(iz) * vpt + uint(ix + 1)];
+    float h01 = terrainHeights[tileOffset + uint(iz + 1) * vpt + uint(ix)];
+    float h11 = terrainHeights[tileOffset + uint(iz + 1) * vpt + uint(ix + 1)];
+
+    float h0 = mix(h00, h10, fx);
+    float h1 = mix(h01, h11, fx);
+    return mix(h0, h1, fz);
+}
+
+vec3 getTerrainNormal(vec3 worldPos)
+{
+    float spacing = terrainVertexSpacing;
+    float hL = sampleTerrainHeight(worldPos - vec3(spacing, 0.0, 0.0));
+    float hR = sampleTerrainHeight(worldPos + vec3(spacing, 0.0, 0.0));
+    float hD = sampleTerrainHeight(worldPos - vec3(0.0, 0.0, spacing));
+    float hU = sampleTerrainHeight(worldPos + vec3(0.0, 0.0, spacing));
+
+    vec3 normal = vec3(hL - hR, 2.0 * spacing, hD - hU);
+    return normalize(normal);
+}
+
+void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx)
+{
+    if (config.terrainCollisionEnabled == 0u || terrainEnabled == 0u)
+        return;
+
+    float terrainY = sampleTerrainHeight(p.position);
+
+    // No terrain at this location
+    if (terrainY < -1e9)
+        return;
+
+    float penetration = terrainY - p.position.y;
+
+    if (penetration > 0.0)
+    {
+        vec3 normal = getTerrainNormal(p.position);
+
+        // Push particle out of terrain
+        p.position += normal * penetration;
+
+        // Reflect velocity
+        float vn = dot(p.velocity, normal);
+        if (vn < 0.0)
+        {
+            vec3 vNormal = normal * vn;
+            vec3 vTangent = p.velocity - vNormal;
+
+            p.velocity = vTangent * (1.0 - config.collisionFriction)
+                       - vNormal * config.collisionBounce;
+        }
+
+        // Lifetime loss
+        if (config.collisionLifetimeLoss > 0.0)
+        {
+            p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
+        }
+
+        // OnCollision event
+        if ((config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+        {
+            emitEvent(2u, p.position, p.velocity, emitterIdx);
+        }
+    }
+}
+
 // --- Quaternion helpers ---
 vec3 rotateByQuat(vec3 v, vec4 q)
 {
@@ -852,6 +972,7 @@ void main()
             p.position += p.velocity * config.deltaTime;
 
             applyCollisions(p, config, pc.emitterIndex);
+            applyTerrainCollision(p, config, pc.emitterIndex);
 
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 

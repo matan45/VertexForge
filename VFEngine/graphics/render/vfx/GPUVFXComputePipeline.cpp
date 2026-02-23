@@ -76,7 +76,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 9> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 10> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -122,6 +122,11 @@ namespace render::vfx
         bindings[8].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[8].descriptorCount = 1;
         bindings[8].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        bindings[9].binding = 9;
+        bindings[9].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[9].descriptorCount = 1;
+        bindings[9].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -183,7 +188,7 @@ namespace render::vfx
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 9;
+        poolSizes[0].descriptorCount = 10;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -216,7 +221,8 @@ namespace render::vfx
             buffers.ribbonRingBuffer != cachedBuffers.ribbonRingBuffer ||
             buffers.ribbonHeadBuffer != cachedBuffers.ribbonHeadBuffer ||
             buffers.eventBuffer != cachedBuffers.eventBuffer ||
-            buffers.colliderBuffer != cachedBuffers.colliderBuffer)
+            buffers.colliderBuffer != cachedBuffers.colliderBuffer ||
+            buffers.terrainBuffer != cachedBuffers.terrainBuffer)
         {
             cachedBuffers = buffers;
             descriptorsNeedUpdate = true;
@@ -277,7 +283,12 @@ namespace render::vfx
         colliderInfo.offset = 0;
         colliderInfo.range = VK_WHOLE_SIZE;
 
-        std::array<vk::WriteDescriptorSet, 9> writes{};
+        vk::DescriptorBufferInfo terrainInfo{};
+        terrainInfo.buffer = cachedBuffers.terrainBuffer;
+        terrainInfo.offset = 0;
+        terrainInfo.range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 10> writes{};
 
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
@@ -332,6 +343,12 @@ namespace render::vfx
         writes[8].descriptorCount = 1;
         writes[8].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[8].pBufferInfo = &colliderInfo;
+
+        writes[9].dstSet = descriptorSet;
+        writes[9].dstBinding = 9;
+        writes[9].descriptorCount = 1;
+        writes[9].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[9].pBufferInfo = &terrainInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
 

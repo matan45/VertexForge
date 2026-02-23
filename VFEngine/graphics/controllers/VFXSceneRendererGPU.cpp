@@ -167,6 +167,14 @@ namespace controllers
             std::min(colliders.size(), static_cast<size_t>(render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS)));
     }
 
+    void VFXSceneRenderer::setTerrainHeightfield(const render::vfx::GPUTerrainHeightfield& header,
+                                                  std::vector<float> heights)
+    {
+        terrainHeader = header;
+        terrainHeights = std::move(heights);
+        terrainDirty = true;
+    }
+
     void VFXSceneRenderer::updateGPU(float deltaTime)
     {
         if (!gpuBufferManager)
@@ -178,6 +186,22 @@ namespace controllers
         if (sceneColliderCount > 0)
         {
             gpuBufferManager->updateSceneColliders(sceneColliders, sceneColliderCount);
+        }
+
+        // Upload terrain heightfield to GPU
+        if (terrainDirty)
+        {
+            if (terrainHeader.enabled && !terrainHeights.empty())
+            {
+                gpuBufferManager->updateTerrainHeightfield(
+                    terrainHeader, terrainHeights.data(),
+                    static_cast<uint32_t>(terrainHeights.size()));
+            }
+            else
+            {
+                gpuBufferManager->clearTerrainHeightfield();
+            }
+            terrainDirty = false;
         }
 
         lastFrameEvents = gpuBufferManager->readbackEvents(lastFrameEventCount);
@@ -408,6 +432,7 @@ namespace controllers
         gpuConfig.collisionBounce = cpuConfig.collisionBounce;
         gpuConfig.collisionFriction = cpuConfig.collisionFriction;
         gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
+        gpuConfig.terrainCollisionEnabled = cpuConfig.collisionEnabled ? 1u : 0u;
 
         return gpuConfig;
     }

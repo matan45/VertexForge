@@ -87,6 +87,13 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createTerrainBuffer())
+            {
+                loggerError("GPUVFXBufferManager: Failed to create terrain buffer");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
@@ -94,7 +101,7 @@ namespace render::vfx
                            getStateBufferSize() + getDrawCommandBufferSize() +
                            getLUTBufferSize() + getRibbonRingBufferSize() +
                            getRibbonHeadBufferSize() + getEventBufferSize() +
-                           getColliderBufferSize()) / (1024.0f * 1024.0f));
+                           getColliderBufferSize() + getTerrainBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -243,6 +250,12 @@ namespace render::vfx
     {
         auto& vkDevice = device.getLogicalDevice();
 
+        if (terrainMapped && terrainMemory)
+        {
+            vkDevice.unmapMemory(terrainMemory);
+            terrainMapped = nullptr;
+        }
+
         if (colliderMapped && colliderMemory)
         {
             vkDevice.unmapMemory(colliderMemory);
@@ -290,6 +303,7 @@ namespace render::vfx
         }
         core::BufferUtilities::destroyBuffer(vkDevice, eventBuffer, eventMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, colliderBuffer, colliderMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainBuffer, terrainMemory);
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const
@@ -344,6 +358,11 @@ namespace render::vfx
         return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_SCENE_COLLIDERS) * sizeof(GPUCollider);
     }
 
+    vk::DeviceSize GPUVFXBufferManager::getTerrainBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_TERRAIN_HEIGHTFIELD_BYTES);
+    }
+
     bool GPUVFXBufferManager::createColliderBuffer()
     {
         core::BufferInfoRequest request(
@@ -387,6 +406,64 @@ namespace render::vfx
             auto* dst = static_cast<uint8_t*>(colliderMapped) + copyCount * sizeof(GPUCollider);
             std::memset(dst, 0, (GPUVFXConstants::MAX_SCENE_COLLIDERS - copyCount) * sizeof(GPUCollider));
         }
+    }
+
+    bool GPUVFXBufferManager::createTerrainBuffer()
+    {
+        core::BufferInfoRequest request(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getTerrainBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible |
+            vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+
+        core::BufferUtilities::createBuffer(request, terrainBuffer, terrainMemory);
+
+        if (terrainBuffer && terrainMemory)
+        {
+            terrainMapped = device.getLogicalDevice().mapMemory(
+                terrainMemory, 0, getTerrainBufferSize(), vk::MemoryMapFlags{}
+            );
+            std::memset(terrainMapped, 0, getTerrainBufferSize());
+            return true;
+        }
+        return false;
+    }
+
+    void GPUVFXBufferManager::updateTerrainHeightfield(const GPUTerrainHeightfield& header,
+                                                        const float* heights, uint32_t heightCount)
+    {
+        if (!initialized || !terrainMapped)
+        {
+            return;
+        }
+
+        // Copy header (32 bytes)
+        std::memcpy(terrainMapped, &header, sizeof(GPUTerrainHeightfield));
+
+        // Copy height data after header
+        if (heights && heightCount > 0)
+        {
+            uint32_t maxHeights = (GPUVFXConstants::MAX_TERRAIN_HEIGHTFIELD_BYTES -
+                                   static_cast<uint32_t>(sizeof(GPUTerrainHeightfield))) / sizeof(float);
+            uint32_t copyCount = std::min(heightCount, maxHeights);
+            auto* dst = static_cast<uint8_t*>(terrainMapped) + sizeof(GPUTerrainHeightfield);
+            std::memcpy(dst, heights, copyCount * sizeof(float));
+        }
+    }
+
+    void GPUVFXBufferManager::clearTerrainHeightfield()
+    {
+        if (!initialized || !terrainMapped)
+        {
+            return;
+        }
+
+        // Zero just the enabled flag (offset 28 in the header)
+        auto* header = static_cast<GPUTerrainHeightfield*>(terrainMapped);
+        header->enabled = 0;
     }
 
     bool GPUVFXBufferManager::createLUTBuffer()

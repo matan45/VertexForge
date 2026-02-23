@@ -140,6 +140,24 @@ namespace events::terrain
         std::string_view getName() const override { return "TerrainLoaded"; }
     };
 
+    // Returns packed terrain heightfield for VFX particle collision
+    struct TerrainHeightfieldResult
+    {
+        float worldOriginX = 0.0f;
+        float worldOriginZ = 0.0f;
+        float tileWorldSize = 32.0f;
+        float vertexSpacing = 1.0f;
+        int32_t gridCountX = 0;
+        int32_t gridCountZ = 0;
+        uint32_t verticesPerTile = 33;
+        std::vector<float> heights;  // packed tile-by-tile, row-major (Z outer, X inner)
+        bool valid = false;
+    };
+
+    struct GetTerrainHeightfieldQuery : IQuery<TerrainHeightfieldResult> {
+        std::string_view getName() const override { return "GetTerrainHeightfield"; }
+    };
+
     // Returns combined LOD 0 terrain geometry for navmesh baking
     struct TerrainGeometryResult
     {

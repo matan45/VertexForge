@@ -96,6 +96,7 @@ namespace services
         void releaseTileRAMData(terrain::TerrainTile& tile);
 
         ::events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh();
+        ::events::terrain::TerrainHeightfieldResult getTerrainHeightfield();
 
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);

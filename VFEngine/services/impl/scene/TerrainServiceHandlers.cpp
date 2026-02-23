@@ -87,6 +87,12 @@ namespace services
             {
                 return getTerrainGeometryForNavmesh();
             });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainHeightfieldQuery>(
+            [this](const events::terrain::GetTerrainHeightfieldQuery&)
+            {
+                return getTerrainHeightfield();
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)

@@ -116,6 +116,10 @@ namespace controllers
         std::vector<render::vfx::GPUCollider> sceneColliders;
         uint32_t sceneColliderCount = 0;
 
+        render::vfx::GPUTerrainHeightfield terrainHeader{};
+        std::vector<float> terrainHeights;
+        bool terrainDirty = true;
+
     public:
         explicit VFXSceneRenderer(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneRenderer();
@@ -145,6 +149,8 @@ namespace controllers
 
         void setSceneDepthImageView(vk::ImageView depthView);
         void setSceneColliders(const std::vector<render::vfx::GPUCollider>& colliders);
+        void setTerrainHeightfield(const render::vfx::GPUTerrainHeightfield& header,
+                                    std::vector<float> heights);
 
         void recordComputeCommands(vk::CommandBuffer cmd);
 

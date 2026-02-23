@@ -17,6 +17,8 @@ namespace core
         std::unique_ptr<controllers::VFXSceneRenderer> renderer;
 
         void updateSceneColliders();
+        void updateTerrainHeightfield();
+        bool terrainHeightfieldCached = false;
 
     public:
         explicit VFXRuntimeAdapter();

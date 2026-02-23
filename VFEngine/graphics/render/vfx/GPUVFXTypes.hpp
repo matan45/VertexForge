@@ -129,7 +129,7 @@ namespace render::vfx
         float collisionBounce = 0.5f;
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
-        float _collisionPad = 0.0f;
+        uint32_t terrainCollisionEnabled = 0;
     };
     static_assert(sizeof(GPUEmitterConfig) == 320, "GPUEmitterConfig must be 320 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -252,7 +252,8 @@ namespace render::vfx
         inline constexpr uint32_t LUT_CHANNELS = 5;
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
-        inline constexpr uint32_t MAX_SCENE_COLLIDERS = 128;
+        inline constexpr uint32_t MAX_SCENE_COLLIDERS = 256;
+        inline constexpr uint32_t MAX_TERRAIN_HEIGHTFIELD_BYTES = 4 * 1024 * 1024;
     }
 
     namespace EmitterFlags
@@ -302,6 +303,19 @@ namespace render::vfx
         float glowColorB = 1.0f;
     };
 
+    struct GPUTerrainHeightfield
+    {
+        float worldOriginX;
+        float worldOriginZ;
+        float tileWorldSize;
+        float vertexSpacing;
+        int32_t gridCountX;
+        int32_t gridCountZ;
+        uint32_t verticesPerTile;
+        uint32_t enabled;
+    };
+    static_assert(sizeof(GPUTerrainHeightfield) == 32, "GPUTerrainHeightfield must be 32 bytes");
+
     struct GPUVFXBufferSet
     {
         vk::Buffer particleBuffer;
@@ -313,6 +327,7 @@ namespace render::vfx
         vk::Buffer ribbonHeadBuffer;
         vk::Buffer eventBuffer;
         vk::Buffer colliderBuffer;
+        vk::Buffer terrainBuffer;
     };
 
     struct VFXFlipbookPushConstants

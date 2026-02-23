@@ -55,6 +55,10 @@ namespace render::vfx
         vk::DeviceMemory colliderMemory;
         void* colliderMapped = nullptr;
 
+        vk::Buffer terrainBuffer;
+        vk::DeviceMemory terrainMemory;
+        void* terrainMapped = nullptr;
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -88,11 +92,13 @@ namespace render::vfx
         vk::Buffer getRibbonHeadBuffer() const { return ribbonHeadBuffer; }
         vk::Buffer getEventBuffer() const { return eventBuffer; }
         vk::Buffer getColliderBuffer() const { return colliderBuffer; }
+        vk::Buffer getTerrainBuffer() const { return terrainBuffer; }
 
         GPUVFXBufferSet getBufferSet() const
         {
             return {particleBuffer, configBuffer, stateBuffer, drawCommandBuffer,
-                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer, colliderBuffer};
+                    lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer,
+                    colliderBuffer, terrainBuffer};
         }
 
         vk::DeviceSize getParticleBufferSize() const;
@@ -104,8 +110,12 @@ namespace render::vfx
         vk::DeviceSize getRibbonHeadBufferSize() const;
         vk::DeviceSize getEventBufferSize() const;
         vk::DeviceSize getColliderBufferSize() const;
+        vk::DeviceSize getTerrainBufferSize() const;
 
         void updateSceneColliders(const std::vector<GPUCollider>& colliders, uint32_t count);
+        void updateTerrainHeightfield(const GPUTerrainHeightfield& header,
+                                       const float* heights, uint32_t heightCount);
+        void clearTerrainHeightfield();
 
         void clearEventBuffer(vk::CommandBuffer cmd);
         void copyEventBufferToReadback(vk::CommandBuffer cmd);
@@ -151,6 +161,7 @@ namespace render::vfx
         bool createRibbonBuffers();
         bool createEventBuffers();
         bool createColliderBuffer();
+        bool createTerrainBuffer();
         void destroyBuffers();
     };
 }
