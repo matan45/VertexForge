@@ -227,21 +227,29 @@ namespace controllers
                 continue;
             }
 
-            instance.emissionTime += deltaTime;
+            // Clamp deltaTime on first active frame to prevent particle burst
+            float effectiveDt = deltaTime;
+            if (instance.firstFrame)
+            {
+                effectiveDt = std::min(deltaTime, 1.0f / 30.0f);
+                instance.firstFrame = false;
+            }
+
+            instance.emissionTime += effectiveDt;
 
             uint32_t spawnThisFrame = 0;
             bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
 
             if (instance.active && canSpawn)
             {
-                instance.spawnAccumulator += instance.config.spawnRate * deltaTime;
+                instance.spawnAccumulator += instance.config.spawnRate * effectiveDt;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
                 instance.spawnAccumulator -= static_cast<float>(spawnThisFrame);
             }
 
             auto gpuConfig = toGPUConfig(
                 instance.config,
-                deltaTime,
+                effectiveDt,
                 instance.gpuParticleCount,
                 dist(gen)
             );

@@ -148,6 +148,12 @@ namespace render::vfx
         uint32_t getActiveEmitterCount() const { return activeEmitterCount; }
 
         void resetParticleBufferClearedFlag() { particleBufferCleared = false; }
+        void resetAllocator()
+        {
+            allocatedParticleCount = 0;
+            activeEmitterCount = 0;
+            std::fill(emitterSlots.begin(), emitterSlots.end(), false);
+        }
 
         void advanceFrame() { currentFrameIndex = (currentFrameIndex + 1) % core::MAX_FRAMES_IN_FLIGHT; }
         uint32_t getCurrentFrameIndex() const { return currentFrameIndex; }

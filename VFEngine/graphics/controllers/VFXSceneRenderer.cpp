@@ -248,6 +248,37 @@ namespace controllers
 
             loggerInfo("Destroyed VFX instance {}", id);
             instances.erase(it);
+
+            // Destroy any sub-emitters owned by this instance
+            std::vector<VFXInstanceId> subToDestroy;
+            for (auto& sub : activeSubEmitters)
+            {
+                if (sub.parentId == id && !sub.finished)
+                {
+                    sub.finished = true;
+                    subToDestroy.push_back(sub.subId);
+                }
+            }
+            activeSubEmitters.erase(
+                std::remove_if(activeSubEmitters.begin(), activeSubEmitters.end(),
+                    [](const SubEmitterInstance& s) { return s.finished; }),
+                activeSubEmitters.end());
+            for (auto subId : subToDestroy)
+            {
+                destroyInstance(subId);
+            }
+
+            // When all instances are gone, fully reset GPU state for next Play cycle
+            if (instances.empty())
+            {
+                activeSubEmitters.clear();
+                pendingEmitterFrees.clear();
+                if (gpuBufferManager)
+                {
+                    gpuBufferManager->resetParticleBufferClearedFlag();
+                    gpuBufferManager->resetAllocator();
+                }
+            }
         }
     }
 
@@ -257,20 +288,13 @@ namespace controllers
 
         activeSubEmitters.clear();
         pendingEmitterFrees.clear();
-
-        for (auto& [id, instance] : instances)
-        {
-            if (instance.gpuDriven && gpuBufferManager)
-            {
-                gpuBufferManager->freeEmitter(instance.gpuEmitterIndex);
-            }
-        }
         instances.clear();
         emitterIndexToInstanceId.clear();
 
         if (gpuBufferManager)
         {
             gpuBufferManager->resetParticleBufferClearedFlag();
+            gpuBufferManager->resetAllocator();
         }
 
         loggerInfo("Destroyed all VFX instances");
@@ -292,6 +316,7 @@ namespace controllers
         {
             if (it->second.gpuDriven)
             {
+                it->second.firstFrame = true;
                 it->second.active = true;
             }
             else if (it->second.particleSystem)
@@ -326,6 +351,8 @@ namespace controllers
             if (it->second.gpuDriven)
             {
                 it->second.spawnAccumulator = 0.0f;
+                it->second.emissionTime = 0.0f;
+                it->second.firstFrame = true;
                 it->second.active = true;
             }
             else if (it->second.particleSystem)

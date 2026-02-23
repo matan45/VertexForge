@@ -61,6 +61,7 @@ namespace controllers
         uint32_t gpuParticleCount = 0;
         float spawnAccumulator = 0.0f;
         float emissionTime = 0.0f;
+        bool firstFrame = true;
     };
 
     class VFXSceneRenderer
