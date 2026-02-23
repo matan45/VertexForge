@@ -244,6 +244,10 @@ namespace render::vfx
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
 
+        // UV Scrolling (VK-623)
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
+
         // Glow color
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
     };

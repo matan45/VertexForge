@@ -38,6 +38,8 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {
@@ -77,6 +79,9 @@ void main() {
     vec2 tileSize = vec2(1.0 / pc.flipbookColumns, 1.0 / pc.flipbookRows);
     fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
 
+    // UV scrolling (VK-623)
+    fragTexCoord += vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
+
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
     fragGlowIntensity = inGlowIntensity;
@@ -104,6 +109,8 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {

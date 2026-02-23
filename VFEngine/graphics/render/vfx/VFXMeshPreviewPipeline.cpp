@@ -668,13 +668,16 @@ namespace render::vfx
     }
 
     void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
-                                                       const glm::vec3& glowColor)
+                                                       const glm::vec3& glowColor,
+                                                       float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
         pushConstants.blendMode = additiveBlend ? 1u : 0u;
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.uvScrollSpeedU = uvScrollSpeedU;
+        pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }
 
     void VFXMeshPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

@@ -32,6 +32,8 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {
@@ -53,7 +55,8 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(finalPos, 1.0);
 
-    fragTexCoord = inTexCoord;
+    // UV scrolling (VK-623)
+    fragTexCoord = inTexCoord + vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
     fragNormal = rotY * inNormal;
@@ -79,6 +82,8 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {

@@ -87,7 +87,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 struct GPUEmitterState

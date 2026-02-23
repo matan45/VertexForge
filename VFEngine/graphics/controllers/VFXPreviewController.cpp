@@ -91,7 +91,8 @@ namespace controllers
         glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
         pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
                                     currentParams.alphaClipThreshold, currentParams.additiveBlend,
-                                    currentParams.renderMode, currentParams.stretchMultiplier, glowColor);
+                                    currentParams.renderMode, currentParams.stretchMultiplier, glowColor,
+                                    currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         // VK-496: Set mesh and texture on mesh preview pipeline
         if (!currentParams.meshPath.empty())
@@ -102,7 +103,8 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
-        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, glowColor);
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, glowColor,
+                                          currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         // VK-624: Configure ribbon preview pipeline
         if (!currentParams.texturePath.empty())
@@ -110,7 +112,8 @@ namespace controllers
             ribbonPipeline->setTexture(currentParams.texturePath);
         }
         ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
-                                            currentParams.ribbonWidth, glowColor);
+                                            currentParams.ribbonWidth, glowColor,
+                                            currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
@@ -221,7 +224,8 @@ namespace controllers
             pipeline->setTexture(params.texturePath);
             pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
                                         params.alphaClipThreshold, params.additiveBlend,
-                                        params.renderMode, params.stretchMultiplier, glowColor);
+                                        params.renderMode, params.stretchMultiplier, glowColor,
+                                        params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
 
         // VK-496: Update mesh preview pipeline
@@ -229,7 +233,8 @@ namespace controllers
         {
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
-            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, glowColor);
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, glowColor,
+                                              params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
 
         // VK-624: Update ribbon preview pipeline
@@ -237,7 +242,8 @@ namespace controllers
         {
             ribbonPipeline->setTexture(params.texturePath);
             ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
-                                                params.ribbonWidth, glowColor);
+                                                params.ribbonWidth, glowColor,
+                                                params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
     }
 

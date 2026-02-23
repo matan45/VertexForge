@@ -74,7 +74,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -200,6 +204,9 @@ void main() {
     vec2 tileSize = vec2(1.0 / config.flipbookColumns, 1.0 / config.flipbookRows);
     fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
 
+    // UV scrolling (VK-623)
+    fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
+
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
     fragGlowIntensity = p.glowIntensity;
@@ -275,7 +282,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

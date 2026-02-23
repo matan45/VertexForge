@@ -68,6 +68,8 @@ namespace core
         controllerParams.maxTrailPoints = params.maxTrailPoints;
         controllerParams.ribbonWidth = params.ribbonWidth;
         controllerParams.ribbonMinDistance = params.ribbonMinDistance;
+        controllerParams.uvScrollSpeedU = params.uvScrollSpeedU;
+        controllerParams.uvScrollSpeedV = params.uvScrollSpeedV;
 
         controller->setParams(controllerParams);
     }

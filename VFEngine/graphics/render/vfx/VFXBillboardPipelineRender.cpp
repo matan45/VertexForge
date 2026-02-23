@@ -88,7 +88,8 @@ namespace render::vfx
 
     void VFXBillboardPipeline::setFlipbookConfig(int rows, int columns, float alphaClipThreshold, bool additiveBlend,
                                                     int renderMode, float stretchMultiplier,
-                                                    const glm::vec3& glowColor)
+                                                    const glm::vec3& glowColor,
+                                                    float uvScrollSpeedU, float uvScrollSpeedV)
     {
         flipbookPC.flipbookRows = static_cast<float>(std::max(rows, 1));
         flipbookPC.flipbookColumns = static_cast<float>(std::max(columns, 1));
@@ -99,6 +100,8 @@ namespace render::vfx
         flipbookPC.glowColorR = glowColor.r;
         flipbookPC.glowColorG = glowColor.g;
         flipbookPC.glowColorB = glowColor.b;
+        flipbookPC.uvScrollSpeedU = uvScrollSpeedU;
+        flipbookPC.uvScrollSpeedV = uvScrollSpeedV;
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

@@ -44,6 +44,10 @@ namespace services
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
+
+        // UV Scrolling (VK-623)
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 
     class IVFXPreviewProvider

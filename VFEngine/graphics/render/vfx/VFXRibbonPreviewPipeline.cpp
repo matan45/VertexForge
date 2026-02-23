@@ -602,7 +602,8 @@ namespace render::vfx
 
     void VFXRibbonPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
                                                         float ribbonWidth,
-                                                        const glm::vec3& glowColor)
+                                                        const glm::vec3& glowColor,
+                                                        float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
         pushConstants.blendMode = additiveBlend ? 1u : 0u;
@@ -610,6 +611,8 @@ namespace render::vfx
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.uvScrollSpeedU = uvScrollSpeedU;
+        pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }
 
     void VFXRibbonPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

@@ -122,9 +122,15 @@ namespace render::vfx
         uint32_t maxTrailPoints = 0;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-        float _ribbonPad = 0.0f;
+
+        // UV Scrolling (VK-623)
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
+        float _uvPad1 = 0.0f;
+        float _uvPad2 = 0.0f;
+        float _uvPad3 = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 288, "GPUEmitterConfig must be 288 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 304, "GPUEmitterConfig must be 304 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -156,6 +162,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, maxTrailPoints) == 272, "GPUEmitterConfig::maxTrailPoints offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ribbonWidth) == 276, "GPUEmitterConfig::ribbonWidth offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ribbonMinDistance) == 280, "GPUEmitterConfig::ribbonMinDistance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedU) == 284, "GPUEmitterConfig::uvScrollSpeedU offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedV) == 288, "GPUEmitterConfig::uvScrollSpeedV offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -274,5 +282,7 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 }

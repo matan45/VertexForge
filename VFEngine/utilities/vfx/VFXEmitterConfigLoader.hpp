@@ -138,6 +138,10 @@ namespace vfx
         config.ribbonMinDistance = std::max(0.0f,
             getFloat(*emitterNode, "ribbonMinDistance", EmitterDefaults::RIBBON_MIN_DISTANCE));
 
+        // UV Scrolling (VK-623)
+        config.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", EmitterDefaults::UV_SCROLL_SPEED_U);
+        config.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", EmitterDefaults::UV_SCROLL_SPEED_V);
+
         // Glow color
         config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
 

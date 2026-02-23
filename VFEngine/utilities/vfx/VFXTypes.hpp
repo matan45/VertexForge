@@ -159,6 +159,10 @@ namespace vfx
         inline constexpr int MAX_TRAIL_POINTS = 64;
         inline constexpr float RIBBON_WIDTH = 1.0f;
         inline constexpr float RIBBON_MIN_DISTANCE = 0.1f;
+
+        // UV Scrolling (VK-623)
+        inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
+        inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
     }
 
     namespace ModifierDefaults

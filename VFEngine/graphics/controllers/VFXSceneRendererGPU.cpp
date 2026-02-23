@@ -385,6 +385,10 @@ namespace controllers
         gpuConfig.ribbonWidth = cpuConfig.ribbonWidth;
         gpuConfig.ribbonMinDistance = cpuConfig.ribbonMinDistance;
 
+        // VK-623: UV Scrolling
+        gpuConfig.uvScrollSpeedU = cpuConfig.uvScrollSpeedU;
+        gpuConfig.uvScrollSpeedV = cpuConfig.uvScrollSpeedV;
+
         return gpuConfig;
     }
 

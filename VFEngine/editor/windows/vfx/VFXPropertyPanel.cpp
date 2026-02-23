@@ -443,6 +443,34 @@ namespace editor::vfxeditor
             }
         }
 
+        // UV Scrolling (VK-623) - shown for all render modes
+        {
+            struct UVScrollEntry { const char* key; const char* label; };
+            static constexpr UVScrollEntry uvScrollEntries[] = {
+                {"uvScrollSpeedU", "UV Scroll U"},
+                {"uvScrollSpeedV", "UV Scroll V"},
+            };
+
+            for (const auto& entry : uvScrollEntries)
+            {
+                auto it = node.properties.find(entry.key);
+                if (it == node.properties.end()) continue;
+                auto& prop = it->second;
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    std::string wid = std::string("##panel_") + entry.key;
+                    if (ImGui::DragFloat(wid.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
         // Disable flipbook/stretch in mesh/ribbon mode
         bool isMeshMode = (currentRenderMode == 3);
         bool isRibbonMode = (currentRenderMode == 4);

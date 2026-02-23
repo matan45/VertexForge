@@ -47,6 +47,65 @@ layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
     GPUParticle particles[];
 };
 
+struct GPUEmitterConfig
+{
+    vec4 emitDirection;
+    vec4 startColor;
+    float spawnRate;
+    float lifetime;
+    float startSize;
+    float startSpeed;
+    uint maxParticles;
+    uint seed;
+    float deltaTime;
+    uint modifierFlags;
+
+    vec4 colorStart;
+    vec4 colorEnd;
+    float sizeStartMult;
+    float sizeEndMult;
+    float speedStartMult;
+    float speedEndMult;
+    float angularVelocity;
+    uint lutBaseOffset;
+    uint lutChannelStride;
+    uint lutFlags;
+
+    vec4 gravityDir;
+    vec4 windDir;
+    vec4 windNoise;
+    vec4 turbulence;
+    vec4 vortexAxis;
+    vec4 vortexCenter;
+
+    vec4 shapeDimensions;
+    uint shapeFlags;
+    float flipbookColumns;
+    float flipbookRows;
+    float flipbookFrameRate;
+
+    uint renderMode;
+    float softParticleDistance;
+    float stretchMultiplier;
+    uint meshIndexCount;
+
+    // Ribbon (VK-624)
+    uint maxTrailPoints;
+    float ribbonWidth;
+    float ribbonMinDistance;
+
+    // UV Scrolling (VK-623)
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
+    GPUEmitterConfig configs[];
+};
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -73,6 +132,8 @@ void main() {
         fragGlowIntensity = 0.0;
         return;
     }
+
+    GPUEmitterConfig config = configs[pc.emitterIndex];
 
     // Build rotation matrix from velocity direction
     vec3 forward = vec3(0.0, 1.0, 0.0);
@@ -102,7 +163,8 @@ void main() {
     // View-space depth for soft particles
     fragViewDepth = -(camera.view * vec4(worldPos, 1.0)).z;
 
-    fragTexCoord = inTexCoord;
+    // UV scrolling (VK-623)
+    fragTexCoord = inTexCoord + vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
     fragColor = p.color;
     fragLifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
     fragNormal = rotationMatrix * inNormal;
@@ -182,7 +244,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

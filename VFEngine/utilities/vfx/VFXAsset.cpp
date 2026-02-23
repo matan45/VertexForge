@@ -191,6 +191,16 @@ namespace vfx
                 EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
             };
 
+            // UV Scrolling (VK-623)
+            emitterNode.properties["uvScrollSpeedU"] = VFXProperty{
+                "uvScrollSpeedU", VFXPropertyType::Float,
+                EmitterDefaults::UV_SCROLL_SPEED_U, -10.0f, 10.0f
+            };
+            emitterNode.properties["uvScrollSpeedV"] = VFXProperty{
+                "uvScrollSpeedV", VFXPropertyType::Float,
+                EmitterDefaults::UV_SCROLL_SPEED_V, -10.0f, 10.0f
+            };
+
             return emitterNode;
         }
     } // anonymous namespace

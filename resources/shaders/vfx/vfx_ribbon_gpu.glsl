@@ -73,7 +73,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
@@ -181,6 +185,9 @@ void main() {
         : 0.0;
     fragTexCoord = vec2(trailT, inTexCoord.x + 0.5);
 
+    // UV scrolling (VK-623)
+    fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
+
     // Interpolate color and lifetime
     fragColor = mix(pA.color, pB.color, along);
     float lifeA = (pA.maxLifetime > 0.0) ? (pA.lifetime / pA.maxLifetime) : 0.0;
@@ -259,7 +266,11 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-    float _ribbonPad;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
+    float _uvPad1;
+    float _uvPad2;
+    float _uvPad3;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
