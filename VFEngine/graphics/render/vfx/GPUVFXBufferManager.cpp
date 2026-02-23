@@ -317,7 +317,10 @@ namespace render::vfx
 
     vk::DeviceSize GPUVFXBufferManager::getEventBufferSize() const
     {
-        return sizeof(uint32_t) +
+        // std430: GPUVFXEvent has vec3 → 16-byte struct alignment
+        // events[] starts at offset 16 (not 4) due to padding after eventCount
+        constexpr vk::DeviceSize EVENT_DATA_OFFSET = 16;
+        return EVENT_DATA_OFFSET +
                static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME) * sizeof(GPUVFXEvent);
     }
 
@@ -477,8 +480,10 @@ namespace render::vfx
             return {};
         }
 
+        // std430: events[] starts at offset 16 due to struct alignment padding
+        constexpr size_t EVENT_DATA_OFFSET = 16;
         std::vector<GPUVFXEvent> events(eventCount);
-        std::memcpy(events.data(), data + sizeof(uint32_t), eventCount * sizeof(GPUVFXEvent));
+        std::memcpy(events.data(), data + EVENT_DATA_OFFSET, eventCount * sizeof(GPUVFXEvent));
         return events;
     }
 

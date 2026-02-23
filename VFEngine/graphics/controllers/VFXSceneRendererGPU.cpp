@@ -466,7 +466,8 @@ namespace controllers
             cmd,
             gpuBufferManager->getStateBuffer(),
             gpuBufferManager->getDrawCommandBuffer(),
-            gpuBufferManager->getParticleBuffer()
+            gpuBufferManager->getParticleBuffer(),
+            gpuBufferManager->getEventBuffer()
         );
 
         for (const auto& [id, instance] : instances)

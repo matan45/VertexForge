@@ -357,27 +357,46 @@ namespace render::vfx
         vk::CommandBuffer cmd,
         vk::Buffer stateBuffer,
         vk::Buffer drawCommandBuffer,
-        vk::Buffer particleBuffer)
+        vk::Buffer particleBuffer,
+        vk::Buffer eventBuffer)
     {
-        std::array<vk::BufferMemoryBarrier, 3> barriers{};
+        std::vector<vk::BufferMemoryBarrier> barriers;
+        barriers.reserve(4);
 
-        barriers[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
-        barriers[0].buffer = stateBuffer;
-        barriers[0].offset = 0;
-        barriers[0].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier stateBarrier{};
+        stateBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        stateBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+        stateBarrier.buffer = stateBuffer;
+        stateBarrier.offset = 0;
+        stateBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(stateBarrier);
 
-        barriers[1].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barriers[1].buffer = drawCommandBuffer;
-        barriers[1].offset = 0;
-        barriers[1].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier drawCmdBarrier{};
+        drawCmdBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        drawCmdBarrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+        drawCmdBarrier.buffer = drawCommandBuffer;
+        drawCmdBarrier.offset = 0;
+        drawCmdBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(drawCmdBarrier);
 
-        barriers[2].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
-        barriers[2].buffer = particleBuffer;
-        barriers[2].offset = 0;
-        barriers[2].size = VK_WHOLE_SIZE;
+        vk::BufferMemoryBarrier particleBarrier{};
+        particleBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        particleBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+        particleBarrier.buffer = particleBuffer;
+        particleBarrier.offset = 0;
+        particleBarrier.size = VK_WHOLE_SIZE;
+        barriers.push_back(particleBarrier);
+
+        if (eventBuffer)
+        {
+            vk::BufferMemoryBarrier eventBarrier{};
+            eventBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            eventBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+            eventBarrier.buffer = eventBuffer;
+            eventBarrier.offset = 0;
+            eventBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(eventBarrier);
+        }
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,

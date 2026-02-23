@@ -57,7 +57,8 @@ namespace render::vfx
             vk::CommandBuffer cmd,
             vk::Buffer stateBuffer,
             vk::Buffer drawCommandBuffer,
-            vk::Buffer particleBuffer
+            vk::Buffer particleBuffer,
+            vk::Buffer eventBuffer = nullptr
         );
 
         void insertBarriersBeforeTransfer(
