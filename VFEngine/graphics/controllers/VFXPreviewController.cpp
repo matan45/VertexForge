@@ -6,7 +6,11 @@
 #include "../core/RenderManager.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../render/vfx/VFXBillboardPipeline.hpp"
+#include "../render/vfx/VFXMeshPreviewPipeline.hpp"
+#include "../render/vfx/VFXRibbonPreviewPipeline.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
+#include "../render/mesh/MeshGPUCache.hpp"
+#include "vfx/VFXModifierConfigLoader.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
 
@@ -44,6 +48,13 @@ namespace controllers
 
         pipeline = std::make_unique<render::vfx::VFXBillboardPipeline>(device, swapChain, offscreenResources);
         pipeline->init();
+        
+        previewMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
+        meshPipeline = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources, *previewMeshCache);
+        meshPipeline->init();
+        
+        ribbonPipeline = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
+        ribbonPipeline->init();
 
         render::vfx::VFXEmitterConfig config;
         config.spawnRate = currentParams.spawnRate;
@@ -63,14 +74,48 @@ namespace controllers
         config.flipbookRandomStart = currentParams.flipbookRandomStart;
         config.alphaClipThreshold = currentParams.alphaClipThreshold;
         config.additiveBlend = currentParams.additiveBlend;
+        config.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
+        config.softParticleDistance = currentParams.softParticleDistance;
+        config.stretchMultiplier = currentParams.stretchMultiplier;
+        config.maxTrailPoints = static_cast<uint32_t>(currentParams.maxTrailPoints);
+        config.ribbonWidth = currentParams.ribbonWidth;
+        config.ribbonMinDistance = currentParams.ribbonMinDistance;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
         {
             pipeline->setTexture(currentParams.texturePath);
         }
-        pipeline->setFlipbookConfig(currentParams.flipbookRows, currentParams.flipbookColumns,
-                                    currentParams.alphaClipThreshold, currentParams.additiveBlend);
+        render::vfx::VFXFlipbookConfig fbConfig;
+        fbConfig.rows = currentParams.flipbookRows;
+        fbConfig.columns = currentParams.flipbookColumns;
+        fbConfig.alphaClipThreshold = currentParams.alphaClipThreshold;
+        fbConfig.additiveBlend = currentParams.additiveBlend;
+        fbConfig.renderMode = currentParams.renderMode;
+        fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
+        fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
+        fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
+        fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
+        pipeline->setFlipbookConfig(fbConfig);
+        
+        if (!currentParams.meshPath.empty())
+        {
+            meshPipeline->setMesh(currentParams.meshPath);
+        }
+        if (!currentParams.texturePath.empty())
+        {
+            meshPipeline->setTexture(currentParams.texturePath);
+        }
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, fbConfig.glowColor,
+                                          currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
+
+        if (!currentParams.texturePath.empty())
+        {
+            ribbonPipeline->setTexture(currentParams.texturePath);
+        }
+        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
+                                            currentParams.ribbonWidth, fbConfig.glowColor,
+                                            currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
@@ -85,6 +130,24 @@ namespace controllers
         }
 
         device.getLogicalDevice().waitIdle();
+
+        if (ribbonPipeline)
+        {
+            ribbonPipeline->cleanUp();
+            ribbonPipeline.reset();
+        }
+
+        if (meshPipeline)
+        {
+            meshPipeline->cleanUp();
+            meshPipeline.reset();
+        }
+
+        if (previewMeshCache)
+        {
+            previewMeshCache->unloadAllMeshes();
+            previewMeshCache.reset();
+        }
 
         if (pipeline)
         {
@@ -147,14 +210,46 @@ namespace controllers
             config.flipbookRandomStart = params.flipbookRandomStart;
             config.alphaClipThreshold = params.alphaClipThreshold;
             config.additiveBlend = params.additiveBlend;
+            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+            config.softParticleDistance = params.softParticleDistance;
+            config.stretchMultiplier = params.stretchMultiplier;
+            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
+            config.ribbonWidth = params.ribbonWidth;
+            config.ribbonMinDistance = params.ribbonMinDistance;
             particleSystem->setEmitterConfig(config);
         }
+
+        render::vfx::VFXFlipbookConfig fbConfig;
+        fbConfig.rows = params.flipbookRows;
+        fbConfig.columns = params.flipbookColumns;
+        fbConfig.alphaClipThreshold = params.alphaClipThreshold;
+        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.renderMode = params.renderMode;
+        fbConfig.stretchMultiplier = params.stretchMultiplier;
+        fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
+        fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
 
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
-            pipeline->setFlipbookConfig(params.flipbookRows, params.flipbookColumns,
-                                        params.alphaClipThreshold, params.additiveBlend);
+            pipeline->setFlipbookConfig(fbConfig);
+        }
+        
+        if (meshPipeline && meshPipeline->isInitialized())
+        {
+            meshPipeline->setMesh(params.meshPath);
+            meshPipeline->setTexture(params.texturePath);
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+                                              params.uvScrollSpeedU, params.uvScrollSpeedV);
+        }
+
+        if (ribbonPipeline && ribbonPipeline->isInitialized())
+        {
+            ribbonPipeline->setTexture(params.texturePath);
+            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+                                                params.ribbonWidth, fbConfig.glowColor,
+                                                params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
     }
 
@@ -164,6 +259,16 @@ namespace controllers
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->updateCameraUBO(view, projection, cameraPos, time);
+        }
+
+        if (meshPipeline && meshPipeline->isInitialized())
+        {
+            meshPipeline->updateCameraUBO(view, projection, cameraPos, time);
+        }
+
+        if (ribbonPipeline && ribbonPipeline->isInitialized())
+        {
+            ribbonPipeline->updateCameraUBO(view, projection, cameraPos, time);
         }
     }
 
@@ -223,6 +328,16 @@ namespace controllers
 
         pipeline->recreate();
 
+        if (meshPipeline)
+        {
+            meshPipeline->recreate();
+        }
+
+        if (ribbonPipeline)
+        {
+            ribbonPipeline->recreate();
+        }
+
         lastExtent = swapChain.getSwapchainExtent();
     }
 
@@ -246,17 +361,52 @@ namespace controllers
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
+        // Route to appropriate pipeline based on render mode
+        auto renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
+        bool useMeshPipeline = renderMode == render::vfx::VFXRenderMode::MeshParticle &&
+                               meshPipeline && meshPipeline->isInitialized() &&
+                               meshPipeline->hasMesh();
+
+        bool useRibbonPipeline = renderMode == render::vfx::VFXRenderMode::Ribbon &&
+                                 ribbonPipeline && ribbonPipeline->isInitialized();
+
         if (particleSystem)
         {
-            auto instances = particleSystem->getInstanceData();
-            pipeline->setParticleInstances(instances);
+            if (useRibbonPipeline)
+            {
+                const auto& segments = particleSystem->getRibbonSegments();
+                ribbonPipeline->setRibbonSegments(segments);
+            }
+            else
+            {
+                auto instances = particleSystem->getInstanceData();
+                if (useMeshPipeline)
+                {
+                    meshPipeline->setParticleInstances(instances);
+                }
+                else
+                {
+                    pipeline->setParticleInstances(instances);
+                }
+            }
         }
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
-        pipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        if (useRibbonPipeline)
+        {
+            ribbonPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+        else if (useMeshPipeline)
+        {
+            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+        else
+        {
+            pipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
         commandBuffer.end();
 
         vk::SubmitInfo submitInfo(

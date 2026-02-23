@@ -2,6 +2,7 @@
 
 #include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../render/vfx/GPUVFXTypes.hpp"
+#include "../../services/data/VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -23,6 +24,13 @@ namespace render::vfx
     class GPUVFXBufferManager;
     class GPUVFXComputePipeline;
     class VFXSceneGPUPipeline;
+    class VFXMeshGPUPipeline;
+    class VFXRibbonGPUPipeline;
+}
+
+namespace render::mesh
+{
+    class MeshGPUCache;
 }
 
 namespace controllers
@@ -50,7 +58,7 @@ namespace controllers
         uint32_t gpuParticleOffset = 0;
         uint32_t gpuParticleCount = 0;
         float spawnAccumulator = 0.0f;
-        float emissionTime = 0.0f;  // Tracks total emission time for looping control
+        float emissionTime = 0.0f;
     };
 
     class VFXSceneRenderer
@@ -65,6 +73,9 @@ namespace controllers
         std::unique_ptr<render::vfx::GPUVFXBufferManager> gpuBufferManager;
         std::unique_ptr<render::vfx::GPUVFXComputePipeline> gpuComputePipeline;
         std::unique_ptr<render::vfx::VFXSceneGPUPipeline> gpuRenderPipeline;
+        std::unique_ptr<render::vfx::VFXMeshGPUPipeline> gpuMeshPipeline;
+        std::unique_ptr<render::vfx::VFXRibbonGPUPipeline> gpuRibbonPipeline;
+        std::unique_ptr<render::mesh::MeshGPUCache> gpuMeshCache;
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
 
@@ -108,8 +119,9 @@ namespace controllers
         bool isInstanceActive(VFXInstanceId id) const;
 
         void update(float deltaTime);
-        void setCamera(const glm::mat4& view, const glm::mat4& projection,
-                       const glm::vec3& cameraPos, float time);
+        void setCamera(const services::VFXCameraParams& camera);
+
+        void setSceneDepthImageView(vk::ImageView depthView);
 
         void recordComputeCommands(vk::CommandBuffer cmd);
 

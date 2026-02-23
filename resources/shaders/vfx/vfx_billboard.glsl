@@ -9,10 +9,12 @@ layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
 layout(location = 5) in float inRotation;
 layout(location = 6) in float inFlipbookFrameIndex;
+layout(location = 7) in float inGlowIntensity;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
+layout(location = 3) out float fragGlowIntensity;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -21,11 +23,21 @@ layout(binding = 0) uniform CameraUBO {
     float time;
 } camera;
 
+const uint RENDER_MODE_BILLBOARD = 0u;
+const uint RENDER_MODE_HORIZONTAL = 2u;
+
 layout(push_constant) uniform FlipbookPC {
     float flipbookColumns;
     float flipbookRows;
     float alphaClipThreshold;
     uint blendMode;  // 0 = alpha blend, 1 = additive
+    uint renderMode;
+    float stretchMultiplier;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {
@@ -39,12 +51,22 @@ void main() {
         inPosition.x * sinR + inPosition.y * cosR
     );
 
-    vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
-    vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+    vec3 vertexPos;
 
-    vec3 vertexPos = worldPos
-        + cameraRight * rotatedPos.x * particleSize
-        + cameraUp * rotatedPos.y * particleSize;
+    if (pc.renderMode == RENDER_MODE_HORIZONTAL) {
+        vec3 right = vec3(1.0, 0.0, 0.0);
+        vec3 forward = vec3(0.0, 0.0, 1.0);
+        vertexPos = worldPos
+            + right * rotatedPos.x * particleSize
+            + forward * rotatedPos.y * particleSize;
+    } else {
+        // Standard billboard: camera-facing (also used for stretched in preview since no velocity data)
+        vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
+        vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+        vertexPos = worldPos
+            + cameraRight * rotatedPos.x * particleSize
+            + cameraUp * rotatedPos.y * particleSize;
+    }
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
@@ -54,8 +76,11 @@ void main() {
     vec2 tileSize = vec2(1.0 / pc.flipbookColumns, 1.0 / pc.flipbookRows);
     fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
 
+    fragTexCoord += vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
+
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
+    fragGlowIntensity = inGlowIntensity;
 }
 
 #type FRAGMENT
@@ -64,6 +89,7 @@ void main() {
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
+layout(location = 3) in float fragGlowIntensity;
 
 layout(location = 0) out vec4 outColor;
 
@@ -74,6 +100,13 @@ layout(push_constant) uniform FlipbookPC {
     float flipbookRows;
     float alphaClipThreshold;
     uint blendMode;
+    uint renderMode;
+    float stretchMultiplier;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
+    float uvScrollSpeedU;
+    float uvScrollSpeedV;
 } pc;
 
 void main() {
@@ -85,6 +118,10 @@ void main() {
         float fadeProgress = (fragLifetimeRatio - fadeStart) / (1.0 - fadeStart);
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
+
+    // Glow: additive emissive color
+    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    finalColor.rgb += glowColor * fragGlowIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

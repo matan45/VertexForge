@@ -10,6 +10,7 @@ namespace resource
 
 namespace core {
 	class Device;
+	class DeferredDeletionQueue;
 
 	struct ImageData
 	{
@@ -57,6 +58,10 @@ namespace core {
 		const vk::Sampler& getSampler() const { return sampler; }
 		const ImageData& getImageData() const { return imageData; }
 		const std::vector<vk::DescriptorSet>& getMipDescriptorSets() const { return mipDescriptorSets; }
+
+		// Moves Vulkan handles into the DeferredDeletionQueue and nulls them.
+		// After this call, the destructor becomes a no-op for GPU resources.
+		void extractResources(DeferredDeletionQueue& queue);
 
 	private:
 		void createSampler(uint32_t mipLevels);

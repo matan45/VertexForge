@@ -137,7 +137,6 @@ namespace editor::graph {
             case material::NodeType::TextureSample:  return "Texture Sample";
             case material::NodeType::OrmSample:      return "ORM Sample";
             case material::NodeType::MixColor:       return "Mix Color";
-            // Type Conversions (VK-56)
             case material::NodeType::FloatToVec2:    return "Float To Vec2";
             case material::NodeType::FloatToVec3:    return "Float To Vec3";
             case material::NodeType::FloatToVec4:    return "Float To Vec4";

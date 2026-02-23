@@ -1,7 +1,6 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
-#include "GPUVFXTypes.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -17,7 +16,19 @@ namespace core
 
 namespace render::vfx
 {
-    class VFXBillboardPipeline
+    struct VFXRibbonPreviewPushConstants
+    {
+        float alphaClipThreshold = 0.1f;
+        uint32_t blendMode = 0;
+        float ribbonWidth = 1.0f;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
+    };
+
+    class VFXRibbonPreviewPipeline
     {
     private:
         core::Device& device;
@@ -26,7 +37,7 @@ namespace render::vfx
 
         bool initialized = false;
 
-        std::shared_ptr<core::Shader> vfxShader;
+        std::shared_ptr<core::Shader> ribbonShader;
 
         vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
@@ -43,8 +54,10 @@ namespace render::vfx
         vk::DeviceMemory quadIndexBufferMemory;
         vk::Buffer instanceBuffer;
         vk::DeviceMemory instanceBufferMemory;
+        void* instanceBufferMapped = nullptr;
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        void* cameraUBOMapped = nullptr;
 
         uint32_t maxInstances = 1024;
         uint32_t currentInstanceCount = 0;
@@ -57,12 +70,12 @@ namespace render::vfx
         std::unique_ptr<core::Texture> customTexture;
         std::string currentTexturePath;
 
-        VFXFlipbookPushConstants flipbookPC{1.0f, 1.0f, 0.1f, 0, RenderModeFlags::Billboard, 1.0f};
+        VFXRibbonPreviewPushConstants pushConstants;
 
     public:
-        explicit VFXBillboardPipeline(core::Device& device, core::SwapChain& swapChain,
-                                      core::OffscreenResources& offscreenResources);
-        ~VFXBillboardPipeline();
+        explicit VFXRibbonPreviewPipeline(core::Device& device, core::SwapChain& swapChain,
+                                           core::OffscreenResources& offscreenResources);
+        ~VFXRibbonPreviewPipeline();
 
         void init();
         void recreate();
@@ -71,11 +84,13 @@ namespace render::vfx
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time) const;
 
-        void setParticleInstances(const std::vector<VFXInstanceData>& instances);
+        void setRibbonSegments(const std::vector<VFXRibbonSegmentData>& segments);
 
         void setTexture(const std::string& texturePath);
-
-        void setFlipbookConfig(const VFXFlipbookConfig& config);
+        void setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+                                float ribbonWidth,
+                                const glm::vec3& glowColor = glm::vec3(1.0f),
+                                float uvScrollSpeedU = 0.0f, float uvScrollSpeedV = 0.0f);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

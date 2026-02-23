@@ -39,8 +39,8 @@ namespace core
 
         // Frame update
         void update(float deltaTime) override;
-        void setCamera(const glm::mat4& view, const glm::mat4& projection,
-                       const glm::vec3& cameraPos, float time) override;
+        void setCamera(const services::VFXCameraParams& camera) override;
+        void setSceneDepthImageView(vk::ImageView depthView) override;
 
         // Compute commands (call before render pass)
         void recordComputeCommands(const vk::CommandBuffer& cmd) override;

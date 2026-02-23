@@ -499,7 +499,6 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Terrain material from shader graph (VK-213)
 #include "../material/terrain_material_generated.glsl"
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;

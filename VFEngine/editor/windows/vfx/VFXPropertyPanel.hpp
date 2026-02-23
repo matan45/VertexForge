@@ -79,6 +79,9 @@ namespace editor::vfxeditor
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         void drawFlipbookProperties(vfx::VFXNode& node);
         void drawRenderingProperties(vfx::VFXNode& node);
+        void drawMeshPathSelector(vfx::VFXNode& node, float inputWidth);
+        void drawRibbonProperties(vfx::VFXNode& node, float inputWidth);
+        void drawUVScrollProperties(vfx::VFXNode& node, float inputWidth);
         void notifyChanged();
     };
 }

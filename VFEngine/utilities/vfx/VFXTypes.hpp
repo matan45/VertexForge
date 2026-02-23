@@ -35,6 +35,7 @@ namespace vfx
         SizeOverLifetime,
         SpeedOverLifetime,
         RotationOverLifetime,
+        GlowOverLifetime,
         ForceGravity,
         ForceWind,
         ForceTurbulence,
@@ -47,7 +48,8 @@ namespace vfx
         return type == VFXNodeType::ColorOverLifetime ||
                type == VFXNodeType::SizeOverLifetime ||
                type == VFXNodeType::SpeedOverLifetime ||
-               type == VFXNodeType::RotationOverLifetime;
+               type == VFXNodeType::RotationOverLifetime ||
+               type == VFXNodeType::GlowOverLifetime;
     }
 
     inline bool isForceNode(VFXNodeType type)
@@ -138,7 +140,6 @@ namespace vfx
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
 
-        // Flipbook defaults (VK-493)
         inline constexpr int FLIPBOOK_ROWS = 1;
         inline constexpr int FLIPBOOK_COLUMNS = 1;
         inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
@@ -147,6 +148,17 @@ namespace vfx
         // Rendering
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
         inline constexpr bool ADDITIVE_BLEND = false;
+
+        inline constexpr int RENDER_MODE = 0;
+        inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
+        inline constexpr float STRETCH_MULTIPLIER = 1.0f;
+
+        inline constexpr int MAX_TRAIL_POINTS = 64;
+        inline constexpr float RIBBON_WIDTH = 1.0f;
+        inline constexpr float RIBBON_MIN_DISTANCE = 0.1f;
+
+        inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
+        inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
     }
 
     namespace ModifierDefaults

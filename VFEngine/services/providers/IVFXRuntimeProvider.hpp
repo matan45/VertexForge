@@ -33,8 +33,9 @@ namespace services
 
         // Frame update (call each frame)
         virtual void update(float deltaTime) = 0;
-        virtual void setCamera(const glm::mat4& view, const glm::mat4& projection,
-                               const glm::vec3& cameraPos, float time) = 0;
+        virtual void setCamera(const VFXCameraParams& camera) = 0;
+
+        virtual void setSceneDepthImageView(vk::ImageView depthView) = 0;
 
         // Called before render pass to dispatch compute shaders (GPU mode)
         virtual void recordComputeCommands(const vk::CommandBuffer& cmd) = 0;

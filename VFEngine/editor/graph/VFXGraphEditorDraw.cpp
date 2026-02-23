@@ -101,6 +101,7 @@ namespace editor::graph {
             if (propName == "shapeType") continue;
             if (propName.rfind("flipbook", 0) == 0) continue;  // shown in property panel
             if (propName == "alphaClipThreshold" || propName == "additiveBlend") continue;  // shown in property panel
+            if (propName == "meshPath") continue;  
 
             std::string widgetId = "##" + idPrefix + propName + std::to_string(node.id);
 
@@ -261,7 +262,7 @@ namespace editor::graph {
 
         ImGui::Spacing();
 
-        drawNodeProperties(node, "", 70, 50);
+        drawNodeProperties(node, "", 140, 50);
 
         ImGui::Spacing();
 

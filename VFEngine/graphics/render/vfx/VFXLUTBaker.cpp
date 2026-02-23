@@ -62,6 +62,12 @@ namespace render::vfx
             fillDefault(result.data, glm::vec4(0.0f));
         }
 
+        if (!bakeChannel<::vfx::GlowOverLifetimeConfig>(modifiers, LUTFlags::Glow,
+            [](const auto& mod, auto& out) { bakeCurve(mod.curve, out); }, result))
+        {
+            fillDefault(result.data, glm::vec4(0.0f));
+        }
+
         result.totalEntries = static_cast<uint32_t>(result.data.size());
         return result;
     }

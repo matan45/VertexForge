@@ -117,12 +117,19 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::setCamera(const glm::mat4& view, const glm::mat4& projection,
-                                       const glm::vec3& cameraPos, float time)
+    void VFXRuntimeAdapter::setCamera(const services::VFXCameraParams& camera)
     {
         if (renderer)
         {
-            renderer->setCamera(view, projection, cameraPos, time);
+            renderer->setCamera(camera);
+        }
+    }
+
+    void VFXRuntimeAdapter::setSceneDepthImageView(vk::ImageView depthView)
+    {
+        if (renderer)
+        {
+            renderer->setSceneDepthImageView(depthView);
         }
     }
 

@@ -62,6 +62,7 @@ namespace render::vfx
 
             createDefaultTexture();
             createSampler();
+            createDepthSampler();
             allocateDescriptorSet();
 
             createPipeline();
@@ -105,11 +106,6 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::cleanup()
     {
-        if (!initialized)
-        {
-            return;
-        }
-
         auto vkDevice = device.getLogicalDevice();
 
         if (graphicsPipeline)
@@ -145,6 +141,12 @@ namespace render::vfx
         core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferMemory);
 
+        if (depthSampler)
+        {
+            vkDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
+
         if (textureSampler)
         {
             vkDevice.destroySampler(textureSampler);
@@ -177,6 +179,7 @@ namespace render::vfx
         cachedParticleBufferSize = 0;
         cachedConfigBuffer = nullptr;
         cachedConfigBufferSize = 0;
+        sceneDepthImageView = nullptr;
         descriptorsNeedUpdate = true;
         initialized = false;
 

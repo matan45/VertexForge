@@ -1,4 +1,6 @@
-#include "VFXSceneGPUPipeline.hpp"
+#include "VFXMeshGPUPipeline.hpp"
+#include "../mesh/MeshGPUCache.hpp"
+#include "../mesh/MeshTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
@@ -8,7 +10,7 @@
 
 namespace render::vfx
 {
-    void VFXSceneGPUPipeline::updateCameraUBO(
+    void VFXMeshGPUPipeline::updateCameraUBO(
         const glm::mat4& view,
         const glm::mat4& projection,
         const glm::vec3& cameraPos,
@@ -32,7 +34,7 @@ namespace render::vfx
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
-    void VFXSceneGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
+    void VFXMeshGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
     {
         if (sceneDepthImageView != depthView)
         {
@@ -41,7 +43,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
+    void VFXMeshGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
     {
         if (particleBuffer != cachedParticleBuffer || particleBufferSize != cachedParticleBufferSize)
         {
@@ -51,7 +53,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
+    void VFXMeshGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
     {
         if (configBuffer != cachedConfigBuffer || configBufferSize != cachedConfigBufferSize)
         {
@@ -61,7 +63,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::writeDescriptors() const
+    void VFXMeshGPUPipeline::writeDescriptors() const
     {
         if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer)
         {
@@ -78,7 +80,7 @@ namespace render::vfx
         descriptorsNeedUpdate = false;
     }
 
-    void VFXSceneGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
+    void VFXMeshGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -152,7 +154,47 @@ namespace render::vfx
         vkDevice.updateDescriptorSets(writes, {});
     }
 
-    void VFXSceneGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
+    void VFXMeshGPUPipeline::setEmitterMesh(uint32_t emitterIndex, const std::string& meshPath)
+    {
+        if (meshPath.empty())
+        {
+            emitterMeshes.erase(emitterIndex);
+            return;
+        }
+
+        std::string meshId = meshCache.loadMesh(meshPath);
+        if (meshId.empty())
+        {
+            loggerWarning("VFXMeshGPUPipeline: Failed to load mesh: {}", meshPath);
+            return;
+        }
+
+        const auto* meshData = meshCache.getMesh(meshId);
+        if (!meshData || meshData->subMeshes.empty())
+        {
+            loggerWarning("VFXMeshGPUPipeline: No submeshes in mesh: {}", meshPath);
+            return;
+        }
+
+        const auto& lod0 = meshData->subMeshes[0].getLOD(0);
+        if (!lod0.isValid())
+        {
+            loggerWarning("VFXMeshGPUPipeline: Invalid LOD 0 for mesh: {}", meshPath);
+            return;
+        }
+
+        EmitterMeshData& emMesh = emitterMeshes[emitterIndex];
+        emMesh.meshPath = meshPath;
+        emMesh.meshId = meshId;
+        emMesh.vertexBuffer = lod0.vertexBuffer;
+        emMesh.indexBuffer = lod0.indexBuffer;
+        emMesh.indexCount = lod0.indexCount;
+
+        loggerInfo("VFXMeshGPUPipeline: Mesh set for emitter {}: {} ({} indices)",
+                   emitterIndex, meshPath, lod0.indexCount);
+    }
+
+    void VFXMeshGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
         auto& config = emitterConfigs[emitterIndex];
         const std::string oldPath = config.texturePath;
@@ -191,7 +233,7 @@ namespace render::vfx
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("VFX GPU texture not found: {}", texturePath);
+            loggerWarning("VFX mesh texture not found: {}", texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
@@ -226,17 +268,17 @@ namespace render::vfx
                 descriptorsNeedUpdate = true;
             }
 
-            loggerInfo("VFX GPU texture loaded: {}", texturePath);
+            loggerInfo("VFX mesh texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX GPU texture '{}': {}", texturePath, e.what());
+            loggerError("Failed to load VFX mesh texture '{}': {}", texturePath, e.what());
             textureEntries.erase(texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
         }
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
+    void VFXMeshGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
                                                          float alphaClipThreshold, bool additiveBlend,
                                                          const glm::vec3& glowColor)
     {
@@ -245,12 +287,7 @@ namespace render::vfx
         emitterConfigs[emitterIndex].glowColor = glowColor;
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode)
-    {
-        emitterConfigs[emitterIndex].renderMode = renderMode;
-    }
-
-    void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
+    void VFXMeshGPUPipeline::removeEmitter(uint32_t emitterIndex)
     {
         auto configIt = emitterConfigs.find(emitterIndex);
         if (configIt != emitterConfigs.end())
@@ -274,16 +311,27 @@ namespace render::vfx
             }
             emitterConfigs.erase(configIt);
         }
+        emitterMeshes.erase(emitterIndex);
     }
 
-    void VFXSceneGPUPipeline::recordCommandsInline(
+    uint32_t VFXMeshGPUPipeline::getEmitterMeshIndexCount(uint32_t emitterIndex) const
+    {
+        auto it = emitterMeshes.find(emitterIndex);
+        if (it != emitterMeshes.end())
+        {
+            return it->second.indexCount;
+        }
+        return 6;
+    }
+
+    void VFXMeshGPUPipeline::recordCommandsInline(
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount) const
     {
         ++frameCounter;
 
-        if (!initialized || emitterCount == 0 || !cachedParticleBuffer)
+        if (!initialized || emitterCount == 0 || !cachedParticleBuffer || emitterMeshes.empty())
         {
             return;
         }
@@ -292,28 +340,24 @@ namespace render::vfx
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        vk::Buffer vertexBuffers[] = {quadVertexBuffer};
-        vk::DeviceSize offsets[] = {0};
-        cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-        cmd.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
-
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        for (uint32_t i = 0; i < emitterCount; ++i)
+        for (const auto& [emitterIdx, meshData] : emitterMeshes)
         {
-            auto configIt = emitterConfigs.find(i);
-            if (configIt != emitterConfigs.end() &&
-                (configIt->second.renderMode == RenderModeFlags::MeshParticle ||
-                 configIt->second.renderMode == RenderModeFlags::Ribbon))
-            {
+            if (emitterIdx >= emitterCount || meshData.indexCount == 0)
                 continue;
-            }
+
+            vk::Buffer vertexBuffers[] = {meshData.vertexBuffer};
+            vk::DeviceSize offsets[] = {0};
+            cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+            cmd.bindIndexBuffer(meshData.indexBuffer, 0, vk::IndexType::eUint32);
 
             vk::DescriptorSet setToBind = defaultDescriptorSet;
             float alphaClip = 0.1f;
             uint32_t blendMode = 0;
             glm::vec3 gc(1.0f);
 
+            auto configIt = emitterConfigs.find(emitterIdx);
             if (configIt != emitterConfigs.end())
             {
                 alphaClip = configIt->second.alphaClipThreshold;
@@ -338,7 +382,7 @@ namespace render::vfx
             }
 
             GPUVFXBillboardPushConstants pushConstants{};
-            pushConstants.emitterIndex = i;
+            pushConstants.emitterIndex = emitterIdx;
             pushConstants.alphaClipThreshold = alphaClip;
             pushConstants.blendMode = blendMode;
             pushConstants.glowColorR = gc.r;
@@ -348,7 +392,7 @@ namespace render::vfx
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
 
-            vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
+            vk::DeviceSize offset = emitterIdx * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
         }
     }

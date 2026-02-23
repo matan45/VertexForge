@@ -61,6 +61,15 @@ namespace core
         controllerParams.flipbookRandomStart = params.flipbookRandomStart;
         controllerParams.alphaClipThreshold = params.alphaClipThreshold;
         controllerParams.additiveBlend = params.additiveBlend;
+        controllerParams.renderMode = params.renderMode;
+        controllerParams.softParticleDistance = params.softParticleDistance;
+        controllerParams.stretchMultiplier = params.stretchMultiplier;
+        controllerParams.meshPath = params.meshPath;
+        controllerParams.maxTrailPoints = params.maxTrailPoints;
+        controllerParams.ribbonWidth = params.ribbonWidth;
+        controllerParams.ribbonMinDistance = params.ribbonMinDistance;
+        controllerParams.uvScrollSpeedU = params.uvScrollSpeedU;
+        controllerParams.uvScrollSpeedV = params.uvScrollSpeedV;
 
         controller->setParams(controllerParams);
     }

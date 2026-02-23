@@ -15,16 +15,22 @@ namespace core
     class DeferredDeletionQueue;
 }
 
+namespace render::mesh
+{
+    class MeshGPUCache;
+}
+
 namespace render::vfx
 {
-    class VFXSceneGPUPipeline
+    class VFXMeshGPUPipeline
     {
     private:
         core::Device& device;
         core::SwapChain& swapChain;
+        render::mesh::MeshGPUCache& meshCache;
 
         bool initialized = false;
-        mutable bool descriptorsNeedUpdate = true;  // mutable: caching flag for lazy descriptor writes
+        mutable bool descriptorsNeedUpdate = true;
 
         std::shared_ptr<core::Shader> gpuShader;
 
@@ -34,23 +40,16 @@ namespace render::vfx
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
 
-        // Buffers
-        vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
-        vk::Buffer quadIndexBuffer;
-        vk::DeviceMemory quadIndexBufferMemory;
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
-        void* cameraUBOMapped = nullptr;  // Persistently mapped for efficient per-frame updates
+        void* cameraUBOMapped = nullptr;
 
-        // Cached particle buffer info
         vk::Buffer cachedParticleBuffer;
         vk::DeviceSize cachedParticleBufferSize = 0;
 
         vk::Buffer cachedConfigBuffer;
         vk::DeviceSize cachedConfigBufferSize = 0;
 
-        // Default texture (white 1x1)
         vk::Image defaultTextureImage;
         vk::DeviceMemory defaultTextureMemory;
         vk::ImageView defaultTextureImageView;
@@ -59,15 +58,22 @@ namespace render::vfx
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
-        // Per-emitter texture and rendering config
         static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
+
+        struct EmitterMeshData
+        {
+            std::string meshPath;
+            std::string meshId;
+            vk::Buffer vertexBuffer;
+            vk::Buffer indexBuffer;
+            uint32_t indexCount = 0;
+        };
 
         struct EmitterRenderConfig
         {
             std::string texturePath;
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
-            uint32_t renderMode = 0; 
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
         };
 
@@ -78,11 +84,11 @@ namespace render::vfx
             uint32_t refCount = 0;
         };
 
+        std::unordered_map<uint32_t, EmitterMeshData> emitterMeshes;
         std::unordered_map<uint32_t, EmitterRenderConfig> emitterConfigs;
         std::unordered_map<std::string, TextureEntry> textureEntries;
         vk::DescriptorSet defaultDescriptorSet;
 
-        // Deferred texture cleanup (avoids waitIdle GPU stall)
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         struct PendingDescriptorSet
@@ -94,11 +100,12 @@ namespace render::vfx
         mutable std::vector<PendingDescriptorSet> pendingDescriptorSets;
 
     public:
-        explicit VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain);
-        ~VFXSceneGPUPipeline();
+        explicit VFXMeshGPUPipeline(core::Device& device, core::SwapChain& swapChain,
+                                     render::mesh::MeshGPUCache& meshCache);
+        ~VFXMeshGPUPipeline();
 
-        VFXSceneGPUPipeline(const VFXSceneGPUPipeline&) = delete;
-        VFXSceneGPUPipeline& operator=(const VFXSceneGPUPipeline&) = delete;
+        VFXMeshGPUPipeline(const VFXMeshGPUPipeline&) = delete;
+        VFXMeshGPUPipeline& operator=(const VFXMeshGPUPipeline&) = delete;
 
         void init(vk::RenderPass renderPass);
         void recreate(vk::RenderPass renderPass);
@@ -114,13 +121,15 @@ namespace render::vfx
         void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
 
+        void setEmitterMesh(uint32_t emitterIndex, const std::string& meshPath);
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
                                        const glm::vec3& glowColor = glm::vec3(1.0f));
-        void setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode);
         void removeEmitter(uint32_t emitterIndex);
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
+
+        uint32_t getEmitterMeshIndexCount(uint32_t emitterIndex) const;
 
         void recordCommandsInline(
             vk::CommandBuffer cmd,

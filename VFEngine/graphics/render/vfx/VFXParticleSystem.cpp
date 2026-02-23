@@ -14,6 +14,13 @@ namespace render::vfx
 
     void VFXParticleSystem::setEmitterConfig(const VFXEmitterConfig& emitterConfig)
     {
+        // If render mode or trail points changed, reset ring buffer
+        if (config.renderMode != emitterConfig.renderMode ||
+            config.maxTrailPoints != emitterConfig.maxTrailPoints)
+        {
+            ribbonRing.clear();
+            ribbonHead = 0;
+        }
         config = emitterConfig;
     }
 
@@ -60,6 +67,9 @@ namespace render::vfx
         }
         spawnAccumulator = 0.0f;
         emissionTime = 0.0f;
+
+        ribbonRing.clear();
+        ribbonHead = 0;
     }
 
     std::vector<VFXInstanceData> VFXParticleSystem::getInstanceData() const
@@ -80,7 +90,6 @@ namespace render::vfx
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
                 instance.rotation = particle.rotation;
 
-                // Flipbook frame index computation (VK-493)
                 if (totalFrames > 1)
                 {
                     float frameIndex;
@@ -107,11 +116,70 @@ namespace render::vfx
                     instance.flipbookFrameIndex = 0.0f;
                 }
 
+                instance.glowIntensity = particle.glowIntensity;
                 instances.push_back(instance);
             }
         }
 
         return instances;
+    }
+
+    const std::vector<VFXRibbonSegmentData>& VFXParticleSystem::getRibbonSegments() const
+    {
+        cachedSegments.clear();
+
+        if (config.renderMode != VFXRenderMode::Ribbon || config.maxTrailPoints < 2)
+            return cachedSegments;
+
+        uint32_t usedPoints = std::min(ribbonHead, config.maxTrailPoints);
+        if (usedPoints < 2 || ribbonRing.size() != config.maxTrailPoints)
+            return cachedSegments;
+
+        cachedSegments.reserve(usedPoints - 1);
+
+        // Safe from unsigned underflow: usedPoints >= 2 (guarded above) and
+        // usedPoints <= ribbonHead (from std::min), so ribbonHead >= 2.
+        // Minimum value of (ribbonHead - 2 - i) is ribbonHead - usedPoints >= 0.
+        for (uint32_t i = 0; i < usedPoints - 1; i++)
+        {
+            // Walk from newest to oldest
+            uint32_t slotA = (ribbonHead - 1 - i) % config.maxTrailPoints;
+            uint32_t slotB = (ribbonHead - 2 - i) % config.maxTrailPoints;
+
+            uint32_t pidxA = ribbonRing[slotA];
+            uint32_t pidxB = ribbonRing[slotB];
+
+            if (pidxA >= particles.size() || pidxB >= particles.size())
+                continue;
+
+            const VFXParticle& pA = particles[pidxA];
+            const VFXParticle& pB = particles[pidxB];
+
+            // Skip segments with dead endpoints
+            if (!pA.active || !pB.active)
+                continue;
+
+            // Skip segments where points are too close
+            float dist = glm::length(pA.position - pB.position);
+            if (dist < config.ribbonMinDistance)
+                continue;
+
+            VFXRibbonSegmentData seg{};
+            seg.posA = pA.position;
+            seg.sizeA = pA.size;
+            seg.posB = pB.position;
+            seg.sizeB = pB.size;
+            seg.colorA = pA.color;
+            seg.colorB = pB.color;
+            seg.trailT = static_cast<float>(i) / static_cast<float>(usedPoints - 1);
+            seg.glowIntensityA = pA.glowIntensity;
+            seg.glowIntensityB = pB.glowIntensity;
+            seg._pad = 0.0f;
+
+            cachedSegments.push_back(seg);
+        }
+
+        return cachedSegments;
     }
 
     size_t VFXParticleSystem::getActiveParticleCount() const
@@ -146,8 +214,19 @@ namespace render::vfx
         particle->initialDirection = direction;
         particle->velocity = direction * config.startSpeed;
 
-        // Assign deterministic seed for flipbook random start (VK-493)
         particle->spawnSeed = rng();
+
+        if (config.renderMode == VFXRenderMode::Ribbon && config.maxTrailPoints > 0)
+        {
+            if (ribbonRing.size() != config.maxTrailPoints)
+            {
+                ribbonRing.resize(config.maxTrailPoints, 0);
+            }
+            uint32_t particleIndex = static_cast<uint32_t>(particle - particles.data());
+            uint32_t slot = ribbonHead % config.maxTrailPoints;
+            ribbonRing[slot] = particleIndex;
+            ribbonHead++;
+        }
     }
 
     void VFXParticleSystem::updateParticle(VFXParticle& particle, float deltaTime)
@@ -227,6 +306,11 @@ namespace render::vfx
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
     {
         particle.rotation += glm::radians(mod.curve.evaluate(t)) * deltaTime;
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::GlowOverLifetimeConfig& mod, float t, float /*deltaTime*/)
+    {
+        particle.glowIntensity = mod.curve.evaluate(t);
     }
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)

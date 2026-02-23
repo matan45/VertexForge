@@ -31,6 +31,19 @@ namespace services
 
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
+
+        int renderMode = 0;
+        float softParticleDistance = 0.0f;
+        float stretchMultiplier = 1.0f;
+
+        std::string meshPath;
+
+        int maxTrailPoints = 64;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
+
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 
     class IVFXPreviewProvider

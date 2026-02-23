@@ -1,6 +1,9 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
+#include <nfd/FileDialog.hpp>
 #include <algorithm>
+#include <cstring>
+#include <filesystem>
 
 namespace editor::vfxeditor
 {
@@ -319,18 +322,164 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawMeshPathSelector(vfx::VFXNode& node, float inputWidth)
+    {
+        auto meshIt = node.properties.find("meshPath");
+        if (meshIt == node.properties.end()) return;
+
+        auto* meshVal = std::get_if<std::string>(&meshIt->second.value);
+        if (!meshVal) return;
+
+        ImGui::Text("Mesh");
+        ImGui::SameLine(100.0f);
+        std::string display = meshVal->empty() ? "(none)" : std::filesystem::path(*meshVal).filename().string();
+        char buf[256];
+        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        ImGui::SetNextItemWidth(inputWidth * 1.5f);
+        ImGui::InputText("##panel_meshPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+        ImGui::SameLine();
+        if (ImGui::Button("...##meshBrowse"))
+        {
+            nfd::FileDialog dialog;
+            std::string path = dialog.openFileDialog({
+                {L"VF Mesh", L"*.vfMesh"}
+            });
+            if (!path.empty())
+            {
+                *meshVal = path;
+                notifyChanged();
+            }
+        }
+        if (!meshVal->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("X##meshClear"))
+            {
+                meshVal->clear();
+                notifyChanged();
+            }
+        }
+    }
+
+    void VFXPropertyPanel::drawRibbonProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        struct RibbonEntry { const char* key; const char* label; float step; const char* fmt; };
+        static constexpr RibbonEntry ribbonEntries[] = {
+            {"ribbonWidth",       "Width",        0.01f, "%.2f"},
+            {"ribbonMinDistance",  "Min Distance", 0.01f, "%.2f"},
+        };
+
+        auto tpIt = node.properties.find("maxTrailPoints");
+        if (tpIt != node.properties.end())
+        {
+            auto* val = std::get_if<int32_t>(&tpIt->second.value);
+            if (val)
+            {
+                ImGui::Text("Trail Points");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                if (ImGui::SliderInt("##panel_maxTrailPoints", val, 2, 256))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+
+        for (const auto& re : ribbonEntries)
+        {
+            auto it = node.properties.find(re.key);
+            if (it == node.properties.end()) continue;
+            auto& prop = it->second;
+            auto* val = std::get_if<float>(&prop.value);
+            if (val)
+            {
+                ImGui::Text("%s", re.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                std::string wid = std::string("##panel_") + re.key;
+                if (ImGui::DragFloat(wid.c_str(), val, re.step, prop.min, prop.max, re.fmt))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+    }
+
+    void VFXPropertyPanel::drawUVScrollProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        struct UVScrollEntry { const char* key; const char* label; };
+        static constexpr UVScrollEntry uvScrollEntries[] = {
+            {"uvScrollSpeedU", "UV Scroll U"},
+            {"uvScrollSpeedV", "UV Scroll V"},
+        };
+
+        for (const auto& entry : uvScrollEntries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+            auto& prop = it->second;
+            auto* val = std::get_if<float>(&prop.value);
+            if (val)
+            {
+                ImGui::Text("%s", entry.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                std::string wid = std::string("##panel_") + entry.key;
+                if (ImGui::DragFloat(wid.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                {
+                    notifyChanged();
+                }
+            }
+        }
+    }
+
     void VFXPropertyPanel::drawRenderingProperties(vfx::VFXNode& node)
     {
         ImGui::Text("Rendering");
         ImGui::Separator();
 
+        float inputWidth = 80.0f;
+
+        int currentRenderMode = 0;
+        {
+            auto rmIt = node.properties.find("renderMode");
+            if (rmIt != node.properties.end())
+            {
+                auto& prop = rmIt->second;
+                if (auto* val = std::get_if<int32_t>(&prop.value))
+                {
+                    currentRenderMode = std::clamp(*val, 0, 4);
+                    ImGui::Text("Render Mode");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    const char* modes[] = {"Billboard", "Stretched", "Horizontal", "Mesh Particle", "Ribbon"};
+                    int current = currentRenderMode;
+                    if (ImGui::Combo("##panel_renderMode", &current, modes, 5))
+                    {
+                        *val = current;
+                        currentRenderMode = current;
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
+        if (currentRenderMode == 3)
+            drawMeshPathSelector(node, inputWidth);
+
+        if (currentRenderMode == 4)
+            drawRibbonProperties(node, inputWidth);
+
+        drawUVScrollProperties(node, inputWidth);
+
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
-            {"alphaClipThreshold", "Alpha Clip"},
-            {"additiveBlend",     "Additive"},
+            {"alphaClipThreshold",   "Alpha Clip"},
+            {"additiveBlend",        "Additive"},
+            {"softParticleDistance",  "Soft Distance"},
+            {"stretchMultiplier",    "Stretch"},
         };
-
-        float inputWidth = 80.0f;
 
         for (const auto& entry : entries)
         {
@@ -339,6 +488,9 @@ namespace editor::vfxeditor
 
             auto& prop = it->second;
             std::string widgetId = std::string("##panel_") + entry.key;
+
+            bool disableWidget = (strcmp(entry.key, "stretchMultiplier") == 0 && currentRenderMode != 1);
+            if (disableWidget) ImGui::BeginDisabled();
 
             if (prop.type == vfx::VFXPropertyType::Float)
             {
@@ -367,6 +519,8 @@ namespace editor::vfxeditor
                     }
                 }
             }
+
+            if (disableWidget) ImGui::EndDisabled();
         }
     }
 

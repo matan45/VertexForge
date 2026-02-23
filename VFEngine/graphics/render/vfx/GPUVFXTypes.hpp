@@ -18,7 +18,7 @@ namespace render::vfx
         float initialSize;
         float initialSpeed;
         uint32_t spawnSeed;
-        float _pad1 = 0.0f;
+        float glowIntensity = 0.0f;
         float _pad2 = 0.0f;
         float _pad3 = 0.0f;
     };
@@ -40,6 +40,7 @@ namespace render::vfx
         inline constexpr uint32_t SizeOverLifetime = 1 << 1;
         inline constexpr uint32_t SpeedOverLifetime = 1 << 2;
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
+        inline constexpr uint32_t GlowOverLifetime = 1 << 15;
     }
 
     namespace ForceFlags
@@ -63,6 +64,15 @@ namespace render::vfx
     namespace FlipbookFlags
     {
         inline constexpr uint32_t RandomStart = 1 << 14;
+    }
+
+    namespace RenderModeFlags
+    {
+        inline constexpr uint32_t Billboard = 0;
+        inline constexpr uint32_t StretchedBillboard = 1;
+        inline constexpr uint32_t HorizontalBillboard = 2;
+        inline constexpr uint32_t MeshParticle = 3;
+        inline constexpr uint32_t Ribbon = 4;
     }
 
     struct alignas(16) GPUEmitterConfig
@@ -101,8 +111,23 @@ namespace render::vfx
         float flipbookColumns = 1.0f;
         float flipbookRows = 1.0f;
         float flipbookFrameRate = 0.0f;
+
+        uint32_t renderMode = RenderModeFlags::Billboard;
+        float softParticleDistance = 0.0f;
+        float stretchMultiplier = 1.0f;
+        uint32_t drawIndexCount = 6;
+
+        uint32_t maxTrailPoints = 0;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
+
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
+        float _uvPad1 = 0.0f;
+        float _uvPad2 = 0.0f;
+        float _uvPad3 = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 304, "GPUEmitterConfig must be 304 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -128,6 +153,15 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, vortexCenter) == 208, "GPUEmitterConfig::vortexCenter offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, shapeDimensions) == 224, "GPUEmitterConfig::shapeDimensions offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, shapeFlags) == 240, "GPUEmitterConfig::shapeFlags offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, renderMode) == 256, "GPUEmitterConfig::renderMode offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, softParticleDistance) == 260, "GPUEmitterConfig::softParticleDistance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, stretchMultiplier) == 264, "GPUEmitterConfig::stretchMultiplier offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, drawIndexCount) == 268, "GPUEmitterConfig::drawIndexCount offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, maxTrailPoints) == 272, "GPUEmitterConfig::maxTrailPoints offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, ribbonWidth) == 276, "GPUEmitterConfig::ribbonWidth offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, ribbonMinDistance) == 280, "GPUEmitterConfig::ribbonMinDistance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedU) == 284, "GPUEmitterConfig::uvScrollSpeedU offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, uvScrollSpeedV) == 288, "GPUEmitterConfig::uvScrollSpeedV offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -173,6 +207,7 @@ namespace render::vfx
         inline constexpr uint32_t Size = 1 << 1;
         inline constexpr uint32_t Speed = 1 << 2;
         inline constexpr uint32_t Rotation = 1 << 3;
+        inline constexpr uint32_t Glow = 1 << 4;
     }
 
     namespace GPUVFXConstants
@@ -183,7 +218,8 @@ namespace render::vfx
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
-        inline constexpr uint32_t LUT_CHANNELS = 4;
+        inline constexpr uint32_t LUT_CHANNELS = 5;
+        inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
     }
 
     namespace EmitterFlags
@@ -199,12 +235,18 @@ namespace render::vfx
         glm::mat4 projection;
         glm::vec3 cameraPos;
         float time;
+        float nearPlane = 0.1f;
+        float farPlane = 1000.0f;
+        float _pad1 = 0.0f;
+        float _pad2 = 0.0f;
     };
-    static_assert(sizeof(GPUVFXCameraUBO) == 144, "GPUVFXCameraUBO must be 144 bytes");
+    static_assert(sizeof(GPUVFXCameraUBO) == 160, "GPUVFXCameraUBO must be 160 bytes");
     static_assert(offsetof(GPUVFXCameraUBO, view) == 0, "GPUVFXCameraUBO::view offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, projection) == 64, "GPUVFXCameraUBO::projection offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, cameraPos) == 128, "GPUVFXCameraUBO::cameraPos offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, time) == 140, "GPUVFXCameraUBO::time offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, nearPlane) == 144, "GPUVFXCameraUBO::nearPlane offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, farPlane) == 148, "GPUVFXCameraUBO::farPlane offset mismatch");
 
     struct GPUVFXComputePushConstants
     {
@@ -222,6 +264,20 @@ namespace render::vfx
         uint32_t emitterIndex;
         float alphaClipThreshold = 0.1f;
         uint32_t blendMode = 0;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
+    };
+
+    struct GPUVFXBufferSet
+    {
+        vk::Buffer particleBuffer;
+        vk::Buffer configBuffer;
+        vk::Buffer stateBuffer;
+        vk::Buffer drawCommandBuffer;
+        vk::Buffer lutBuffer;
+        vk::Buffer ribbonRingBuffer;
+        vk::Buffer ribbonHeadBuffer;
     };
 
     struct VFXFlipbookPushConstants
@@ -230,5 +286,12 @@ namespace render::vfx
         float flipbookRows;
         float alphaClipThreshold;
         uint32_t blendMode = 0;
+        uint32_t renderMode = RenderModeFlags::Billboard;
+        float stretchMultiplier = 1.0f;
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 }

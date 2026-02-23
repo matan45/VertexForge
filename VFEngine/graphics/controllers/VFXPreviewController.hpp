@@ -18,7 +18,14 @@ namespace core
 namespace render::vfx
 {
     class VFXBillboardPipeline;
+    class VFXMeshPreviewPipeline;
+    class VFXRibbonPreviewPipeline;
     class VFXParticleSystem;
+}
+
+namespace render::mesh
+{
+    class MeshGPUCache;
 }
 
 namespace controllers
@@ -37,8 +44,7 @@ namespace controllers
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
-
-        // Flipbook (VK-493)
+        
         int flipbookRows = 1;
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
@@ -47,6 +53,19 @@ namespace controllers
         // Rendering
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
+        
+        int renderMode = 0;
+        float softParticleDistance = 0.0f;
+        float stretchMultiplier = 1.0f;
+        
+        std::string meshPath;
+        
+        int maxTrailPoints = 64;
+        float ribbonWidth = 1.0f;
+        float ribbonMinDistance = 0.1f;
+        
+        float uvScrollSpeedU = 0.0f;
+        float uvScrollSpeedV = 0.0f;
     };
 
     class VFXPreviewController
@@ -56,6 +75,9 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<core::CommandPool> commandPool;
         std::unique_ptr<render::vfx::VFXBillboardPipeline> pipeline;
+        std::unique_ptr<render::vfx::VFXMeshPreviewPipeline> meshPipeline;
+        std::unique_ptr<render::vfx::VFXRibbonPreviewPipeline> ribbonPipeline;
+        std::unique_ptr<render::mesh::MeshGPUCache> previewMeshCache;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
 
         core::OffscreenResources offscreenResources;

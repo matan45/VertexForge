@@ -90,6 +90,8 @@ namespace vfx
             return extractSpeedConfig(node);
         case VFXNodeType::RotationOverLifetime:
             return extractRotationConfig(node);
+        case VFXNodeType::GlowOverLifetime:
+            return extractGlowConfig(node);
         default:
             return ColorOverLifetimeConfig{};
         }
@@ -123,6 +125,15 @@ namespace vfx
     {
         RotationOverLifetimeConfig config;
         config.curve = getCurve(node, "curve", VFXCurve::constant(ModifierDefaults::ANGULAR_VELOCITY));
+        return config;
+    }
+
+    GlowOverLifetimeConfig VFXModifierConfigLoader::extractGlowConfig(const VFXNode& node)
+    {
+        GlowOverLifetimeConfig config;
+        config.curve = getCurve(node, "curve", VFXCurve::fromStartEnd(1.0f, 0.0f));
+        glm::vec4 color = getVec4(node, "glowColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        config.glowColor = glm::vec3(color);
         return config;
     }
 

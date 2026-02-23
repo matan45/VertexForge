@@ -1,8 +1,9 @@
-#include "VFXSceneGPUPipeline.hpp"
+#include "VFXRibbonGPUPipeline.hpp"
 #include "VFXQuadData.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
@@ -11,23 +12,206 @@
 #include "GPUVFXTypes.hpp"
 
 
+
 namespace render::vfx
 {
-    void VFXSceneGPUPipeline::loadShader()
+    VFXRibbonGPUPipeline::VFXRibbonGPUPipeline(core::Device& device, core::SwapChain& swapChain)
+        : device(device)
+        , swapChain(swapChain)
+    {
+    }
+
+    VFXRibbonGPUPipeline::~VFXRibbonGPUPipeline()
+    {
+        cleanup();
+    }
+
+    void VFXRibbonGPUPipeline::init(vk::RenderPass renderPass)
+    {
+        if (initialized)
+        {
+            return;
+        }
+
+        externalRenderPass = renderPass;
+
+        try
+        {
+            loadShader();
+            if (!gpuShader)
+            {
+                loggerError("VFXRibbonGPUPipeline: Failed to load shader");
+                return;
+            }
+
+            createDescriptorSetLayout();
+            if (!descriptorSetLayout)
+            {
+                loggerError("VFXRibbonGPUPipeline: Failed to create descriptor set layout");
+                return;
+            }
+
+            createDescriptorPool();
+            if (!descriptorPool)
+            {
+                loggerError("VFXRibbonGPUPipeline: Failed to create descriptor pool");
+                cleanup();
+                return;
+            }
+
+            createBuffers();
+            if (!cameraUBO)
+            {
+                loggerError("VFXRibbonGPUPipeline: Failed to create buffers");
+                cleanup();
+                return;
+            }
+
+            createDefaultTexture();
+            createSampler();
+            createDepthSampler();
+            allocateDescriptorSet();
+
+            createPipeline();
+            if (!graphicsPipeline || !pipelineLayout)
+            {
+                loggerError("VFXRibbonGPUPipeline: Failed to create graphics pipeline");
+                cleanup();
+                return;
+            }
+
+            initialized = true;
+            loggerInfo("VFXRibbonGPUPipeline initialized");
+        }
+        catch (const vk::SystemError& e)
+        {
+            loggerError("VFXRibbonGPUPipeline: Vulkan error during init - {}", e.what());
+            cleanup();
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("VFXRibbonGPUPipeline: Exception during init - {}", e.what());
+            cleanup();
+        }
+    }
+
+    void VFXRibbonGPUPipeline::recreate(vk::RenderPass renderPass)
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        externalRenderPass = renderPass;
+
+        auto vkDevice = device.getLogicalDevice();
+        vkDevice.destroyPipeline(graphicsPipeline);
+        vkDevice.destroyPipelineLayout(pipelineLayout);
+
+        createPipeline();
+    }
+
+    void VFXRibbonGPUPipeline::cleanup()
+    {
+        auto vkDevice = device.getLogicalDevice();
+
+        if (graphicsPipeline)
+        {
+            vkDevice.destroyPipeline(graphicsPipeline);
+            graphicsPipeline = nullptr;
+        }
+
+        if (pipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(pipelineLayout);
+            pipelineLayout = nullptr;
+        }
+
+        if (descriptorPool)
+        {
+            vkDevice.destroyDescriptorPool(descriptorPool);
+            descriptorPool = nullptr;
+        }
+
+        if (descriptorSetLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+            descriptorSetLayout = nullptr;
+        }
+
+        if (cameraUBOMapped && cameraUBOMemory)
+        {
+            vkDevice.unmapMemory(cameraUBOMemory);
+            cameraUBOMapped = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferMemory);
+
+        if (depthSampler)
+        {
+            vkDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
+
+        if (textureSampler)
+        {
+            vkDevice.destroySampler(textureSampler);
+            textureSampler = nullptr;
+        }
+
+        if (defaultTextureImageView)
+        {
+            vkDevice.destroyImageView(defaultTextureImageView);
+            defaultTextureImageView = nullptr;
+        }
+
+        if (defaultTextureImage)
+        {
+            vkDevice.destroyImage(defaultTextureImage);
+            vkDevice.freeMemory(defaultTextureMemory);
+            defaultTextureImage = nullptr;
+        }
+
+        textureEntries.clear();
+        emitterConfigs.clear();
+
+        if (gpuShader)
+        {
+            gpuShader->cleanUp();
+            gpuShader.reset();
+        }
+
+        cachedParticleBuffer = nullptr;
+        cachedParticleBufferSize = 0;
+        cachedConfigBuffer = nullptr;
+        cachedConfigBufferSize = 0;
+        cachedRibbonRingBuffer = nullptr;
+        cachedRibbonRingBufferSize = 0;
+        cachedRibbonHeadBuffer = nullptr;
+        cachedRibbonHeadBufferSize = 0;
+        sceneDepthImageView = nullptr;
+        descriptorsNeedUpdate = true;
+        initialized = false;
+
+        loggerInfo("VFXRibbonGPUPipeline cleaned up");
+    }
+
+    void VFXRibbonGPUPipeline::loadShader()
     {
         gpuShader = std::make_shared<core::Shader>(device);
-        gpuShader->readShader("../../resources/shaders/vfx/vfx_billboard_gpu.glsl");
+        gpuShader->readShader("../../resources/shaders/vfx/vfx_ribbon_gpu.glsl");
 
         if (gpuShader->getShaderStages().empty())
         {
-            loggerError("VFXSceneGPUPipeline: Failed to load shader: {}",
+            loggerError("VFXRibbonGPUPipeline: Failed to load shader: {}",
                         gpuShader->getLastCompilationError());
         }
     }
 
-    void VFXSceneGPUPipeline::createDescriptorSetLayout()
+    void VFXRibbonGPUPipeline::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
@@ -53,10 +237,21 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
+        // Binding 4: Scene depth texture (soft particles)
         bindings[4].binding = 4;
         bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[5].descriptorCount = 1;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+        bindings[6].binding = 6;
+        bindings[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[6].descriptorCount = 1;
+        bindings[6].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -65,7 +260,7 @@ namespace render::vfx
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void VFXSceneGPUPipeline::createDescriptorPool()
+    void VFXRibbonGPUPipeline::createDescriptorPool()
     {
         uint32_t totalSets = MAX_TEXTURE_SLOTS + 1;
 
@@ -73,9 +268,9 @@ namespace render::vfx
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = totalSets;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = totalSets * 2;  // particle texture + depth texture per set
+        poolSizes[1].descriptorCount = totalSets * 2; // particle texture + depth texture
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = totalSets * 2;
+        poolSizes[2].descriptorCount = totalSets * 4; // particle + config + ring + head
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -85,12 +280,12 @@ namespace render::vfx
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
-    void VFXSceneGPUPipeline::allocateDescriptorSet()
+    void VFXRibbonGPUPipeline::allocateDescriptorSet()
     {
         defaultDescriptorSet = allocateDescriptorSetFromPool();
     }
 
-    vk::DescriptorSet VFXSceneGPUPipeline::allocateDescriptorSetFromPool()
+    vk::DescriptorSet VFXRibbonGPUPipeline::allocateDescriptorSetFromPool()
     {
         // Recycle descriptor sets that have aged past the deferred deletion window
         for (auto it = pendingDescriptorSets.begin(); it != pendingDescriptorSets.end(); ++it)
@@ -111,7 +306,7 @@ namespace render::vfx
         return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
-    void VFXSceneGPUPipeline::createPipeline()
+    void VFXRibbonGPUPipeline::createPipeline()
     {
         auto vertexBinding = VFXQuadVertex::getBindingDescription();
         auto vertexAttribs = VFXQuadVertex::getAttributeDescriptions();
@@ -138,7 +333,7 @@ namespace render::vfx
         pipelineLayout = result.pipelineLayout;
     }
 
-    void VFXSceneGPUPipeline::createBuffers()
+    void VFXRibbonGPUPipeline::createBuffers()
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -187,7 +382,7 @@ namespace render::vfx
         );
     }
 
-    void VFXSceneGPUPipeline::createDefaultTexture()
+    void VFXRibbonGPUPipeline::createDefaultTexture()
     {
         auto vkDevice = device.getLogicalDevice();
         constexpr uint32_t texSize = 1;
@@ -214,12 +409,12 @@ namespace render::vfx
         core::ImageUtilities::uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
     }
 
-    void VFXSceneGPUPipeline::createSampler()
+    void VFXRibbonGPUPipeline::createSampler()
     {
         textureSampler = core::ImageUtilities::createVFXSampler(device.getLogicalDevice());
     }
 
-    void VFXSceneGPUPipeline::createDepthSampler()
+    void VFXRibbonGPUPipeline::createDepthSampler()
     {
         depthSampler = core::ImageUtilities::createVFXDepthSampler(device.getLogicalDevice());
     }

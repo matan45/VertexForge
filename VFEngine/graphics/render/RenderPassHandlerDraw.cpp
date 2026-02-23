@@ -22,11 +22,16 @@
 
 namespace
 {
-    void recordVFXInMeshPass(const vk::CommandBuffer& commandBuffer,
-                             render::mesh::StaticMeshPipeline* meshPipeline,
-                             services::IVFXRuntimeProvider* vfxProvider, uint32_t imageIndex)
+    void recordVFXAfterMeshPass(const vk::CommandBuffer& commandBuffer,
+                                render::mesh::StaticMeshPipeline* meshPipeline,
+                                services::IVFXRuntimeProvider* vfxProvider, uint32_t imageIndex)
     {
+        // Begin mesh pass to clear depth, then immediately end it
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+        meshPipeline->endRenderPass(commandBuffer);
+
+        // VFX render pass transitions depth to read-only for soft particle sampling
+        meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
         vfxProvider->recordDrawCommands(commandBuffer);
         meshPipeline->endRenderPass(commandBuffer);
     }
@@ -89,7 +94,15 @@ namespace render
 
         if (hasVFX)
         {
-            vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
+            services::VFXCameraParams vfxCamera;
+            vfxCamera.view = currentView;
+            vfxCamera.projection = currentProjection;
+            vfxCamera.cameraPos = currentCameraPosition;
+            vfxCamera.time = currentTime;
+            vfxCamera.nearPlane = currentNearPlane;
+            vfxCamera.farPlane = currentFarPlane;
+            vfxRuntimeProvider->setCamera(vfxCamera);
+            vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
         }
 
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
@@ -128,12 +141,12 @@ namespace render
 
             if (hasVFX)
             {
-                recordVFXInMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
+                recordVFXAfterMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
             }
         }
         else if (hasVFX)
         {
-            recordVFXInMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
+            recordVFXAfterMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
         }
     }
 
@@ -173,12 +186,14 @@ namespace render
                                      });
         }
 
+        meshPipeline->endRenderPass(commandBuffer);
+
         if (hasVFX)
         {
+            meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer);
         }
-
-        meshPipeline->endRenderPass(commandBuffer);
     }
 
     void RenderPassHandler::drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

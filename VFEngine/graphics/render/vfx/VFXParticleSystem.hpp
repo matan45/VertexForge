@@ -20,6 +20,12 @@ namespace render::vfx
         std::mt19937 rng;
         std::uniform_real_distribution<float> randomDist{-1.0f, 1.0f};
 
+        std::vector<uint32_t> ribbonRing;
+        uint32_t ribbonHead = 0;
+
+        // Reusable segment buffer to avoid per-frame heap allocation
+        mutable std::vector<VFXRibbonSegmentData> cachedSegments;
+
     public:
         explicit VFXParticleSystem();
         ~VFXParticleSystem() = default;
@@ -35,6 +41,7 @@ namespace render::vfx
 
         const std::vector<VFXParticle>& getParticles() const { return particles; }
         std::vector<VFXInstanceData> getInstanceData() const;
+        const std::vector<VFXRibbonSegmentData>& getRibbonSegments() const;
         size_t getActiveParticleCount() const;
 
     private:
@@ -47,6 +54,7 @@ namespace render::vfx
         void applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::GlowOverLifetimeConfig& mod, float t, float deltaTime);
 
         void applyForces(VFXParticle& particle, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime);

@@ -1,8 +1,9 @@
-#include "VFXSceneGPUPipeline.hpp"
-#include "VFXQuadData.hpp"
+#include "VFXMeshGPUPipeline.hpp"
+#include "../mesh/MeshTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
@@ -13,19 +14,198 @@
 
 namespace render::vfx
 {
-    void VFXSceneGPUPipeline::loadShader()
+    VFXMeshGPUPipeline::VFXMeshGPUPipeline(core::Device& device, core::SwapChain& swapChain,
+                                             render::mesh::MeshGPUCache& meshCache)
+        : device(device)
+        , swapChain(swapChain)
+        , meshCache(meshCache)
+    {
+    }
+
+    VFXMeshGPUPipeline::~VFXMeshGPUPipeline()
+    {
+        cleanup();
+    }
+
+    void VFXMeshGPUPipeline::init(vk::RenderPass renderPass)
+    {
+        if (initialized)
+        {
+            return;
+        }
+
+        externalRenderPass = renderPass;
+
+        try
+        {
+            loadShader();
+            if (!gpuShader)
+            {
+                loggerError("VFXMeshGPUPipeline: Failed to load shader");
+                return;
+            }
+
+            createDescriptorSetLayout();
+            if (!descriptorSetLayout)
+            {
+                loggerError("VFXMeshGPUPipeline: Failed to create descriptor set layout");
+                return;
+            }
+
+            createDescriptorPool();
+            if (!descriptorPool)
+            {
+                loggerError("VFXMeshGPUPipeline: Failed to create descriptor pool");
+                cleanup();
+                return;
+            }
+
+            createBuffers();
+            if (!cameraUBO)
+            {
+                loggerError("VFXMeshGPUPipeline: Failed to create buffers");
+                cleanup();
+                return;
+            }
+
+            createDefaultTexture();
+            createSampler();
+            createDepthSampler();
+            allocateDescriptorSet();
+
+            createPipeline();
+            if (!graphicsPipeline || !pipelineLayout)
+            {
+                loggerError("VFXMeshGPUPipeline: Failed to create graphics pipeline");
+                cleanup();
+                return;
+            }
+
+            initialized = true;
+            loggerInfo("VFXMeshGPUPipeline initialized");
+        }
+        catch (const vk::SystemError& e)
+        {
+            loggerError("VFXMeshGPUPipeline: Vulkan error during init - {}", e.what());
+            cleanup();
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("VFXMeshGPUPipeline: Exception during init - {}", e.what());
+            cleanup();
+        }
+    }
+
+    void VFXMeshGPUPipeline::recreate(vk::RenderPass renderPass)
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        externalRenderPass = renderPass;
+
+        auto vkDevice = device.getLogicalDevice();
+        vkDevice.destroyPipeline(graphicsPipeline);
+        vkDevice.destroyPipelineLayout(pipelineLayout);
+
+        createPipeline();
+    }
+
+    void VFXMeshGPUPipeline::cleanup()
+    {
+        auto vkDevice = device.getLogicalDevice();
+
+        if (graphicsPipeline)
+        {
+            vkDevice.destroyPipeline(graphicsPipeline);
+            graphicsPipeline = nullptr;
+        }
+
+        if (pipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(pipelineLayout);
+            pipelineLayout = nullptr;
+        }
+
+        if (descriptorPool)
+        {
+            vkDevice.destroyDescriptorPool(descriptorPool);
+            descriptorPool = nullptr;
+        }
+
+        if (descriptorSetLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
+            descriptorSetLayout = nullptr;
+        }
+
+        if (cameraUBOMapped && cameraUBOMemory)
+        {
+            vkDevice.unmapMemory(cameraUBOMemory);
+            cameraUBOMapped = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
+
+        if (depthSampler)
+        {
+            vkDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
+
+        if (textureSampler)
+        {
+            vkDevice.destroySampler(textureSampler);
+            textureSampler = nullptr;
+        }
+
+        if (defaultTextureImageView)
+        {
+            vkDevice.destroyImageView(defaultTextureImageView);
+            defaultTextureImageView = nullptr;
+        }
+
+        if (defaultTextureImage)
+        {
+            vkDevice.destroyImage(defaultTextureImage);
+            vkDevice.freeMemory(defaultTextureMemory);
+            defaultTextureImage = nullptr;
+        }
+
+        textureEntries.clear();
+        emitterConfigs.clear();
+        emitterMeshes.clear();
+
+        if (gpuShader)
+        {
+            gpuShader->cleanUp();
+            gpuShader.reset();
+        }
+
+        cachedParticleBuffer = nullptr;
+        cachedParticleBufferSize = 0;
+        cachedConfigBuffer = nullptr;
+        cachedConfigBufferSize = 0;
+        sceneDepthImageView = nullptr;
+        descriptorsNeedUpdate = true;
+        initialized = false;
+
+        loggerInfo("VFXMeshGPUPipeline cleaned up");
+    }
+
+    void VFXMeshGPUPipeline::loadShader()
     {
         gpuShader = std::make_shared<core::Shader>(device);
-        gpuShader->readShader("../../resources/shaders/vfx/vfx_billboard_gpu.glsl");
+        gpuShader->readShader("../../resources/shaders/vfx/vfx_mesh_particle.glsl");
 
         if (gpuShader->getShaderStages().empty())
         {
-            loggerError("VFXSceneGPUPipeline: Failed to load shader: {}",
+            loggerError("VFXMeshGPUPipeline: Failed to load shader: {}",
                         gpuShader->getLastCompilationError());
         }
     }
 
-    void VFXSceneGPUPipeline::createDescriptorSetLayout()
+    void VFXMeshGPUPipeline::createDescriptorSetLayout()
     {
         std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
@@ -53,6 +233,7 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
+        // Binding 4: Scene depth texture (soft particles)
         bindings[4].binding = 4;
         bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[4].descriptorCount = 1;
@@ -65,7 +246,7 @@ namespace render::vfx
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void VFXSceneGPUPipeline::createDescriptorPool()
+    void VFXMeshGPUPipeline::createDescriptorPool()
     {
         uint32_t totalSets = MAX_TEXTURE_SLOTS + 1;
 
@@ -73,7 +254,7 @@ namespace render::vfx
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = totalSets;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = totalSets * 2;  // particle texture + depth texture per set
+        poolSizes[1].descriptorCount = totalSets * 2;
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[2].descriptorCount = totalSets * 2;
 
@@ -85,12 +266,12 @@ namespace render::vfx
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
-    void VFXSceneGPUPipeline::allocateDescriptorSet()
+    void VFXMeshGPUPipeline::allocateDescriptorSet()
     {
         defaultDescriptorSet = allocateDescriptorSetFromPool();
     }
 
-    vk::DescriptorSet VFXSceneGPUPipeline::allocateDescriptorSetFromPool()
+    vk::DescriptorSet VFXMeshGPUPipeline::allocateDescriptorSetFromPool()
     {
         // Recycle descriptor sets that have aged past the deferred deletion window
         for (auto it = pendingDescriptorSets.begin(); it != pendingDescriptorSets.end(); ++it)
@@ -111,10 +292,10 @@ namespace render::vfx
         return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
-    void VFXSceneGPUPipeline::createPipeline()
+    void VFXMeshGPUPipeline::createPipeline()
     {
-        auto vertexBinding = VFXQuadVertex::getBindingDescription();
-        auto vertexAttribs = VFXQuadVertex::getAttributeDescriptions();
+        auto vertexBinding = render::mesh::MeshVertexInput::getBindingDescription();
+        auto vertexAttribs = render::mesh::MeshVertexInput::getAttributeDescriptions();
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
@@ -127,7 +308,7 @@ namespace render::vfx
             .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-            .cullMode = vk::CullModeFlagBits::eNone,
+            .cullMode = vk::CullModeFlagBits::eBack,
             .depthTestEnable = true,
             .depthWriteEnable = false,
             .blendEnable = true
@@ -138,7 +319,7 @@ namespace render::vfx
         pipelineLayout = result.pipelineLayout;
     }
 
-    void VFXSceneGPUPipeline::createBuffers()
+    void VFXMeshGPUPipeline::createBuffers()
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -149,45 +330,9 @@ namespace render::vfx
         uboRequest.size = sizeof(GPUVFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
         cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(GPUVFXCameraUBO));
-
-        constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
-        core::BufferInfoRequest vertexRequest(vkDevice, device.getPhysicalDevice());
-        vertexRequest.size = vertexBufferSize;
-        vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-                              vk::BufferUsageFlagBits::eTransferDst;
-        vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
-
-        constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
-        core::BufferInfoRequest indexRequest(vkDevice, device.getPhysicalDevice());
-        indexRequest.size = indexBufferSize;
-        indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-                             vk::BufferUsageFlagBits::eTransferDst;
-        indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
-
-        core::BufferUtilities::copyToBuffer(
-            vkDevice,
-            device.getPhysicalDevice(),
-            device.getGraphicsQueue(),
-            device.getStagingCommandPool(),
-            quadVertexBuffer,
-            QUAD_VERTICES.data(),
-            vertexBufferSize
-        );
-
-        core::BufferUtilities::copyToBuffer(
-            vkDevice,
-            device.getPhysicalDevice(),
-            device.getGraphicsQueue(),
-            device.getStagingCommandPool(),
-            quadIndexBuffer,
-            QUAD_INDICES.data(),
-            indexBufferSize
-        );
     }
 
-    void VFXSceneGPUPipeline::createDefaultTexture()
+    void VFXMeshGPUPipeline::createDefaultTexture()
     {
         auto vkDevice = device.getLogicalDevice();
         constexpr uint32_t texSize = 1;
@@ -214,12 +359,12 @@ namespace render::vfx
         core::ImageUtilities::uploadStagedPixelData(device, defaultTextureImage, whitePixel.data(), whitePixel.size(), texSize, texSize);
     }
 
-    void VFXSceneGPUPipeline::createSampler()
+    void VFXMeshGPUPipeline::createSampler()
     {
         textureSampler = core::ImageUtilities::createVFXSampler(device.getLogicalDevice());
     }
 
-    void VFXSceneGPUPipeline::createDepthSampler()
+    void VFXMeshGPUPipeline::createDepthSampler()
     {
         depthSampler = core::ImageUtilities::createVFXDepthSampler(device.getLogicalDevice());
     }

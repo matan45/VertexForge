@@ -79,11 +79,7 @@ struct GPUEmitterConfig
     float _uvPad3;
 };
 
-const uint FLIPBOOK_RANDOM_START = (1u << 14u);
-
-const uint RENDER_MODE_BILLBOARD = 0u;
-const uint RENDER_MODE_STRETCHED = 1u;
-const uint RENDER_MODE_HORIZONTAL = 2u;
+const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -104,16 +100,43 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
 };
 
+layout(std430, set = 0, binding = 5) readonly buffer RibbonRingBuffer {
+    uint ribbonRing[];
+};
+
+layout(std430, set = 0, binding = 6) readonly buffer RibbonHeadBuffer {
+    uint ribbonHeads[];
+};
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
+    float alphaClipThreshold;
+    uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
 } pc;
 
 void main() {
-    uint particleIdx = gl_InstanceIndex;
+    GPUEmitterConfig config = configs[pc.emitterIndex];
+    uint maxTP = config.maxTrailPoints;
+    uint head = ribbonHeads[pc.emitterIndex];
+    uint segIdx = gl_InstanceIndex;
 
-    GPUParticle p = particles[particleIdx];
+    uint ringBase = pc.emitterIndex * MAX_TRAIL_POINTS_STRIDE;
 
-    if (p.size <= 0.0) {
+    // Newest point = head-1, next newest = head-2, etc.
+    // segIdx 0 connects the two newest points, segIdx 1 the next pair, etc.
+    uint slotA = (head - 1u - segIdx) % maxTP;
+    uint slotB = (head - 2u - segIdx) % maxTP;
+    uint pidxA = ribbonRing[ringBase + slotA];
+    uint pidxB = ribbonRing[ringBase + slotB];
+
+    GPUParticle pA = particles[pidxA];
+    GPUParticle pB = particles[pidxB];
+
+    // Cull dead segments
+    if (pA.size <= 0.0 || pB.size <= 0.0) {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         fragTexCoord = vec2(0.0);
         fragColor = vec4(0.0);
@@ -123,89 +146,52 @@ void main() {
         return;
     }
 
-    GPUEmitterConfig config = configs[pc.emitterIndex];
+    // inTexCoord.y selects which endpoint: 0 = pA (newer), 1 = pB (older)
+    float along = inTexCoord.y;
+    vec3 posA = pA.position;
+    vec3 posB = pB.position;
+    vec3 pos = mix(posA, posB, along);
 
-    float cosR = cos(p.rotation);
-    float sinR = sin(p.rotation);
-    vec2 rotatedPos;
-    rotatedPos.x = inPosition.x * cosR - inPosition.y * sinR;
-    rotatedPos.y = inPosition.x * sinR + inPosition.y * cosR;
-
-    vec3 vertexPos;
-
-    if (config.renderMode == RENDER_MODE_STRETCHED) {
-        // Stretched billboard: stretch along velocity direction
-        float speed = length(p.velocity);
-        if (speed < 0.001) {
-            // Fallback to standard billboard
-            vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
-            vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
-            vertexPos = p.position
-                + cameraRight * rotatedPos.x * p.size
-                + cameraUp * rotatedPos.y * p.size;
-        } else {
-            vec3 velDir = p.velocity / speed;
-            vec3 toCamera = normalize(camera.cameraPos - p.position);
-            vec3 rawRight = cross(toCamera, velDir);
-            float rightLen = length(rawRight);
-            vec3 right;
-            if (rightLen > 0.001) {
-                right = rawRight / rightLen;
-            } else {
-                // toCamera parallel to velDir - pick the world axis least aligned with velDir
-                vec3 alt = (abs(velDir.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-                right = normalize(cross(alt, velDir));
-            }
-
-            vertexPos = p.position
-                + right * rotatedPos.x * p.size
-                + velDir * rotatedPos.y * p.size * config.stretchMultiplier;
-        }
-    } else if (config.renderMode == RENDER_MODE_HORIZONTAL) {
-        // Horizontal billboard: flat on XZ plane
-        vec3 right = vec3(1.0, 0.0, 0.0);
-        vec3 forward = vec3(0.0, 0.0, 1.0);
-        vertexPos = p.position
-            + right * rotatedPos.x * p.size
-            + forward * rotatedPos.y * p.size;
-    } else {
-        // Standard billboard: camera-facing
-        vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
-        vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
-        vertexPos = p.position
-            + cameraRight * rotatedPos.x * p.size
-            + cameraUp * rotatedPos.y * p.size;
+    // Camera-facing ribbon: cross segment direction with view direction
+    vec3 segDir = posB - posA;
+    float segLen = length(segDir);
+    if (segLen < 0.0001) {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        fragTexCoord = vec2(0.0);
+        fragColor = vec4(0.0);
+        fragLifetimeRatio = 1.0;
+        fragViewDepth = 0.0;
+        fragGlowIntensity = 0.0;
+        return;
     }
+    segDir /= segLen;
 
-    gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
+    vec3 toCamera = normalize(camera.cameraPos - pos);
+    vec3 right = normalize(cross(toCamera, segDir));
 
-    // Compute linear view-space depth for soft particles
-    fragViewDepth = -(camera.view * vec4(vertexPos, 1.0)).z;
+    float width = mix(pA.size, pB.size, along) * config.ribbonWidth;
+    pos += right * inPosition.x * width;
 
-    float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
+    gl_Position = camera.projection * camera.view * vec4(pos, 1.0);
 
-    float totalFrames = config.flipbookColumns * config.flipbookRows;
-    float frameIndex = 0.0;
-    if (totalFrames > 1.0) {
-        if (config.flipbookFrameRate > 0.0)
-            frameIndex = p.lifetime * config.flipbookFrameRate;
-        else
-            frameIndex = lifetimeRatio * totalFrames;
-        if ((config.modifierFlags & FLIPBOOK_RANDOM_START) != 0u) {
-            frameIndex += float(p.spawnSeed % uint(totalFrames));
-        }
-        frameIndex = mod(frameIndex, totalFrames);
-    }
-    float col = mod(floor(frameIndex), config.flipbookColumns);
-    float row = floor(floor(frameIndex) / config.flipbookColumns);
-    vec2 tileSize = vec2(1.0 / config.flipbookColumns, 1.0 / config.flipbookRows);
-    fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
+    // View-space depth for soft particles
+    fragViewDepth = -(camera.view * vec4(pos, 1.0)).z;
+
+    // UV: U = trail position (0=head, 1=tail), V = across width (0..1)
+    uint totalSegments = min(head, maxTP) - 1u;
+    float trailT = (totalSegments > 0u)
+        ? (float(segIdx) + along) / float(totalSegments)
+        : 0.0;
+    fragTexCoord = vec2(trailT, inTexCoord.x + 0.5);
 
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
-    fragColor = p.color;
-    fragLifetimeRatio = lifetimeRatio;
-    fragGlowIntensity = p.glowIntensity;
+    // Interpolate color and lifetime
+    fragColor = mix(pA.color, pB.color, along);
+    float lifeA = (pA.maxLifetime > 0.0) ? (pA.lifetime / pA.maxLifetime) : 0.0;
+    float lifeB = (pB.maxLifetime > 0.0) ? (pB.lifetime / pB.maxLifetime) : 0.0;
+    fragLifetimeRatio = mix(lifeA, lifeB, along);
+    fragGlowIntensity = mix(pA.glowIntensity, pB.glowIntensity, along);
 }
 
 #type FRAGMENT
@@ -301,7 +287,6 @@ layout(push_constant) uniform PushConstants {
 
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
-
     vec4 finalColor = texColor * fragColor;
 
     // Soft particles: fade near scene geometry
@@ -310,7 +295,6 @@ void main() {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));
         float rawDepth = texture(sceneDepthTexture, screenUV).r;
 
-        // Linearize depth (standard Vulkan depth range 0..1)
         float sceneLinearDepth = camera.nearPlane * camera.farPlane /
             (camera.farPlane - rawDepth * (camera.farPlane - camera.nearPlane));
 
