@@ -135,18 +135,22 @@ namespace render::vfx
         }
         framebuffers.clear();
 
-        if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
-        if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
+        if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
+        if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
         if (descriptorPool)
         {
             if (descriptorSet)
+            {
                 dev.freeDescriptorSets(descriptorPool, descriptorSet);
+                descriptorSet = nullptr;
+            }
             dev.destroyDescriptorPool(descriptorPool);
+            descriptorPool = nullptr;
         }
-        if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
+        if (descriptorSetLayout) { dev.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
 
-        if (renderPass) dev.destroyRenderPass(renderPass);
+        if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
         if (cameraUBOMapped && cameraUBOMemory)
         {
@@ -188,12 +192,14 @@ namespace render::vfx
         customTexture.reset();
         currentTexturePath.clear();
 
-        if (textureSampler) dev.destroySampler(textureSampler);
-        if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
+        if (textureSampler) { dev.destroySampler(textureSampler); textureSampler = nullptr; }
+        if (defaultTextureImageView) { dev.destroyImageView(defaultTextureImageView); defaultTextureImageView = nullptr; }
         if (defaultTextureImage)
         {
             dev.destroyImage(defaultTextureImage);
             dev.freeMemory(defaultTextureMemory);
+            defaultTextureImage = nullptr;
+            defaultTextureMemory = nullptr;
         }
 
         if (ribbonShader)
