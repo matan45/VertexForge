@@ -20,6 +20,7 @@ namespace windows
         void drawSleepSection();
         void drawLayersSection();
         void drawCollisionMatrixSection();
+        void drawVFXCollisionSection();
 
         void loadFromScene();
         void saveToScene();

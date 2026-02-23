@@ -64,6 +64,7 @@ namespace types
               , linearSleepThreshold(other.linearSleepThreshold)
               , angularSleepThreshold(other.angularSleepThreshold)
               , timeToSleep(other.timeToSleep)
+              , maxVFXSceneColliders(other.maxVFXSceneColliders)
               , layers(other.layers), collisionMatrix(other.collisionMatrix)
         {
         } // Invalidate cache on copy
@@ -80,6 +81,7 @@ namespace types
                 linearSleepThreshold = other.linearSleepThreshold;
                 angularSleepThreshold = other.angularSleepThreshold;
                 timeToSleep = other.timeToSleep;
+                maxVFXSceneColliders = other.maxVFXSceneColliders;
                 layers = other.layers;
                 collisionMatrix = other.collisionMatrix;
                 cacheValid = false; // Invalidate cache on assignment
@@ -101,6 +103,7 @@ namespace types
                 linearSleepThreshold = other.linearSleepThreshold;
                 angularSleepThreshold = other.angularSleepThreshold;
                 timeToSleep = other.timeToSleep;
+                maxVFXSceneColliders = other.maxVFXSceneColliders;
                 layers = std::move(other.layers);
                 collisionMatrix = std::move(other.collisionMatrix);
                 cacheValid = false; // Invalidate cache on move assignment
@@ -121,6 +124,9 @@ namespace types
         float linearSleepThreshold = 0.05f; // m/s
         float angularSleepThreshold = 0.05f; // rad/s
         float timeToSleep = 0.5f; // seconds
+
+        // VFX particle collision
+        uint32_t maxVFXSceneColliders = 32; // Max scene colliders for VFX particles (1-128)
 
         std::vector<CollisionLayer> layers;
 

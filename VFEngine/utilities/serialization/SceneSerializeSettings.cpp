@@ -2,6 +2,7 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 #include "../print/EditorLogger.hpp"
+#include <algorithm>
 
 namespace serialization
 {
@@ -221,6 +222,10 @@ namespace serialization
             {"timeToSleep", settings.timeToSleep}
         };
 
+        j["vfxCollision"] = {
+            {"maxSceneColliders", settings.maxVFXSceneColliders}
+        };
+
         j["collisionLayers"] = json::array();
         for (const auto& layer : settings.layers)
         {
@@ -262,6 +267,14 @@ namespace serialization
         deserializePhysicsSleepThresholds(j, settings);
         deserializePhysicsCollisionLayers(j, settings);
         deserializePhysicsCollisionMatrix(j, settings);
+
+        if (j.contains("vfxCollision") && j["vfxCollision"].is_object())
+        {
+            const auto& vfx = j["vfxCollision"];
+            if (vfx.contains("maxSceneColliders"))
+                settings.maxVFXSceneColliders = std::clamp(
+                    vfx["maxSceneColliders"].get<uint32_t>(), 1u, 128u);
+        }
     }
 
     // ---- Audio Settings ----

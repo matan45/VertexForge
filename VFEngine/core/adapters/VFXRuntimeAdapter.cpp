@@ -5,7 +5,10 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "components/PhysicsComponents.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/SceneEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <algorithm>
 #include "print/Logger.hpp"
 
 namespace core
@@ -163,15 +166,27 @@ namespace core
 
     void VFXRuntimeAdapter::updateSceneColliders()
     {
+        // Query configurable max colliders from physics settings
+        uint32_t maxColliders = 32;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::GetPhysicsSettingsQuery query;
+            auto physSettings = dispatcher.query(query);
+            maxColliders = std::min(physSettings.maxVFXSceneColliders,
+                                    render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS);
+        }
+        catch (...) {}
+
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
 
         std::vector<render::vfx::GPUCollider> gpuColliders;
-        gpuColliders.reserve(render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS);
+        gpuColliders.reserve(maxColliders);
 
         for (auto entity : view)
         {
-            if (gpuColliders.size() >= render::vfx::GPUVFXConstants::MAX_SCENE_COLLIDERS)
+            if (gpuColliders.size() >= maxColliders)
                 break;
 
             const auto& collider = view.get<components::ColliderComponent>(entity);

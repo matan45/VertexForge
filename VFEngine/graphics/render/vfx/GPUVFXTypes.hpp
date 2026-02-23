@@ -252,7 +252,7 @@ namespace render::vfx
         inline constexpr uint32_t LUT_CHANNELS = 5;
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
-        inline constexpr uint32_t MAX_SCENE_COLLIDERS = 32;
+        inline constexpr uint32_t MAX_SCENE_COLLIDERS = 128;
     }
 
     namespace EmitterFlags

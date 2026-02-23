@@ -37,6 +37,8 @@ namespace windows
             drawLayersSection();
             ImGui::Spacing();
             drawCollisionMatrixSection();
+            ImGui::Spacing();
+            drawVFXCollisionSection();
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -304,6 +306,29 @@ namespace windows
             }
 
             ImGui::EndTable();
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::drawVFXCollisionSection()
+    {
+        if (ImGui::CollapsingHeader("VFX Particle Colliders"))
+        {
+            ImGui::Indent();
+
+            ImGui::Text("Max Scene Colliders");
+            ImGui::PushItemWidth(-1);
+            int maxColliders = static_cast<int>(settings.maxVFXSceneColliders);
+            if (ImGui::SliderInt("##MaxVFXColliders", &maxColliders, 1, 128))
+            {
+                settings.maxVFXSceneColliders = static_cast<uint32_t>(maxColliders);
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::TextDisabled("Maximum number of scene colliders (Box, Sphere, Capsule)");
+            ImGui::TextDisabled("used for VFX particle collision detection.");
+
             ImGui::Unindent();
         }
     }

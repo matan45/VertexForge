@@ -173,7 +173,7 @@ layout(std430, set = 0, binding = 8) readonly buffer ColliderBuffer {
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
 const uint COLLIDER_CAPSULE = 2u;
-const uint MAX_SCENE_COLLIDERS = 32u;
+const uint MAX_SCENE_COLLIDERS = 128u;
 
 const uint EVENT_FLAG_ON_SPAWN = 1u;
 const uint EVENT_FLAG_ON_DEATH = 2u;
