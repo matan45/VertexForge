@@ -74,9 +74,13 @@ struct GPUEmitterConfig
     float ribbonMinDistance;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
-    float _uvPad1;
-    float _uvPad2;
-    float _uvPad3;
+    uint eventFlags;
+    float lifetimeThreshold;
+    uint colliderCount;
+    float collisionBounce;
+    float collisionFriction;
+    float collisionLifetimeLoss;
+    uint terrainCollisionEnabled;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -279,9 +283,13 @@ struct GPUEmitterConfig
     float ribbonMinDistance;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
-    float _uvPad1;
-    float _uvPad2;
-    float _uvPad3;
+    uint eventFlags;
+    float lifetimeThreshold;
+    uint colliderCount;
+    float collisionBounce;
+    float collisionFriction;
+    float collisionLifetimeLoss;
+    uint terrainCollisionEnabled;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
