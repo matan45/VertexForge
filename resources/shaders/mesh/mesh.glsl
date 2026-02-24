@@ -25,6 +25,7 @@ layout(push_constant) uniform PushConstants {
     float emission;
     uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float alphaCutoff;
     float iblDiffuse;
     float iblSpecular;
 } pc;
@@ -76,12 +77,13 @@ layout(push_constant) uniform PushConstants {
     float emission;
     uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float alphaCutoff;
     float iblDiffuse;
     float iblSpecular;
 } pc;
 
 const float PI = 3.14159265359;
-const float ALPHA_CUTOFF = 0.5;  // Alpha threshold for masked mode
+// Alpha threshold for masked mode - now read from push constants (pc.alphaCutoff)
 const float MAX_REFLECTION_LOD = 4.0;
 const uint TEXTURE_INDEX_NONE = 255u;
 
@@ -168,7 +170,7 @@ void main() {
 
     // Masked mode: discard fragments below alpha threshold
     if (pc.blendMode > 0.5 && pc.blendMode < 1.5) {  // blendMode == 1 (Masked)
-        if (alpha < ALPHA_CUTOFF) {
+        if (alpha < pc.alphaCutoff) {
             discard;
         }
     }

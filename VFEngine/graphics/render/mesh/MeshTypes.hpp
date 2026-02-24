@@ -232,6 +232,7 @@ namespace render::mesh
         uint32_t textureIndicesPacked[4];
 
         float blendMode;
+        float alphaCutoff;
         float iblDiffuse;
         float iblSpecular;
 

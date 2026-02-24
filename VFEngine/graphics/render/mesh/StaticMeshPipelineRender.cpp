@@ -151,6 +151,7 @@ namespace render::mesh
         pushConstants.roughness = pbrValues.roughness;
         pushConstants.ao = pbrValues.ao;
         pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
+        pushConstants.alphaCutoff = pbrValues.alphaCutoff;
 
         auto getTexIdx = [&](material::TextureSlot slot, const std::string& pbrPath) -> uint8_t {
             if (!pbrPath.empty()) {

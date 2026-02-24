@@ -328,13 +328,14 @@ void main() {
     perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
     perDrawData[globalDrawIndex].boneCount = 0u;
 
-    // Pack blend mode (from flags) and opacity (from albedo.a) into blendModeAndOpacity
-    // Low 8 bits: blend mode enum, bits 16-31: opacity as uint16 (0-65535)
+    // Pack blend mode (from flags), alpha cutoff, and opacity into blendModeAndOpacity
+    // Low 8 bits: blend mode enum, bits 8-15: alpha cutoff (0-255 -> 0.0-1.0), bits 16-31: opacity as uint16 (0-65535)
     uint blendMode = 0u; // Opaque
     if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u; // Masked
     if ((obj.flags & FLAG_TRANSLUCENT) != 0u) blendMode = 2u; // Translucent
     if ((obj.flags & FLAG_ADDITIVE_BLEND) != 0u) blendMode = 3u; // Additive
     if ((obj.flags & FLAG_MULTIPLY_BLEND) != 0u) blendMode = 4u; // Multiply
+    uint alphaCutoffBits = uint(clamp(obj.iblParams.z, 0.0, 1.0) * 255.0);
     uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
-    perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (opacityBits << 16u);
+    perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);
 }

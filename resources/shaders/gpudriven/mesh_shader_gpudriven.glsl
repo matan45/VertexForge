@@ -676,7 +676,7 @@ vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
     return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
 }
 
-const float ALPHA_CUTOFF = 0.5;
+const float DEFAULT_ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
@@ -728,7 +728,9 @@ void main() {
     }
 
     if ((drawData.flags & FLAG_ALPHA_MASK) != 0u) {
-        if (alpha < ALPHA_CUTOFF) {
+        // Unpack alpha cutoff from blendModeAndOpacity: bits 8-15 store cutoff as uint8 (0-255 -> 0.0-1.0)
+        float alphaCutoff = float((drawData.blendModeAndOpacity >> 8u) & 0xFFu) / 255.0;
+        if (alpha < alphaCutoff) {
             discard;
         }
     }
