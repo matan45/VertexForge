@@ -21,7 +21,6 @@ namespace render::transparency
 
         bool initialized = false;
 
-        // WBOIT render targets
         vk::Image accumImage;
         vk::DeviceMemory accumMemory;
         vk::ImageView accumImageView;
@@ -30,11 +29,9 @@ namespace render::transparency
         vk::DeviceMemory revealageMemory;
         vk::ImageView revealageImageView;
 
-        // WBOIT render pass (2 color attachments + depth read-only)
         vk::RenderPass wboitRenderPass;
         std::vector<vk::Framebuffer> wboitFramebuffers;
 
-        // Composite pass
         vk::RenderPass compositeRenderPass;
         std::vector<vk::Framebuffer> compositeFramebuffers;
         vk::Pipeline compositePipeline;
@@ -47,7 +44,7 @@ namespace render::transparency
         vk::Sampler linearSampler;
 
     public:
-        WBOITPipeline(core::Device& device, core::SwapChain& swapChain,
+       explicit WBOITPipeline(core::Device& device, core::SwapChain& swapChain,
                       core::OffscreenResources& offscreenResources);
         ~WBOITPipeline();
 

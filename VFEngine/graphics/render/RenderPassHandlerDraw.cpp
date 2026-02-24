@@ -163,7 +163,6 @@ namespace render
 
         gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-        // Draw transparent objects: use WBOIT if available, otherwise simple alpha blending
         bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
                         && gpuDrivenRenderer->isWBOITReady();
         if (!useWBOIT)
@@ -200,7 +199,6 @@ namespace render
 
         meshPipeline->endRenderPass(commandBuffer);
 
-        // WBOIT pass: render transparent objects to accum/revealage targets, then composite
         if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);

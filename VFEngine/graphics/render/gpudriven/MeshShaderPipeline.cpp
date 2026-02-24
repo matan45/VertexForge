@@ -22,33 +22,21 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void MeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
-                                  vk::DescriptorSetLayout bindlessTextureLayout,
-                                  vk::DescriptorSetLayout boneMatrixLayout,
-                                  vk::DescriptorSetLayout lightDataLayout,
-                                  vk::DescriptorSetLayout clusterGridLayout,
-                                  vk::DescriptorSetLayout cullingOutputLayout,
-                                  vk::DescriptorSetLayout shadowDataLayout,
-                                  vk::DescriptorSetLayout shadowTextureLayout,
-                                  vk::RenderPass renderPass,
-                                  bool transparentMode,
-                                  bool wboitMode)
+    void MeshShaderPipeline::init(const MeshPipelineInitInfo& info)
     {
-        isTransparentMode = transparentMode;
-        isWBOITMode = wboitMode;
-        cachedLightDataLayout = lightDataLayout;
-        cachedClusterGridLayout = clusterGridLayout;
-        cachedCullingOutputLayout = cullingOutputLayout;
-        cachedShadowDataLayout = shadowDataLayout;
-        cachedShadowTextureLayout = shadowTextureLayout;
+        isTransparentMode = info.transparentMode;
+        isWBOITMode = info.wboitMode;
+        cachedLightDataLayout = info.lightDataLayout;
+        cachedClusterGridLayout = info.clusterGridLayout;
+        cachedCullingOutputLayout = info.cullingOutputLayout;
+        cachedShadowDataLayout = info.shadowDataLayout;
+        cachedShadowTextureLayout = info.shadowTextureLayout;
 
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
-                                         shadowDataLayout, shadowTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(info);
     }
 
     void MeshShaderPipeline::createStatsBuffer()
@@ -127,28 +115,18 @@ namespace render::gpudriven
         }
     }
 
-    void MeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
-                                      vk::DescriptorSetLayout bindlessTextureLayout,
-                                      vk::DescriptorSetLayout boneMatrixLayout,
-                                      vk::DescriptorSetLayout lightDataLayout,
-                                      vk::DescriptorSetLayout clusterGridLayout,
-                                      vk::DescriptorSetLayout cullingOutputLayout,
-                                      vk::DescriptorSetLayout shadowDataLayout,
-                                      vk::DescriptorSetLayout shadowTextureLayout,
-                                      vk::RenderPass renderPass,
-                                      bool transparentMode,
-                                      bool wboitMode)
+    void MeshShaderPipeline::recreate(const MeshPipelineInitInfo& info)
     {
-        isTransparentMode = transparentMode;
-        isWBOITMode = wboitMode;
+        isTransparentMode = info.transparentMode;
+        isWBOITMode = info.wboitMode;
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        cachedLightDataLayout = lightDataLayout;
-        cachedClusterGridLayout = clusterGridLayout;
-        cachedCullingOutputLayout = cullingOutputLayout;
-        cachedShadowDataLayout = shadowDataLayout;
-        cachedShadowTextureLayout = shadowTextureLayout;
+        cachedLightDataLayout = info.lightDataLayout;
+        cachedClusterGridLayout = info.clusterGridLayout;
+        cachedCullingOutputLayout = info.cullingOutputLayout;
+        cachedShadowDataLayout = info.shadowDataLayout;
+        cachedShadowTextureLayout = info.shadowTextureLayout;
 
         if (graphicsPipeline)
         {
@@ -167,9 +145,7 @@ namespace render::gpudriven
             meshShader->cleanUp();
         }
 
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
-                                         shadowDataLayout, shadowTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(info);
     }
 
     void MeshShaderPipeline::updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer)
@@ -407,15 +383,7 @@ namespace render::gpudriven
         loggerInfo("MeshShaderPipeline: Created vertex data descriptor");
     }
 
-    void MeshShaderPipeline::createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
-                                                              vk::DescriptorSetLayout bindlessTextureLayout,
-                                                              vk::DescriptorSetLayout boneMatrixLayout,
-                                                              vk::DescriptorSetLayout lightDataLayout,
-                                                              vk::DescriptorSetLayout clusterGridLayout,
-                                                              vk::DescriptorSetLayout cullingOutputLayout,
-                                                              vk::DescriptorSetLayout shadowDataLayout,
-                                                              vk::DescriptorSetLayout shadowTextureLayout,
-                                                              vk::RenderPass renderPass)
+    void MeshShaderPipeline::createMeshShaderGraphicsPipeline(const MeshPipelineInitInfo& info)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -451,17 +419,17 @@ namespace render::gpudriven
         }
 
         std::array<vk::DescriptorSetLayout, 11> setLayouts = {
-            iblLayout,
+            info.iblLayout,
             perDrawDataLayout,
-            bindlessTextureLayout,
+            info.bindlessTextureLayout,
             meshletDataLayout,
             vertexDataLayout,
-            boneMatrixLayout,
-            lightDataLayout,
-            clusterGridLayout,
-            cullingOutputLayout,
-            shadowDataLayout,
-            shadowTextureLayout
+            info.boneMatrixLayout,
+            info.lightDataLayout,
+            info.clusterGridLayout,
+            info.cullingOutputLayout,
+            info.shadowDataLayout,
+            info.shadowTextureLayout
         };
 
         vk::PushConstantRange pushConstantRange{};

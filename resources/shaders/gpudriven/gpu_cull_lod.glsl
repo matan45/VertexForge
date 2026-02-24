@@ -66,7 +66,6 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     return vec4(worldCenter, worldRadius);
 }
 
-// Transform local AABB to world space
 void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
     vec3 corners[8];
     corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
@@ -92,7 +91,6 @@ bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
         vec3 planeNormal = frustumPlanes[i].xyz;
         float planeD = frustumPlanes[i].w;
 
-        // Find the positive vertex (furthest along plane normal)
         vec3 pVertex;
         pVertex.x = (planeNormal.x >= 0.0) ? aabbMax.x : aabbMin.x;
         pVertex.y = (planeNormal.y >= 0.0) ? aabbMax.y : aabbMin.y;
@@ -101,16 +99,6 @@ bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
         float distance = dot(planeNormal, pVertex) + planeD;
 
         if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
             return false;
         }
     }
@@ -221,11 +209,9 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    // Transform AABB to world space (used for frustum culling and to derive bounding sphere)
     vec3 worldAabbMin, worldAabbMax;
     transformAABB(obj.aabbMin.xyz, obj.aabbMax.xyz, obj.modelMatrix, worldAabbMin, worldAabbMax);
 
-    // Compute world-space bounding sphere from AABB for occlusion/LOD
     vec3 worldCenter = (worldAabbMin + worldAabbMax) * 0.5;
     float worldRadius = length(worldAabbMax - worldCenter);
     vec4 worldSphere = vec4(worldCenter, worldRadius);
@@ -328,13 +314,12 @@ void main() {
     perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
     perDrawData[globalDrawIndex].boneCount = 0u;
 
-    // Pack blend mode (from flags), alpha cutoff, and opacity into blendModeAndOpacity
-    // Low 8 bits: blend mode enum, bits 8-15: alpha cutoff (0-255 -> 0.0-1.0), bits 16-31: opacity as uint16 (0-65535)
-    uint blendMode = 0u; // Opaque
-    if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u; // Masked
-    if ((obj.flags & FLAG_TRANSLUCENT) != 0u) blendMode = 2u; // Translucent
-    if ((obj.flags & FLAG_ADDITIVE_BLEND) != 0u) blendMode = 3u; // Additive
-    if ((obj.flags & FLAG_MULTIPLY_BLEND) != 0u) blendMode = 4u; // Multiply
+    // blendModeAndOpacity: bits 0-7 = blend mode, bits 8-15 = alpha cutoff, bits 16-31 = opacity
+    uint blendMode = 0u;
+    if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u;
+    if ((obj.flags & FLAG_TRANSLUCENT) != 0u) blendMode = 2u;
+    if ((obj.flags & FLAG_ADDITIVE_BLEND) != 0u) blendMode = 3u;
+    if ((obj.flags & FLAG_MULTIPLY_BLEND) != 0u) blendMode = 4u;
     uint alphaCutoffBits = uint(clamp(obj.iblParams.z, 0.0, 1.0) * 255.0);
     uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
     perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);

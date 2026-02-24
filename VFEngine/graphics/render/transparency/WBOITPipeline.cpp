@@ -132,7 +132,6 @@ namespace render::transparency
         createWBOITFramebuffers();
         createCompositeFramebuffers();
 
-        // Update descriptor set with new image views
         std::array<vk::DescriptorImageInfo, 2> imageInfos{};
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[0].imageView = accumImageView;
@@ -163,7 +162,6 @@ namespace render::transparency
         vk::Device vkDevice = device.getLogicalDevice();
         auto extent = swapChain.getSwapchainExtent();
 
-        // Accumulation target (RGBA16F)
         {
             core::ImageInfoRequest req(vkDevice, device.getPhysicalDevice());
             req.width = extent.width;
@@ -178,7 +176,6 @@ namespace render::transparency
             core::ImageUtilities::createImageView(viewReq, accumImageView);
         }
 
-        // Revealage target (R8)
         {
             core::ImageInfoRequest req(vkDevice, device.getPhysicalDevice());
             req.width = extent.width;
@@ -209,7 +206,6 @@ namespace render::transparency
 
     void WBOITPipeline::createWBOITRenderPass()
     {
-        // Attachment 0: Accumulation (RGBA16F) - clear to (0,0,0,0), blend: src=One, dst=One
         vk::AttachmentDescription accumAttachment{};
         accumAttachment.format = vk::Format::eR16G16B16A16Sfloat;
         accumAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -220,7 +216,6 @@ namespace render::transparency
         accumAttachment.initialLayout = vk::ImageLayout::eUndefined;
         accumAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        // Attachment 1: Revealage (R8) - clear to 1.0, blend: src=Zero, dst=OneMinusSrcColor
         vk::AttachmentDescription revealageAttachment{};
         revealageAttachment.format = vk::Format::eR8Unorm;
         revealageAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -231,7 +226,6 @@ namespace render::transparency
         revealageAttachment.initialLayout = vk::ImageLayout::eUndefined;
         revealageAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        // Attachment 2: Depth (read-only from opaque pass)
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -295,7 +289,6 @@ namespace render::transparency
 
     void WBOITPipeline::createCompositeRenderPass()
     {
-        // Single color attachment - loads the existing scene color and blends WBOIT result on top
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -364,7 +357,6 @@ namespace render::transparency
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Descriptor set layout: 2 combined image samplers
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -381,7 +373,6 @@ namespace render::transparency
         layoutInfo.pBindings = bindings.data();
         compositeDescriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Descriptor pool
         vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, 2};
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -389,7 +380,6 @@ namespace render::transparency
         poolInfo.pPoolSizes = &poolSize;
         compositeDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = compositeDescriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -397,7 +387,6 @@ namespace render::transparency
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         compositeDescriptorSet = sets[0];
 
-        // Update descriptor set
         std::array<vk::DescriptorImageInfo, 2> imageInfos{};
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[0].imageView = accumImageView;
@@ -434,13 +423,11 @@ namespace render::transparency
             return;
         }
 
-        // Pipeline layout
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = 1;
         layoutInfo.pSetLayouts = &compositeDescriptorSetLayout;
         compositePipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
 
-        // Vertex input (none - fullscreen triangle)
         vk::PipelineVertexInputStateCreateInfo vertexInput{};
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
@@ -468,7 +455,6 @@ namespace render::transparency
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
 
-        // Blend: standard alpha blending to composite WBOIT result onto opaque
         vk::PipelineColorBlendAttachmentState blendAttachment{};
         blendAttachment.blendEnable = VK_TRUE;
         blendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -513,7 +499,6 @@ namespace render::transparency
 
     void WBOITPipeline::beginWBOITPass(const vk::CommandBuffer& cmd, uint32_t imageIndex)
     {
-        // Transition depth to read-only
         vk::ImageMemoryBarrier depthBarrier{};
         depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         depthBarrier.newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
@@ -599,7 +584,7 @@ namespace render::transparency
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                compositePipelineLayout, 0, compositeDescriptorSet, {});
-        cmd.draw(3, 1, 0, 0); // Fullscreen triangle
+        cmd.draw(3, 1, 0, 0);
 
         cmd.endRenderPass();
     }
