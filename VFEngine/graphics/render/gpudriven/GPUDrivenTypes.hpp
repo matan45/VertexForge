@@ -51,7 +51,7 @@ namespace render::gpudriven
     struct alignas(16) GPUObjectData
     {
         glm::mat4 modelMatrix;
-        glm::vec4 aabbMin;  // .w unused (padding)
+        glm::vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
         glm::vec4 aabbMax;  // .w unused (padding)
         glm::uvec4 lod0Data;
         glm::uvec4 lod1Data;
@@ -84,6 +84,17 @@ namespace render::gpudriven
         constexpr uint32_t AdditiveBlend = 1 << 10;
         constexpr uint32_t MultiplyBlend = 1 << 11;
         constexpr uint32_t TerrainTile = 1 << 12;
+    }
+
+    namespace ObjectCategory
+    {
+        constexpr uint32_t StaticMesh = 0;
+        constexpr uint32_t Terrain = 1;
+        constexpr uint32_t Foliage = 2;
+        constexpr uint32_t VFX = 3;
+        constexpr uint32_t Decals = 4;
+        constexpr uint32_t CategoryShift = 13;
+        constexpr uint32_t CategoryMask = 0xFu << CategoryShift; // bits 13-16
     }
 
     struct alignas(16) TerrainTileGPUData
@@ -171,10 +182,12 @@ namespace render::gpudriven
         uint32_t batchCount;
         uint32_t commandsPerBatch;
         uint32_t shaderGroupCount;
-        uint32_t padding1;
+        uint32_t enableDistanceCulling;
         uint32_t padding2;
+        glm::vec4 categoryDistSq0;     // [staticMesh^2, terrain^2, foliage^2, vfx^2]
+        glm::vec4 categoryDistSq1;     // [decals^2, 0, 0, shadowMultiplier]
     };
-    static_assert(sizeof(GPUCameraData) == 432);
+    static_assert(sizeof(GPUCameraData) == 464);
 
     struct SubmeshLocation
     {
@@ -249,6 +262,7 @@ namespace render::gpudriven
         uint32_t objectsLOD3;
         uint32_t culledByFrustum;
         uint32_t culledByOcclusion;
+        uint32_t culledByDistance;
     };
 
     struct MeshTasksIndirectCommand
@@ -268,7 +282,7 @@ namespace render::gpudriven
         uint32_t lodCount3;
         uint32_t culledByFrustum;
         uint32_t culledByOcclusion;
-        uint32_t padding;
+        uint32_t culledByDistance;
     };
     static_assert(sizeof(BatchDrawStats) == 32);
 }

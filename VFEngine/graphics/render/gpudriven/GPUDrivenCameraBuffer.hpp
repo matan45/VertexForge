@@ -27,6 +27,9 @@ namespace render::gpudriven
         bool frustumCullingEnabled;
         bool occlusionCullingEnabled;
         bool lodSelectionEnabled;
+        bool distanceCullingEnabled;
+        float categoryDistances[5]; // StaticMesh, Terrain, Foliage, VFX, Decals
+        float shadowDistanceMultiplier;
         const IndirectBatchManager* batchManager;
     };
 

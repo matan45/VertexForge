@@ -570,6 +570,33 @@ namespace services
                     offScreenProvider->setMeshletBackfaceCullingEnabled(cmd.enabled);
                 }
             });
+
+        dispatcher.registerCommandHandler<events::render::SetDistanceCullingCommand>(
+            [this](const events::render::SetDistanceCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setDistanceCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetDrawDistanceCommand>(
+            [this](const events::render::SetDrawDistanceCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setCategoryDistance(cmd.category, cmd.distance);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetShadowDistanceMultiplierCommand>(
+            [this](const events::render::SetShadowDistanceMultiplierCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShadowDistanceMultiplier(cmd.multiplier);
+                }
+            });
     }
 
     void EditorRenderServiceImpl::registerTerrainRenderHandlers(events::EventDispatcher& dispatcher)

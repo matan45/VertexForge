@@ -93,6 +93,7 @@ namespace render::gpudriven
 
         stats.culledByFrustum = aggregated.culledByFrustum;
         stats.culledByOcclusion = aggregated.culledByOcclusion;
+        stats.culledByDistance = aggregated.culledByDistance;
     }
 
     MeshletCullingStats GPUDrivenRenderer::getMeshletCullingStats()

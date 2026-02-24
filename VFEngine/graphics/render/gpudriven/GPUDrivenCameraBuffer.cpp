@@ -79,8 +79,12 @@ namespace render::gpudriven
 
         data.commandsPerBatch = params.batchManager ? params.batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;
         data.shaderGroupCount = params.batchManager ? params.batchManager->getShaderGroupCount() : MAX_SHADER_GROUPS;
-        data.padding1 = 0;
+        data.enableDistanceCulling = params.distanceCullingEnabled ? 1 : 0;
         data.padding2 = 0;
+
+        const float* d = params.categoryDistances;
+        data.categoryDistSq0 = glm::vec4(d[0] * d[0], d[1] * d[1], d[2] * d[2], d[3] * d[3]);
+        data.categoryDistSq1 = glm::vec4(d[4] * d[4], 0.0f, 0.0f, params.shadowDistanceMultiplier);
 
         std::memcpy(mapped, &data, sizeof(GPUCameraData));
     }

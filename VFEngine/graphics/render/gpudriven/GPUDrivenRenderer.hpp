@@ -116,6 +116,9 @@ namespace render::gpudriven
         bool frustumCullingEnabled = true;
         bool lodSelectionEnabled = true;
         bool occlusionCullingEnabled = true;
+        bool distanceCullingEnabled = false;
+        float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
+        float shadowDistanceMultiplier = 0.5f;
 
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
@@ -208,6 +211,11 @@ namespace render::gpudriven
         bool isMeshletFrustumCullingEnabled() const { return meshletFrustumCullingEnabled; }
         void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
+
+        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
+        bool isDistanceCullingEnabled() const { return distanceCullingEnabled; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) categoryDistances[category] = distance; }
+        void setShadowDistanceMultiplier(float mult) { shadowDistanceMultiplier = mult; }
 
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);

@@ -48,6 +48,14 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
+        gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
+        gpuDriven->setCategoryDistance(0, settings.distanceCulling.staticMeshDistance);
+        gpuDriven->setCategoryDistance(1, settings.distanceCulling.terrainDistance);
+        gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
+        gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
+        gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
+        gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
+
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
@@ -223,6 +231,36 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setDistanceCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+            if (gpuDriven) gpuDriven->setDistanceCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setCategoryDistance(uint32_t category, float distance)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+            if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
+        }
+    }
+
+    void OffScreenController::setShadowDistanceMultiplier(float multiplier)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+            if (gpuDriven) gpuDriven->setShadowDistanceMultiplier(multiplier);
         }
     }
 

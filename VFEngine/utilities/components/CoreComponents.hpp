@@ -150,6 +150,7 @@ namespace components
         std::string animatorPath;
         bool showBoundingBox = false;
         bool applyRootMotion = false;
+        float maxDrawDistance = 0.0f; // 0 = use category default from render config
     };
 
     struct MaterialComponent

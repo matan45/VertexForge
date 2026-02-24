@@ -47,6 +47,7 @@ namespace services
         std::string animatorPath; // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
         bool applyRootMotion = false;
+        float maxDrawDistance = 0.0f; // 0 = use category default from render config
     };
 
     struct MeshBoundingBox

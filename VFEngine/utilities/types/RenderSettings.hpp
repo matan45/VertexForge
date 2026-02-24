@@ -110,6 +110,17 @@ namespace types
         bool terrainMeshletCullingEnabled = true;
     };
 
+    struct DistanceCullingSettings
+    {
+        bool enabled = false;
+        float staticMeshDistance = 1000.0f;
+        float terrainDistance = 2000.0f;
+        float foliageDistance = 500.0f;
+        float vfxDistance = 300.0f;
+        float decalDistance = 200.0f;
+        float shadowDistanceMultiplier = 0.5f;
+    };
+
     struct TransparencySettings
     {
         bool wboitEnabled = true;
@@ -128,6 +139,7 @@ namespace types
     {
         ShadowSettings shadows;
         CullingSettings culling;
+        DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
         TerrainSettings terrain;
         postprocess::PostProcessSettings postProcess;

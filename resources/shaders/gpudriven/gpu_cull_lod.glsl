@@ -17,6 +17,9 @@ const uint FLAG_UNIFORM_SCALE = 1u << 9;
 const uint FLAG_ADDITIVE_BLEND = 1u << 10;
 const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
+const uint CATEGORY_SHIFT = 13u;
+const uint CATEGORY_MASK  = 0xFu;
+
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
 };
@@ -215,6 +218,26 @@ void main() {
     vec3 worldCenter = (worldAabbMin + worldAabbMax) * 0.5;
     float worldRadius = length(worldAabbMax - worldCenter);
     vec4 worldSphere = vec4(worldCenter, worldRadius);
+
+    // Distance culling - cheap squared-distance check before frustum/occlusion
+    if (camera.enableDistanceCulling != 0u) {
+        vec3 diff = worldCenter - camera.cameraPosition.xyz;
+        float distSq = dot(diff, diff);
+
+        // Per-object override stored in aabbMin.w (0 = use category default)
+        float maxDistSq = obj.aabbMin.w;
+        if (maxDistSq <= 0.0) {
+            uint cat = (obj.flags >> CATEGORY_SHIFT) & CATEGORY_MASK;
+            maxDistSq = (cat < 4u)
+                ? camera.categoryDistSq0[cat]
+                : camera.categoryDistSq1[cat - 4u];
+        }
+
+        if (maxDistSq > 0.0 && distSq > maxDistSq) {
+            atomicAdd(batchStats[sectionIndex].culledByDistance, 1);
+            return;
+        }
+    }
 
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!aabbInFrustum(worldAabbMin, worldAabbMax, camera.frustumPlanes)) {

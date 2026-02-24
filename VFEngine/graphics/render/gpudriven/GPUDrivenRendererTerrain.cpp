@@ -244,6 +244,14 @@ namespace render::gpudriven
 
         auto extent = swapChain.getSwapchainExtent();
 
+        float terrainDistSq = 0.0f;
+        if (distanceCullingEnabled)
+        {
+            float d = categoryDistances[ObjectCategory::Terrain];
+            terrainDistSq = d * d;
+        }
+        terrainPipeline->setTerrainMaxDrawDistSq(terrainDistSq);
+
         uint32_t viewMode = currentViewMode;
         if (meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;
         if (meshletBackfaceCullingEnabled) viewMode |= TERRAIN_CULL_BACKFACE_BIT;

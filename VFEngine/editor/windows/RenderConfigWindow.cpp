@@ -395,6 +395,75 @@ namespace windows
             }
 
             ImGui::Separator();
+            ImGui::Text("Distance Culling");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Enable Distance Culling", &settings.distanceCulling.enabled))
+            {
+                isDirty = true;
+                events::render::SetDistanceCullingCommand cmd;
+                cmd.enabled = settings.distanceCulling.enabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull objects beyond a maximum draw distance before frustum and occlusion tests.");
+            }
+
+            if (settings.distanceCulling.enabled)
+            {
+                auto dispatchDistance = [&](uint32_t category, float distance) {
+                    events::render::SetDrawDistanceCommand cmd;
+                    cmd.category = category;
+                    cmd.distance = distance;
+                    dispatcher.execute(cmd);
+                };
+
+                if (ImGui::DragFloat("Static Mesh Distance", &settings.distanceCulling.staticMeshDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(0, settings.distanceCulling.staticMeshDistance);
+                }
+                if (ImGui::DragFloat("Terrain Distance", &settings.distanceCulling.terrainDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(1, settings.distanceCulling.terrainDistance);
+                }
+                if (ImGui::DragFloat("Foliage Distance", &settings.distanceCulling.foliageDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(2, settings.distanceCulling.foliageDistance);
+                }
+                if (ImGui::DragFloat("VFX Distance", &settings.distanceCulling.vfxDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(3, settings.distanceCulling.vfxDistance);
+                }
+                if (ImGui::DragFloat("Decals Distance", &settings.distanceCulling.decalDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(4, settings.distanceCulling.decalDistance);
+                }
+                if (ImGui::DragFloat("Shadow Distance Multiplier", &settings.distanceCulling.shadowDistanceMultiplier,
+                                     0.05f, 0.1f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                    events::render::SetShadowDistanceMultiplierCommand cmd;
+                    cmd.multiplier = settings.distanceCulling.shadowDistanceMultiplier;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Multiplier for shadow pass draw distances.\nLower values = shadows disappear closer.");
+                }
+            }
+
+            ImGui::Separator();
             ImGui::Text("Transparency");
             ImGui::Spacing();
 

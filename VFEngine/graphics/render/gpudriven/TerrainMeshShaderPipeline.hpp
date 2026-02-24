@@ -26,7 +26,7 @@ namespace render::gpudriven
         float lodBias;           // LOD quality bias (1.0 = normal)
         float errorThreshold;    // Screen-space error threshold in pixels
         float terrainTextureScale; // Scale for world-space UV tiling
-        float padding;
+        float terrainMaxDrawDistSq; // Squared max draw distance for terrain (0 = disabled)
         glm::vec2 brushWorldPos;
         float brushWorldRadius;    // 0.0 = inactive
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
@@ -108,6 +108,7 @@ namespace render::gpudriven
         float brushWorldRadius_ = 0.0f;
         float brushFalloff_ = 0.0f;
         float brushShape_ = 0.0f;
+        float terrainMaxDrawDistSq_ = 0.0f;
         glm::mat4 viewProjection_{1.0f};
 
     public:
@@ -176,6 +177,7 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
+        void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq_ = distSq; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {

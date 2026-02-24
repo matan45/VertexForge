@@ -523,6 +523,29 @@ namespace serialization
             if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
                 settings.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
         }
+        void deserializeDistanceCullingSettings(const json& j, types::DistanceCullingSettings& settings)
+        {
+            if (!j.contains("distanceCulling") || !j["distanceCulling"].is_object())
+            {
+                settings = types::DistanceCullingSettings{};
+                return;
+            }
+            const auto& dc = j["distanceCulling"];
+            if (dc.contains("enabled") && dc["enabled"].is_boolean())
+                settings.enabled = dc["enabled"].get<bool>();
+            if (dc.contains("staticMeshDistance") && dc["staticMeshDistance"].is_number())
+                settings.staticMeshDistance = dc["staticMeshDistance"].get<float>();
+            if (dc.contains("terrainDistance") && dc["terrainDistance"].is_number())
+                settings.terrainDistance = dc["terrainDistance"].get<float>();
+            if (dc.contains("foliageDistance") && dc["foliageDistance"].is_number())
+                settings.foliageDistance = dc["foliageDistance"].get<float>();
+            if (dc.contains("vfxDistance") && dc["vfxDistance"].is_number())
+                settings.vfxDistance = dc["vfxDistance"].get<float>();
+            if (dc.contains("decalDistance") && dc["decalDistance"].is_number())
+                settings.decalDistance = dc["decalDistance"].get<float>();
+            if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
+                settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
+        }
     } // anonymous namespace
 
     // ---- Render Settings ----
@@ -552,6 +575,16 @@ namespace serialization
             {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
         };
 
+        j["distanceCulling"] = {
+            {"enabled", settings.distanceCulling.enabled},
+            {"staticMeshDistance", settings.distanceCulling.staticMeshDistance},
+            {"terrainDistance", settings.distanceCulling.terrainDistance},
+            {"foliageDistance", settings.distanceCulling.foliageDistance},
+            {"vfxDistance", settings.distanceCulling.vfxDistance},
+            {"decalDistance", settings.distanceCulling.decalDistance},
+            {"shadowDistanceMultiplier", settings.distanceCulling.shadowDistanceMultiplier}
+        };
+
         j["transparency"] = {
             {"wboitEnabled", settings.transparency.wboitEnabled}
         };
@@ -573,6 +606,7 @@ namespace serialization
     {
         deserializeShadowSettings(j, settings.shadows);
         deserializeCullingSettings(j, settings.culling);
+        deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
 
