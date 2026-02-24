@@ -16,6 +16,8 @@ layout(push_constant) uniform PushConstants {
     float exposure;
     float gamma;
     float contrast;
+    float toe;
+    float shoulder;
     uint mode;
 } pc;
 
@@ -178,6 +180,19 @@ void main()
         color = KhronosPBRNeutral(color);
     }
     // mode == 3: Linear (exposure only, no curve)
+
+    // Toe: darken shadows (power curve affects dark values more)
+    if (pc.toe > 0.0)
+    {
+        color = pow(color, vec3(1.0 + pc.toe * 0.5));
+    }
+
+    // Shoulder: compress highlights (inverse power curve affects bright values more)
+    if (pc.shoulder > 0.0)
+    {
+        color = 1.0 - pow(1.0 - clamp(color, 0.0, 1.0), vec3(1.0 + pc.shoulder * 0.5));
+    }
+
     color = pow(color, vec3(1.0 / pc.gamma));
 
     outColor = vec4(color, 1.0);

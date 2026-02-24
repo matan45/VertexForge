@@ -74,6 +74,24 @@ public class PostProcess {
         _native_postprocess_toneMapping_setContrast(value);
     }
 
+    // Toe: shadow curve strength (0.0 - 1.0, 0.0 = neutral)
+    public static function getToe(): float {
+        return _native_postprocess_toneMapping_getToe();
+    }
+
+    public static function setToe(float value): void {
+        _native_postprocess_toneMapping_setToe(value);
+    }
+
+    // Shoulder: highlight curve strength (0.0 - 1.0, 0.0 = neutral)
+    public static function getShoulder(): float {
+        return _native_postprocess_toneMapping_getShoulder();
+    }
+
+    public static function setShoulder(float value): void {
+        _native_postprocess_toneMapping_setShoulder(value);
+    }
+
     // ============================================
     // FXAA
     // ============================================

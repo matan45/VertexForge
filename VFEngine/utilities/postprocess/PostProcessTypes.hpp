@@ -48,6 +48,8 @@ namespace postprocess
         float exposure = 1.0f;
         float gamma = 2.2f;
         float contrast = 1.0f;
+        float toe = 0.0f;
+        float shoulder = 0.0f;
     };
 
     struct FXAASettings

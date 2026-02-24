@@ -129,6 +129,38 @@ namespace core::api
                 });
             });
 
+        interpreter->registerNativeFunction("_native_postprocess_toneMapping_getToe",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.toneMapping.toe);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_toneMapping_setToe",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.toneMapping.toe = extractFloat(args[0], "PostProcess.toneMapping.setToe");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_toneMapping_getShoulder",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.toneMapping.shoulder);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_toneMapping_setShoulder",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.toneMapping.shoulder = extractFloat(args[0], "PostProcess.toneMapping.setShoulder");
+                });
+            });
+
         // =============================================
         // FXAA
         // =============================================

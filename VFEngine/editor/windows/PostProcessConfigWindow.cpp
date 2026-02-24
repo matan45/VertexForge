@@ -104,6 +104,24 @@ namespace windows
                 {
                     ImGui::SetTooltip("Display gamma correction.\n2.2 is standard for most monitors.");
                 }
+
+                if (ImGui::DragFloat("Toe", &settings.toneMapping.toe, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Shadow curve strength.\n0.0 = neutral, higher = darker shadows with more contrast.");
+                }
+
+                if (ImGui::DragFloat("Shoulder", &settings.toneMapping.shoulder, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Highlight curve strength.\n0.0 = neutral, higher = softer highlight rolloff.");
+                }
             }
 
             ImGui::Unindent(10.0f);

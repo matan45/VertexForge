@@ -23,6 +23,8 @@ namespace render::postprocess
         float currentExposure = 1.0f;
         float currentGamma = 2.2f;
         float currentContrast = 1.0f;
+        float currentToe = 0.0f;
+        float currentShoulder = 0.0f;
         ::postprocess::ToneMappingMode currentMode = ::postprocess::ToneMappingMode::ACES;
 
     public:
