@@ -40,7 +40,10 @@ namespace render::mesh
                 ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
                     meshData, subMesh.name, materialCache, currentTime);
 
-                if (pbrValues.blendMode == material::BlendMode::Opaque)
+                if (pbrValues.blendMode == material::BlendMode::Opaque ||
+                    pbrValues.blendMode == material::BlendMode::Translucent ||
+                    pbrValues.blendMode == material::BlendMode::Additive ||
+                    pbrValues.blendMode == material::BlendMode::Multiply)
                 {
                     opaqueSubmeshes.push_back({&meshData, &subMesh, subMeshIndex, pbrValues.materialPath});
                 }
@@ -207,7 +210,13 @@ namespace render::mesh
         ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
             meshData, subMesh.name, materialCache, currentTime);
 
-        if (pbrValues.blendMode != targetBlendMode) return;
+        if (pbrValues.blendMode != targetBlendMode)
+        {
+            // In traditional pipeline, transparent modes render using the opaque pipeline
+            if (targetBlendMode != material::BlendMode::Opaque ||
+                !material::isTransparentBlendMode(pbrValues.blendMode))
+                return;
+        }
 
         bindSubmeshPipeline(commandBuffer, pbrValues, materialCache, state);
         bindSubmeshMaterial(commandBuffer, pbrValues, state);
