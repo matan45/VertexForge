@@ -29,6 +29,11 @@ namespace render::transparency
         createCompositeFramebuffers();
         createCompositeDescriptorResources();
         createCompositePipeline();
+        if (!compositePipeline)
+        {
+            loggerError("WBOITPipeline: Initialization failed - composite pipeline not created");
+            return;
+        }
         initialized = true;
         loggerInfo("WBOITPipeline: Initialized");
     }
@@ -556,7 +561,8 @@ namespace render::transparency
     {
         cmd.endRenderPass();
 
-        // Transition depth back to attachment optimal
+        // The render pass finalLayout already transitioned depth back to eDepthStencilAttachmentOptimal.
+        // This same-layout barrier ensures memory availability for subsequent depth-writing passes (VFX, etc.).
         vk::ImageMemoryBarrier depthBarrier{};
         depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         depthBarrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;

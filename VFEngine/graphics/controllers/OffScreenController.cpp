@@ -232,7 +232,7 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
-        renderHandler->setWBOITEnabled(settings.culling.wboitEnabled);
+        renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
         gpuDriven->setTerrainLODBias(settings.terrain.lodBias);

@@ -734,7 +734,7 @@ namespace render::gpudriven
                 populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
                 obj.entityId = currentObjectCount;
 
-                if (obj.shaderGroupIndex == 3)
+                if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                 {
                     transparentObjectCount++;
                 }

@@ -398,11 +398,11 @@ namespace windows
             ImGui::Text("Transparency");
             ImGui::Spacing();
 
-            if (ImGui::Checkbox("Weighted Blended OIT", &settings.culling.wboitEnabled))
+            if (ImGui::Checkbox("Weighted Blended OIT", &settings.transparency.wboitEnabled))
             {
                 isDirty = true;
                 events::render::SetWBOITCommand cmd;
-                cmd.enabled = settings.culling.wboitEnabled;
+                cmd.enabled = settings.transparency.wboitEnabled;
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())

@@ -32,6 +32,10 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
+    // Shader group indices for material blend modes
+    constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)
+    constexpr uint32_t SHADER_GROUP_BLEND = 4;        // Additive / Multiply objects
+
     constexpr float LOD_THRESHOLD_0 = 400.0f;
     constexpr float LOD_THRESHOLD_1 = 200.0f;
     constexpr float LOD_THRESHOLD_2 = 100.0f;

@@ -41,10 +41,10 @@ namespace render::gpudriven
             if (it != pbrCache.end())
             {
                 if (it->second.blendMode == material::BlendMode::Translucent)
-                    return 3;
+                    return SHADER_GROUP_TRANSPARENT;
                 if (it->second.blendMode == material::BlendMode::Additive ||
                     it->second.blendMode == material::BlendMode::Multiply)
-                    return 4;
+                    return SHADER_GROUP_BLEND;
             }
             return 0;
         };

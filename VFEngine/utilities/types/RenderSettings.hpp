@@ -108,7 +108,10 @@ namespace types
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
+    };
 
+    struct TransparencySettings
+    {
         bool wboitEnabled = true;
     };
 
@@ -125,6 +128,7 @@ namespace types
     {
         ShadowSettings shadows;
         CullingSettings culling;
+        TransparencySettings transparency;
         TerrainSettings terrain;
         postprocess::PostProcessSettings postProcess;
 

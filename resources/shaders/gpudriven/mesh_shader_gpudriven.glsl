@@ -980,8 +980,9 @@ void main() {
 
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013) — only for Translucent (group 3)
-    float z = gl_FragCoord.z;
-    float w = alpha * max(1e-2, min(3e3, 10.0 / (1e-5 + pow(z / 200.0, 4.0))));
+    // Use view-space depth for proper depth-dependent weighting
+    float viewZ = linearizeDepth(gl_FragCoord.z);
+    float w = alpha * max(1e-2, min(3e3, 10.0 / (1e-5 + pow(viewZ / 200.0, 4.0))));
     outColor = vec4(color * alpha * w, alpha * w);
     outRevealage = alpha;
 #else

@@ -52,9 +52,8 @@ namespace core {
 
 		void cleanUp();
 
-		std::vector<std::string> macroDefinitions;
-
 	private:
+		std::vector<std::string> macroDefinitions;
 		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName);
 		void createShaderModule(const std::vector<uint32_t>& code, vk::ShaderStageFlagBits stage);
 		vk::ShaderStageFlagBits shaderTypeToVulkanStage(resource::ShaderType shaderType) const;

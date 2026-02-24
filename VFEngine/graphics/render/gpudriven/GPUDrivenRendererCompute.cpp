@@ -138,7 +138,7 @@ namespace render::gpudriven
             shadowParams.batchCount = batchManager->getBatchCount();
             shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
             shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
-            shadowParams.transparentGroupIndex = 3;  // Transparent objects don't cast shadows
+            shadowParams.transparentGroupIndex = SHADER_GROUP_TRANSPARENT;
             shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
         }
 
@@ -392,9 +392,8 @@ namespace render::gpudriven
 
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
-        constexpr uint32_t transparentShaderGroup = 3;
 
-        if (transparentShaderGroup >= batchManager->getShaderGroupCount())
+        if (SHADER_GROUP_TRANSPARENT >= batchManager->getShaderGroupCount())
         {
             return;
         }
@@ -430,11 +429,11 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
-            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, transparentShaderGroup);
-            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, transparentShaderGroup);
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_TRANSPARENT);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_TRANSPARENT);
 
             MeshShaderPushConstants pushConstants{};
-            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, transparentShaderGroup) * commandsPerSection;
+            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_TRANSPARENT) * commandsPerSection;
 
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
@@ -507,11 +506,11 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
-            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, transparentShaderGroup);
-            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, transparentShaderGroup);
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_TRANSPARENT);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_TRANSPARENT);
 
             MeshShaderPushConstants pushConstants{};
-            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, transparentShaderGroup) * commandsPerSection;
+            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_TRANSPARENT) * commandsPerSection;
 
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
@@ -546,9 +545,8 @@ namespace render::gpudriven
 
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
-        constexpr uint32_t blendShaderGroup = 4;
 
-        if (blendShaderGroup >= batchManager->getShaderGroupCount())
+        if (SHADER_GROUP_BLEND >= batchManager->getShaderGroupCount())
         {
             return;
         }
@@ -584,11 +582,11 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
-            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, blendShaderGroup);
-            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, blendShaderGroup);
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_BLEND);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_BLEND);
 
             MeshShaderPushConstants pushConstants{};
-            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, blendShaderGroup) * commandsPerSection;
+            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_BLEND) * commandsPerSection;
 
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
