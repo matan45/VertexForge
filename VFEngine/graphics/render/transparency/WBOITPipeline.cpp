@@ -116,6 +116,11 @@ namespace render::transparency
             vkDevice.destroyPipeline(compositePipeline);
             compositePipeline = nullptr;
         }
+        if (compositePipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(compositePipelineLayout);
+            compositePipelineLayout = nullptr;
+        }
 
         cleanupRenderTargets();
         createRenderTargets();
