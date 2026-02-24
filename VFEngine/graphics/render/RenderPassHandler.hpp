@@ -35,6 +35,11 @@ namespace render::postprocess
     class PostProcessPipeline;
 }
 
+namespace render::transparency
+{
+    class WBOITPipeline;
+}
+
 namespace render::volumetric
 {
     class VolumetricFogComposite;
@@ -104,6 +109,8 @@ namespace render
         std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
         std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
+        std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
+        bool wboitEnabled = true;
 
         core::OffscreenResources& offscreenResources;
 

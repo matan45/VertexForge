@@ -90,6 +90,9 @@ namespace core
 		vk::BlendFactor dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 		vk::BlendFactor srcAlphaBlendFactor = vk::BlendFactor::eOne;
 		vk::BlendFactor dstAlphaBlendFactor = vk::BlendFactor::eZero;
+
+		// When non-empty, overrides the single blend attachment above with per-attachment states
+		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
 	};
 
 	struct MeshShaderPipelineResult

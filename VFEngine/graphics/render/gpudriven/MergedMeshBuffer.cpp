@@ -642,8 +642,23 @@ namespace render::gpudriven
 
         const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         obj.flags = 0;
-        if (subMat && subMat->blendMode == 1)
-            obj.flags |= ObjectFlags::AlphaMask;
+        if (subMat)
+        {
+            switch (subMat->blendMode)
+            {
+            case 1: obj.flags |= ObjectFlags::AlphaMask; break;
+            case 2: obj.flags |= ObjectFlags::Translucent; break;
+            case 3: obj.flags |= ObjectFlags::Translucent | ObjectFlags::AdditiveBlend; break;
+            case 4: obj.flags |= ObjectFlags::Translucent | ObjectFlags::MultiplyBlend; break;
+            default: break;
+            }
+
+            // For transparent objects, store opacity in albedo.a for GPU access
+            if (subMat->blendMode >= 2)
+            {
+                obj.albedo.a = subMat->opacity;
+            }
+        }
 
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));

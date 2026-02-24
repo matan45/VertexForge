@@ -35,7 +35,13 @@ namespace render::gpudriven
         registerSceneMaterialTextures(opaqueObjects);
 
         TextureIndexResolver textureResolver = createTextureResolver();
-        ShaderGroupResolver shaderGroupResolver = [](const std::string&) -> uint32_t { return 0; };
+        ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
+            if (materialPath.empty()) return 0;
+            auto it = pbrCache.find(materialPath);
+            if (it != pbrCache.end() && material::isTransparentBlendMode(it->second.blendMode))
+                return 3;
+            return 0;
+        };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
@@ -276,6 +282,18 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
         }
 
+        if (transparentMeshShaderPipeline)
+        {
+            transparentMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
+            transparentMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
+
+        if (wboitMeshShaderPipeline)
+        {
+            wboitMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
+            wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
+
         if (meshShaderPipeline && hasMeshes)
         {
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
@@ -288,9 +306,49 @@ namespace render::gpudriven
             }
         }
 
+        if (transparentMeshShaderPipeline && hasMeshes)
+        {
+            transparentMeshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+
+            if (shadowSystem && shadowSystem->isInitialized())
+            {
+                transparentMeshShaderPipeline->updateShadowDescriptors(
+                    shadowSystem->getShadowDataDescSet(),
+                    shadowSystem->getShadowTextureDescSet());
+            }
+        }
+
+        if (wboitMeshShaderPipeline && hasMeshes)
+        {
+            wboitMeshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+
+            if (shadowSystem && shadowSystem->isInitialized())
+            {
+                wboitMeshShaderPipeline->updateShadowDescriptors(
+                    shadowSystem->getShadowDataDescSet(),
+                    shadowSystem->getShadowTextureDescSet());
+            }
+        }
+
         if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
         {
             meshShaderPipeline->updateLightingDescriptors(
+                lightBufferManager->getDescriptorSet(),
+                clusterGridManager->getDescriptorSet(),
+                lightCullingPipeline->getDescriptorSet());
+        }
+
+        if (transparentMeshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        {
+            transparentMeshShaderPipeline->updateLightingDescriptors(
+                lightBufferManager->getDescriptorSet(),
+                clusterGridManager->getDescriptorSet(),
+                lightCullingPipeline->getDescriptorSet());
+        }
+
+        if (wboitMeshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        {
+            wboitMeshShaderPipeline->updateLightingDescriptors(
                 lightBufferManager->getDescriptorSet(),
                 clusterGridManager->getDescriptorSet(),
                 lightCullingPipeline->getDescriptorSet());

@@ -128,6 +128,18 @@ namespace render::gpudriven
                                      shadowSystem->getShadowTextureLayout(),
                                      renderPass);
 
+            transparentMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            transparentMeshShaderPipeline->init(iblDescriptorSetLayout,
+                                     bindlessTextures->getDescriptorSetLayout(),
+                                     boneMatrixManager->getDescriptorSetLayout(),
+                                     lightBufferManager->getDescriptorSetLayout(),
+                                     clusterGridManager->getDescriptorSetLayout(),
+                                     lightCullingPipeline->getDescriptorSetLayout(),
+                                     shadowSystem->getShadowDataLayout(),
+                                     shadowSystem->getShadowTextureLayout(),
+                                     renderPass,
+                                     true, false);
+
             shadowSystem->initShadowPass(
                 meshShaderPipeline->getPerDrawDataLayout(),
                 meshShaderPipeline->getMeshletDataLayout(),
@@ -175,6 +187,25 @@ namespace render::gpudriven
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
 
+    void GPUDrivenRenderer::initWBOITPipeline(vk::RenderPass wboitRenderPass)
+    {
+        if (!initialized || !meshShaderSupported || !wboitRenderPass) return;
+
+        wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+        wboitMeshShaderPipeline->init(cachedIBLLayout,
+                                     bindlessTextures->getDescriptorSetLayout(),
+                                     boneMatrixManager->getDescriptorSetLayout(),
+                                     lightBufferManager->getDescriptorSetLayout(),
+                                     clusterGridManager->getDescriptorSetLayout(),
+                                     lightCullingPipeline->getDescriptorSetLayout(),
+                                     shadowSystem->getShadowDataLayout(),
+                                     shadowSystem->getShadowTextureLayout(),
+                                     wboitRenderPass,
+                                     false, true);
+
+        loggerInfo("GPUDrivenRenderer: WBOIT mesh shader pipeline initialized");
+    }
+
     void GPUDrivenRenderer::cleanup()
     {
         if (!initialized)
@@ -200,6 +231,8 @@ namespace render::gpudriven
         if (terrainPipeline) terrainPipeline->cleanup();
         if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->cleanup();
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
@@ -222,6 +255,8 @@ namespace render::gpudriven
         waterPipeline.reset();
         waterMeshBuffer.reset();
         lightOcclusionCulling.reset();
+        wboitMeshShaderPipeline.reset();
+        transparentMeshShaderPipeline.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
         lightCullingPipeline.reset();
@@ -450,6 +485,20 @@ namespace render::gpudriven
                                          shadowSystem->getShadowDataLayout(),
                                          shadowSystem->getShadowTextureLayout(),
                                          cachedRenderPass);
+
+            if (transparentMeshShaderPipeline)
+            {
+                transparentMeshShaderPipeline->recreate(cachedIBLLayout,
+                                             bindlessTextures->getDescriptorSetLayout(),
+                                             boneMatrixManager->getDescriptorSetLayout(),
+                                             lightBufferManager->getDescriptorSetLayout(),
+                                             clusterGridManager->getDescriptorSetLayout(),
+                                             lightCullingPipeline->getDescriptorSetLayout(),
+                                             shadowSystem->getShadowDataLayout(),
+                                             shadowSystem->getShadowTextureLayout(),
+                                             cachedRenderPass,
+                                             true);
+            }
 
             if (terrainPipeline)
             {

@@ -425,6 +425,8 @@ namespace material
                 logWarning("Material has empty name, using default");
             }
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
+            material.opacity = j.value("opacity", 1.0f);
+            material.alphaCutoff = j.value("alphaCutoff", 0.5f);
         }
 
         void parseGraph(

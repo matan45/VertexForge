@@ -15,6 +15,7 @@
 #include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "transparency/WBOITPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
@@ -136,6 +137,11 @@ namespace render
 
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
+
+        // Initialize WBOIT pipeline for order-independent transparency
+        wboitPipeline = std::make_unique<transparency::WBOITPipeline>(device, swapChain, offscreenResources);
+        wboitPipeline->init();
+        gpuDrivenRenderer->initWBOITPipeline(wboitPipeline->getWBOITRenderPass());
     }
 
     void RenderPassHandler::resetVolumetricFogComposite()
@@ -361,6 +367,11 @@ namespace render
             volumetricFogComposite->recreate();
         }
 
+        if (wboitPipeline && wboitPipeline->isInitialized())
+        {
+            wboitPipeline->recreate();
+        }
+
         if (postProcessPipeline && postProcessPipeline->isInitialized())
         {
             postProcessPipeline->recreate();
@@ -406,6 +417,11 @@ namespace render
         if (terrainRaycastPipeline)
         {
             terrainRaycastPipeline->cleanup();
+        }
+
+        if (wboitPipeline)
+        {
+            wboitPipeline->cleanup();
         }
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

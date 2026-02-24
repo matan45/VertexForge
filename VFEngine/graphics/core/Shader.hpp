@@ -39,6 +39,8 @@ namespace core {
 
 		void readShader(std::string_view path);
 
+		void addMacroDefinition(const std::string& name);
+
 		bool compileFromSource(std::string_view source, std::string_view shaderName = "generated");
 
 		bool compileFromSources(std::string_view vertexSource, std::string_view fragmentSource,
@@ -49,6 +51,8 @@ namespace core {
 		const std::string& getLastCompilationError() const { return lastCompilationError; }
 
 		void cleanUp();
+
+		std::vector<std::string> macroDefinitions;
 
 	private:
 		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName);

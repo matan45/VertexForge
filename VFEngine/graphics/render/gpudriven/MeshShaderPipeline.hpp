@@ -90,7 +90,9 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout cullingOutputLayout,
                   vk::DescriptorSetLayout shadowDataLayout,
                   vk::DescriptorSetLayout shadowTextureLayout,
-                  vk::RenderPass renderPass);
+                  vk::RenderPass renderPass,
+                  bool transparentMode = false,
+                  bool wboitMode = false);
 
         void cleanup();
 
@@ -102,7 +104,9 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout cullingOutputLayout,
                       vk::DescriptorSetLayout shadowDataLayout,
                       vk::DescriptorSetLayout shadowTextureLayout,
-                      vk::RenderPass renderPass);
+                      vk::RenderPass renderPass,
+                      bool transparentMode = false,
+                      bool wboitMode = false);
 
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
@@ -138,6 +142,9 @@ namespace render::gpudriven
         void createPerDrawDataDescriptor();
         void createMeshletDataDescriptor();
         void createVertexDataDescriptor();
+        bool isTransparentMode = false;
+        bool isWBOITMode = false;
+
         void createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                               vk::DescriptorSetLayout bindlessTextureLayout,
                                               vk::DescriptorSetLayout boneMatrixLayout,

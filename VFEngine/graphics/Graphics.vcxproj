@@ -239,6 +239,7 @@
     <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasImageRenderer.hpp" />
+    <ClInclude Include="render\transparency\WBOITPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderBufferManager.hpp" />
     <ClInclude Include="render\ui\UIRenderPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderTypes.hpp" />
@@ -416,6 +417,7 @@
     <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />
     <ClCompile Include="render\tools\UICanvasDebugRenderer.cpp" />
     <ClCompile Include="render\tools\UICanvasImageRenderer.cpp" />
+    <ClCompile Include="render\transparency\WBOITPipeline.cpp" />
     <ClCompile Include="render\ui\UIRenderBufferManager.cpp" />
     <ClCompile Include="render\ui\UIRenderPipeline.cpp" />
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
@@ -508,6 +510,7 @@
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\ui_canvas_image.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
+    <None Include="..\..\resources\shaders\transparency\wboit_composite.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />

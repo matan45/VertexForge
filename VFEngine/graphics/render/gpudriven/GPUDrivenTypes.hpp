@@ -73,7 +73,12 @@ namespace render::gpudriven
     namespace ObjectFlags
     {
         constexpr uint32_t AlphaMask = 1 << 4;
+        constexpr uint32_t Translucent = 1 << 5;
+        constexpr uint32_t NoCull = 1 << 6;       // matches GPU shader FLAG_NO_CULL
+        constexpr uint32_t NoOcclude = 1 << 7;    // matches GPU shader FLAG_NO_OCCLUDE
         constexpr uint32_t UniformScale = 1 << 9;
+        constexpr uint32_t AdditiveBlend = 1 << 10;
+        constexpr uint32_t MultiplyBlend = 1 << 11;
         constexpr uint32_t TerrainTile = 1 << 12;
     }
 
@@ -139,7 +144,7 @@ namespace render::gpudriven
         uint32_t baseVertexOffset;
         uint32_t boneMatrixOffset;
         uint32_t boneCount;
-        uint32_t padding3;
+        uint32_t blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
     };
     static_assert(sizeof(PerDrawData) == 240);
 

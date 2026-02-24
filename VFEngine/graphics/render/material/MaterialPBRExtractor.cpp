@@ -325,6 +325,8 @@ namespace render::mesh
         pbr.ormTexturePath = getOrmTexturePath(matData.graph, outputNode->id);
 
         pbr.blendMode = matData.blendMode;
+        pbr.opacity = matData.opacity;
+        pbr.alphaCutoff = matData.alphaCutoff;
 
         return pbr;
     }

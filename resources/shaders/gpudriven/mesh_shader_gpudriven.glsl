@@ -196,6 +196,9 @@ layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
 
 layout(location = 0) out vec4 outColor;
+#ifdef WBOIT_ENABLED
+layout(location = 1) out float outRevealage;
+#endif
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -677,6 +680,9 @@ const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
+const uint FLAG_TRANSLUCENT = 1u << 5;
+const uint FLAG_ADDITIVE_BLEND = 1u << 10;
+const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
@@ -725,6 +731,12 @@ void main() {
         if (alpha < ALPHA_CUTOFF) {
             discard;
         }
+    }
+
+    if ((drawData.flags & FLAG_TRANSLUCENT) != 0u) {
+        // Unpack opacity from blendModeAndOpacity: bits 16-31 store opacity as uint16 (0-65535 -> 0.0-1.0)
+        float materialOpacity = float(drawData.blendModeAndOpacity >> 16u) / 65535.0;
+        alpha *= materialOpacity;
     }
 
     float metallic = drawData.materialParams.x;
@@ -964,5 +976,13 @@ void main() {
         color = shadowColor;
     }
 
+#ifdef WBOIT_ENABLED
+    // Weighted Blended OIT (McGuire & Bavoil 2013)
+    float z = gl_FragCoord.z;
+    float w = alpha * max(1e-2, min(3e3, 10.0 / (1e-5 + pow(z / 200.0, 4.0))));
+    outColor = vec4(color * alpha * w, alpha * w);
+    outRevealage = alpha;
+#else
     outColor = vec4(color, alpha);
+#endif
 }

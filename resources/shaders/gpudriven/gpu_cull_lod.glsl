@@ -9,9 +9,13 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
 
+const uint FLAG_ALPHA_MASK     = 1u << 4;
+const uint FLAG_TRANSLUCENT   = 1u << 5;
 const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
 const uint FLAG_UNIFORM_SCALE = 1u << 9;
+const uint FLAG_ADDITIVE_BLEND = 1u << 10;
+const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
@@ -233,7 +237,8 @@ void main() {
         }
     }
 
-    if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
+    bool isTransparent = (obj.flags & FLAG_TRANSLUCENT) != 0u;
+    if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u && !isTransparent) {
         if (camera.hiZMipLevels > 0u) {
             if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
                 atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
@@ -322,5 +327,14 @@ void main() {
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
     perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
     perDrawData[globalDrawIndex].boneCount = 0u;
-    perDrawData[globalDrawIndex].padding3 = 0u;
+
+    // Pack blend mode (from flags) and opacity (from albedo.a) into blendModeAndOpacity
+    // Low 8 bits: blend mode enum, bits 16-31: opacity as uint16 (0-65535)
+    uint blendMode = 0u; // Opaque
+    if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u; // Masked
+    if ((obj.flags & FLAG_TRANSLUCENT) != 0u) blendMode = 2u; // Translucent
+    if ((obj.flags & FLAG_ADDITIVE_BLEND) != 0u) blendMode = 3u; // Additive
+    if ((obj.flags & FLAG_MULTIPLY_BLEND) != 0u) blendMode = 4u; // Multiply
+    uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
+    perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (opacityBits << 16u);
 }

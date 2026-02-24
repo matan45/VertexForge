@@ -81,6 +81,8 @@ namespace render::gpudriven
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
+        std::unique_ptr<MeshShaderPipeline> transparentMeshShaderPipeline;
+        std::unique_ptr<MeshShaderPipeline> wboitMeshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
@@ -181,6 +183,11 @@ namespace render::gpudriven
         void dispatchCompute(vk::CommandBuffer cmd);
 
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+
+        void initWBOITPipeline(vk::RenderPass wboitRenderPass);
+        bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr; }
 
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
