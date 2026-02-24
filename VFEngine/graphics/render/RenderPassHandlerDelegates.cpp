@@ -160,6 +160,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setGlobalLodBias(float bias)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setGlobalLodBias(bias);
+        }
+    }
+
     void RenderPassHandler::setTerrainFrustumCullingEnabled(bool enabled)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

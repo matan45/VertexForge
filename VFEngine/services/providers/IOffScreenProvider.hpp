@@ -215,6 +215,7 @@ namespace services {
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setCategoryDistance(uint32_t category, float distance) = 0;
         virtual void setShadowDistanceMultiplier(float multiplier) = 0;
+        virtual void setGlobalLodBias(float bias) = 0;
 
         virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
         virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;

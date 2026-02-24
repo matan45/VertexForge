@@ -67,6 +67,7 @@ namespace render::gpudriven
             .distanceCullingEnabled = distanceCullingEnabled,
             .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
             .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
             .batchManager = batchManager.get()
         };
         cameraBuffer->update(cameraParams);

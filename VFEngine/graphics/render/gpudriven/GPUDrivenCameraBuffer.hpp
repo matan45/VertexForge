@@ -30,6 +30,7 @@ namespace render::gpudriven
         bool distanceCullingEnabled;
         float categoryDistances[5]; // StaticMesh, Terrain, Foliage, VFX, Decals
         float shadowDistanceMultiplier;
+        float globalLodBias;
         const IndirectBatchManager* batchManager;
     };
 

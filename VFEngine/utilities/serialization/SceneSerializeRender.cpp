@@ -483,6 +483,8 @@ namespace serialization
                 settings.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
             if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
                 settings.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
+            if (culling.contains("globalLodBias") && culling["globalLodBias"].is_number())
+                settings.globalLodBias = culling["globalLodBias"].get<float>();
         }
 
         void deserializeTransparencySettings(const json& j, types::TransparencySettings& settings)
@@ -545,6 +547,8 @@ namespace serialization
                 settings.decalDistance = dc["decalDistance"].get<float>();
             if (dc.contains("billboardDistance") && dc["billboardDistance"].is_number())
                 settings.billboardDistance = dc["billboardDistance"].get<float>();
+            if (dc.contains("waterDistance") && dc["waterDistance"].is_number())
+                settings.waterDistance = dc["waterDistance"].get<float>();
             if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
                 settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
         }
@@ -574,7 +578,8 @@ namespace serialization
             {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
             {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
             {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
-            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
+            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled},
+            {"globalLodBias", settings.culling.globalLodBias}
         };
 
         j["distanceCulling"] = {
@@ -585,6 +590,7 @@ namespace serialization
             {"vfxDistance", settings.distanceCulling.vfxDistance},
             {"decalDistance", settings.distanceCulling.decalDistance},
             {"billboardDistance", settings.distanceCulling.billboardDistance},
+            {"waterDistance", settings.distanceCulling.waterDistance},
             {"shadowDistanceMultiplier", settings.distanceCulling.shadowDistanceMultiplier}
         };
 

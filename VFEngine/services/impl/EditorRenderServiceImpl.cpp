@@ -597,6 +597,15 @@ namespace services
                     offScreenProvider->setShadowDistanceMultiplier(cmd.multiplier);
                 }
             });
+
+        dispatcher.registerCommandHandler<events::render::SetGlobalLodBiasCommand>(
+            [this](const events::render::SetGlobalLodBiasCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setGlobalLodBias(cmd.bias);
+                }
+            });
     }
 
     void EditorRenderServiceImpl::registerTerrainRenderHandlers(events::EventDispatcher& dispatcher)

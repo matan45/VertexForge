@@ -100,6 +100,7 @@ namespace core
         void setDistanceCullingEnabled(bool enabled) override;
         void setCategoryDistance(uint32_t category, float distance) override;
         void setShadowDistanceMultiplier(float multiplier) override;
+        void setGlobalLodBias(float bias) override;
         void setTerrainFrustumCullingEnabled(bool enabled) override;
         void setTerrainMeshletCullingEnabled(bool enabled) override;
 

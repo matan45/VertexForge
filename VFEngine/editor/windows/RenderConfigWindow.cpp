@@ -338,6 +338,24 @@ namespace windows
                 ImGui::SetTooltip("Automatically select LOD level based on screen size.");
             }
 
+            if (settings.culling.lodSelectionEnabled)
+            {
+                if (ImGui::DragFloat("Global LOD Bias", &settings.culling.globalLodBias, 0.1f, -4.0f, 4.0f, "%.1f"))
+                {
+                    isDirty = true;
+                    events::render::SetGlobalLodBiasCommand cmd;
+                    cmd.bias = settings.culling.globalLodBias;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Global bias for LOD distance transitions.\n"
+                                      "Positive = lower detail sooner (better performance)\n"
+                                      "Negative = higher detail longer (better quality)\n"
+                                      "0 = default behavior");
+                }
+            }
+
             ImGui::Separator();
             ImGui::Text("Meshlet-Level Culling");
             ImGui::Spacing();
@@ -454,6 +472,12 @@ namespace windows
                 {
                     isDirty = true;
                     dispatchDistance(5, settings.distanceCulling.billboardDistance);
+                }
+                if (ImGui::DragFloat("Water Distance", &settings.distanceCulling.waterDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(6, settings.distanceCulling.waterDistance);
                 }
                 if (ImGui::DragFloat("Shadow Distance Multiplier", &settings.distanceCulling.shadowDistanceMultiplier,
                                      0.05f, 0.1f, 2.0f, "%.2f"))

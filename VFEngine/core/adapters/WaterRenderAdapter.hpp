@@ -29,5 +29,8 @@ namespace core
         water::WaterGlobalSettings getWaterGlobalSettings() const override;
 
         water::WaterTileConfig getWaterTileConfig() const override;
+
+        void setDistanceCullingEnabled(bool enabled) override;
+        void setMaxDrawDistance(float distance) override;
     };
 }

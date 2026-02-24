@@ -35,7 +35,7 @@ struct GPUCameraData {
     uint commandsPerBatch;
     uint shaderGroupCount;
     uint enableDistanceCulling;
-    uint padding2;
+    float globalLodBias;
 
     vec4 categoryDistSq0;   // [staticMesh, terrain, foliage, vfx] squared distances
     vec4 categoryDistSq1;   // [decals, 0, 0, shadowMultiplier]

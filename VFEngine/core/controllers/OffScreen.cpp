@@ -301,6 +301,11 @@ namespace controllers {
 		offScreenController->setShadowDistanceMultiplier(multiplier);
 	}
 
+	void OffScreen::setGlobalLodBias(float bias)
+	{
+		offScreenController->setGlobalLodBias(bias);
+	}
+
 	void OffScreen::setTerrainFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setTerrainFrustumCullingEnabled(enabled);

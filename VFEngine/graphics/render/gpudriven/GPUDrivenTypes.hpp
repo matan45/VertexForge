@@ -94,6 +94,7 @@ namespace render::gpudriven
         constexpr uint32_t VFX = 3;
         constexpr uint32_t Decals = 4;
         constexpr uint32_t Billboard = 5;
+        constexpr uint32_t Water = 6;
         constexpr uint32_t CategoryShift = 13;
         constexpr uint32_t CategoryMask = 0xFu << CategoryShift; // bits 13-16
     }
@@ -184,7 +185,7 @@ namespace render::gpudriven
         uint32_t commandsPerBatch;
         uint32_t shaderGroupCount;
         uint32_t enableDistanceCulling;
-        uint32_t padding2;
+        float globalLodBias;
         glm::vec4 categoryDistSq0;     // [staticMesh^2, terrain^2, foliage^2, vfx^2]
         glm::vec4 categoryDistSq1;     // [decals^2, 0, 0, shadowMultiplier]
     };

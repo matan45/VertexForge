@@ -118,8 +118,8 @@ float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) 
     return screenDiameter;
 }
 
-uint selectLOD(float screenPixels, vec4 thresholds) {
-    float adjustedPixels = screenPixels * pow(2.0, -thresholds.w);
+uint selectLOD(float screenPixels, vec4 thresholds, float globalBias) {
+    float adjustedPixels = screenPixels * pow(2.0, -(thresholds.w + globalBias));
     if (adjustedPixels > thresholds.x) return 0;
     if (adjustedPixels > thresholds.y) return 1;
     if (adjustedPixels > thresholds.z) return 2;
@@ -261,7 +261,7 @@ void main() {
         vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
         viewSphere.w = worldSphere.w;
         float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        targetLOD = selectLOD(screenPixels, obj.lodThresholds);
+        targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
     }
 
     uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);

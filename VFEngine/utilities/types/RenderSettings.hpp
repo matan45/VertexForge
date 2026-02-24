@@ -108,6 +108,7 @@ namespace types
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
+        float globalLodBias = 0.0f;
     };
 
     struct DistanceCullingSettings
@@ -119,6 +120,7 @@ namespace types
         float vfxDistance = 300.0f;
         float decalDistance = 200.0f;
         float billboardDistance = 1000.0f;
+        float waterDistance = 2000.0f;
         float shadowDistanceMultiplier = 0.5f;
     };
 

@@ -20,6 +20,7 @@
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "../../services/providers/IWaterRenderProvider.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "material/MaterialTypes.hpp"
 
@@ -277,6 +278,16 @@ namespace render
     {
         if (billboardPipelineInitialized && billboardPipeline)
             billboardPipeline->setMaxDrawDistance(distance);
+    }
+
+    void RenderPassHandler::setWaterDistanceCullingEnabled(bool enabled)
+    {
+        if (waterRenderProvider) waterRenderProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setWaterDrawDistance(float distance)
+    {
+        if (waterRenderProvider) waterRenderProvider->setMaxDrawDistance(distance);
     }
 
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)

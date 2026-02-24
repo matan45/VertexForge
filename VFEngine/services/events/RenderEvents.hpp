@@ -239,6 +239,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetShadowDistanceMultiplier"; }
     };
 
+    struct SetGlobalLodBiasCommand : ICommand<> {
+        float bias;
+
+        std::string_view getName() const override { return "SetGlobalLodBias"; }
+    };
+
     struct SetWBOITCommand : ICommand<> {
         bool enabled;
 

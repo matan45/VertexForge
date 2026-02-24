@@ -306,6 +306,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setGlobalLodBias(float bias) {
+        if (offScreen) {
+            offScreen->setGlobalLodBias(bias);
+        }
+    }
+
     void OffScreenAdapter::setTerrainFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setTerrainFrustumCullingEnabled(enabled);

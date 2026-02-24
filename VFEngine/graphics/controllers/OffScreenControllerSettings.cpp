@@ -48,6 +48,7 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
+        gpuDriven->setGlobalLodBias(settings.culling.globalLodBias);
         gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
         gpuDriven->setCategoryDistance(0, settings.distanceCulling.staticMeshDistance);
         gpuDriven->setCategoryDistance(1, settings.distanceCulling.terrainDistance);
@@ -60,6 +61,8 @@ namespace controllers
         renderHandler->setVFXDrawDistance(settings.distanceCulling.vfxDistance);
         renderHandler->setBillboardDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
+        renderHandler->setWaterDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setWaterDrawDistance(settings.distanceCulling.waterDistance);
 
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
@@ -249,6 +252,7 @@ namespace controllers
 
         renderHandler->setVFXDistanceCullingEnabled(enabled);
         renderHandler->setBillboardDistanceCullingEnabled(enabled);
+        renderHandler->setWaterDistanceCullingEnabled(enabled);
     }
 
     void OffScreenController::setCategoryDistance(uint32_t category, float distance)
@@ -267,6 +271,10 @@ namespace controllers
         {
             renderHandler->setBillboardDrawDistance(distance);
         }
+        else if (category == 6) // ObjectCategory::Water
+        {
+            renderHandler->setWaterDrawDistance(distance);
+        }
     }
 
     void OffScreenController::setShadowDistanceMultiplier(float multiplier)
@@ -276,6 +284,15 @@ namespace controllers
         {
             auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
             if (gpuDriven) gpuDriven->setShadowDistanceMultiplier(multiplier);
+        }
+    }
+
+    void OffScreenController::setGlobalLodBias(float bias)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setGlobalLodBias(bias);
         }
     }
 
