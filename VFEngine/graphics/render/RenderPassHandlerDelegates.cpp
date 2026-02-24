@@ -176,6 +176,11 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setWBOITEnabled(bool enabled)
+    {
+        wboitEnabled = enabled;
+    }
+
     void RenderPassHandler::setTerrainRenderingEnabled(bool enabled)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

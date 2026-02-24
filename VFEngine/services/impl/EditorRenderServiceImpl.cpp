@@ -592,6 +592,15 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::render::SetWBOITCommand>(
+            [this](const events::render::SetWBOITCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setWBOITEnabled(cmd.enabled);
+                }
+            });
+
         dispatcher.registerCommandHandler<events::render::SetTerrainRenderingEnabledCommand>(
             [this](const events::render::SetTerrainRenderingEnabledCommand& cmd)
             {

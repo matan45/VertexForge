@@ -483,6 +483,8 @@ namespace serialization
                 settings.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
             if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
                 settings.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
+            if (culling.contains("wboitEnabled") && culling["wboitEnabled"].is_boolean())
+                settings.wboitEnabled = culling["wboitEnabled"].get<bool>();
         }
 
         void deserializeTerrainRenderSettings(const json& j, types::TerrainSettings& settings)
@@ -530,7 +532,8 @@ namespace serialization
             {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
             {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
             {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
-            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
+            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled},
+            {"wboitEnabled", settings.culling.wboitEnabled}
         };
 
         j["terrain"] = {

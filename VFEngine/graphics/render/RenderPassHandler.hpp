@@ -256,6 +256,8 @@ namespace render
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 
+        void setWBOITEnabled(bool enabled);
+
         void setTerrainRenderingEnabled(bool enabled);
         void setTerrainLODBias(float bias);
         void setTerrainErrorThreshold(float threshold);

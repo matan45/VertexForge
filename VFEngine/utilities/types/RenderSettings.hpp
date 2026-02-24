@@ -108,6 +108,8 @@ namespace types
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
+
+        bool wboitEnabled = true;
     };
 
     struct TerrainSettings

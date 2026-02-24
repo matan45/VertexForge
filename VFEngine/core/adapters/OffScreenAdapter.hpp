@@ -100,6 +100,8 @@ namespace core
         void setTerrainFrustumCullingEnabled(bool enabled) override;
         void setTerrainMeshletCullingEnabled(bool enabled) override;
 
+        void setWBOITEnabled(bool enabled) override;
+
         void setTerrainRenderingEnabled(bool enabled) override;
         void setTerrainLODBias(float bias) override;
         void setTerrainErrorThreshold(float threshold) override;

@@ -220,6 +220,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainMeshletCulling"; }
     };
 
+    struct SetWBOITCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetWBOIT"; }
+    };
+
     struct SetTerrainRenderingEnabledCommand : ICommand<> {
         bool enabled;
 

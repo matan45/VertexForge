@@ -260,7 +260,7 @@ namespace render::transparency
     void WBOITPipeline::createWBOITFramebuffers()
     {
         auto extent = swapChain.getSwapchainExtent();
-        uint32_t imageCount = swapChain.getSwapchainImageCount();
+        uint32_t imageCount = swapChain.getImageCount();
         wboitFramebuffers.resize(imageCount);
 
         for (uint32_t i = 0; i < imageCount; ++i)
@@ -315,7 +315,7 @@ namespace render::transparency
     void WBOITPipeline::createCompositeFramebuffers()
     {
         auto extent = swapChain.getSwapchainExtent();
-        uint32_t imageCount = swapChain.getSwapchainImageCount();
+        uint32_t imageCount = swapChain.getImageCount();
         compositeFramebuffers.resize(imageCount);
 
         for (uint32_t i = 0; i < imageCount; ++i)

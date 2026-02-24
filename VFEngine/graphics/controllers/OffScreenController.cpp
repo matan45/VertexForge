@@ -232,6 +232,8 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
+        renderHandler->setWBOITEnabled(settings.culling.wboitEnabled);
+
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
         gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
@@ -524,6 +526,15 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setWBOITEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setWBOITEnabled(enabled);
         }
     }
 
