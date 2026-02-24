@@ -198,7 +198,7 @@ namespace render
         meshPipeline->endRenderPass(commandBuffer);
 
         // WBOIT pass: render transparent objects to accum/revealage targets, then composite
-        if (useWBOIT)
+        if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
             gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet);

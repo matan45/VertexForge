@@ -702,6 +702,7 @@ namespace render::gpudriven
                                          float time)
     {
         currentObjectCount = 0;
+        transparentObjectCount = 0;
 
         for (const auto& meshRender : renderData)
         {
@@ -731,6 +732,11 @@ namespace render::gpudriven
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
                 populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
                 obj.entityId = currentObjectCount;
+
+                if (obj.shaderGroupIndex == 3)
+                {
+                    transparentObjectCount++;
+                }
 
                 currentObjectCount++;
             }

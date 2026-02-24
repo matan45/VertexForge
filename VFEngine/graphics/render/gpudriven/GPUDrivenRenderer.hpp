@@ -189,6 +189,7 @@ namespace render::gpudriven
 
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
+        bool hasTransparentObjects() const { return mergedBuffer && mergedBuffer->getTransparentObjectCount() > 0; }
 
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }

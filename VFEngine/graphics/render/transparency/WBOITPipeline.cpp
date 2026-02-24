@@ -231,9 +231,9 @@ namespace render::transparency
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
         depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eLoad;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
         depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
