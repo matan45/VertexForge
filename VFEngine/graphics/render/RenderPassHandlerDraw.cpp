@@ -171,6 +171,9 @@ namespace render
             gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
         }
 
+        // Additive/Multiply always drawn in main pass (commutative, don't need OIT)
+        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
+
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
         {
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);

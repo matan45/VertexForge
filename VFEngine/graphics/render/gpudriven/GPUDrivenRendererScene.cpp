@@ -38,8 +38,14 @@ namespace render::gpudriven
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
             auto it = pbrCache.find(materialPath);
-            if (it != pbrCache.end() && material::isTransparentBlendMode(it->second.blendMode))
-                return 3;
+            if (it != pbrCache.end())
+            {
+                if (it->second.blendMode == material::BlendMode::Translucent)
+                    return 3;
+                if (it->second.blendMode == material::BlendMode::Additive ||
+                    it->second.blendMode == material::BlendMode::Multiply)
+                    return 4;
+            }
             return 0;
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();

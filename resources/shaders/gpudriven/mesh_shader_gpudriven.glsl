@@ -977,12 +977,20 @@ void main() {
     }
 
 #ifdef WBOIT_ENABLED
-    // Weighted Blended OIT (McGuire & Bavoil 2013)
+    // Weighted Blended OIT (McGuire & Bavoil 2013) — only for Translucent (group 3)
     float z = gl_FragCoord.z;
     float w = alpha * max(1e-2, min(3e3, 10.0 / (1e-5 + pow(z / 200.0, 4.0))));
     outColor = vec4(color * alpha * w, alpha * w);
     outRevealage = alpha;
 #else
-    outColor = vec4(color, alpha);
+    // Premultiplied alpha output — blend state is One/OneMinusSrcAlpha
+    bool isAdditive = (drawData.flags & FLAG_ADDITIVE_BLEND) != 0u;
+    if (isAdditive) {
+        // Additive: color adds to background, alpha=0 means dst is fully preserved
+        outColor = vec4(color * alpha, 0.0);
+    } else {
+        // Translucent and Multiply: premultiplied alpha blend
+        outColor = vec4(color * alpha, alpha);
+    }
 #endif
 }

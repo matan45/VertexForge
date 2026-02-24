@@ -492,7 +492,7 @@ namespace render::gpudriven
             .depthWriteEnable = !isTransparent,
             .depthCompareOp = isWBOITMode ? vk::CompareOp::eLessOrEqual : vk::CompareOp::eLess,
             .blendEnable = isTransparentMode && !isWBOITMode,
-            .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,
             .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
             .srcAlphaBlendFactor = vk::BlendFactor::eOne,
             .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha

@@ -536,4 +536,81 @@ namespace render::gpudriven
                 sizeof(MeshTasksIndirectCommand));
         }
     }
+
+    void GPUDrivenRenderer::renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    {
+        if (!initialized || !enabled || stats.totalObjects == 0 || !transparentMeshShaderPipeline)
+        {
+            return;
+        }
+
+        uint32_t batchCount = batchManager->getBatchCount();
+        uint32_t commandsPerSection = batchManager->getCommandsPerSection();
+        constexpr uint32_t blendShaderGroup = 4;
+
+        if (blendShaderGroup >= batchManager->getShaderGroupCount())
+        {
+            return;
+        }
+
+        vk::Pipeline activePipeline = transparentMeshShaderPipeline->getPipeline();
+        vk::PipelineLayout layout = transparentMeshShaderPipeline->getPipelineLayout();
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
+
+        std::array<vk::DescriptorSet, 11> descriptorSets = {
+            iblDescriptorSet,
+            transparentMeshShaderPipeline->getPerDrawDataDescriptorSet(),
+            bindlessTextures->getDescriptorSet(),
+            transparentMeshShaderPipeline->getMeshletDataDescriptorSet(),
+            transparentMeshShaderPipeline->getVertexDataDescriptorSet(),
+            boneMatrixManager->getDescriptorSet(),
+            transparentMeshShaderPipeline->getLightDataDescriptorSet(),
+            transparentMeshShaderPipeline->getClusterGridDescriptorSet(),
+            transparentMeshShaderPipeline->getCullingOutputDescriptorSet(),
+            transparentMeshShaderPipeline->getShadowDataDescriptorSet(),
+            transparentMeshShaderPipeline->getShadowTextureDescriptorSet()
+        };
+
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            layout,
+            0,
+            static_cast<uint32_t>(descriptorSets.size()),
+            descriptorSets.data(),
+            0, nullptr);
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        for (uint32_t batch = 0; batch < batchCount; ++batch)
+        {
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, blendShaderGroup);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, blendShaderGroup);
+
+            MeshShaderPushConstants pushConstants{};
+            pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, blendShaderGroup) * commandsPerSection;
+
+            pushConstants.viewMode = currentViewMode;
+            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.screenWidth = static_cast<float>(extent.width);
+            pushConstants.screenHeight = static_cast<float>(extent.height);
+
+            cmd.pushConstants(
+                layout,
+                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
+                vk::ShaderStageFlagBits::eFragment,
+                0,
+                sizeof(MeshShaderPushConstants),
+                &pushConstants);
+
+            cmd.drawMeshTasksIndirectCountEXT(
+                batchManager->getCombinedDrawCommandBuffer(),
+                cmdOffset,
+                batchManager->getCombinedDrawCountBuffer(),
+                countOffset,
+                commandsPerSection,
+                sizeof(MeshTasksIndirectCommand));
+        }
+    }
 }

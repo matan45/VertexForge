@@ -186,6 +186,7 @@ namespace render::gpudriven
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
 
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
