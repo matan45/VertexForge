@@ -118,6 +118,7 @@ namespace types
         float foliageDistance = 500.0f;
         float vfxDistance = 300.0f;
         float decalDistance = 200.0f;
+        float billboardDistance = 1000.0f;
         float shadowDistanceMultiplier = 0.5f;
     };
 

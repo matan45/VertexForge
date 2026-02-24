@@ -56,6 +56,11 @@ namespace controllers
         gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
         gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
 
+        renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setVFXDrawDistance(settings.distanceCulling.vfxDistance);
+        renderHandler->setBillboardDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
+
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
@@ -237,20 +242,30 @@ namespace controllers
     void OffScreenController::setDistanceCullingEnabled(bool enabled)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (renderHandler)
-        {
-            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
-            if (gpuDriven) gpuDriven->setDistanceCullingEnabled(enabled);
-        }
+        if (!renderHandler) return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (gpuDriven) gpuDriven->setDistanceCullingEnabled(enabled);
+
+        renderHandler->setVFXDistanceCullingEnabled(enabled);
+        renderHandler->setBillboardDistanceCullingEnabled(enabled);
     }
 
     void OffScreenController::setCategoryDistance(uint32_t category, float distance)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (renderHandler)
+        if (!renderHandler) return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
+
+        if (category == 3) // ObjectCategory::VFX
         {
-            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
-            if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
+            renderHandler->setVFXDrawDistance(distance);
+        }
+        else if (category == 5) // ObjectCategory::Billboard
+        {
+            renderHandler->setBillboardDrawDistance(distance);
         }
     }
 

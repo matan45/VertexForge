@@ -239,6 +239,11 @@ namespace render
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 
+        void setVFXDistanceCullingEnabled(bool enabled);
+        void setVFXDrawDistance(float distance);
+        void setBillboardDistanceCullingEnabled(bool enabled);
+        void setBillboardDrawDistance(float distance);
+
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
 

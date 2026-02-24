@@ -60,6 +60,10 @@ namespace render::billboard
         uint32_t atlasInstanceCount = 0;
         std::vector<CustomTextureBatch> customBatches;
 
+        bool distanceCullingEnabled_ = false;
+        float maxBillboardDistSq_ = 0.0f;
+        glm::vec3 cameraPos_{0.0f};
+
     public:
         explicit BillboardPipeline(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -73,13 +77,16 @@ namespace render::billboard
         bool loadAtlas(const std::string& atlasPath);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos) const;
+                             const glm::vec3& cameraPos);
 
         void setBillboardList(const std::vector<BillboardRenderData>& billboards);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
+
+        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
+        void setMaxDrawDistance(float distance) { maxBillboardDistSq_ = distance * distance; }
 
     private:
         void loadShader();

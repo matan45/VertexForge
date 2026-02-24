@@ -114,6 +114,9 @@ namespace controllers
         glm::vec3 currentCameraPos{0.0f};
         float currentTime = 0.0f;
 
+        bool distanceCullingEnabled_ = false;
+        float maxVFXDistSq_ = 0.0f;
+
         std::vector<render::vfx::GPUCollider> sceneColliders;
         uint32_t sceneColliderCount = 0;
 
@@ -159,6 +162,9 @@ namespace controllers
 
         size_t getInstanceCount() const { return instances.size(); }
         size_t getTotalParticleCount() const;
+
+        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
+        void setMaxDrawDistance(float distance) { maxVFXDistSq_ = distance * distance; }
 
     private:
         void collectAllParticleInstances();

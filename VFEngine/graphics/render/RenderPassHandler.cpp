@@ -257,6 +257,28 @@ namespace render
         vfxRuntimeProvider = provider;
     }
 
+    void RenderPassHandler::setVFXDistanceCullingEnabled(bool enabled)
+    {
+        if (vfxRuntimeProvider) vfxRuntimeProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setVFXDrawDistance(float distance)
+    {
+        if (vfxRuntimeProvider) vfxRuntimeProvider->setMaxDrawDistance(distance);
+    }
+
+    void RenderPassHandler::setBillboardDistanceCullingEnabled(bool enabled)
+    {
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setBillboardDrawDistance(float distance)
+    {
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->setMaxDrawDistance(distance);
+    }
+
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
     {
         terrainRenderProvider = provider;

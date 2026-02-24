@@ -449,6 +449,12 @@ namespace windows
                     isDirty = true;
                     dispatchDistance(4, settings.distanceCulling.decalDistance);
                 }
+                if (ImGui::DragFloat("Billboard Distance", &settings.distanceCulling.billboardDistance,
+                                     10.0f, 50.0f, 50000.0f, "%.0f"))
+                {
+                    isDirty = true;
+                    dispatchDistance(5, settings.distanceCulling.billboardDistance);
+                }
                 if (ImGui::DragFloat("Shadow Distance Multiplier", &settings.distanceCulling.shadowDistanceMultiplier,
                                      0.05f, 0.1f, 2.0f, "%.2f"))
                 {

@@ -108,6 +108,9 @@ namespace controllers {
 		void setLODSelectionEnabled(bool enabled);
 		void setMeshletFrustumCullingEnabled(bool enabled);
 		void setMeshletBackfaceCullingEnabled(bool enabled);
+		void setDistanceCullingEnabled(bool enabled);
+		void setCategoryDistance(uint32_t category, float distance);
+		void setShadowDistanceMultiplier(float multiplier);
 		void setTerrainFrustumCullingEnabled(bool enabled);
 		void setTerrainMeshletCullingEnabled(bool enabled);
 

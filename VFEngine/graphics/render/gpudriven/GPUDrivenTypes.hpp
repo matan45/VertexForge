@@ -93,6 +93,7 @@ namespace render::gpudriven
         constexpr uint32_t Foliage = 2;
         constexpr uint32_t VFX = 3;
         constexpr uint32_t Decals = 4;
+        constexpr uint32_t Billboard = 5;
         constexpr uint32_t CategoryShift = 13;
         constexpr uint32_t CategoryMask = 0xFu << CategoryShift; // bits 13-16
     }

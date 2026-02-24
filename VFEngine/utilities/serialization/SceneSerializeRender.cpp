@@ -543,6 +543,8 @@ namespace serialization
                 settings.vfxDistance = dc["vfxDistance"].get<float>();
             if (dc.contains("decalDistance") && dc["decalDistance"].is_number())
                 settings.decalDistance = dc["decalDistance"].get<float>();
+            if (dc.contains("billboardDistance") && dc["billboardDistance"].is_number())
+                settings.billboardDistance = dc["billboardDistance"].get<float>();
             if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
                 settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
         }
@@ -582,6 +584,7 @@ namespace serialization
             {"foliageDistance", settings.distanceCulling.foliageDistance},
             {"vfxDistance", settings.distanceCulling.vfxDistance},
             {"decalDistance", settings.distanceCulling.decalDistance},
+            {"billboardDistance", settings.distanceCulling.billboardDistance},
             {"shadowDistanceMultiplier", settings.distanceCulling.shadowDistanceMultiplier}
         };
 

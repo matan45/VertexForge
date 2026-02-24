@@ -171,6 +171,16 @@ namespace core
         return renderer ? renderer->getInstanceCount() : 0;
     }
 
+    void VFXRuntimeAdapter::setDistanceCullingEnabled(bool enabled)
+    {
+        if (renderer) renderer->setDistanceCullingEnabled(enabled);
+    }
+
+    void VFXRuntimeAdapter::setMaxDrawDistance(float distance)
+    {
+        if (renderer) renderer->setMaxDrawDistance(distance);
+    }
+
     void VFXRuntimeAdapter::updateSceneColliders()
     {
         // Skip if no VFX instances are active
