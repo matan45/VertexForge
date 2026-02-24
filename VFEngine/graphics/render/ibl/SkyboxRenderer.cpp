@@ -219,6 +219,14 @@ namespace render::ibl
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
+        std::array<vk::DynamicState, 2> dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
@@ -233,6 +241,7 @@ namespace render::ibl
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
@@ -347,6 +356,22 @@ namespace render::ibl
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+            // Set dynamic viewport and scissor to current swapchain extent
+            vk::Viewport viewport;
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
+            viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            commandBuffer.setViewport(0, 1, &viewport);
+
+            vk::Rect2D scissor;
+            scissor.offset = vk::Offset2D(0, 0);
+            scissor.extent = swapChain.getSwapchainExtent();
+            commandBuffer.setScissor(0, 1, &scissor);
+
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
                 descriptorSet,
                 {});

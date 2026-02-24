@@ -10,6 +10,8 @@ namespace render::postprocess
         float exposure;
         float gamma;
         float contrast;
+        float toe;
+        float shoulder;
         uint32_t mode;
     };
 
@@ -88,6 +90,8 @@ namespace render::postprocess
         pc.exposure = currentExposure;
         pc.gamma = currentGamma;
         pc.contrast = currentContrast;
+        pc.toe = currentToe;
+        pc.shoulder = currentShoulder;
         pc.mode = static_cast<uint32_t>(currentMode);
 
         commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment,
@@ -103,6 +107,8 @@ namespace render::postprocess
         currentExposure = tm.exposure;
         currentGamma = tm.gamma;
         currentContrast = tm.contrast;
+        currentToe = tm.toe;
+        currentShoulder = tm.shoulder;
         currentMode = tm.mode;
     }
 

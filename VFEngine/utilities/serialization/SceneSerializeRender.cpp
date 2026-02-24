@@ -103,7 +103,9 @@ namespace serialization
                 {"mode", toneMappingModeToStr(s.mode)},
                 {"exposure", s.exposure},
                 {"gamma", s.gamma},
-                {"contrast", s.contrast}
+                {"contrast", s.contrast},
+                {"toe", s.toe},
+                {"shoulder", s.shoulder}
             };
         }
 
@@ -250,6 +252,10 @@ namespace serialization
                 s.gamma = std::clamp(tm["gamma"].get<float>(), 0.1f, 5.0f);
             if (tm.contains("contrast") && tm["contrast"].is_number())
                 s.contrast = std::clamp(tm["contrast"].get<float>(), 0.5f, 2.0f);
+            if (tm.contains("toe") && tm["toe"].is_number())
+                s.toe = std::clamp(tm["toe"].get<float>(), 0.0f, 1.0f);
+            if (tm.contains("shoulder") && tm["shoulder"].is_number())
+                s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
         }
 
         void deserializeFxaa(const json& j, postprocess::FXAASettings& s)
