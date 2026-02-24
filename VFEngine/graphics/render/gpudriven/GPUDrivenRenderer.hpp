@@ -187,7 +187,7 @@ namespace render::gpudriven
         void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
 
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
-        bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr; }
+        bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
 
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
