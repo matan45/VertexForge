@@ -54,7 +54,6 @@ namespace core
         float velX, float velY, float velZ,
         uint32_t entityId)
     {
-        // Create Vec3f objects for position and velocity
         value::Value positionObj = interpreter->createObject("Vec3f",
             {value::Value(posX), value::Value(posY), value::Value(posZ)});
         value::Value velocityObj = interpreter->createObject("Vec3f",

@@ -422,6 +422,8 @@
     <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\ui\UITextPipelineSetup.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
+    <ClCompile Include="render\vfx\GPUVFXBufferManagerCreate.cpp" />
+    <ClCompile Include="render\vfx\GPUVFXBufferManagerUpdate.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipelineRender.cpp" />

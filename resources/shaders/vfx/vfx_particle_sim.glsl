@@ -37,7 +37,6 @@ const uint SHAPE_CIRCLE = 2048u;
 const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
-const uint FLIPBOOK_RANDOM_START = 16384u;
 const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
 
 struct GPUEmitterConfig
@@ -666,27 +665,21 @@ void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
     }
 }
 
-// --- Terrain heightfield sampling ---
 float sampleTerrainHeight(vec3 worldPos)
 {
-    // Convert world position to terrain-local coordinates
     float localX = worldPos.x - terrainWorldOriginX;
     float localZ = worldPos.z - terrainWorldOriginZ;
 
-    // Which tile are we in?
     float tileSize = terrainTileWorldSize;
     int tileX = int(floor(localX / tileSize));
     int tileZ = int(floor(localZ / tileSize));
 
-    // Bounds check
     if (tileX < 0 || tileX >= terrainGridCountX || tileZ < 0 || tileZ >= terrainGridCountZ)
         return -1e10;
 
-    // Position within the tile [0, tileSize]
     float inTileX = localX - float(tileX) * tileSize;
     float inTileZ = localZ - float(tileZ) * tileSize;
 
-    // Convert to grid coordinates
     float spacing = terrainVertexSpacing;
     float gx = inTileX / spacing;
     float gz = inTileZ / spacing;
@@ -702,11 +695,9 @@ float sampleTerrainHeight(vec3 worldPos)
     fx = clamp(fx, 0.0, 1.0);
     fz = clamp(fz, 0.0, 1.0);
 
-    // Tile offset in the heights array
     uint tileIndex = uint(tileZ) * uint(terrainGridCountX) + uint(tileX);
     uint tileOffset = tileIndex * vpt * vpt;
 
-    // Bilinear sample
     float h00 = terrainHeights[tileOffset + uint(iz) * vpt + uint(ix)];
     float h10 = terrainHeights[tileOffset + uint(iz) * vpt + uint(ix + 1)];
     float h01 = terrainHeights[tileOffset + uint(iz + 1) * vpt + uint(ix)];
@@ -736,21 +727,17 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
 
     float terrainY = sampleTerrainHeight(p.position);
 
-    // No terrain at this location
     if (terrainY < -1e9)
         return;
 
-    // Compute penetration along surface normal (not vertical)
     vec3 terrainPoint = vec3(p.position.x, terrainY, p.position.z);
     vec3 normal = getTerrainNormal(p.position);
     float penetration = dot(terrainPoint - p.position, normal);
 
     if (penetration > 0.0)
     {
-        // Push particle out of terrain
         p.position += normal * penetration;
 
-        // Reflect velocity
         float vn = dot(p.velocity, normal);
         if (vn < 0.0)
         {
@@ -761,13 +748,11 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
                        - vNormal * config.collisionBounce;
         }
 
-        // Lifetime loss
         if (config.collisionLifetimeLoss > 0.0)
         {
             p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
         }
 
-        // OnCollision event (once per particle per frame)
         if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
             emitEvent(2u, p.position, p.velocity, emitterIdx);
@@ -776,7 +761,6 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
     }
 }
 
-// --- Quaternion helpers ---
 vec3 rotateByQuat(vec3 v, vec4 q)
 {
     vec3 u = q.xyz;
@@ -791,7 +775,6 @@ vec3 rotateByQuatInverse(vec3 v, vec4 q)
     return rotateByQuat(v, vec4(-q.xyz, q.w));
 }
 
-// --- Collision detection per shape ---
 bool resolveCollisionSphere(vec3 particlePos, GPUCollider col, out vec3 hitNormal, out float penetration)
 {
     vec3 center = col.positionAndType.xyz;
@@ -817,15 +800,12 @@ bool resolveCollisionBox(vec3 particlePos, GPUCollider col, out vec3 hitNormal, 
     vec4 quat = col.rotation;
     vec3 halfExtents = col.dimensions.xyz;
 
-    // Transform particle to collider local space
     vec3 localPos = rotateByQuatInverse(particlePos - center, quat);
 
-    // AABB check in local space
     vec3 absLocal = abs(localPos);
     if (absLocal.x > halfExtents.x || absLocal.y > halfExtents.y || absLocal.z > halfExtents.z)
         return false;
 
-    // Find closest face (minimum penetration axis)
     vec3 depths = halfExtents - absLocal;
     float minDepth = depths.x;
     vec3 localNormal = vec3(sign(localPos.x), 0.0, 0.0);

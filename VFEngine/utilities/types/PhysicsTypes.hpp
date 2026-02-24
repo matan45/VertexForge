@@ -25,7 +25,6 @@ namespace types
         Kinematic = 2
     };
 
-    // Collision layer definition
     struct CollisionLayer
     {
         std::string name;
@@ -111,22 +110,18 @@ namespace types
             return *this;
         }
 
-        // Gravity
         glm::vec3 gravity{0.0f, -9.81f, 0.0f};
         float gravityScale = 1.0f;
 
-        // Timestep configuration
-        double fixedTimestep = 1.0 / 60.0; // 60 Hz physics
-        double maxAccumulator = 0.25; // Max 250ms accumulator
-        int maxStepsPerFrame = 8; // Limit steps per frame
+        double fixedTimestep = 1.0 / 60.0; // 60 Hz
+        double maxAccumulator = 0.25; // 250ms max
+        int maxStepsPerFrame = 8;
 
-        // Sleep thresholds
         float linearSleepThreshold = 0.05f; // m/s
         float angularSleepThreshold = 0.05f; // rad/s
         float timeToSleep = 0.5f; // seconds
 
-        // VFX particle collision
-        uint32_t maxVFXSceneColliders = 32; // Max scene colliders for VFX particles (1-128)
+        uint32_t maxVFXSceneColliders = 32; // 1-128
 
         std::vector<CollisionLayer> layers;
 
@@ -143,26 +138,21 @@ namespace types
                 {"Sensor", 3, true}
             };
 
-            // Initialize collision matrix with default rules
-            // Static (0): collides with Dynamic, Kinematic
             settings.collisionMatrix[0].reset();
             settings.collisionMatrix[0].set(1); // Dynamic
             settings.collisionMatrix[0].set(2); // Kinematic
 
-            // Dynamic (1): collides with all
             settings.collisionMatrix[1].reset();
             settings.collisionMatrix[1].set(0); // Static
             settings.collisionMatrix[1].set(1); // Dynamic
             settings.collisionMatrix[1].set(2); // Kinematic
             settings.collisionMatrix[1].set(3); // Sensor
 
-            // Kinematic (2): collides with Static, Dynamic, Sensor (not other Kinematic)
             settings.collisionMatrix[2].reset();
             settings.collisionMatrix[2].set(0); // Static
             settings.collisionMatrix[2].set(1); // Dynamic
             settings.collisionMatrix[2].set(3); // Sensor
 
-            // Sensor (3): collides with Dynamic, Kinematic
             settings.collisionMatrix[3].reset();
             settings.collisionMatrix[3].set(1); // Dynamic
             settings.collisionMatrix[3].set(2); // Kinematic
@@ -183,7 +173,6 @@ namespace types
             collisionMatrix[layer2].set(layer1, shouldCollide);
         }
 
-        // Get layer by index, returns nullptr if not found (O(1) with cache)
         const CollisionLayer* getLayerByIndex(uint8_t index) const
         {
             if (index >= MAX_LAYERS) return nullptr;
@@ -195,7 +184,6 @@ namespace types
             return &layers[static_cast<size_t>(pos)];
         }
 
-        // Get next available layer index (returns MAX_LAYERS if none available)
         uint8_t getNextAvailableLayerIndex() const
         {
             std::bitset<MAX_LAYERS> usedIndices;
