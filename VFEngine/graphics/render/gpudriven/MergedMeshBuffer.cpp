@@ -659,6 +659,26 @@ namespace render::gpudriven
                 obj.albedo.a = subMat->opacity;
             }
         }
+        else if (!materialPath.empty())
+        {
+            auto it = pbrCache.find(materialPath);
+            if (it != pbrCache.end())
+            {
+                switch (static_cast<uint8_t>(it->second.blendMode))
+                {
+                case 1: obj.flags |= ObjectFlags::AlphaMask; break;
+                case 2: obj.flags |= ObjectFlags::Translucent; break;
+                case 3: obj.flags |= ObjectFlags::Translucent | ObjectFlags::AdditiveBlend; break;
+                case 4: obj.flags |= ObjectFlags::Translucent | ObjectFlags::MultiplyBlend; break;
+                default: break;
+                }
+
+                if (material::isTransparentBlendMode(it->second.blendMode))
+                {
+                    obj.albedo.a = it->second.opacity;
+                }
+            }
+        }
 
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
