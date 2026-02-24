@@ -128,6 +128,7 @@ namespace render::gpudriven
 
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::RenderPass cachedRenderPass;
+        vk::RenderPass cachedWBOITRenderPass;
 
         mesh::MaterialTextureCache* materialTextureCache = nullptr;
 

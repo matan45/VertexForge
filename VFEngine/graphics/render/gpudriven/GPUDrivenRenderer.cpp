@@ -191,6 +191,8 @@ namespace render::gpudriven
     {
         if (!initialized || !meshShaderSupported || !wboitRenderPass) return;
 
+        cachedWBOITRenderPass = wboitRenderPass;
+
         wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
         wboitMeshShaderPipeline->init(cachedIBLLayout,
                                      bindlessTextures->getDescriptorSetLayout(),
@@ -498,6 +500,20 @@ namespace render::gpudriven
                                              shadowSystem->getShadowTextureLayout(),
                                              cachedRenderPass,
                                              true);
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                wboitMeshShaderPipeline->recreate(cachedIBLLayout,
+                                             bindlessTextures->getDescriptorSetLayout(),
+                                             boneMatrixManager->getDescriptorSetLayout(),
+                                             lightBufferManager->getDescriptorSetLayout(),
+                                             clusterGridManager->getDescriptorSetLayout(),
+                                             lightCullingPipeline->getDescriptorSetLayout(),
+                                             shadowSystem->getShadowDataLayout(),
+                                             shadowSystem->getShadowTextureLayout(),
+                                             cachedWBOITRenderPass,
+                                             false, true);
             }
 
             if (terrainPipeline)
