@@ -1,6 +1,7 @@
 #include "MergedMeshBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "resource/ResourceManager.hpp"
+#include "print/Logger.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <cmath>
 

@@ -451,7 +451,7 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = renderPass,
+            .renderPass = info.renderPass,
             .extent = swapChain.getSwapchainExtent(),
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
