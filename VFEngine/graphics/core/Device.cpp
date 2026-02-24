@@ -224,6 +224,7 @@ namespace core {
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.independentBlend = VK_TRUE;
 
 		// required for gl_BaseInstance in shaders
 		vk::PhysicalDeviceVulkan11Features vulkan11Features{};

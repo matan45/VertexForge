@@ -296,6 +296,11 @@ namespace controllers {
 		offScreenController->setTerrainMeshletCullingEnabled(enabled);
 	}
 
+	void OffScreen::setWBOITEnabled(bool enabled)
+	{
+		offScreenController->setWBOITEnabled(enabled);
+	}
+
 	void OffScreen::setTerrainRenderingEnabled(bool enabled)
 	{
 		offScreenController->setTerrainRenderingEnabled(enabled);

@@ -154,12 +154,30 @@ namespace editor::materialeditor
 
         if (materialData) {
             ImGui::Text("Blend Mode");
-            const char* blendModes[] = { "Opaque", "Masked" };
+            const char* blendModes[] = { "Opaque", "Masked", "Translucent", "Additive", "Multiply" };
             int blendMode = static_cast<int>(materialData->blendMode);
-            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 2)) {
+            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, IM_ARRAYSIZE(blendModes))) {
                 materialData->blendMode = static_cast<::material::BlendMode>(blendMode);
                 if (onBlendModeChanged) {
                     onBlendModeChanged();
+                }
+            }
+
+            if (materialData->blendMode == ::material::BlendMode::Translucent) {
+                ImGui::Text("Opacity");
+                if (ImGui::SliderFloat("##Opacity", &materialData->opacity, 0.0f, 1.0f, "%.2f")) {
+                    if (onBlendModeChanged) {
+                        onBlendModeChanged();
+                    }
+                }
+            }
+
+            if (materialData->blendMode == ::material::BlendMode::Masked) {
+                ImGui::Text("Alpha Cutoff");
+                if (ImGui::SliderFloat("##AlphaCutoff", &materialData->alphaCutoff, 0.0f, 1.0f, "%.2f")) {
+                    if (onBlendModeChanged) {
+                        onBlendModeChanged();
+                    }
                 }
             }
         }

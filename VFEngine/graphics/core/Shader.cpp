@@ -109,6 +109,11 @@ namespace core {
 		}
 	}
 
+	void Shader::addMacroDefinition(const std::string& name)
+	{
+		macroDefinitions.push_back(name);
+	}
+
 	void Shader::cleanUp()
 	{
 		shaderModules.clear();
@@ -138,6 +143,10 @@ namespace core {
 		shaderc::CompileOptions options;
 		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
 		options.SetOptimizationLevel(shaderc_optimization_level_performance);
+
+		for (const auto& name : macroDefinitions) {
+			options.AddMacroDefinition(name);
+		}
 
 		if (!currentShaderBasePath.empty()) {
 			options.SetIncluder(std::make_unique<ShaderIncluder>(currentShaderBasePath));

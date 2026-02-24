@@ -77,6 +77,7 @@ namespace render::gpudriven
         uint32_t totalVertexCount = 0;
         uint32_t totalIndexCount = 0;
         uint32_t currentObjectCount = 0;
+        uint32_t transparentObjectCount = 0;
 
         static constexpr uint32_t vertexStride = 64;
 
@@ -122,6 +123,7 @@ namespace render::gpudriven
         uint32_t getTotalVertexCount() const { return totalVertexCount; }
         uint32_t getTotalIndexCount() const { return totalIndexCount; }
         uint32_t getObjectCount() const { return currentObjectCount; }
+        uint32_t getTransparentObjectCount() const { return transparentObjectCount; }
 
         const SubmeshLocation* getSubmeshLocation(const std::string& meshPath,
                                                   const std::string& submeshName,

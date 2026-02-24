@@ -394,6 +394,22 @@ namespace windows
                 ImGui::SetTooltip("Cull individual terrain meshlets for finer-grained culling.");
             }
 
+            ImGui::Separator();
+            ImGui::Text("Transparency");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Weighted Blended OIT", &settings.transparency.wboitEnabled))
+            {
+                isDirty = true;
+                events::render::SetWBOITCommand cmd;
+                cmd.enabled = settings.transparency.wboitEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Use Weighted Blended Order-Independent Transparency for transparent objects.\nWhen disabled, falls back to simple alpha blending.");
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

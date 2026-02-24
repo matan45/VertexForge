@@ -355,7 +355,10 @@ namespace material
     enum class BlendMode : uint8_t
     {
         Opaque,
-        Masked
+        Masked,
+        Translucent,
+        Additive,
+        Multiply
     };
 
     inline std::string blendModeToString(BlendMode mode)
@@ -364,6 +367,9 @@ namespace material
         {
         case BlendMode::Opaque: return "opaque";
         case BlendMode::Masked: return "masked";
+        case BlendMode::Translucent: return "translucent";
+        case BlendMode::Additive: return "additive";
+        case BlendMode::Multiply: return "multiply";
         default: return "opaque";
         }
     }
@@ -371,7 +377,17 @@ namespace material
     inline BlendMode stringToBlendMode(const std::string& str)
     {
         if (str == "masked") return BlendMode::Masked;
+        if (str == "translucent") return BlendMode::Translucent;
+        if (str == "additive") return BlendMode::Additive;
+        if (str == "multiply") return BlendMode::Multiply;
         return BlendMode::Opaque;
+    }
+
+    inline bool isTransparentBlendMode(BlendMode mode)
+    {
+        return mode == BlendMode::Translucent ||
+               mode == BlendMode::Additive ||
+               mode == BlendMode::Multiply;
     }
 
     struct MaterialData
@@ -379,6 +395,8 @@ namespace material
         std::string uuid;
         std::string name;
         BlendMode blendMode = BlendMode::Opaque;
+        float opacity = 1.0f;
+        float alphaCutoff = 0.5f;
 
         ShaderGraph graph;
 

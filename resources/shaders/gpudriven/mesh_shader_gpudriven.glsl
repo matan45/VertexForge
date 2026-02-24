@@ -196,6 +196,9 @@ layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
 
 layout(location = 0) out vec4 outColor;
+#ifdef WBOIT_ENABLED
+layout(location = 1) out float outRevealage;
+#endif
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -218,7 +221,6 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
 } pc;
 
-// Matches GPUDirectionalLight in GPULightTypes.hpp (32 bytes)
 struct DirectionalLight {
     vec3 direction;
     float intensity;
@@ -230,7 +232,6 @@ layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
 };
 
-// Matches GPUPointLight in GPULightTypes.hpp (48 bytes)
 struct PointLight {
     vec3 position;
     float radius;
@@ -246,7 +247,6 @@ layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer {
     PointLight pointLights[];
 };
 
-// Matches GPUSpotLight in GPULightTypes.hpp (64 bytes)
 struct SpotLight {
     vec3 position;
     float range;
@@ -301,7 +301,6 @@ layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer
     uint lightIndexList[];
 };
 
-// Matches GPUShadowData in ShadowTypes.hpp (128 bytes)
 struct ShadowData {
     mat4 viewProjection;
     vec4 atlasViewport;
@@ -318,9 +317,8 @@ layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
-// Shadow constants (must match ShadowTypes.hpp)
-const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
-const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
+const int MAX_SHADOW_VIEWS = 272;
+const int MAX_POINT_SHADOW_CUBES = 32;
 
 const float LIGHTING_PI = 3.14159265359;
 
@@ -375,7 +373,6 @@ float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float co
 }
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
@@ -402,7 +399,7 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     float softness = sd.pcfParams.y;
     float spread = texelSize * softness;
     int sampleCount = 0;
-    int size = kernelSize + 1;  // 3x3 or 5x5
+    int size = kernelSize + 1;
     float halfSize = float(size) * 0.5;
 
     for (int x = 0; x < size; ++x) {
@@ -416,7 +413,6 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
@@ -442,7 +438,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     float shadow = 0.0;
     float spread = sd.biasParams.w * sd.pcfParams.y;
     int sampleCount = 0;
-    int size = kernelSize + 1;  // 3x3 or 5x5
+    int size = kernelSize + 1;
     float halfSize = float(size) * 0.5;
 
     for (int x = 0; x < size; ++x) {
@@ -456,13 +452,11 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
     cascadeCount = clamp(cascadeCount, 1, 4);
 
-    // Ensure we don't access beyond buffer bounds with cascades
     if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
         cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
         if (cascadeCount <= 0) return 1.0;
@@ -497,7 +491,6 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
@@ -533,7 +526,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 l
 
     float shadow = 0.0;
     int sampleCount = 0;
-    int size = kernelSize + 1;  // 3x3 or 5x5
+    int size = kernelSize + 1;
     float halfSize = float(size) * 0.5;
 
     for (int x = 0; x < size; ++x) {
@@ -673,10 +666,12 @@ vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
     return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
 }
 
-const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
+const uint FLAG_TRANSLUCENT = 1u << 5;
+const uint FLAG_ADDITIVE_BLEND = 1u << 10;
+const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
@@ -722,9 +717,15 @@ void main() {
     }
 
     if ((drawData.flags & FLAG_ALPHA_MASK) != 0u) {
-        if (alpha < ALPHA_CUTOFF) {
+        float alphaCutoff = float((drawData.blendModeAndOpacity >> 8u) & 0xFFu) / 255.0;
+        if (alpha < alphaCutoff) {
             discard;
         }
+    }
+
+    if ((drawData.flags & FLAG_TRANSLUCENT) != 0u) {
+        float materialOpacity = float(drawData.blendModeAndOpacity >> 16u) / 65535.0;
+        alpha *= materialOpacity;
     }
 
     float metallic = drawData.materialParams.x;
@@ -964,5 +965,18 @@ void main() {
         color = shadowColor;
     }
 
-    outColor = vec4(color, alpha);
+#ifdef WBOIT_ENABLED
+    // Weighted Blended OIT (McGuire & Bavoil 2013)
+    float viewZ = linearizeDepth(gl_FragCoord.z);
+    float w = alpha * max(1e-2, min(3e3, 10.0 / (1e-5 + pow(viewZ / 200.0, 4.0))));
+    outColor = vec4(color * alpha * w, alpha * w);
+    outRevealage = alpha;
+#else
+    bool isAdditive = (drawData.flags & FLAG_ADDITIVE_BLEND) != 0u;
+    if (isAdditive) {
+        outColor = vec4(color * alpha, 0.0);
+    } else {
+        outColor = vec4(color * alpha, alpha);
+    }
+#endif
 }

@@ -1,5 +1,4 @@
 #include "GPUDrivenRenderer.hpp"
-#include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
@@ -117,16 +116,24 @@ namespace render::gpudriven
                 shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
             }
 
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = iblDescriptorSetLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .renderPass = renderPass
+            };
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
-            meshShaderPipeline->init(iblDescriptorSetLayout,
-                                     bindlessTextures->getDescriptorSetLayout(),
-                                     boneMatrixManager->getDescriptorSetLayout(),
-                                     lightBufferManager->getDescriptorSetLayout(),
-                                     clusterGridManager->getDescriptorSetLayout(),
-                                     lightCullingPipeline->getDescriptorSetLayout(),
-                                     shadowSystem->getShadowDataLayout(),
-                                     shadowSystem->getShadowTextureLayout(),
-                                     renderPass);
+            meshShaderPipeline->init(pipelineInfo);
+
+            pipelineInfo.transparentMode = true;
+            transparentMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            transparentMeshShaderPipeline->init(pipelineInfo);
 
             shadowSystem->initShadowPass(
                 meshShaderPipeline->getPerDrawDataLayout(),
@@ -175,6 +182,29 @@ namespace render::gpudriven
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
 
+    void GPUDrivenRenderer::initWBOITPipeline(vk::RenderPass wboitRenderPass)
+    {
+        if (!initialized || !meshShaderSupported || !wboitRenderPass) return;
+
+        cachedWBOITRenderPass = wboitRenderPass;
+
+        wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+        wboitMeshShaderPipeline->init({
+            .iblLayout = cachedIBLLayout,
+            .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+            .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+            .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+            .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+            .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+            .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+            .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+            .renderPass = wboitRenderPass,
+            .wboitMode = true
+        });
+
+        loggerInfo("GPUDrivenRenderer: WBOIT mesh shader pipeline initialized");
+    }
+
     void GPUDrivenRenderer::cleanup()
     {
         if (!initialized)
@@ -200,6 +230,8 @@ namespace render::gpudriven
         if (terrainPipeline) terrainPipeline->cleanup();
         if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->cleanup();
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
@@ -222,6 +254,8 @@ namespace render::gpudriven
         waterPipeline.reset();
         waterMeshBuffer.reset();
         lightOcclusionCulling.reset();
+        wboitMeshShaderPipeline.reset();
+        transparentMeshShaderPipeline.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
         lightCullingPipeline.reset();
@@ -237,157 +271,6 @@ namespace render::gpudriven
 
         initialized = false;
         loggerInfo("GPUDrivenRenderer: Cleaned up");
-    }
-
-    void GPUDrivenRenderer::setDefaultTexture(vk::ImageView view, vk::Sampler sampler)
-    {
-        if (!initialized || !bindlessTextures)
-        {
-            return;
-        }
-
-        bindlessTextures->setDefaultTexture(view, sampler);
-    }
-
-    uint32_t GPUDrivenRenderer::getMergedVertexCount() const
-    {
-        return mergedBuffer ? mergedBuffer->getTotalVertexCount() : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getMergedIndexCount() const
-    {
-        return mergedBuffer ? mergedBuffer->getTotalIndexCount() : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getRegisteredMeshCount() const
-    {
-        return mergedBuffer ? static_cast<uint32_t>(mergedBuffer->getRegisteredMeshes().size()) : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getRegisteredTextureCount() const
-    {
-        return bindlessTextures ? bindlessTextures->getRegisteredTextureCount() : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getBatchCount() const
-    {
-        return batchManager ? batchManager->getBatchCount() : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getCommandsPerBatch() const
-    {
-        return batchManager ? batchManager->getCommandsPerBatch() : 0;
-    }
-
-    uint32_t GPUDrivenRenderer::getTotalCapacity() const
-    {
-        return batchManager ? batchManager->getTotalCapacity() : 0;
-    }
-
-    uint64_t GPUDrivenRenderer::getDrawCommandBufferSize() const
-    {
-        return batchManager ? batchManager->getCombinedDrawCommandBufferSize() : 0;
-    }
-
-    uint64_t GPUDrivenRenderer::getDrawCountBufferSize() const
-    {
-        return batchManager ? batchManager->getCombinedDrawCountBufferSize() : 0;
-    }
-
-    uint64_t GPUDrivenRenderer::getPerDrawDataBufferSize() const
-    {
-        return batchManager ? batchManager->getCombinedPerDrawDataBufferSize() : 0;
-    }
-
-    uint64_t GPUDrivenRenderer::getTotalMemoryUsage() const
-    {
-        if (!batchManager) return 0;
-        return batchManager->getCombinedDrawCommandBufferSize() +
-            batchManager->getCombinedDrawCountBufferSize() +
-            batchManager->getCombinedPerDrawDataBufferSize();
-    }
-
-    void GPUDrivenRenderer::updateStatsFromGPU()
-    {
-        if (!initialized || !enabled || !batchManager)
-        {
-            return;
-        }
-
-        GPUDrivenStats aggregated = batchManager->readBackAggregatedStats();
-
-        stats.visibleObjects = aggregated.visibleObjects;
-        stats.drawCalls = aggregated.drawCalls;
-
-        stats.objectsLOD0 = aggregated.objectsLOD0;
-        stats.objectsLOD1 = aggregated.objectsLOD1;
-        stats.objectsLOD2 = aggregated.objectsLOD2;
-        stats.objectsLOD3 = aggregated.objectsLOD3;
-
-        stats.culledByFrustum = aggregated.culledByFrustum;
-        stats.culledByOcclusion = aggregated.culledByOcclusion;
-    }
-
-    MeshletCullingStats GPUDrivenRenderer::getMeshletCullingStats()
-    {
-        if (!meshShaderPipeline)
-        {
-            return MeshletCullingStats{};
-        }
-        return meshShaderPipeline->readStats();
-    }
-
-    void GPUDrivenRenderer::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
-    {
-        visibleLightIds.clear();
-        visibleLightIds.insert(visibleLights.begin(), visibleLights.end());
-        useBVHLightCulling = true;
-    }
-
-    void GPUDrivenRenderer::clearVisibleLights()
-    {
-        visibleLightIds.clear();
-        useBVHLightCulling = false;
-    }
-
-    void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
-    {
-        if (shadowSystem)
-        {
-            shadowSystem->setDeletionQueue(queue);
-        }
-    }
-
-    void GPUDrivenRenderer::initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer)
-    {
-        if (!hiZBuffer)
-        {
-            loggerWarning("GPUDrivenRenderer: Cannot init light occlusion culling - HiZBuffer is null");
-            return;
-        }
-
-        lightOcclusionCulling = std::make_unique<occlusion::LightOcclusionCulling>(device, swapChain);
-        lightOcclusionCulling->init(hiZBuffer);
-        useLightOcclusionCulling = true;
-
-        loggerInfo("GPUDrivenRenderer: Light occlusion culling initialized");
-    }
-
-    void GPUDrivenRenderer::readBackLightOcclusionResults()
-    {
-        if (!useLightOcclusionCulling || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
-        {
-            return;
-        }
-
-        lightOcclusionCulling->markResultsReady();
-
-        const auto& visibleLights = lightOcclusionCulling->getVisibleLightIds();
-
-        prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
-        hasPrevFrameOcclusionData = true;
-
-        lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
@@ -441,15 +324,33 @@ namespace render::gpudriven
 
         if (canRecreate && shadowSystem)
         {
-            meshShaderPipeline->recreate(cachedIBLLayout,
-                                         bindlessTextures->getDescriptorSetLayout(),
-                                         boneMatrixManager->getDescriptorSetLayout(),
-                                         lightBufferManager->getDescriptorSetLayout(),
-                                         clusterGridManager->getDescriptorSetLayout(),
-                                         lightCullingPipeline->getDescriptorSetLayout(),
-                                         shadowSystem->getShadowDataLayout(),
-                                         shadowSystem->getShadowTextureLayout(),
-                                         cachedRenderPass);
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+
+            if (transparentMeshShaderPipeline)
+            {
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+                pipelineInfo.transparentMode = false;
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+            }
 
             if (terrainPipeline)
             {
@@ -476,62 +377,4 @@ namespace render::gpudriven
         }
     }
 
-    uint32_t GPUDrivenRenderer::getTotalSceneLights() const
-    {
-        return totalSceneLights;
-    }
-
-    uint32_t GPUDrivenRenderer::getLightsAfterBVHCull() const
-    {
-        return lightsAfterBVHCull;
-    }
-
-    uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
-    {
-        return lightsAfterHiZCull;
-    }
-
-    void GPUDrivenRenderer::initVolumetricFog(::postprocess::VolumetricQuality quality)
-    {
-        if (!initialized || !clusterGridManager || !lightBufferManager || !lightCullingPipeline)
-        {
-            loggerWarning("GPUDrivenRenderer: Cannot init volumetric fog - lighting subsystems not ready");
-            return;
-        }
-
-        if (volumetricPipeline)
-        {
-            volumetricPipeline->cleanup();
-            volumetricPipeline.reset();
-        }
-
-        auto volQuality = static_cast<volumetric::VolumetricQuality>(static_cast<uint8_t>(quality));
-
-        volumetricPipeline = std::make_unique<volumetric::VolumetricPipeline>(device);
-        volumetricPipeline->init(
-            volQuality,
-            clusterGridManager->getDescriptorSetLayout(),
-            lightBufferManager->getDescriptorSetLayout(),
-            lightCullingPipeline->getDescriptorSetLayout(),
-            shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
-            shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
-
-        loggerInfo("GPUDrivenRenderer: Volumetric fog initialized");
-    }
-
-    void GPUDrivenRenderer::setVolumetricFogEnabled(bool value)
-    {
-        if (volumetricPipeline)
-            volumetricPipeline->setEnabled(value);
-    }
-
-    bool GPUDrivenRenderer::isVolumetricFogEnabled() const
-    {
-        return volumetricPipeline && volumetricPipeline->isEnabled();
-    }
-
-    void GPUDrivenRenderer::updateVolumetricSettings(const ::postprocess::VolumetricFogSettings& settings)
-    {
-        cachedVolumetricSettings = settings;
-    }
 }

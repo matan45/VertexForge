@@ -239,6 +239,7 @@
     <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasDebugRenderer.hpp" />
     <ClInclude Include="render\tools\UICanvasImageRenderer.hpp" />
+    <ClInclude Include="render\transparency\WBOITPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderBufferManager.hpp" />
     <ClInclude Include="render\ui\UIRenderPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderTypes.hpp" />
@@ -282,7 +283,9 @@
     <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
+    <ClCompile Include="controllers\OffScreenControllerDebug.cpp" />
     <ClCompile Include="controllers\OffScreenControllerFrame.cpp" />
+    <ClCompile Include="controllers\OffScreenControllerSettings.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
     <ClCompile Include="controllers\VFXPreviewController.cpp" />
@@ -336,11 +339,14 @@
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererCompute.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRendererDraw.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRendererQuery.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererScene.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererTerrain.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererWater.cpp" />
     <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\MergedMeshBufferScene.cpp" />
     <ClCompile Include="render\gpudriven\MeshShaderPipeline.cpp" />
     <ClCompile Include="render\gpudriven\MeshletBuffer.cpp" />
     <ClCompile Include="render\gpudriven\TerrainGPUAdapter.cpp" />
@@ -416,6 +422,7 @@
     <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />
     <ClCompile Include="render\tools\UICanvasDebugRenderer.cpp" />
     <ClCompile Include="render\tools\UICanvasImageRenderer.cpp" />
+    <ClCompile Include="render\transparency\WBOITPipeline.cpp" />
     <ClCompile Include="render\ui\UIRenderBufferManager.cpp" />
     <ClCompile Include="render\ui\UIRenderPipeline.cpp" />
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
@@ -508,6 +515,7 @@
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\ui_canvas_image.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
+    <None Include="..\..\resources\shaders\transparency\wboit_composite.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />

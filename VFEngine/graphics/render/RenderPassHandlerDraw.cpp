@@ -14,6 +14,7 @@
 #include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
 #include "../../services/providers/IWaterRenderProvider.hpp"
@@ -162,6 +163,16 @@ namespace render
 
         gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
+        bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                        && gpuDrivenRenderer->isWBOITReady();
+        if (!useWBOIT)
+        {
+            gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        // Additive/Multiply always drawn in main pass (commutative, don't need OIT)
+        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
+
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
         {
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
@@ -187,6 +198,14 @@ namespace render
         }
 
         meshPipeline->endRenderPass(commandBuffer);
+
+        if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
+        {
+            wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
+            gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet);
+            wboitPipeline->endWBOITPass(commandBuffer);
+            wboitPipeline->composite(commandBuffer, imageIndex);
+        }
 
         if (hasVFX)
         {

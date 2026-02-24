@@ -300,6 +300,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setWBOITEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setWBOITEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setTerrainRenderingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setTerrainRenderingEnabled(enabled);

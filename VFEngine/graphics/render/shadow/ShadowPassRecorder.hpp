@@ -28,6 +28,7 @@ namespace render::shadow
         uint32_t batchCount;
         uint32_t commandsPerSection;
         uint32_t shaderGroupCount;
+        uint32_t transparentGroupIndex;  // Shader group index for transparent objects (skip in shadows)
         uint32_t drawCountStructSize;
     };
 

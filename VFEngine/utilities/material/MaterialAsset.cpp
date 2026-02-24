@@ -262,6 +262,8 @@ namespace material
         j["uuid"] = material.uuid;
         j["name"] = material.name;
         j["blendMode"] = blendModeToString(material.blendMode);
+        j["opacity"] = material.opacity;
+        j["alphaCutoff"] = material.alphaCutoff;
         j["graph"] = serializeGraph(material);
 
         if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())

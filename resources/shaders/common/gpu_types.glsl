@@ -25,7 +25,7 @@ struct PerDrawData {
     uint baseVertexOffset;
     uint boneMatrixOffset;
     uint boneCount;
-    uint padding3;
+    uint blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
 };
 
 // Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)

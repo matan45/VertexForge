@@ -170,6 +170,8 @@ namespace render::shadow
 
                     for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                     {
+                        if (shaderGroup == params.transparentGroupIndex) continue;
+
                         for (uint32_t batch = 0; batch < params.batchCount; ++batch)
                         {
                             uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
@@ -368,6 +370,8 @@ namespace render::shadow
 
                     for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                     {
+                        if (shaderGroup == params.transparentGroupIndex) continue;
+
                         for (uint32_t batch = 0; batch < params.batchCount; ++batch)
                         {
                             uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;

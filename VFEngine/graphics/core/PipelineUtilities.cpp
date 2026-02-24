@@ -373,8 +373,16 @@ namespace core
 
 		vk::PipelineColorBlendStateCreateInfo colorBlending{};
 		colorBlending.logicOpEnable = VK_FALSE;
-		colorBlending.attachmentCount = 1;
-		colorBlending.pAttachments = &colorBlendAttachment;
+		if (!config.colorBlendAttachments.empty())
+		{
+			colorBlending.attachmentCount = static_cast<uint32_t>(config.colorBlendAttachments.size());
+			colorBlending.pAttachments = config.colorBlendAttachments.data();
+		}
+		else
+		{
+			colorBlending.attachmentCount = 1;
+			colorBlending.pAttachments = &colorBlendAttachment;
+		}
 
 		// Create mesh shader pipeline
 		// Key difference: pVertexInputState and pInputAssemblyState are nullptr

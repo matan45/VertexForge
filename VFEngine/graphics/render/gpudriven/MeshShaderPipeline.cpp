@@ -22,29 +22,21 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void MeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
-                                  vk::DescriptorSetLayout bindlessTextureLayout,
-                                  vk::DescriptorSetLayout boneMatrixLayout,
-                                  vk::DescriptorSetLayout lightDataLayout,
-                                  vk::DescriptorSetLayout clusterGridLayout,
-                                  vk::DescriptorSetLayout cullingOutputLayout,
-                                  vk::DescriptorSetLayout shadowDataLayout,
-                                  vk::DescriptorSetLayout shadowTextureLayout,
-                                  vk::RenderPass renderPass)
+    void MeshShaderPipeline::init(const MeshPipelineInitInfo& info)
     {
-        cachedLightDataLayout = lightDataLayout;
-        cachedClusterGridLayout = clusterGridLayout;
-        cachedCullingOutputLayout = cullingOutputLayout;
-        cachedShadowDataLayout = shadowDataLayout;
-        cachedShadowTextureLayout = shadowTextureLayout;
+        isTransparentMode = info.transparentMode;
+        isWBOITMode = info.wboitMode;
+        cachedLightDataLayout = info.lightDataLayout;
+        cachedClusterGridLayout = info.clusterGridLayout;
+        cachedCullingOutputLayout = info.cullingOutputLayout;
+        cachedShadowDataLayout = info.shadowDataLayout;
+        cachedShadowTextureLayout = info.shadowTextureLayout;
 
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
-                                         shadowDataLayout, shadowTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(info);
     }
 
     void MeshShaderPipeline::createStatsBuffer()
@@ -123,24 +115,18 @@ namespace render::gpudriven
         }
     }
 
-    void MeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
-                                      vk::DescriptorSetLayout bindlessTextureLayout,
-                                      vk::DescriptorSetLayout boneMatrixLayout,
-                                      vk::DescriptorSetLayout lightDataLayout,
-                                      vk::DescriptorSetLayout clusterGridLayout,
-                                      vk::DescriptorSetLayout cullingOutputLayout,
-                                      vk::DescriptorSetLayout shadowDataLayout,
-                                      vk::DescriptorSetLayout shadowTextureLayout,
-                                      vk::RenderPass renderPass)
+    void MeshShaderPipeline::recreate(const MeshPipelineInitInfo& info)
     {
+        isTransparentMode = info.transparentMode;
+        isWBOITMode = info.wboitMode;
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        cachedLightDataLayout = lightDataLayout;
-        cachedClusterGridLayout = clusterGridLayout;
-        cachedCullingOutputLayout = cullingOutputLayout;
-        cachedShadowDataLayout = shadowDataLayout;
-        cachedShadowTextureLayout = shadowTextureLayout;
+        cachedLightDataLayout = info.lightDataLayout;
+        cachedClusterGridLayout = info.clusterGridLayout;
+        cachedCullingOutputLayout = info.cullingOutputLayout;
+        cachedShadowDataLayout = info.shadowDataLayout;
+        cachedShadowTextureLayout = info.shadowTextureLayout;
 
         if (graphicsPipeline)
         {
@@ -159,9 +145,7 @@ namespace render::gpudriven
             meshShader->cleanUp();
         }
 
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
-                                         shadowDataLayout, shadowTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(info);
     }
 
     void MeshShaderPipeline::updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer)
@@ -399,19 +383,15 @@ namespace render::gpudriven
         loggerInfo("MeshShaderPipeline: Created vertex data descriptor");
     }
 
-    void MeshShaderPipeline::createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
-                                                              vk::DescriptorSetLayout bindlessTextureLayout,
-                                                              vk::DescriptorSetLayout boneMatrixLayout,
-                                                              vk::DescriptorSetLayout lightDataLayout,
-                                                              vk::DescriptorSetLayout clusterGridLayout,
-                                                              vk::DescriptorSetLayout cullingOutputLayout,
-                                                              vk::DescriptorSetLayout shadowDataLayout,
-                                                              vk::DescriptorSetLayout shadowTextureLayout,
-                                                              vk::RenderPass renderPass)
+    void MeshShaderPipeline::createMeshShaderGraphicsPipeline(const MeshPipelineInitInfo& info)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
         meshShader = std::make_unique<core::Shader>(device);
+        if (isWBOITMode)
+        {
+            meshShader->addMacroDefinition("WBOIT_ENABLED");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -439,17 +419,17 @@ namespace render::gpudriven
         }
 
         std::array<vk::DescriptorSetLayout, 11> setLayouts = {
-            iblLayout,
+            info.iblLayout,
             perDrawDataLayout,
-            bindlessTextureLayout,
+            info.bindlessTextureLayout,
             meshletDataLayout,
             vertexDataLayout,
-            boneMatrixLayout,
-            lightDataLayout,
-            clusterGridLayout,
-            cullingOutputLayout,
-            shadowDataLayout,
-            shadowTextureLayout
+            info.boneMatrixLayout,
+            info.lightDataLayout,
+            info.clusterGridLayout,
+            info.cullingOutputLayout,
+            info.shadowDataLayout,
+            info.shadowTextureLayout
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -467,16 +447,53 @@ namespace render::gpudriven
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
+        bool isTransparent = isTransparentMode || isWBOITMode;
+
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = renderPass,
+            .renderPass = info.renderPass,
             .extent = swapChain.getSwapchainExtent(),
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
-            .cullMode = vk::CullModeFlagBits::eBack,
+            .cullMode = isTransparent ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack,
             .depthTestEnable = true,
-            .depthWriteEnable = true
+            .depthWriteEnable = !isTransparent,
+            .depthCompareOp = isWBOITMode ? vk::CompareOp::eLessOrEqual : vk::CompareOp::eLess,
+            .blendEnable = isTransparentMode && !isWBOITMode,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,
+            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+            .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+            .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
         };
+
+        if (isWBOITMode)
+        {
+            // WBOIT dual-attachment blend states
+            vk::PipelineColorBlendAttachmentState accumBlend{};
+            accumBlend.blendEnable = VK_TRUE;
+            accumBlend.srcColorBlendFactor = vk::BlendFactor::eOne;
+            accumBlend.dstColorBlendFactor = vk::BlendFactor::eOne;
+            accumBlend.colorBlendOp = vk::BlendOp::eAdd;
+            accumBlend.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+            accumBlend.dstAlphaBlendFactor = vk::BlendFactor::eOne;
+            accumBlend.alphaBlendOp = vk::BlendOp::eAdd;
+            accumBlend.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                                        vk::ColorComponentFlagBits::eG |
+                                        vk::ColorComponentFlagBits::eB |
+                                        vk::ColorComponentFlagBits::eA;
+
+            vk::PipelineColorBlendAttachmentState revealageBlend{};
+            revealageBlend.blendEnable = VK_TRUE;
+            revealageBlend.srcColorBlendFactor = vk::BlendFactor::eZero;
+            revealageBlend.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcColor;
+            revealageBlend.colorBlendOp = vk::BlendOp::eAdd;
+            revealageBlend.srcAlphaBlendFactor = vk::BlendFactor::eZero;
+            revealageBlend.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+            revealageBlend.alphaBlendOp = vk::BlendOp::eAdd;
+            revealageBlend.colorWriteMask = vk::ColorComponentFlagBits::eR;
+
+            config.colorBlendAttachments = {accumBlend, revealageBlend};
+        }
 
         try
         {

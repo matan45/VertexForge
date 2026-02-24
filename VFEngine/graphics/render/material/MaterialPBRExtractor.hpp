@@ -19,6 +19,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         material::BlendMode blendMode = material::BlendMode::Opaque;
+        float opacity = 1.0f;
+        float alphaCutoff = 0.5f;
         float iblDiffuse = 1.0f;
         float iblSpecular = 0.5f;
 

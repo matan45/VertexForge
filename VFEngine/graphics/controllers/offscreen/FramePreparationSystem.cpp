@@ -53,6 +53,8 @@ namespace controllers::offscreen
             matInfo.ao = pbrValues->ao;
             matInfo.emission = pbrValues->emission;
             matInfo.blendMode = static_cast<uint8_t>(pbrValues->blendMode);
+            matInfo.opacity = pbrValues->opacity;
+            matInfo.alphaCutoff = pbrValues->alphaCutoff;
             matInfo.iblDiffuse = pbrValues->iblDiffuse;
             matInfo.iblSpecular = pbrValues->iblSpecular;
         }

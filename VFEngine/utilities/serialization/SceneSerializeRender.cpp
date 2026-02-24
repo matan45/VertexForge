@@ -485,6 +485,25 @@ namespace serialization
                 settings.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
         }
 
+        void deserializeTransparencySettings(const json& j, types::TransparencySettings& settings)
+        {
+            // Support loading from new "transparency" section
+            if (j.contains("transparency") && j["transparency"].is_object())
+            {
+                const auto& transparency = j["transparency"];
+                if (transparency.contains("wboitEnabled") && transparency["wboitEnabled"].is_boolean())
+                    settings.wboitEnabled = transparency["wboitEnabled"].get<bool>();
+                return;
+            }
+            // Backward compatibility: load from old "culling" section
+            if (j.contains("culling") && j["culling"].is_object())
+            {
+                const auto& culling = j["culling"];
+                if (culling.contains("wboitEnabled") && culling["wboitEnabled"].is_boolean())
+                    settings.wboitEnabled = culling["wboitEnabled"].get<bool>();
+            }
+        }
+
         void deserializeTerrainRenderSettings(const json& j, types::TerrainSettings& settings)
         {
             if (!j.contains("terrain") || !j["terrain"].is_object())
@@ -533,6 +552,10 @@ namespace serialization
             {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
         };
 
+        j["transparency"] = {
+            {"wboitEnabled", settings.transparency.wboitEnabled}
+        };
+
         j["terrain"] = {
             {"enabled", settings.terrain.enabled},
             {"lodBias", settings.terrain.lodBias},
@@ -550,6 +573,7 @@ namespace serialization
     {
         deserializeShadowSettings(j, settings.shadows);
         deserializeCullingSettings(j, settings.culling);
+        deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
 
         if (j.contains("postProcess") && j["postProcess"].is_object())
