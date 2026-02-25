@@ -186,6 +186,8 @@ namespace render
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
 
+        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler);
+
         void initUIRenderPipeline();
         ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }
         bool isUIRenderPipelineInitialized() const { return uiPipelineInitialized; }

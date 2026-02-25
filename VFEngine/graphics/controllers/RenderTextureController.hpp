@@ -33,6 +33,7 @@ namespace controllers
         float farPlane = 1000.0f;
         bool enabled = true;
         void* lastRenderedHandle = nullptr;
+        std::string textureKey;
 
     public:
         RenderTextureController();
@@ -60,7 +61,6 @@ namespace controllers
         uint32_t getPriority() const { return desc.priority; }
         void* getLastRenderedHandle() const { return lastRenderedHandle; }
 
-        vk::ImageView getColorImageView() const;
-        vk::Sampler getTextureSampler() const;
+        void setTextureKey(const std::string& key) { textureKey = key; }
     };
 }

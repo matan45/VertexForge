@@ -189,6 +189,15 @@ namespace render
         rebuildCombinedMeshDrawList();
     }
 
+    void RenderPassHandler::registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler)
+    {
+        if (uiPipelineInitialized && uiPipeline)
+            uiPipeline->registerExternalTexture(key, imageView, sampler);
+
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->registerExternalTexture(key, imageView, sampler);
+    }
+
     void RenderPassHandler::initBillboardPipeline()
     {
         if (billboardPipelineInitialized)

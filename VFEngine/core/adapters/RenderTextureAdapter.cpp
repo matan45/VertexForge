@@ -1,9 +1,6 @@
 #include "RenderTextureAdapter.hpp"
 #include "../../graphics/controllers/RenderTextureController.hpp"
 #include "../controllers/OffScreen.hpp"
-#include "../../graphics/render/RenderPassHandler.hpp"
-#include "../../graphics/render/ui/UIRenderPipeline.hpp"
-#include "../../graphics/render/billboard/BillboardPipeline.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <vector>
@@ -41,6 +38,7 @@ namespace core
 
         auto controller = std::make_unique<::controllers::RenderTextureController>();
         controller->init(desc);
+        controller->setTextureKey("__rtt_" + std::to_string(id) + "__");
 
         controllers[id] = std::move(controller);
         return id;
@@ -95,42 +93,10 @@ namespace core
             });
 
         // Render each RTT camera sequentially (they share GPUDrivenRenderer state)
+        // Each controller registers its texture with pipelines during render()
         for (auto& [id, ctrl] : sorted)
         {
             ctrl->render(passHandler);
-        }
-
-        // Register rendered textures with UI and Billboard pipelines
-        registerTexturesWithPipelines();
-    }
-
-    void RenderTextureAdapter::registerTexturesWithPipelines()
-    {
-        auto* passHandler = getMainRenderPassHandler();
-        if (!passHandler)
-            return;
-
-        auto* uiPipeline = passHandler->getUIRenderPipeline();
-        auto* bbPipeline = passHandler->getBillboardPipeline();
-
-        for (auto& [id, ctrl] : controllers)
-        {
-            if (!ctrl || !ctrl->isEnabled())
-                continue;
-
-            auto imageView = ctrl->getColorImageView();
-            auto texSampler = ctrl->getTextureSampler();
-
-            if (!imageView || !texSampler)
-                continue;
-
-            std::string key = "__rtt_" + std::to_string(id) + "__";
-
-            if (uiPipeline && uiPipeline->isInitialized())
-                uiPipeline->registerExternalTexture(key, imageView, texSampler);
-
-            if (bbPipeline && bbPipeline->isInitialized())
-                bbPipeline->registerExternalTexture(key, imageView, texSampler);
         }
     }
 

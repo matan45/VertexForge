@@ -1,5 +1,6 @@
 #include "RenderTextureController.hpp"
 #include "../render/RenderTextureViewPort.hpp"
+#include "../render/RenderPassHandler.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
@@ -63,17 +64,19 @@ namespace controllers
         );
 
         lastRenderedHandle = static_cast<void*>(result);
+
+        // Register rendered texture with UI and Billboard pipelines
+        if (!textureKey.empty() && mainPassHandler)
+        {
+            auto imageView = viewport->getLastRenderedImageView();
+            auto texSampler = viewport->getTextureSampler();
+            if (imageView && texSampler)
+            {
+                mainPassHandler->registerExternalTexture(textureKey, imageView, texSampler);
+            }
+        }
+
         return lastRenderedHandle;
-    }
-
-    vk::ImageView RenderTextureController::getColorImageView() const
-    {
-        return viewport ? viewport->getLastRenderedImageView() : vk::ImageView{};
-    }
-
-    vk::Sampler RenderTextureController::getTextureSampler() const
-    {
-        return viewport ? viewport->getTextureSampler() : vk::Sampler{};
     }
 
     void RenderTextureController::resize(uint32_t w, uint32_t h)

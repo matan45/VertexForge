@@ -55,6 +55,5 @@ namespace core
     private:
         ::controllers::RenderTextureController* getController(rendertexture::RenderTextureId id) const;
         render::RenderPassHandler* getMainRenderPassHandler() const;
-        void registerTexturesWithPipelines();
     };
 }
