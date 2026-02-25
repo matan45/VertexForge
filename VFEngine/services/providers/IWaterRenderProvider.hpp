@@ -31,5 +31,8 @@ namespace services
         virtual water::WaterGlobalSettings getWaterGlobalSettings() const = 0;
 
         virtual water::WaterTileConfig getWaterTileConfig() const = 0;
+
+        virtual void setDistanceCullingEnabled(bool enabled) = 0;
+        virtual void setMaxDrawDistance(float distance) = 0;
     };
 }

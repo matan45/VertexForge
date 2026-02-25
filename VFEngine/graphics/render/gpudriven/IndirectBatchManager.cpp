@@ -386,6 +386,7 @@ namespace render::gpudriven
             aggregated.objectsLOD3 += section.lodCount3;
             aggregated.culledByFrustum += section.culledByFrustum;
             aggregated.culledByOcclusion += section.culledByOcclusion;
+            aggregated.culledByDistance += section.culledByDistance;
         }
 
         return aggregated;

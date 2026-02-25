@@ -42,6 +42,7 @@ namespace services {
         uint32_t visibleObjects = 0;
         uint32_t culledByFrustum = 0;
         uint32_t culledByOcclusion = 0;
+        uint32_t culledByDistance = 0;
 
         uint32_t objectsLOD0 = 0;
         uint32_t objectsLOD1 = 0;
@@ -210,6 +211,11 @@ namespace services {
         virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
 
         virtual void setWBOITEnabled(bool enabled) = 0;
+
+        virtual void setDistanceCullingEnabled(bool enabled) = 0;
+        virtual void setCategoryDistance(uint32_t category, float distance) = 0;
+        virtual void setShadowDistanceMultiplier(float multiplier) = 0;
+        virtual void setGlobalLodBias(float bias) = 0;
 
         virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
         virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;

@@ -58,11 +58,12 @@ namespace windows
                     ImGui::Text("Objects: %u total", gpu.totalObjects);
                     if (gpu.totalObjects > 0)
                     {
+                        ImGui::Text("  Culled by Distance:  %u", gpu.culledByDistance);
                         ImGui::Text("  Culled by Frustum:   %u", gpu.culledByFrustum);
                         ImGui::Text("  Culled by Occlusion: %u", gpu.culledByOcclusion);
                         ImGui::Text("  Visible:             %u", gpu.visibleObjects);
 
-                        uint32_t totalCulled = gpu.culledByFrustum + gpu.culledByOcclusion;
+                        uint32_t totalCulled = gpu.culledByDistance + gpu.culledByFrustum + gpu.culledByOcclusion;
                         float cullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalObjects);
                         ImGui::Text("Cull Rate:");
                         ImGui::SameLine();

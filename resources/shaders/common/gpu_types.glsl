@@ -47,7 +47,7 @@ void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCo
 struct GPUObjectData {
     mat4 modelMatrix;
 
-    vec4 aabbMin;  // .w unused (padding)
+    vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
     vec4 aabbMax;  // .w unused (padding)
 
     uvec4 lod0Data;
@@ -84,7 +84,7 @@ struct BatchDrawStats {
     uint lodCount3;
     uint culledByFrustum;
     uint culledByOcclusion;
-    uint padding;
+    uint culledByDistance;
 };
 
 // VkDrawMeshTasksIndirectCommandEXT (12 bytes)

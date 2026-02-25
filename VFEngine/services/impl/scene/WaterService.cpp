@@ -301,14 +301,31 @@ namespace services
 
     std::vector<water::WaterTile*> WaterService::getVisibleWaterTiles(
         const math::Frustum& frustum,
-        const glm::vec3& /*cameraPosition*/)
+        const glm::vec3& cameraPosition)
     {
         std::vector<water::WaterTile*> result;
 
         for (auto& [entityId, grid] : waterGrids)
         {
             auto visibleTiles = grid->getVisibleTiles(frustum);
-            result.insert(result.end(), visibleTiles.begin(), visibleTiles.end());
+
+            if (distanceCullingEnabled_ && maxWaterDistSq_ > 0.0f)
+            {
+                for (auto* tile : visibleTiles)
+                {
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    glm::vec3 diff = tileCenter - cameraPosition;
+                    float distSq = glm::dot(diff, diff);
+                    if (distSq <= maxWaterDistSq_)
+                    {
+                        result.push_back(tile);
+                    }
+                }
+            }
+            else
+            {
+                result.insert(result.end(), visibleTiles.begin(), visibleTiles.end());
+            }
         }
 
         return result;

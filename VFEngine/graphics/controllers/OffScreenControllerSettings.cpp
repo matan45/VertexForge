@@ -48,6 +48,22 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
+        gpuDriven->setGlobalLodBias(settings.culling.globalLodBias);
+        gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
+        gpuDriven->setCategoryDistance(0, settings.distanceCulling.staticMeshDistance);
+        gpuDriven->setCategoryDistance(1, settings.distanceCulling.terrainDistance);
+        gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
+        gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
+        gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
+        gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
+
+        renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setVFXDrawDistance(settings.distanceCulling.vfxDistance);
+        renderHandler->setBillboardDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
+        renderHandler->setWaterDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setWaterDrawDistance(settings.distanceCulling.waterDistance);
+
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
@@ -223,6 +239,60 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setDistanceCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (gpuDriven) gpuDriven->setDistanceCullingEnabled(enabled);
+
+        renderHandler->setVFXDistanceCullingEnabled(enabled);
+        renderHandler->setBillboardDistanceCullingEnabled(enabled);
+        renderHandler->setWaterDistanceCullingEnabled(enabled);
+    }
+
+    void OffScreenController::setCategoryDistance(uint32_t category, float distance)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
+
+        if (category == 3) // ObjectCategory::VFX
+        {
+            renderHandler->setVFXDrawDistance(distance);
+        }
+        else if (category == 5) // ObjectCategory::Billboard
+        {
+            renderHandler->setBillboardDrawDistance(distance);
+        }
+        else if (category == 6) // ObjectCategory::Water
+        {
+            renderHandler->setWaterDrawDistance(distance);
+        }
+    }
+
+    void OffScreenController::setShadowDistanceMultiplier(float multiplier)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+            if (gpuDriven) gpuDriven->setShadowDistanceMultiplier(multiplier);
+        }
+    }
+
+    void OffScreenController::setGlobalLodBias(float bias)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setGlobalLodBias(bias);
         }
     }
 

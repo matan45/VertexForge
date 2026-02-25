@@ -288,6 +288,30 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setDistanceCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setDistanceCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setCategoryDistance(uint32_t category, float distance) {
+        if (offScreen) {
+            offScreen->setCategoryDistance(category, distance);
+        }
+    }
+
+    void OffScreenAdapter::setShadowDistanceMultiplier(float multiplier) {
+        if (offScreen) {
+            offScreen->setShadowDistanceMultiplier(multiplier);
+        }
+    }
+
+    void OffScreenAdapter::setGlobalLodBias(float bias) {
+        if (offScreen) {
+            offScreen->setGlobalLodBias(bias);
+        }
+    }
+
     void OffScreenAdapter::setTerrainFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setTerrainFrustumCullingEnabled(enabled);

@@ -169,7 +169,9 @@ namespace render::gpudriven
                                               float time)
     {
         obj.modelMatrix = meshRender.modelMatrix;
-        obj.aabbMin = glm::vec4(submeshLoc.aabbMin, 0.0f);
+        float drawDistSq = meshRender.maxDrawDistance > 0.0f
+            ? meshRender.maxDrawDistance * meshRender.maxDrawDistance : 0.0f;
+        obj.aabbMin = glm::vec4(submeshLoc.aabbMin, drawDistSq);
         obj.aabbMax = glm::vec4(submeshLoc.aabbMax, 0.0f);
 
         populateLODData(obj, meshRender, submeshLoc, boneOffsetResolver);

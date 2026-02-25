@@ -64,6 +64,11 @@ namespace serialization
                 j["applyRootMotion"] = true;
             }
         }
+
+        if (mesh.maxDrawDistance > 0.0f)
+        {
+            j["maxDrawDistance"] = mesh.maxDrawDistance;
+        }
         return j;
     }
 
@@ -133,6 +138,10 @@ namespace serialization
         if (auto it = j.find("applyRootMotion"); it != j.end() && it->is_boolean())
         {
             mesh.applyRootMotion = it->get<bool>();
+        }
+        if (auto it = j.find("maxDrawDistance"); it != j.end() && it->is_number())
+        {
+            mesh.maxDrawDistance = it->get<float>();
         }
     }
 

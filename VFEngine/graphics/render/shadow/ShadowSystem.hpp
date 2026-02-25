@@ -81,6 +81,9 @@ namespace render
                                 vk::DescriptorSetLayout vertexDataLayout,
                                 vk::DescriptorSetLayout boneMatrixLayout);
 
+            void updateCameraDescriptor(vk::Buffer cameraBuffer, vk::DeviceSize bufferSize);
+            [[nodiscard]] vk::DescriptorSet getShadowCameraDescSet() const;
+
             void initTerrainShadowPass(vk::DescriptorSetLayout terrainDataLayout,
                                         vk::DescriptorSetLayout terrainMeshletLayout,
                                         vk::DescriptorSetLayout terrainVertexLayout);

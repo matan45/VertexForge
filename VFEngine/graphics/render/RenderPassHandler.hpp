@@ -239,6 +239,13 @@ namespace render
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 
+        void setVFXDistanceCullingEnabled(bool enabled);
+        void setVFXDrawDistance(float distance);
+        void setBillboardDistanceCullingEnabled(bool enabled);
+        void setBillboardDrawDistance(float distance);
+        void setWaterDistanceCullingEnabled(bool enabled);
+        void setWaterDrawDistance(float distance);
+
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
 
@@ -253,6 +260,7 @@ namespace render
         void setLODSelectionEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setGlobalLodBias(float bias);
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 

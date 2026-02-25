@@ -147,6 +147,7 @@ namespace controllers::offscreen
             renderData.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering)
                                              ? meshComp.showBoundingBox
                                              : false;
+            renderData.maxDrawDistance = meshComp.maxDrawDistance;
 
             if (registry.all_of<components::MaterialComponent>(entity))
             {

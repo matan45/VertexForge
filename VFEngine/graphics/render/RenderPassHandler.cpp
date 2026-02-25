@@ -20,6 +20,7 @@
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "../../services/providers/IWaterRenderProvider.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "material/MaterialTypes.hpp"
 
@@ -255,6 +256,38 @@ namespace render
     void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
     {
         vfxRuntimeProvider = provider;
+    }
+
+    void RenderPassHandler::setVFXDistanceCullingEnabled(bool enabled)
+    {
+        if (vfxRuntimeProvider) vfxRuntimeProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setVFXDrawDistance(float distance)
+    {
+        if (vfxRuntimeProvider) vfxRuntimeProvider->setMaxDrawDistance(distance);
+    }
+
+    void RenderPassHandler::setBillboardDistanceCullingEnabled(bool enabled)
+    {
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setBillboardDrawDistance(float distance)
+    {
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->setMaxDrawDistance(distance);
+    }
+
+    void RenderPassHandler::setWaterDistanceCullingEnabled(bool enabled)
+    {
+        if (waterRenderProvider) waterRenderProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setWaterDrawDistance(float distance)
+    {
+        if (waterRenderProvider) waterRenderProvider->setMaxDrawDistance(distance);
     }
 
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)

@@ -189,6 +189,7 @@ namespace render::mesh
 
         float lodBias = 0.0f;
         int forceLODLevel = -1;
+        float maxDrawDistance = 0.0f; // 0 = use category default
 
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const
         {

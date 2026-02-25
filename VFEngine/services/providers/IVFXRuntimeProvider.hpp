@@ -44,5 +44,9 @@ namespace services
         virtual void recordDrawCommands(const vk::CommandBuffer& cmd) = 0;
 
         virtual size_t getInstanceCount() const = 0;
+
+        // Distance culling
+        virtual void setDistanceCullingEnabled(bool enabled) = 0;
+        virtual void setMaxDrawDistance(float distance) = 0;
     };
 }

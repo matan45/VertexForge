@@ -88,6 +88,7 @@ namespace controllers::offscreen
             stats.gpuDriven.visibleObjects = gpuStats.visibleObjects;
             stats.gpuDriven.culledByFrustum = gpuStats.culledByFrustum;
             stats.gpuDriven.culledByOcclusion = gpuStats.culledByOcclusion;
+            stats.gpuDriven.culledByDistance = gpuStats.culledByDistance;
             stats.gpuDriven.objectsLOD0 = gpuStats.objectsLOD0;
             stats.gpuDriven.objectsLOD1 = gpuStats.objectsLOD1;
             stats.gpuDriven.objectsLOD2 = gpuStats.objectsLOD2;

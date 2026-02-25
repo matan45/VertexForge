@@ -4,11 +4,15 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "../common/gpu_types.glsl"
+#include "../common/camera_types.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
 const uint MAX_MESHLETS_PER_PAYLOAD = 32;
+
+const uint CATEGORY_SHIFT = 13u;
+const uint CATEGORY_MASK  = 0xFu;
 
 layout(push_constant) uniform ShadowPushConstants {
     mat4 lightViewProjection;
@@ -24,6 +28,10 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
 
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
+};
+
+layout(set = 4, binding = 0) uniform CameraUBO {
+    GPUCameraData camera;
 };
 
 struct MeshletPayload {
@@ -93,6 +101,27 @@ void main() {
         GPUMeshlet meshlet = meshlets[globalMeshletIndex];
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
         isVisible = sphereInFrustum(worldSphere, sharedFrustumPlanes);
+
+        // Shadow distance culling: cull objects beyond (categoryDist * multiplier)
+        if (isVisible && camera.enableDistanceCulling != 0u) {
+            float shadowMult = camera.categoryDistSq1.w;
+            if (shadowMult > 0.0 && shadowMult < 1.0) {
+                vec3 diff = worldSphere.xyz - camera.cameraPosition.xyz;
+                float distSq = dot(diff, diff);
+
+                uint cat = (drawData.flags >> CATEGORY_SHIFT) & CATEGORY_MASK;
+                float maxDistSq = (cat < 4u)
+                    ? camera.categoryDistSq0[cat]
+                    : camera.categoryDistSq1[cat - 4u];
+
+                // Apply multiplier: threshold stored as dist^2, so mult^2
+                float shadowMaxDistSq = maxDistSq * shadowMult * shadowMult;
+
+                if (shadowMaxDistSq > 0.0 && distSq > shadowMaxDistSq) {
+                    isVisible = false;
+                }
+            }
+        }
 
         if (isVisible) {
             uint slot = atomicAdd(sharedVisibleCount, 1);

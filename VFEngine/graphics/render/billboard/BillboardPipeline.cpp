@@ -347,8 +347,9 @@ namespace render::billboard
     }
 
     void BillboardPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                            const glm::vec3& cameraPos) const
+                                            const glm::vec3& cameraPos)
     {
+        cameraPos_ = cameraPos;
         bufferManager.updateCameraUBO(view, projection, cameraPos);
     }
 
@@ -368,6 +369,15 @@ namespace render::billboard
 
         for (const auto& billboard : billboards)
         {
+            if (distanceCullingEnabled_ && maxBillboardDistSq_ > 0.0f)
+            {
+                glm::vec3 diff = billboard.worldPosition - cameraPos_;
+                float distSq = glm::dot(diff, diff);
+                if (distSq > maxBillboardDistSq_)
+                {
+                    continue;
+                }
+            }
             if (billboard.texturePath.empty())
             {
                 atlasBillboards.push_back(billboard);

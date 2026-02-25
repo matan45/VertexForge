@@ -44,6 +44,8 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
     float lodBias;          // LOD quality bias (1.0 = normal)
     float errorThreshold;   // Screen-space error threshold in pixels
+    float terrainTextureScale;     // Scale for world-space UV tiling
+    float terrainMaxDrawDistSq;    // Squared max draw distance for terrain (0 = disabled)
 } pc;
 
 const uint TERRAIN_CULL_FRUSTUM_BIT = 0x100u;
@@ -179,6 +181,16 @@ void main() {
         if ((pc.viewMode & TERRAIN_CULL_FRUSTUM_BIT) != 0u) {
             tileVisible = aabbInFrustum(tile.aabbMin.xyz, tile.aabbMax.xyz, camera.frustumPlanes);
             if (!tileVisible) {
+                atomicAdd(stats.culledTiles, 1);
+            }
+        }
+
+        // Stage 1b: Distance culling for terrain tiles
+        if (tileVisible && pc.terrainMaxDrawDistSq > 0.0) {
+            vec3 diff = tile.boundingSphere.xyz - camera.cameraPos;
+            float distSq = dot(diff, diff);
+            if (distSq > pc.terrainMaxDrawDistSq) {
+                tileVisible = false;
                 atomicAdd(stats.culledTiles, 1);
             }
         }

@@ -220,6 +220,31 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainMeshletCulling"; }
     };
 
+    struct SetDistanceCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetDistanceCulling"; }
+    };
+
+    struct SetDrawDistanceCommand : ICommand<> {
+        uint32_t category; // 0=StaticMesh, 1=Terrain, 2=Foliage, 3=VFX, 4=Decals
+        float distance;
+
+        std::string_view getName() const override { return "SetDrawDistance"; }
+    };
+
+    struct SetShadowDistanceMultiplierCommand : ICommand<> {
+        float multiplier;
+
+        std::string_view getName() const override { return "SetShadowDistanceMultiplier"; }
+    };
+
+    struct SetGlobalLodBiasCommand : ICommand<> {
+        float bias;
+
+        std::string_view getName() const override { return "SetGlobalLodBias"; }
+    };
+
     struct SetWBOITCommand : ICommand<> {
         bool enabled;
 

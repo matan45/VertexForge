@@ -64,6 +64,10 @@ namespace render::gpudriven
             .frustumCullingEnabled = frustumCullingEnabled,
             .occlusionCullingEnabled = occlusionCullingEnabled,
             .lodSelectionEnabled = lodSelectionEnabled,
+            .distanceCullingEnabled = distanceCullingEnabled,
+            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
+            .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
             .batchManager = batchManager.get()
         };
         cameraBuffer->update(cameraParams);
@@ -365,6 +369,12 @@ namespace render::gpudriven
         {
             terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
             terrainPipeline->updateWeightMapDescriptor(terrainMeshBuffer->getWeightMapBuffer());
+        }
+
+        if (shadowSystem && shadowSystem->isInitialized() && cameraBuffer)
+        {
+            shadowSystem->updateCameraDescriptor(cameraBuffer->getBuffer(),
+                                                  static_cast<vk::DeviceSize>(sizeof(GPUCameraData)));
         }
     }
 

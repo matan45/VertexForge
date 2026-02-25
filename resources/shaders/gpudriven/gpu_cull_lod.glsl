@@ -17,6 +17,9 @@ const uint FLAG_UNIFORM_SCALE = 1u << 9;
 const uint FLAG_ADDITIVE_BLEND = 1u << 10;
 const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
+const uint CATEGORY_SHIFT = 13u;
+const uint CATEGORY_MASK  = 0xFu;
+
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
 };
@@ -115,8 +118,8 @@ float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) 
     return screenDiameter;
 }
 
-uint selectLOD(float screenPixels, vec4 thresholds) {
-    float adjustedPixels = screenPixels * pow(2.0, -thresholds.w);
+uint selectLOD(float screenPixels, vec4 thresholds, float globalBias) {
+    float adjustedPixels = screenPixels * pow(2.0, -(thresholds.w + globalBias));
     if (adjustedPixels > thresholds.x) return 0;
     if (adjustedPixels > thresholds.y) return 1;
     if (adjustedPixels > thresholds.z) return 2;
@@ -216,6 +219,26 @@ void main() {
     float worldRadius = length(worldAabbMax - worldCenter);
     vec4 worldSphere = vec4(worldCenter, worldRadius);
 
+    // Distance culling - cheap squared-distance check before frustum/occlusion
+    if (camera.enableDistanceCulling != 0u) {
+        vec3 diff = worldCenter - camera.cameraPosition.xyz;
+        float distSq = dot(diff, diff);
+
+        // Per-object override stored in aabbMin.w (0 = use category default)
+        float maxDistSq = obj.aabbMin.w;
+        if (maxDistSq <= 0.0) {
+            uint cat = (obj.flags >> CATEGORY_SHIFT) & CATEGORY_MASK;
+            maxDistSq = (cat < 4u)
+                ? camera.categoryDistSq0[cat]
+                : camera.categoryDistSq1[cat - 4u];
+        }
+
+        if (maxDistSq > 0.0 && distSq > maxDistSq) {
+            atomicAdd(batchStats[sectionIndex].culledByDistance, 1);
+            return;
+        }
+    }
+
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!aabbInFrustum(worldAabbMin, worldAabbMax, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
@@ -238,7 +261,7 @@ void main() {
         vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
         viewSphere.w = worldSphere.w;
         float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        targetLOD = selectLOD(screenPixels, obj.lodThresholds);
+        targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
     }
 
     uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);

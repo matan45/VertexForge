@@ -779,7 +779,7 @@ namespace render::gpudriven
         pc.lodBias = lodBias;
         pc.errorThreshold = errorThreshold;
         pc.terrainTextureScale = textureScale;
-        pc.padding = 0.0f;
+        pc.terrainMaxDrawDistSq = terrainMaxDrawDistSq_;
         pc.brushWorldPos = brushWorldPos_;
         pc.brushWorldRadius = brushWorldRadius_;
         pc.brushFalloff = brushFalloff_;

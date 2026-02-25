@@ -286,6 +286,26 @@ namespace controllers {
 		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
 	}
 
+	void OffScreen::setDistanceCullingEnabled(bool enabled)
+	{
+		offScreenController->setDistanceCullingEnabled(enabled);
+	}
+
+	void OffScreen::setCategoryDistance(uint32_t category, float distance)
+	{
+		offScreenController->setCategoryDistance(category, distance);
+	}
+
+	void OffScreen::setShadowDistanceMultiplier(float multiplier)
+	{
+		offScreenController->setShadowDistanceMultiplier(multiplier);
+	}
+
+	void OffScreen::setGlobalLodBias(float bias)
+	{
+		offScreenController->setGlobalLodBias(bias);
+	}
+
 	void OffScreen::setTerrainFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setTerrainFrustumCullingEnabled(enabled);

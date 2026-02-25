@@ -61,5 +61,8 @@ namespace core
         void recordDrawCommands(const vk::CommandBuffer& cmd) override;
 
         size_t getInstanceCount() const override;
+
+        void setDistanceCullingEnabled(bool enabled) override;
+        void setMaxDrawDistance(float distance) override;
     };
 }

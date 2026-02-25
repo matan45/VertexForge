@@ -127,11 +127,12 @@ namespace render::shadow
             {
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
 
-                std::array<vk::DescriptorSet, 4> descriptorSets = {
+                std::array<vk::DescriptorSet, 5> descriptorSets = {
                     params.perDrawDataDescSet,
                     params.meshletDataDescSet,
                     params.vertexDataDescSet,
-                    params.boneMatrixDescSet
+                    params.boneMatrixDescSet,
+                    params.cameraDescSet
                 };
                 cmd.bindDescriptorSets(
                     vk::PipelineBindPoint::eGraphics,
@@ -297,11 +298,12 @@ namespace render::shadow
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        std::array<vk::DescriptorSet, 4> meshDescriptorSets = {
+        std::array<vk::DescriptorSet, 5> meshDescriptorSets = {
             params.perDrawDataDescSet,
             params.meshletDataDescSet,
             params.vertexDataDescSet,
-            params.boneMatrixDescSet
+            params.boneMatrixDescSet,
+            params.cameraDescSet
         };
 
         for (auto& [entityId, data] : pointLightsToRender)

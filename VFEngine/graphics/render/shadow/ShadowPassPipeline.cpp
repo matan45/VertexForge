@@ -34,6 +34,7 @@ namespace render::shadow
         cachedBoneMatrixLayout = boneMatrixLayout;
         depthFormat = atlasDepthFormat;
 
+        createCameraDescriptorResources();
         createShadowRenderPass();
         createShadowPipeline();
 
@@ -72,6 +73,19 @@ namespace render::shadow
         {
             vkDevice.destroyRenderPass(shadowRenderPass);
             shadowRenderPass = nullptr;
+        }
+
+        if (cameraDescriptorPool)
+        {
+            vkDevice.destroyDescriptorPool(cameraDescriptorPool);
+            cameraDescriptorPool = nullptr;
+            cameraDescriptorSet = nullptr;
+        }
+
+        if (cameraUBOLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(cameraUBOLayout);
+            cameraUBOLayout = nullptr;
         }
 
         initialized = false;
@@ -158,11 +172,12 @@ namespace render::shadow
             return;
         }
 
-        std::array<vk::DescriptorSetLayout, 4> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 5> setLayouts = {
             cachedPerDrawLayout,
             cachedMeshletDataLayout,
             cachedVertexDataLayout,
-            cachedBoneMatrixLayout
+            cachedBoneMatrixLayout,
+            cameraUBOLayout
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -273,5 +288,64 @@ namespace render::shadow
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.destroyFramebuffer(atlasFramebuffer);
         atlasFramebuffer = nullptr;
+    }
+
+    void ShadowPassPipeline::createCameraDescriptorResources()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Create descriptor set layout with a single UBO binding (set 4, binding 0)
+        vk::DescriptorSetLayoutBinding binding{};
+        binding.binding = 0;
+        binding.descriptorType = vk::DescriptorType::eUniformBuffer;
+        binding.descriptorCount = 1;
+        binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &binding;
+
+        cameraUBOLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+
+        // Create descriptor pool
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eUniformBuffer;
+        poolSize.descriptorCount = 1;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+
+        cameraDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
+
+        // Allocate descriptor set
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = cameraDescriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &cameraUBOLayout;
+
+        cameraDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+    }
+
+    void ShadowPassPipeline::updateCameraDescriptor(vk::Buffer cameraBuffer, vk::DeviceSize bufferSize)
+    {
+        if (!cameraDescriptorSet)
+            return;
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = cameraBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = bufferSize;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = cameraDescriptorSet;
+        write.dstBinding = 0;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eUniformBuffer;
+        write.pBufferInfo = &bufferInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(1, &write, 0, nullptr);
     }
 }

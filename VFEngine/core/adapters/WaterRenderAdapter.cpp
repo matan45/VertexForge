@@ -39,4 +39,14 @@ namespace core
 
         return waterService->getWaterTileConfig();
     }
+
+    void WaterRenderAdapter::setDistanceCullingEnabled(bool enabled)
+    {
+        if (waterService) waterService->setDistanceCullingEnabled(enabled);
+    }
+
+    void WaterRenderAdapter::setMaxDrawDistance(float distance)
+    {
+        if (waterService) waterService->setMaxDrawDistance(distance);
+    }
 }

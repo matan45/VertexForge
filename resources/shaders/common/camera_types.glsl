@@ -10,7 +10,7 @@ struct CameraData {
     vec4 frustumPlanes[6];
 };
 
-// Must match GPUCameraData in GPUDrivenTypes.hpp (432 bytes)
+// Must match GPUCameraData in GPUDrivenTypes.hpp (464 bytes)
 struct GPUCameraData {
     mat4 view;
     mat4 projection;
@@ -34,8 +34,11 @@ struct GPUCameraData {
 
     uint commandsPerBatch;
     uint shaderGroupCount;
-    uint padding1;
-    uint padding2;
+    uint enableDistanceCulling;
+    float globalLodBias;
+
+    vec4 categoryDistSq0;   // [staticMesh, terrain, foliage, vfx] squared distances
+    vec4 categoryDistSq1;   // [decals, 0, 0, shadowMultiplier]
 };
 
 #endif // CAMERA_TYPES_GLSL

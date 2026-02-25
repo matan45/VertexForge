@@ -58,6 +58,7 @@ namespace windows::details
             ImGui::Spacing();
 
             drawBoundingBoxCheckbox(handle, *meshOpt);
+            drawMaxDrawDistance(handle, *meshOpt);
 
             ImGui::Unindent(10.0f);
         }
@@ -139,6 +140,7 @@ namespace windows::details
             cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
+            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
             dispatcher.execute(cmd);
         }
         else
@@ -186,6 +188,7 @@ namespace windows::details
                     cmd.meshData.animatorPath = path;
                     cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                     cmd.meshData.applyRootMotion = currentData.applyRootMotion;
+                    cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
                     dispatcher.execute(cmd);
                 }
                 else
@@ -207,6 +210,7 @@ namespace windows::details
                 cmd.meshData.animatorPath = "";  // Clear animator
                 cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                 cmd.meshData.applyRootMotion = false;  // Reset when clearing animator
+                cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
                 dispatcher.execute(cmd);
             }
         }
@@ -224,6 +228,7 @@ namespace windows::details
             cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = applyRootMotion;
+            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
             dispatcher.execute(cmd);
         }
     }
@@ -240,7 +245,29 @@ namespace windows::details
             cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
+            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
             dispatcher.execute(cmd);
+        }
+    }
+
+    void MeshDrawer::drawMaxDrawDistance(services::EntityHandle handle, const services::MeshData& currentData)
+    {
+        float maxDrawDist = currentData.maxDrawDistance;
+        if (ImGui::DragFloat("Max Draw Distance", &maxDrawDist, 10.0f, 0.0f, 50000.0f, "%.0f"))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SetMeshDataCommand cmd;
+            cmd.entity = handle;
+            cmd.meshData.meshPath = currentData.meshPath;
+            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
+            cmd.meshData.maxDrawDistance = maxDrawDist;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Override draw distance for this entity.\n0 = use category default from Render Config.");
         }
     }
 }

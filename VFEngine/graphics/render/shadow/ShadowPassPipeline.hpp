@@ -36,6 +36,9 @@ namespace render::shadow
         vk::DescriptorSetLayout cachedMeshletDataLayout;
         vk::DescriptorSetLayout cachedVertexDataLayout;
         vk::DescriptorSetLayout cachedBoneMatrixLayout;
+        vk::DescriptorSetLayout cameraUBOLayout;
+        vk::DescriptorPool cameraDescriptorPool;
+        vk::DescriptorSet cameraDescriptorSet;
 
         bool initialized = false;
         vk::Format depthFormat = vk::Format::eD32Sfloat;
@@ -53,6 +56,9 @@ namespace render::shadow
                   vk::DescriptorSetLayout boneMatrixLayout,
                   vk::Format atlasDepthFormat);
 
+        void updateCameraDescriptor(vk::Buffer cameraBuffer, vk::DeviceSize bufferSize);
+        [[nodiscard]] vk::DescriptorSet getCameraDescriptorSet() const { return cameraDescriptorSet; }
+
         void cleanup();
 
         void createFramebuffer(vk::ImageView depthImageView, uint32_t width, uint32_t height);
@@ -67,5 +73,6 @@ namespace render::shadow
     private:
         void createShadowRenderPass();
         void createShadowPipeline();
+        void createCameraDescriptorResources();
     };
 }

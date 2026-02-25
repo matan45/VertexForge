@@ -23,6 +23,7 @@ namespace render::shadow
         vk::DescriptorSet meshletDataDescSet;
         vk::DescriptorSet vertexDataDescSet;
         vk::DescriptorSet boneMatrixDescSet;
+        vk::DescriptorSet cameraDescSet;
         vk::Buffer drawCommandBuffer;
         vk::Buffer drawCountBuffer;
         uint32_t batchCount;
