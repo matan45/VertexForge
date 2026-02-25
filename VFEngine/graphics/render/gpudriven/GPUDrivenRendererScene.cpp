@@ -370,6 +370,12 @@ namespace render::gpudriven
             terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
             terrainPipeline->updateWeightMapDescriptor(terrainMeshBuffer->getWeightMapBuffer());
         }
+
+        if (shadowSystem && shadowSystem->isInitialized() && cameraBuffer)
+        {
+            shadowSystem->updateCameraDescriptor(cameraBuffer->getBuffer(),
+                                                  static_cast<vk::DeviceSize>(sizeof(GPUCameraData)));
+        }
     }
 
     bool GPUDrivenRenderer::registerMaterialTextures(const std::string& materialPath)

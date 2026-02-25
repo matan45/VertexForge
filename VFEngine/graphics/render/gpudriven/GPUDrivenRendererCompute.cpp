@@ -132,6 +132,7 @@ namespace render::gpudriven
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
             shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
             shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
+            shadowParams.cameraDescSet = shadowSystem->getShadowCameraDescSet();
             shadowParams.drawCommandBuffer = batchManager->getCombinedDrawCommandBuffer();
             shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
             shadowParams.batchCount = batchManager->getBatchCount();

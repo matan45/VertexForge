@@ -152,6 +152,23 @@ namespace render::shadow
         );
     }
 
+    void ShadowSystem::updateCameraDescriptor(vk::Buffer cameraBuffer, vk::DeviceSize bufferSize)
+    {
+        if (shadowPassPipeline && shadowPassPipeline->isInitialized())
+        {
+            shadowPassPipeline->updateCameraDescriptor(cameraBuffer, bufferSize);
+        }
+    }
+
+    vk::DescriptorSet ShadowSystem::getShadowCameraDescSet() const
+    {
+        if (shadowPassPipeline && shadowPassPipeline->isInitialized())
+        {
+            return shadowPassPipeline->getCameraDescriptorSet();
+        }
+        return {};
+    }
+
     void ShadowSystem::initTerrainShadowPass(vk::DescriptorSetLayout terrainDataLayout,
                                               vk::DescriptorSetLayout terrainMeshletLayout,
                                               vk::DescriptorSetLayout terrainVertexLayout)

@@ -557,12 +557,12 @@ namespace controllers
         {
             if (instance.gpuDriven && instance.active)
             {
-                if (distanceCullingEnabled_ && maxVFXDistSq_ > 0.0f)
+                if (distanceCullingEnabled && maxVFXDistSq > 0.0f)
                 {
                     glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
                     glm::vec3 diff = emitterPos - currentCameraPos;
                     float distSq = glm::dot(diff, diff);
-                    if (distSq > maxVFXDistSq_)
+                    if (distSq > maxVFXDistSq)
                     {
                         continue;
                     }
