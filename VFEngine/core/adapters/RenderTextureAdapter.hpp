@@ -38,7 +38,7 @@ namespace core
 
         void updateCamera(rendertexture::RenderTextureId id,
             const glm::mat4& view, const glm::mat4& proj,
-            const glm::vec3& pos, float near, float far) override;
+            const glm::vec3& pos, float nearPlane, float farPlane) override;
 
         void renderAll(float deltaTime) override;
         void* getTextureHandle(rendertexture::RenderTextureId id) const override;
@@ -55,5 +55,6 @@ namespace core
     private:
         ::controllers::RenderTextureController* getController(rendertexture::RenderTextureId id) const;
         render::RenderPassHandler* getMainRenderPassHandler() const;
+        void registerTexturesWithPipelines();
     };
 }

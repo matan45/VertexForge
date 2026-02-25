@@ -91,6 +91,7 @@ namespace render
             return nullptr;
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();
+        lastRenderedImageIndex = imageIndex;
 
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
@@ -219,6 +220,13 @@ namespace render
         cleanupOffscreenResources();
 
         initialized = false;
+    }
+
+    vk::ImageView RenderTextureViewPort::getLastRenderedImageView() const
+    {
+        if (lastRenderedImageIndex < offscreenResources.colorImages.size())
+            return offscreenResources.colorImages[lastRenderedImageIndex].colorImageView;
+        return {};
     }
 
     void RenderTextureViewPort::createRenderPass()

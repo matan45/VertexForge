@@ -229,6 +229,7 @@
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
     <ClCompile Include="serialization\SceneSerializeRender.cpp" />
+    <ClCompile Include="serialization\SceneSerializeRenderTexture.cpp" />
     <ClCompile Include="serialization\SceneSerializeSettings.cpp" />
     <ClCompile Include="serialization\SceneSerializeSocket.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />

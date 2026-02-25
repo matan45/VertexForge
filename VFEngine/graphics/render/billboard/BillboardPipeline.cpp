@@ -75,6 +75,7 @@ namespace render::billboard
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         customTextureCache.clear();
+        externalTextureCache.clear();
         customBatches.clear();
         atlasInstanceCount = 0;
 
@@ -172,7 +173,7 @@ namespace render::billboard
 
     void BillboardPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES;
+        uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES + MAX_EXTERNAL_TEXTURES;
 
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
@@ -346,6 +347,51 @@ namespace render::billboard
         return true;
     }
 
+    void BillboardPipeline::registerExternalTexture(const std::string& key,
+                                                       vk::ImageView imageView, vk::Sampler externalSampler)
+    {
+        if (!initialized || !imageView || !externalSampler)
+            return;
+
+        auto it = externalTextureCache.find(key);
+        if (it != externalTextureCache.end())
+        {
+            updateDescriptorSet(it->second, imageView, externalSampler);
+            return;
+        }
+
+        if (externalTextureCache.size() >= MAX_EXTERNAL_TEXTURES)
+            return;
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        updateDescriptorSet(newDescSet, imageView, externalSampler);
+        externalTextureCache[key] = newDescSet;
+    }
+
+    void BillboardPipeline::unregisterExternalTexture(const std::string& key)
+    {
+        auto it = externalTextureCache.find(key);
+        if (it != externalTextureCache.end())
+        {
+            device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
+            externalTextureCache.erase(it);
+        }
+    }
+
+    void BillboardPipeline::clearExternalTextures()
+    {
+        for (auto& [key, descSet] : externalTextureCache)
+        {
+            device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+        }
+        externalTextureCache.clear();
+    }
+
     void BillboardPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                             const glm::vec3& cameraPos)
     {
@@ -396,7 +442,8 @@ namespace render::billboard
 
         for (auto& [path, batchBillboards] : texturedBillboards)
         {
-            if (loadCustomTexture(path))
+            bool hasTexture = externalTextureCache.contains(path) || loadCustomTexture(path);
+            if (hasTexture)
             {
                 CustomTextureBatch batch;
                 batch.texturePath = path;
@@ -463,14 +510,27 @@ namespace render::billboard
 
         for (const auto& batch : customBatches)
         {
+            vk::DescriptorSet texDescSet;
             auto it = customTextureCache.find(batch.texturePath);
-            if (it == customTextureCache.end())
+            if (it != customTextureCache.end())
             {
-                continue;
+                texDescSet = it->second.descriptorSet;
+            }
+            else
+            {
+                auto extIt = externalTextureCache.find(batch.texturePath);
+                if (extIt != externalTextureCache.end())
+                {
+                    texDescSet = extIt->second;
+                }
+                else
+                {
+                    continue;
+                }
             }
 
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                              0, it->second.descriptorSet, nullptr);
+                                              0, texDescSet, nullptr);
 
             BillboardPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;

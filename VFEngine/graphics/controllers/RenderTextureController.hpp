@@ -1,6 +1,7 @@
 #pragma once
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
 #include <memory>
 
 namespace core
@@ -44,7 +45,7 @@ namespace controllers
         void cleanUp();
 
         void updateCamera(const glm::mat4& view, const glm::mat4& proj,
-                          const glm::vec3& pos, float near, float far);
+                          const glm::vec3& pos, float nearPlane, float farPlane);
 
         void* render(render::RenderPassHandler* mainPassHandler);
 
@@ -58,5 +59,8 @@ namespace controllers
         rendertexture::UpdateMode getUpdateMode() const { return desc.updateMode; }
         uint32_t getPriority() const { return desc.priority; }
         void* getLastRenderedHandle() const { return lastRenderedHandle; }
+
+        vk::ImageView getColorImageView() const;
+        vk::Sampler getTextureSampler() const;
     };
 }

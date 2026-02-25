@@ -82,6 +82,10 @@ namespace serialization {
             j["texturePath"] = image.texturePath;
         }
         j["colorTint"] = writeVec4(image.colorTint);
+        if (!image.renderTextureSourceName.empty())
+        {
+            j["renderTextureSourceName"] = image.renderTextureSourceName;
+        }
         return j;
     }
 
@@ -89,6 +93,8 @@ namespace serialization {
     {
         image.texturePath = j.value("texturePath", std::string(""));
         readVec4(j, "colorTint", image.colorTint);
+        image.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
+        image.renderTextureSource = entt::null; // Resolved post-load
     }
 
     // ---- ScaleMode enum ----

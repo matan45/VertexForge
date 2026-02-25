@@ -36,6 +36,7 @@ namespace render
         uint32_t width = 512;
         uint32_t height = 512;
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+        uint32_t lastRenderedImageIndex = 0;
         bool initialized = false;
 
     public:
@@ -64,6 +65,9 @@ namespace render
         uint32_t getWidth() const { return width; }
         uint32_t getHeight() const { return height; }
         bool isInitialized() const { return initialized; }
+
+        vk::ImageView getLastRenderedImageView() const;
+        vk::Sampler getTextureSampler() const { return sampler; }
 
     private:
         void createRenderPass();

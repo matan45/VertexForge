@@ -45,6 +45,9 @@ namespace components
 
         std::string texturePath; // Path to .vfImage file (empty = use atlas icon)
 
+        entt::entity renderTextureSource = entt::null;
+        std::string renderTextureSourceName;
+
         uint32_t getEffectiveAtlasIndex() const
         {
             if (iconType == BillboardIconType::Custom)

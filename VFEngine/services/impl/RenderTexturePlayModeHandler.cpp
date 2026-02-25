@@ -2,7 +2,7 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/EditorModeEvents.hpp"
 #include "../events/RenderTextureEvents.hpp"
-#include "scene/internal/EntityInternalUtils.hpp"
+#include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <components/CoreComponents.hpp>
 #include "print/Logger.hpp"

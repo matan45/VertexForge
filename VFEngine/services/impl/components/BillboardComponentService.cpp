@@ -95,6 +95,11 @@ namespace services {
         data.texturePath = comp.texturePath;
         data.size = comp.size;
         data.colorTint = comp.colorTint;
+        if (comp.renderTextureSource != entt::null)
+            data.renderTextureSource = EntityHandle{static_cast<uint64_t>(comp.renderTextureSource)};
+        else
+            data.renderTextureSource = EntityHandle::invalid();
+        data.renderTextureSourceName = comp.renderTextureSourceName;
         return data;
     }
 
@@ -117,6 +122,11 @@ namespace services {
         comp.texturePath = billboardData.texturePath;
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
+        if (billboardData.renderTextureSource.isValid())
+            comp.renderTextureSource = static_cast<entt::entity>(billboardData.renderTextureSource.id);
+        else
+            comp.renderTextureSource = entt::null;
+        comp.renderTextureSourceName = billboardData.renderTextureSourceName;
         return true;
     }
 

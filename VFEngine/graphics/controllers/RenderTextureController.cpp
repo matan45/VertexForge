@@ -39,13 +39,13 @@ namespace controllers
     }
 
     void RenderTextureController::updateCamera(const glm::mat4& view, const glm::mat4& proj,
-                                                const glm::vec3& pos, float near, float far)
+                                                const glm::vec3& pos, float nearVal, float farVal)
     {
         viewMatrix = view;
         projectionMatrix = proj;
         cameraPosition = pos;
-        nearPlane = near;
-        farPlane = far;
+        nearPlane = nearVal;
+        farPlane = farVal;
     }
 
     void* RenderTextureController::render(render::RenderPassHandler* mainPassHandler)
@@ -64,6 +64,16 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
         return lastRenderedHandle;
+    }
+
+    vk::ImageView RenderTextureController::getColorImageView() const
+    {
+        return viewport ? viewport->getLastRenderedImageView() : vk::ImageView{};
+    }
+
+    vk::Sampler RenderTextureController::getTextureSampler() const
+    {
+        return viewport ? viewport->getTextureSampler() : vk::Sampler{};
     }
 
     void RenderTextureController::resize(uint32_t w, uint32_t h)

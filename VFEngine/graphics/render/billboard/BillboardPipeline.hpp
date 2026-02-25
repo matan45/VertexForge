@@ -55,7 +55,9 @@ namespace render::billboard
             vk::DescriptorSet descriptorSet;
         };
         std::unordered_map<std::string, CustomTextureEntry> customTextureCache;
+        std::unordered_map<std::string, vk::DescriptorSet> externalTextureCache;
         static constexpr uint32_t MAX_CUSTOM_TEXTURES = 32;
+        static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 8;
 
         uint32_t atlasInstanceCount = 0;
         std::vector<CustomTextureBatch> customBatches;
@@ -80,6 +82,10 @@ namespace render::billboard
                              const glm::vec3& cameraPos);
 
         void setBillboardList(const std::vector<BillboardRenderData>& billboards);
+
+        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler externalSampler);
+        void unregisterExternalTexture(const std::string& key);
+        void clearExternalTextures();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

@@ -502,8 +502,21 @@ namespace controllers::offscreen
                     scissor = it->second.scissorRect;
             }
 
+            // Resolve render texture source if set
+            std::string effectiveTexturePath = imageComp.texturePath;
+            if (imageComp.renderTextureSource != entt::null
+                && registry.valid(imageComp.renderTextureSource)
+                && registry.all_of<components::RenderTextureComponent>(imageComp.renderTextureSource))
+            {
+                const auto& rtt = registry.get<components::RenderTextureComponent>(imageComp.renderTextureSource);
+                if (rtt.textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
+                {
+                    effectiveTexturePath = "__rtt_" + std::to_string(rtt.textureId) + "__";
+                }
+            }
+
             render::ui::UIImageRenderData renderData;
-            renderData.texturePath = imageComp.texturePath.empty() ? "__white_1x1__" : imageComp.texturePath;
+            renderData.texturePath = effectiveTexturePath.empty() ? "__white_1x1__" : effectiveTexturePath;
             renderData.position = glm::vec2(rect.x, rect.y);
             renderData.size = glm::vec2(rect.w, rect.h);
             renderData.colorTint = imageComp.colorTint;

@@ -84,9 +84,9 @@ namespace services
 
     void RenderTextureServiceImpl::updateCamera(rendertexture::RenderTextureId id,
         const glm::mat4& view, const glm::mat4& proj,
-        const glm::vec3& pos, float near, float far)
+        const glm::vec3& pos, float nearPlane, float farPlane)
     {
-        provider->updateCamera(id, view, proj, pos, near, far);
+        provider->updateCamera(id, view, proj, pos, nearPlane, farPlane);
     }
 
     void RenderTextureServiceImpl::renderAll(float deltaTime)

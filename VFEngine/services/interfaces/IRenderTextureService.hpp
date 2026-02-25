@@ -16,7 +16,7 @@ namespace services
 
         virtual void updateCamera(rendertexture::RenderTextureId id,
             const glm::mat4& view, const glm::mat4& proj,
-            const glm::vec3& pos, float near, float far) = 0;
+            const glm::vec3& pos, float nearPlane, float farPlane) = 0;
 
         virtual void renderAll(float deltaTime) = 0;
 

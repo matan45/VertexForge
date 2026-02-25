@@ -242,6 +242,11 @@ namespace services {
         UIImageData data;
         data.texturePath = comp.texturePath;
         data.colorTint = comp.colorTint;
+        if (comp.renderTextureSource != entt::null)
+            data.renderTextureSource = EntityHandle{static_cast<uint64_t>(comp.renderTextureSource)};
+        else
+            data.renderTextureSource = EntityHandle::invalid();
+        data.renderTextureSourceName = comp.renderTextureSourceName;
         return data;
     }
 
@@ -259,6 +264,11 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
         comp.texturePath = imageData.texturePath;
         comp.colorTint = imageData.colorTint;
+        if (imageData.renderTextureSource.isValid())
+            comp.renderTextureSource = static_cast<entt::entity>(imageData.renderTextureSource.id);
+        else
+            comp.renderTextureSource = entt::null;
+        comp.renderTextureSourceName = imageData.renderTextureSourceName;
         return true;
     }
 
