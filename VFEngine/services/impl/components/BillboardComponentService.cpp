@@ -122,11 +122,19 @@ namespace services {
         comp.texturePath = billboardData.texturePath;
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
-        if (billboardData.renderTextureSource.isValid())
-            comp.renderTextureSource = static_cast<entt::entity>(billboardData.renderTextureSource.id);
-        else
-            comp.renderTextureSource = entt::null;
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;
+
+        // Resolve renderTextureSourceName → entity handle
+        comp.renderTextureSource = entt::null;
+        if (!comp.renderTextureSourceName.empty()) {
+            auto nameView = registry.view<components::NameComponent, components::RenderTextureComponent>();
+            for (auto e : nameView) {
+                if (nameView.get<components::NameComponent>(e).name == comp.renderTextureSourceName) {
+                    comp.renderTextureSource = e;
+                    break;
+                }
+            }
+        }
         return true;
     }
 

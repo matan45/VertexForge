@@ -264,11 +264,19 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
         comp.texturePath = imageData.texturePath;
         comp.colorTint = imageData.colorTint;
-        if (imageData.renderTextureSource.isValid())
-            comp.renderTextureSource = static_cast<entt::entity>(imageData.renderTextureSource.id);
-        else
-            comp.renderTextureSource = entt::null;
         comp.renderTextureSourceName = imageData.renderTextureSourceName;
+
+        // Resolve renderTextureSourceName → entity handle
+        comp.renderTextureSource = entt::null;
+        if (!comp.renderTextureSourceName.empty()) {
+            auto nameView = registry.view<components::NameComponent, components::RenderTextureComponent>();
+            for (auto e : nameView) {
+                if (nameView.get<components::NameComponent>(e).name == comp.renderTextureSourceName) {
+                    comp.renderTextureSource = e;
+                    break;
+                }
+            }
+        }
         return true;
     }
 
