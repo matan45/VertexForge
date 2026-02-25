@@ -12,6 +12,7 @@
 #include "interfaces/IPhysicsService.hpp"
 #include "interfaces/INavmeshService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
+#include "interfaces/IRenderTextureService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core::audio {
@@ -24,6 +25,7 @@ namespace core {
 
 namespace services {
     class PhysicsPlayModeHandler;
+    class RenderTexturePlayModeHandler;
 }
 
 namespace handlers {
@@ -45,6 +47,8 @@ namespace handlers {
         std::shared_ptr<services::INavmeshService> navmeshService;
         std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
+        std::shared_ptr<services::IRenderTextureService> renderTextureService;
+        std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
 
         events::SubscriptionToken resizeSubscription;
 

@@ -25,6 +25,8 @@
 #include "impl/PaintModeServiceImpl.hpp"
 #include "impl/PaintBrushServiceImpl.hpp"
 #include "impl/TerrainRaycastServiceImpl.hpp"
+#include "impl/RenderTextureServiceImpl.hpp"
+#include "impl/RenderTexturePlayModeHandler.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -94,6 +96,11 @@ namespace handlers
                     vfxPlayModeHandler->update(deltaTime);
                 }
 
+                if (renderTexturePlayModeHandler)
+                {
+                    renderTexturePlayModeHandler->update(deltaTime);
+                }
+
                 if (audioSceneUpdater)
                 {
                     audioSceneUpdater->updateListenerFromPrimaryCamera();
@@ -132,6 +139,7 @@ namespace handlers
         navmeshService.reset();
         physicsPlayModeHandler.reset();
         vfxPlayModeHandler.reset();
+        renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
@@ -199,6 +207,15 @@ namespace handlers
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
         projectService = std::make_shared<services::ProjectServiceImpl>();
+        renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
+            bootstrap->getRenderTextureProvider()
+        );
+
+        if (auto* rttProvider = bootstrap->getRenderTextureProvider())
+        {
+            renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
+            renderTexturePlayModeHandler->subscribeToEvents();
+        }
     }
 
     void EditorHandler::createMediaServices()
@@ -311,6 +328,7 @@ namespace handlers
         paintModeService->registerEventHandlers();
         paintBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
+        renderTextureService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

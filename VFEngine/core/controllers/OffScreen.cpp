@@ -412,4 +412,9 @@ namespace controllers {
 	{
 		return offScreenController->applyBrushGPU(heightData, params);
 	}
+
+	render::RenderPassHandler* OffScreen::getRenderPassHandler() const
+	{
+		return offScreenController ? offScreenController->getRenderPassHandler() : nullptr;
+	}
 }

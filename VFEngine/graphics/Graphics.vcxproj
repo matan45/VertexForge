@@ -110,6 +110,7 @@
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
+    <ClInclude Include="controllers\RenderTextureController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
     <ClInclude Include="controllers\VFXPreviewController.hpp" />
     <ClInclude Include="controllers\VFXSceneRenderer.hpp" />
@@ -148,6 +149,7 @@
     <ClInclude Include="render\IBL.hpp" />
     <ClInclude Include="render\OffScreenViewPort.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
+    <ClInclude Include="render\RenderTextureViewPort.hpp" />
     <ClInclude Include="render\billboard\BillboardAtlasManager.hpp" />
     <ClInclude Include="render\billboard\BillboardBufferManager.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
@@ -287,6 +289,7 @@
     <ClCompile Include="controllers\OffScreenControllerFrame.cpp" />
     <ClCompile Include="controllers\OffScreenControllerSettings.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
+    <ClCompile Include="controllers\RenderTextureController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
     <ClCompile Include="controllers\VFXPreviewController.cpp" />
     <ClCompile Include="controllers\VFXSceneRenderer.cpp" />
@@ -329,6 +332,7 @@
     <ClCompile Include="render\RenderPassHandlerDelegates.cpp" />
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
     <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
+    <ClCompile Include="render\RenderTextureViewPort.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />

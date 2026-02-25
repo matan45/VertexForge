@@ -1,0 +1,62 @@
+#pragma once
+#include <rendertexture/RenderTextureTypes.hpp>
+#include <glm/glm.hpp>
+#include <memory>
+
+namespace core
+{
+    class Device;
+    class SwapChain;
+}
+
+namespace render
+{
+    class RenderTextureViewPort;
+    class RenderPassHandler;
+}
+
+namespace controllers
+{
+    class RenderTextureController
+    {
+    private:
+        core::Device& device;
+        core::SwapChain& swapChain;
+        std::unique_ptr<render::RenderTextureViewPort> viewport;
+        rendertexture::RenderTextureDesc desc;
+
+        glm::mat4 viewMatrix{1.0f};
+        glm::mat4 projectionMatrix{1.0f};
+        glm::vec3 cameraPosition{0.0f};
+        float nearPlane = 0.1f;
+        float farPlane = 1000.0f;
+        bool enabled = true;
+        void* lastRenderedHandle = nullptr;
+
+    public:
+        RenderTextureController();
+        ~RenderTextureController();
+
+        RenderTextureController(const RenderTextureController&) = delete;
+        RenderTextureController& operator=(const RenderTextureController&) = delete;
+
+        void init(const rendertexture::RenderTextureDesc& desc);
+        void cleanUp();
+
+        void updateCamera(const glm::mat4& view, const glm::mat4& proj,
+                          const glm::vec3& pos, float near, float far);
+
+        void* render(render::RenderPassHandler* mainPassHandler);
+
+        void resize(uint32_t w, uint32_t h);
+
+        uint32_t getWidth() const { return desc.width; }
+        uint32_t getHeight() const { return desc.height; }
+        bool isEnabled() const { return enabled; }
+        void setEnabled(bool e) { enabled = e; }
+        void setUpdateMode(rendertexture::UpdateMode mode) { desc.updateMode = mode; }
+        rendertexture::UpdateMode getUpdateMode() const { return desc.updateMode; }
+        uint32_t getPriority() const { return desc.priority; }
+        void* getLastRenderedHandle() const { return lastRenderedHandle; }
+    };
+}

@@ -12,6 +12,11 @@
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 
+namespace render
+{
+	class RenderPassHandler;
+}
+
 namespace services
 {
 	class IVFXRuntimeProvider;
@@ -143,5 +148,8 @@ namespace controllers {
 		bool applyBrushGPU(
 			std::vector<float>& heightData,
 			const terrain::BrushGPUParams& params);
+
+		// Access the internal render pass handler (for RTT scene data sharing)
+		render::RenderPassHandler* getRenderPassHandler() const;
 	};
 }

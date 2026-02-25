@@ -25,6 +25,7 @@ namespace services
     class AnimatorComponentService;
     class SocketComponentService;
     class VFXComponentService;
+    class RenderTextureComponentService;
     class BillboardComponentService;
     class TextComponentService;
     class LightComponentService;
@@ -52,6 +53,7 @@ namespace services
         std::unique_ptr<AnimatorComponentService> animatorService;
         std::unique_ptr<SocketComponentService> socketService;
         std::unique_ptr<VFXComponentService> vfxService;
+        std::unique_ptr<RenderTextureComponentService> renderTextureComponentService;
         std::unique_ptr<BillboardComponentService> billboardService;
         std::unique_ptr<TextComponentService> textService;
         std::unique_ptr<LightComponentService> lightService;

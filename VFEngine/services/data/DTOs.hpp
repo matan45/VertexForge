@@ -2,6 +2,7 @@
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
+#include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -217,11 +218,24 @@ namespace services
         bool loop = true; // Loop the VFX effect
     };
 
+    struct RenderTextureData
+    {
+        uint32_t width = 512;
+        uint32_t height = 512;
+        uint8_t updateMode = 0; // 0=EveryFrame, 1=OnDemand, 2=FixedInterval
+        float fixedIntervalSeconds = 1.0f / 30.0f;
+        glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+        uint32_t priority = 0;
+        bool enabled = true;
+    };
+
     struct BillboardData
     {
         std::string texturePath; // Path to .vfImage file
         glm::vec2 size{1.0f, 1.0f};
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        EntityHandle renderTextureSource;
+        std::string renderTextureSourceName;
     };
 
     struct TextData
@@ -281,6 +295,8 @@ namespace services
     {
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        EntityHandle renderTextureSource;
+        std::string renderTextureSourceName;
     };
 
     struct UIScrollData

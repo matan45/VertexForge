@@ -394,4 +394,9 @@ namespace controllers
             renderHandler->setWaterRenderProvider(provider);
         }
     }
+
+    render::RenderPassHandler* OffScreenController::getRenderPassHandler() const
+    {
+        return offScreen ? offScreen->getRenderPassHandler() : nullptr;
+    }
 }

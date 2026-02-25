@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <entt/entt.hpp>
 #include "../uuid/UUID.hpp"
+#include "../rendertexture/RenderTextureTypes.hpp"
 
 namespace components
 {
@@ -142,6 +143,20 @@ namespace components
 
             viewMatrix = glm::inverse(model);
         }
+    };
+
+    struct RenderTextureComponent
+    {
+        rendertexture::RenderTextureId textureId = rendertexture::INVALID_RENDER_TEXTURE_ID;
+        uint32_t width = 512;
+        uint32_t height = 512;
+        rendertexture::UpdateMode updateMode = rendertexture::UpdateMode::EveryFrame;
+        float fixedIntervalSeconds = 1.0f / 30.0f;
+        glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+        uint32_t priority = 0;
+        bool enabled = true;
+        bool needsRender = true;
+        float timeSinceLastRender = 0.0f;
     };
 
     struct MeshComponent

@@ -14,6 +14,8 @@
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
+#include "impl/RenderTextureServiceImpl.hpp"
+#include "impl/RenderTexturePlayModeHandler.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
@@ -54,6 +56,10 @@ namespace handlers {
                 scriptingService->updateScripts(deltaTime);
             }
 
+            if (renderTexturePlayModeHandler) {
+                renderTexturePlayModeHandler->update(deltaTime);
+            }
+
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
@@ -79,6 +85,7 @@ namespace handlers {
         }
 
         physicsPlayModeHandler.reset();
+        renderTexturePlayModeHandler.reset();
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
@@ -87,6 +94,7 @@ namespace handlers {
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        renderTextureService.reset();
         renderService.reset();
         sceneService.reset();
         windowStateService.reset();
@@ -186,6 +194,16 @@ namespace handlers {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
+        renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
+            bootstrap->getRenderTextureProvider()
+        );
+
+        if (auto* rttProvider = bootstrap->getRenderTextureProvider())
+        {
+            renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
+            renderTexturePlayModeHandler->subscribeToEvents();
+        }
+
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -206,6 +224,7 @@ namespace handlers {
         {
             navmeshService->registerEventHandlers();
         }
+        renderTextureService->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()
