@@ -94,15 +94,17 @@ namespace core
                 return a.second->getPriority() < b.second->getPriority();
             });
 
-        // Register RTT camera frustums so terrain tiles visible to RTT cameras
+        // Register RTT camera frustums so terrain/water tiles visible to RTT cameras
         // are loaded alongside the main camera's tiles (one frame delay is acceptable)
         if (mainOffScreen)
         {
             mainOffScreen->clearAdditionalTerrainFrustums();
+            mainOffScreen->clearAdditionalWaterFrustums();
             for (auto& [id, ctrl] : sorted)
             {
                 glm::mat4 vp = ctrl->getProjectionMatrix() * ctrl->getViewMatrix();
                 mainOffScreen->addTerrainFrustum(vp, ctrl->getCameraPosition());
+                mainOffScreen->addWaterFrustum(vp, ctrl->getCameraPosition());
             }
         }
 

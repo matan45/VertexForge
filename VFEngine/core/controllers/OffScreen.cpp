@@ -433,4 +433,20 @@ namespace controllers {
 			offScreenController->clearAdditionalTerrainFrustums();
 		}
 	}
+
+	void OffScreen::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+	{
+		if (offScreenController)
+		{
+			offScreenController->addWaterFrustum(viewProjection, cameraPos);
+		}
+	}
+
+	void OffScreen::clearAdditionalWaterFrustums()
+	{
+		if (offScreenController)
+		{
+			offScreenController->clearAdditionalWaterFrustums();
+		}
+	}
 }

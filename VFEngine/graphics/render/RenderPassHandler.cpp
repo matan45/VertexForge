@@ -338,6 +338,16 @@ namespace render
         }
     }
 
+    void RenderPassHandler::addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
+    {
+        additionalWaterFrustums.emplace_back(frustum, cameraPos);
+    }
+
+    void RenderPassHandler::clearAdditionalWaterFrustums()
+    {
+        additionalWaterFrustums.clear();
+    }
+
     void RenderPassHandler::recreateOverlayPipelines()
     {
         if (debugRendererInitialized)

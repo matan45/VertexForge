@@ -419,4 +419,24 @@ namespace controllers
             handler->clearAdditionalTerrainFrustums();
         }
     }
+
+    void OffScreenController::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            math::Frustum frustum;
+            frustum.extractFromMatrix(viewProjection);
+            handler->addWaterFrustum(frustum, cameraPos);
+        }
+    }
+
+    void OffScreenController::clearAdditionalWaterFrustums()
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            handler->clearAdditionalWaterFrustums();
+        }
+    }
 }

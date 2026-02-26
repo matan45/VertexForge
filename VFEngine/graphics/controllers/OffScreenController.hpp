@@ -209,6 +209,9 @@ namespace controllers
         void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();
 
+        void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalWaterFrustums();
+
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
     };
