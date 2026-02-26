@@ -201,6 +201,11 @@ namespace render::gpudriven
         // Restore main camera data to the GPU buffer after RTT rendering.
         void restoreMainCamera();
 
+        // Cached main camera accessors (for restoring mesh pipeline UBO after RTT)
+        const glm::mat4& getCachedCameraView() const { return cachedCameraView; }
+        const glm::mat4& getCachedCameraProjection() const { return cachedCameraProjection; }
+        const glm::vec3& getCachedCameraPosition() const { return cachedCameraPosition; }
+
         void dispatchCompute(vk::CommandBuffer cmd);
 
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,

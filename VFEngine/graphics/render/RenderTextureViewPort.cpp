@@ -189,9 +189,15 @@ namespace render
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
         device.getGraphicsQueue().waitIdle();
 
-        // Restore the main camera's data to the GPU buffer so the main render pass
-        // uses the correct frustum/projection for culling
+        // Restore the main camera's data so the main render pass uses the correct
+        // frustum/projection. restoreMainCamera() restores GPUDrivenCameraBuffer;
+        // we also restore the mesh pipeline's CameraUBO which shaders read at set 0 binding 0.
         gpuRenderer->restoreMainCamera();
+        meshPipeline->updateCameraUBO(
+            gpuRenderer->getCachedCameraView(),
+            gpuRenderer->getCachedCameraProjection(),
+            gpuRenderer->getCachedCameraPosition()
+        );
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
