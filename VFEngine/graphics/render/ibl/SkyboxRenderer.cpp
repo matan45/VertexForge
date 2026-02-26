@@ -386,6 +386,50 @@ namespace render::ibl
         }
     }
 
+    void SkyboxRenderer::renderToTarget(const vk::CommandBuffer& commandBuffer,
+                                         vk::RenderPass targetPass, vk::Framebuffer targetFramebuffer,
+                                         uint32_t targetWidth, uint32_t targetHeight,
+                                         const glm::mat4& view, const glm::mat4& projection,
+                                         const glm::vec4& clearCol) const
+    {
+        if (!initialized)
+            return;
+
+        updateUniformBuffer(view, projection);
+
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = targetPass;
+        renderPassInfo.framebuffer = targetFramebuffer;
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = vk::Extent2D{targetWidth, targetHeight};
+
+        std::array<vk::ClearValue, 1> clearValues{};
+        clearValues[0].color = vk::ClearColorValue(std::array{clearCol.r, clearCol.g, clearCol.b, clearCol.a});
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Viewport viewport{0.0f, 0.0f,
+                               static_cast<float>(targetWidth), static_cast<float>(targetHeight),
+                               0.0f, 1.0f};
+        commandBuffer.setViewport(0, 1, &viewport);
+
+        vk::Rect2D scissor{{0, 0}, {targetWidth, targetHeight}};
+        commandBuffer.setScissor(0, 1, &scissor);
+
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+            descriptorSet, {});
+
+        vk::DeviceSize offsets[] = {0};
+        commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
+        commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
+
+        commandBuffer.endRenderPass();
+    }
+
     void SkyboxRenderer::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix) const
     {
         UniformBufferObject ubo;

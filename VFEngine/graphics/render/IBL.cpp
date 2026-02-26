@@ -33,6 +33,19 @@ namespace render
         skyboxRenderer->recordCommandBuffer(commandBuffer, imageIndex);
     }
 
+    void IBL::renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
+                                    vk::RenderPass targetPass, vk::Framebuffer targetFramebuffer,
+                                    uint32_t targetWidth, uint32_t targetHeight,
+                                    const glm::mat4& view, const glm::mat4& projection,
+                                    const glm::vec4& clearColor) const
+    {
+        if (skyboxRenderer && iblInitialized)
+        {
+            skyboxRenderer->renderToTarget(commandBuffer, targetPass, targetFramebuffer,
+                                           targetWidth, targetHeight, view, projection, clearColor);
+        }
+    }
+
     void IBL::init(std::string_view path)
     {
         hdrTexture = std::make_shared<core::Texture>(device);

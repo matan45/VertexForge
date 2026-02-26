@@ -6,6 +6,7 @@
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "RenderPassHandler.hpp"
+#include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "print/Logger.hpp"
@@ -35,8 +36,10 @@ namespace render
 
         createSampler();
         createRenderPass();
+        createSkyboxRenderPass();
         createOffscreenResources();
         createFramebuffers();
+        createSkyboxFramebuffers();
 
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
@@ -66,10 +69,12 @@ namespace render
             }
         }
 
+        cleanupSkyboxFramebuffers();
         cleanupFramebuffers();
         cleanupOffscreenResources();
         createOffscreenResources();
         createFramebuffers();
+        createSkyboxFramebuffers();
     }
 
     vk::DescriptorSet RenderTextureViewPort::render(
@@ -128,7 +133,36 @@ namespace render
         // Dispatch compute culling with RTT camera frustum
         gpuRenderer->dispatchCompute(commandBuffer);
 
-        // Begin render pass on RTT framebuffer
+        // Phase 1: Skybox / clear pass (color-only, eClear)
+        // Renders the IBL skybox if available, otherwise just clears the color image.
+        // This uses a color-only render pass compatible with the main skybox pipeline.
+        auto* ibl = mainPassHandler->getIBL();
+        if (ibl && ibl->isInitialized())
+        {
+            ibl->renderSkyboxToTarget(commandBuffer, skyboxRenderPass,
+                                       skyboxFramebuffers[imageIndex],
+                                       width, height, view, projection, clearColor);
+        }
+        else
+        {
+            // No IBL — just clear the color image
+            vk::RenderPassBeginInfo clearPassInfo{};
+            clearPassInfo.renderPass = skyboxRenderPass;
+            clearPassInfo.framebuffer = skyboxFramebuffers[imageIndex];
+            clearPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+            clearPassInfo.renderArea.extent = vk::Extent2D{width, height};
+
+            vk::ClearValue clearVal;
+            clearVal.color = vk::ClearColorValue{
+                std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+            clearPassInfo.clearValueCount = 1;
+            clearPassInfo.pClearValues = &clearVal;
+
+            commandBuffer.beginRenderPass(clearPassInfo, vk::SubpassContents::eInline);
+            commandBuffer.endRenderPass();
+        }
+
+        // Phase 2: Mesh render pass (eLoad color from skybox/clear, eClear depth)
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = compatibleRenderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
@@ -230,7 +264,14 @@ namespace render
 
         device.getLogicalDevice().destroySampler(sampler);
 
+        cleanupSkyboxFramebuffers();
         cleanupFramebuffers();
+
+        if (skyboxRenderPass)
+        {
+            device.getLogicalDevice().destroyRenderPass(skyboxRenderPass);
+            skyboxRenderPass = nullptr;
+        }
 
         if (compatibleRenderPass)
         {
@@ -252,13 +293,12 @@ namespace render
 
     void RenderTextureViewPort::createRenderPass()
     {
-        // Create a render pass compatible with the main mesh pipeline's render pass.
-        // Same attachment formats and sample counts ensure pipeline compatibility.
-        // Uses eClear for loadOp since RTT starts fresh each frame.
+        // Mesh render pass: eLoad for color (skybox/clear already wrote it), eClear for depth.
+        // Same attachment formats and sample counts as the main mesh pipeline for pipeline compatibility.
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
         colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
         colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -298,6 +338,70 @@ namespace render
         renderPassInfo.pSubpasses = &subpass;
 
         compatibleRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+    }
+
+    void RenderTextureViewPort::createSkyboxRenderPass()
+    {
+        // Color-only render pass for skybox rendering (compatible with the main skybox pipeline).
+        // Uses eClear since this is the first pass and we want to clear the color image.
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        skyboxRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+    }
+
+    void RenderTextureViewPort::createSkyboxFramebuffers()
+    {
+        skyboxFramebuffers.resize(offscreenResources.colorImages.size());
+
+        for (uint32_t i = 0; i < skyboxFramebuffers.size(); i++)
+        {
+            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
+
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = skyboxRenderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = &colorView;
+            framebufferInfo.width = width;
+            framebufferInfo.height = height;
+            framebufferInfo.layers = 1;
+
+            skyboxFramebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+        }
+    }
+
+    void RenderTextureViewPort::cleanupSkyboxFramebuffers()
+    {
+        for (auto& fb : skyboxFramebuffers)
+        {
+            if (fb)
+            {
+                device.getLogicalDevice().destroyFramebuffer(fb);
+            }
+        }
+        skyboxFramebuffers.clear();
     }
 
     void RenderTextureViewPort::createFramebuffers()

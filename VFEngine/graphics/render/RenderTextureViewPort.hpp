@@ -28,9 +28,11 @@ namespace render
         std::unique_ptr<core::CommandPool> commandPool;
 
         vk::Sampler sampler;
-        vk::RenderPass compatibleRenderPass;
+        vk::RenderPass compatibleRenderPass;      // Mesh pass: eLoad color + eClear depth
+        vk::RenderPass skyboxRenderPass;           // Skybox/clear pass: eClear color only
         core::OffscreenResources offscreenResources;
-        std::vector<vk::Framebuffer> framebuffers;
+        std::vector<vk::Framebuffer> framebuffers;       // For mesh render pass (color + depth)
+        std::vector<vk::Framebuffer> skyboxFramebuffers; // For skybox pass (color only)
         std::vector<vk::Fence> inFlightFences;
 
         uint32_t width = 512;
@@ -71,8 +73,11 @@ namespace render
 
     private:
         void createRenderPass();
+        void createSkyboxRenderPass();
         void createFramebuffers();
+        void createSkyboxFramebuffers();
         void cleanupFramebuffers();
+        void cleanupSkyboxFramebuffers();
         void createOffscreenResources();
         void cleanupOffscreenResources();
         void createSampler();
