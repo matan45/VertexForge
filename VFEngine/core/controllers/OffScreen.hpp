@@ -151,5 +151,9 @@ namespace controllers {
 
 		// Access the internal render pass handler (for RTT scene data sharing)
 		render::RenderPassHandler* getRenderPassHandler() const;
+
+		// RTT terrain frustum registration (forwarded to RenderPassHandler)
+		void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+		void clearAdditionalTerrainFrustums();
 	};
 }

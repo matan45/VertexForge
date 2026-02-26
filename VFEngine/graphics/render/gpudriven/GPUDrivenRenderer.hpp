@@ -159,8 +159,10 @@ namespace render::gpudriven
 
         glm::mat4 cachedCameraView{1.0f};
         glm::mat4 cachedCameraProjection{1.0f};
+        glm::vec3 cachedCameraPosition{0.0f};
         float cachedCameraNear = 0.1f;
         float cachedCameraFar = 1000.0f;
+        float cachedTime = 0.0f;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -191,15 +193,24 @@ namespace render::gpudriven
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,
             float nearPlane,
-            float farPlane
+            float farPlane,
+            uint32_t screenWidth = 0,
+            uint32_t screenHeight = 0
         );
+
+        // Restore main camera data to the GPU buffer after RTT rendering.
+        void restoreMainCamera();
 
         void dispatchCompute(vk::CommandBuffer cmd);
 
-        void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                        uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
 
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }

@@ -4,7 +4,8 @@
 
 namespace render::gpudriven
 {
-    void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                       uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !meshShaderPipeline)
         {
@@ -41,7 +42,18 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
-        auto extent = swapChain.getSwapchainExtent();
+        float dispatchWidth, dispatchHeight;
+        if (screenWidth > 0 && screenHeight > 0)
+        {
+            dispatchWidth = static_cast<float>(screenWidth);
+            dispatchHeight = static_cast<float>(screenHeight);
+        }
+        else
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            dispatchWidth = static_cast<float>(extent.width);
+            dispatchHeight = static_cast<float>(extent.height);
+        }
 
         for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
         {
@@ -56,8 +68,8 @@ namespace render::gpudriven
                 pushConstants.viewMode = currentViewMode;
                 if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
                 if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-                pushConstants.screenWidth = static_cast<float>(extent.width);
-                pushConstants.screenHeight = static_cast<float>(extent.height);
+                pushConstants.screenWidth = dispatchWidth;
+                pushConstants.screenHeight = dispatchHeight;
 
                 cmd.pushConstants(
                     layout,
@@ -78,7 +90,8 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    void GPUDrivenRenderer::renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                                   uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !transparentMeshShaderPipeline)
         {
@@ -120,7 +133,18 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
-        auto extent = swapChain.getSwapchainExtent();
+        float dispatchWidth, dispatchHeight;
+        if (screenWidth > 0 && screenHeight > 0)
+        {
+            dispatchWidth = static_cast<float>(screenWidth);
+            dispatchHeight = static_cast<float>(screenHeight);
+        }
+        else
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            dispatchWidth = static_cast<float>(extent.width);
+            dispatchHeight = static_cast<float>(extent.height);
+        }
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
@@ -133,8 +157,8 @@ namespace render::gpudriven
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-            pushConstants.screenWidth = static_cast<float>(extent.width);
-            pushConstants.screenHeight = static_cast<float>(extent.height);
+            pushConstants.screenWidth = dispatchWidth;
+            pushConstants.screenHeight = dispatchHeight;
 
             cmd.pushConstants(
                 layout,
@@ -154,7 +178,8 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    void GPUDrivenRenderer::renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                              uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !wboitMeshShaderPipeline)
         {
@@ -196,7 +221,18 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
-        auto extent = swapChain.getSwapchainExtent();
+        float dispatchWidth, dispatchHeight;
+        if (screenWidth > 0 && screenHeight > 0)
+        {
+            dispatchWidth = static_cast<float>(screenWidth);
+            dispatchHeight = static_cast<float>(screenHeight);
+        }
+        else
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            dispatchWidth = static_cast<float>(extent.width);
+            dispatchHeight = static_cast<float>(extent.height);
+        }
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
@@ -209,8 +245,8 @@ namespace render::gpudriven
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-            pushConstants.screenWidth = static_cast<float>(extent.width);
-            pushConstants.screenHeight = static_cast<float>(extent.height);
+            pushConstants.screenWidth = dispatchWidth;
+            pushConstants.screenHeight = dispatchHeight;
 
             cmd.pushConstants(
                 layout,
@@ -230,7 +266,8 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    void GPUDrivenRenderer::renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                              uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !transparentMeshShaderPipeline)
         {
@@ -272,7 +309,18 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
-        auto extent = swapChain.getSwapchainExtent();
+        float dispatchWidth, dispatchHeight;
+        if (screenWidth > 0 && screenHeight > 0)
+        {
+            dispatchWidth = static_cast<float>(screenWidth);
+            dispatchHeight = static_cast<float>(screenHeight);
+        }
+        else
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            dispatchWidth = static_cast<float>(extent.width);
+            dispatchHeight = static_cast<float>(extent.height);
+        }
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
@@ -285,8 +333,8 @@ namespace render::gpudriven
             pushConstants.viewMode = currentViewMode;
             if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-            pushConstants.screenWidth = static_cast<float>(extent.width);
-            pushConstants.screenHeight = static_cast<float>(extent.height);
+            pushConstants.screenWidth = dispatchWidth;
+            pushConstants.screenHeight = dispatchHeight;
 
             cmd.pushConstants(
                 layout,

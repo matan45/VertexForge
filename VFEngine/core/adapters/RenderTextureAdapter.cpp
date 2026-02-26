@@ -4,7 +4,6 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <vector>
-#include <iostream>
 
 namespace core
 {
@@ -74,7 +73,6 @@ namespace core
         auto* passHandler = getMainRenderPassHandler();
         if (!passHandler)
         {
-            std::cout << "[RTT] Adapter::renderAll: passHandler is null" << std::endl;
             return;
         }
 
@@ -90,14 +88,23 @@ namespace core
             }
         }
 
-        std::cout << "[RTT] Adapter::renderAll: " << sorted.size()
-                  << " enabled controllers of " << controllers.size() << " total" << std::endl;
-
         std::sort(sorted.begin(), sorted.end(),
             [](const auto& a, const auto& b)
             {
                 return a.second->getPriority() < b.second->getPriority();
             });
+
+        // Register RTT camera frustums so terrain tiles visible to RTT cameras
+        // are loaded alongside the main camera's tiles (one frame delay is acceptable)
+        if (mainOffScreen)
+        {
+            mainOffScreen->clearAdditionalTerrainFrustums();
+            for (auto& [id, ctrl] : sorted)
+            {
+                glm::mat4 vp = ctrl->getProjectionMatrix() * ctrl->getViewMatrix();
+                mainOffScreen->addTerrainFrustum(vp, ctrl->getCameraPosition());
+            }
+        }
 
         // Render each RTT camera sequentially (they share GPUDrivenRenderer state)
         // Each controller registers its texture with pipelines during render()

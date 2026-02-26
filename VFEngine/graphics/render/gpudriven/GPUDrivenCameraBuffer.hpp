@@ -32,6 +32,8 @@ namespace render::gpudriven
         float shadowDistanceMultiplier;
         float globalLodBias;
         const IndirectBatchManager* batchManager;
+        uint32_t screenWidth = 0;   // 0 = use swapchain extent
+        uint32_t screenHeight = 0;
     };
 
     class GPUDrivenCameraBuffer

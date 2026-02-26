@@ -10,7 +10,6 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
-#include <iostream>
 
 namespace render
 {
@@ -83,29 +82,20 @@ namespace render
     {
         if (!initialized || !mainPassHandler)
         {
-            std::cout << "[RTT] ViewPort::render early exit: initialized=" << initialized
-                      << " passHandler=" << (mainPassHandler != nullptr) << std::endl;
             return nullptr;
         }
 
         auto* gpuRenderer = mainPassHandler->getGPUDrivenRenderer();
         if (!gpuRenderer || !gpuRenderer->isEnabled())
         {
-            std::cout << "[RTT] ViewPort::render: gpuRenderer=" << (gpuRenderer != nullptr)
-                      << " enabled=" << (gpuRenderer ? gpuRenderer->isEnabled() : false) << std::endl;
             return nullptr;
         }
 
         auto* meshPipeline = mainPassHandler->getMeshPipeline();
         if (!meshPipeline)
         {
-            std::cout << "[RTT] ViewPort::render: meshPipeline is null" << std::endl;
             return nullptr;
         }
-
-        std::cout << "[RTT] ViewPort::render: totalObjects=" << gpuRenderer->getStats().totalObjects
-                  << " terrainEnabled=" << gpuRenderer->isTerrainRenderingEnabled()
-                  << " res=" << width << "x" << height << std::endl;
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();
         lastRenderedImageIndex = imageIndex;
@@ -115,16 +105,21 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Update only the camera buffer for RTT rendering.
-        // Mesh/object data is preserved from the main render pass.
-        // We only re-cull with the RTT camera frustum.
+        // Update both camera buffers for RTT rendering:
+        // 1. GPUDrivenCameraBuffer — used by the compute cull pipeline for object-level frustum culling
+        // 2. StaticMeshPipeline CameraUBO — used by mesh/task/fragment shaders for vertex
+        //    transformation, meshlet-level frustum culling, and lighting calculations
         gpuRenderer->updateCameraForRTT(
             view,
             projection,
             cameraPosition,
             nearPlane,
-            farPlane
+            farPlane,
+            width,
+            height
         );
+
+        meshPipeline->updateCameraUBO(view, projection, cameraPosition);
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
@@ -161,13 +156,13 @@ namespace render
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
         // Draw opaque meshes
-        gpuRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+        gpuRenderer->renderDraw(commandBuffer, iblDescriptorSet, width, height);
 
         // Draw transparent meshes
-        gpuRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+        gpuRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet, width, height);
 
         // Draw blend/additive meshes
-        gpuRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
+        gpuRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet, width, height);
 
         // Draw terrain
         if (gpuRenderer->isTerrainRenderingEnabled())
@@ -193,6 +188,10 @@ namespace render
 
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
         device.getGraphicsQueue().waitIdle();
+
+        // Restore the main camera's data to the GPU buffer so the main render pass
+        // uses the correct frustum/projection for culling
+        gpuRenderer->restoreMainCamera();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }

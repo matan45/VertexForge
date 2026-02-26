@@ -61,6 +61,10 @@ namespace controllers
         uint32_t getPriority() const { return desc.priority; }
         void* getLastRenderedHandle() const { return lastRenderedHandle; }
 
+        const glm::mat4& getViewMatrix() const { return viewMatrix; }
+        const glm::mat4& getProjectionMatrix() const { return projectionMatrix; }
+        const glm::vec3& getCameraPosition() const { return cameraPosition; }
+
         void setTextureKey(const std::string& key) { textureKey = key; }
     };
 }

@@ -7,7 +7,6 @@
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
 #include <array>
-#include <iostream>
 
 namespace
 {
@@ -825,11 +824,8 @@ namespace render::gpudriven
 
         if (!validateDescriptorsForDispatch())
         {
-            std::cout << "[RTT] TerrainPipeline::dispatch ABORTED - missing descriptors" << std::endl;
             return;
         }
-
-        std::cout << "[RTT] TerrainPipeline::dispatch OK - drawing " << currentTileCount << " tiles" << std::endl;
 
         bindDescriptorSetsInBatches(cmd, currentSets);
 

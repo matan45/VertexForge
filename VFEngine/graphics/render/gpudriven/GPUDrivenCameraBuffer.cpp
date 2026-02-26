@@ -58,12 +58,14 @@ namespace render::gpudriven
         data.invViewProjection = glm::inverse(viewProjection);
 
         data.cameraPosition = glm::vec4(params.cameraPosition, params.nearPlane);
-        data.screenParams = glm::vec4(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height),
-            1.0f / static_cast<float>(swapChain.getSwapchainExtent().width),
-            1.0f / static_cast<float>(swapChain.getSwapchainExtent().height)
-        );
+
+        float screenW = (params.screenWidth > 0)
+            ? static_cast<float>(params.screenWidth)
+            : static_cast<float>(swapChain.getSwapchainExtent().width);
+        float screenH = (params.screenHeight > 0)
+            ? static_cast<float>(params.screenHeight)
+            : static_cast<float>(swapChain.getSwapchainExtent().height);
+        data.screenParams = glm::vec4(screenW, screenH, 1.0f / screenW, 1.0f / screenH);
 
         extractFrustumPlanes(viewProjection, data.frustumPlanes);
 

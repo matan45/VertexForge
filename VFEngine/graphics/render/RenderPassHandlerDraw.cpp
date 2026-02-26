@@ -73,6 +73,21 @@ namespace render
         if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
         {
             auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
+
+            // Merge terrain tiles visible to additional cameras (RTT) so they are
+            // available on the GPU for RTT render passes in the next frame.
+            for (const auto& [rttFrustum, rttCameraPos] : additionalTerrainFrustums)
+            {
+                auto rttTiles = terrainRenderProvider->getVisibleTiles(rttFrustum, rttCameraPos);
+                for (auto* tile : rttTiles)
+                {
+                    if (std::find(visibleTiles.begin(), visibleTiles.end(), tile) == visibleTiles.end())
+                    {
+                        visibleTiles.push_back(tile);
+                    }
+                }
+            }
+
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
         }

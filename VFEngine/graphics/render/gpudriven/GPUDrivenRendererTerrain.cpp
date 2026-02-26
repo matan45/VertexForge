@@ -6,7 +6,6 @@
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
 #include <chrono>
-#include <iostream>
 
 namespace render::gpudriven
 {
@@ -226,21 +225,13 @@ namespace render::gpudriven
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
         {
-            std::cout << "[RTT] renderTerrainDraw SKIP: init=" << initialized
-                      << " terrainEnabled=" << terrainRenderingEnabled
-                      << " pipeline=" << (terrainPipeline != nullptr)
-                      << " meshPipeline=" << (meshShaderPipeline != nullptr) << std::endl;
             return;
         }
 
         if (terrainTileData.empty())
         {
-            std::cout << "[RTT] renderTerrainDraw SKIP: terrainTileData is empty" << std::endl;
             return;
         }
-
-        std::cout << "[RTT] renderTerrainDraw: tiles=" << terrainTileData.size()
-                  << " tileCount=" << terrainPipeline->getCurrentTileCount() << std::endl;
 
         terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,

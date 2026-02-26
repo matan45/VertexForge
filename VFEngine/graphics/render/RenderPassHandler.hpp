@@ -154,6 +154,9 @@ namespace render
         float brushOverlayFalloff_ = 0.0f;
         float brushOverlayShape_ = 0.0f;
 
+        // Additional frustums for RTT cameras — merged with main when loading terrain tiles
+        std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -250,6 +253,9 @@ namespace render
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
+
+        void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
+        void clearAdditionalTerrainFrustums();
 
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();

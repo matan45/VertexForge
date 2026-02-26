@@ -206,6 +206,9 @@ namespace controllers
 
         render::RenderPassHandler* getRenderPassHandler() const;
 
+        void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalTerrainFrustums();
+
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
     };

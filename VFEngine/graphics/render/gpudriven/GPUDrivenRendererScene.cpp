@@ -74,8 +74,10 @@ namespace render::gpudriven
 
         cachedCameraView = view;
         cachedCameraProjection = projection;
+        cachedCameraPosition = cameraPosition;
         cachedCameraNear = nearPlane;
         cachedCameraFar = farPlane;
+        cachedTime = time;
 
         if (terrainPipeline)
         {
@@ -93,7 +95,9 @@ namespace render::gpudriven
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
         float nearPlane,
-        float farPlane)
+        float farPlane,
+        uint32_t screenWidth,
+        uint32_t screenHeight)
     {
         if (!initialized || !enabled)
         {
@@ -116,7 +120,9 @@ namespace render::gpudriven
             .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
             .shadowDistanceMultiplier = shadowDistanceMultiplier,
             .globalLodBias = globalLodBias,
-            .batchManager = batchManager.get()
+            .batchManager = batchManager.get(),
+            .screenWidth = screenWidth,
+            .screenHeight = screenHeight
         };
         cameraBuffer->update(cameraParams);
 
@@ -124,6 +130,40 @@ namespace render::gpudriven
         if (terrainPipeline)
         {
             terrainPipeline->setViewProjection(projection * view);
+        }
+    }
+
+    void GPUDrivenRenderer::restoreMainCamera()
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        CameraUpdateParams cameraParams{
+            .view = cachedCameraView,
+            .projection = cachedCameraProjection,
+            .cameraPosition = cachedCameraPosition,
+            .nearPlane = cachedCameraNear,
+            .farPlane = cachedCameraFar,
+            .time = cachedTime,
+            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .hiZMipLevels = hiZMipLevels,
+            .frustumCullingEnabled = frustumCullingEnabled,
+            .occlusionCullingEnabled = occlusionCullingEnabled,
+            .lodSelectionEnabled = lodSelectionEnabled,
+            .distanceCullingEnabled = distanceCullingEnabled,
+            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
+            .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
+            .batchManager = batchManager.get()
+        };
+        cameraBuffer->update(cameraParams);
+
+        // Restore terrain frustum culling with main camera's view-projection
+        if (terrainPipeline)
+        {
+            terrainPipeline->setViewProjection(cachedCameraProjection * cachedCameraView);
         }
     }
 

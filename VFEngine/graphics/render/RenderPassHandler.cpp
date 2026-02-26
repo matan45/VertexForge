@@ -320,6 +320,16 @@ namespace render
         }
     }
 
+    void RenderPassHandler::addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
+    {
+        additionalTerrainFrustums.emplace_back(frustum, cameraPos);
+    }
+
+    void RenderPassHandler::clearAdditionalTerrainFrustums()
+    {
+        additionalTerrainFrustums.clear();
+    }
+
     void RenderPassHandler::clearWaterData()
     {
         if (gpuDrivenRenderer)

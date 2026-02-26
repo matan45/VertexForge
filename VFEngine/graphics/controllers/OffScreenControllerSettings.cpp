@@ -399,4 +399,24 @@ namespace controllers
     {
         return offScreen ? offScreen->getRenderPassHandler() : nullptr;
     }
+
+    void OffScreenController::addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            math::Frustum frustum;
+            frustum.extractFromMatrix(viewProjection);
+            handler->addTerrainFrustum(frustum, cameraPos);
+        }
+    }
+
+    void OffScreenController::clearAdditionalTerrainFrustums()
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            handler->clearAdditionalTerrainFrustums();
+        }
+    }
 }
