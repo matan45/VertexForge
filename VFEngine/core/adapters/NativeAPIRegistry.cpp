@@ -13,6 +13,7 @@
 #include "api/WaterAPI.hpp"
 #include "api/SocketAPI.hpp"
 #include "api/NavmeshAPI.hpp"
+#include "api/RenderTextureAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -48,6 +49,7 @@ namespace core
         api::WaterAPI::registerAPI(interpreter);
         api::SocketAPI::registerAPI(interpreter);
         api::NavmeshAPI::registerAPI(interpreter);
+        api::RenderTextureAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

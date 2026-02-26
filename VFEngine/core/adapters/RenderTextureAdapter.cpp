@@ -3,6 +3,7 @@
 #include "../controllers/OffScreen.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
+#include <cassert>
 #include <vector>
 
 namespace core
@@ -35,6 +36,7 @@ namespace core
         const rendertexture::RenderTextureDesc& desc)
     {
         rendertexture::RenderTextureId id = nextId++;
+        assert(nextId != 0 && "RenderTextureId overflow — 4 billion create/destroy cycles exceeded");
 
         auto controller = std::make_unique<::controllers::RenderTextureController>();
         controller->init(desc);

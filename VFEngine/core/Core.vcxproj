@@ -140,6 +140,7 @@
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
+    <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
@@ -217,6 +218,7 @@
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
+    <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
