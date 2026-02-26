@@ -143,6 +143,11 @@ namespace components
 
             viewMatrix = glm::inverse(model);
         }
+
+        void updateViewMatrixFromWorld(const glm::mat4& worldMatrix)
+        {
+            viewMatrix = glm::inverse(worldMatrix);
+        }
     };
 
     struct RenderTextureComponent

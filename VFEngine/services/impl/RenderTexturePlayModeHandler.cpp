@@ -148,13 +148,18 @@ namespace services
                 continue;
 
             auto& camera = registry.get<components::CameraComponent>(enttEntity);
-            const auto& transform = registry.get<components::TransformComponent>(enttEntity);
 
-            // Use CameraComponent::updateViewMatrix() which applies Y→X→Z rotation order,
-            // matching how the main viewport computes its view matrix (ViewPort.cpp).
-            // Note: for child entities this uses local transform (same limitation as main viewport).
-            camera.updateViewMatrix(transform.position, transform.rotation);
-            glm::vec3 worldPos = transform.position;
+            // Use world transform to support child cameras that inherit parent movement
+            glm::vec3 worldPos;
+            if (registry.all_of<components::WorldTransformComponent>(enttEntity)) {
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
+                camera.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+                worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+            } else {
+                const auto& transform = registry.get<components::TransformComponent>(enttEntity);
+                camera.updateViewMatrix(transform.position, transform.rotation);
+                worldPos = transform.position;
+            }
             glm::mat4 worldViewMatrix = camera.viewMatrix;
 
             // Update aspect ratio from RTT dimensions and recompute projection

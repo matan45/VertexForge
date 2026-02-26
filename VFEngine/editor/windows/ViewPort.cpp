@@ -112,7 +112,8 @@ namespace windows
 
                 if (cameraDataOpt.has_value())
                 {
-                    events::scene::GetTransformQuery transformQuery;
+                    // Use world transform so child cameras follow parent movement
+                    events::scene::GetWorldTransformQuery transformQuery;
                     transformQuery.entity = primaryCamera;
                     auto transformOpt = dispatcher.query(transformQuery);
 
