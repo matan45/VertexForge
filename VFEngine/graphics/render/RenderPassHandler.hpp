@@ -154,9 +154,10 @@ namespace render
         float brushOverlayFalloff_ = 0.0f;
         float brushOverlayShape_ = 0.0f;
 
-        // Additional frustums for RTT cameras — merged with main when loading terrain/water tiles
-        std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
-        std::vector<std::pair<math::Frustum, glm::vec3>> additionalWaterFrustums;
+        // Additional frustums for RTT cameras — merged with main when loading terrain/water tiles.
+        // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
+        mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
+        mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalWaterFrustums;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,

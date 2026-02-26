@@ -114,6 +114,11 @@ namespace render
             auto tileConfig = waterRenderProvider->getWaterTileConfig();
             gpuDrivenRenderer->updateWater(visibleTiles, settings, tileConfig);
         }
+
+        // Consume and discard RTT frustums so they don't persist across frames.
+        // renderAll() re-populates them each frame during play mode.
+        additionalTerrainFrustums.clear();
+        additionalWaterFrustums.clear();
     }
 
     void RenderPassHandler::drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
