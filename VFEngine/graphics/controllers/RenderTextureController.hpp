@@ -32,6 +32,8 @@ namespace controllers
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
         bool enabled = true;
+        bool renderRequested = false;
+        float timeSinceLastRender = 0.0f;
         void* lastRenderedHandle = nullptr;
         std::string textureKey;
 
@@ -46,7 +48,7 @@ namespace controllers
         void cleanUp();
 
         void updateCamera(const glm::mat4& view, const glm::mat4& proj,
-                          const glm::vec3& pos, float nearPlane, float farPlane);
+                          const glm::vec3& pos, float nearVal, float farVal);
 
         void* render(render::RenderPassHandler* mainPassHandler);
 
@@ -60,6 +62,13 @@ namespace controllers
         rendertexture::UpdateMode getUpdateMode() const { return desc.updateMode; }
         uint32_t getPriority() const { return desc.priority; }
         void* getLastRenderedHandle() const { return lastRenderedHandle; }
+
+        // Returns true if this controller should render during this frame,
+        // based on updateMode, deltaTime accumulation, and one-shot requests.
+        bool shouldRenderThisFrame(float deltaTime);
+
+        // Flag a one-shot render for OnDemand mode (consumed after the next render).
+        void requestRender() { renderRequested = true; }
 
         const glm::mat4& getViewMatrix() const { return viewMatrix; }
         const glm::mat4& getProjectionMatrix() const { return projectionMatrix; }

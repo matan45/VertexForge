@@ -2,7 +2,6 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
-#include "events/scene/EntityTransformEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
@@ -153,115 +152,7 @@ namespace windows::details
 
     bool BillboardDrawer::drawRenderTextureSource(services::BillboardData& data)
     {
-        bool changed = false;
-
-        if (rttNeedsRefresh)
-        {
-            refreshRTTCandidates();
-            rttNeedsRefresh = false;
-
-            // Sync selectedRTTIdx with current data
-            selectedRTTIdx = -1;
-            if (!data.renderTextureSourceName.empty())
-            {
-                for (int i = 0; i < static_cast<int>(rttCandidateNames.size()); ++i)
-                {
-                    if (rttCandidateNames[i] == data.renderTextureSourceName)
-                    {
-                        selectedRTTIdx = i;
-                        break;
-                    }
-                }
-            }
-        }
-
-        const char* preview = selectedRTTIdx >= 0 && selectedRTTIdx < static_cast<int>(rttCandidateNames.size())
-            ? rttCandidateNames[selectedRTTIdx].c_str()
-            : "None";
-
-        if (ImGui::BeginCombo("RTT Source##Billboard", preview))
-        {
-            // "None" option
-            if (ImGui::Selectable("None##BillboardRTT", selectedRTTIdx < 0))
-            {
-                selectedRTTIdx = -1;
-                data.renderTextureSourceName = "";
-                data.renderTextureSource = services::EntityHandle::invalid();
-                changed = true;
-            }
-
-            for (int i = 0; i < static_cast<int>(rttCandidates.size()); ++i)
-            {
-                bool isSelected = (i == selectedRTTIdx);
-                if (ImGui::Selectable(rttCandidateNames[i].c_str(), isSelected))
-                {
-                    selectedRTTIdx = i;
-                    data.renderTextureSourceName = rttCandidateNames[i];
-                    data.renderTextureSource = rttCandidates[i];
-                    changed = true;
-                }
-                if (isSelected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Entity with RenderTextureComponent + CameraComponent.\nDisplays camera feed on this billboard during play mode.");
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh##BillboardRTT"))
-        {
-            refreshRTTCandidates();
-
-            // Re-sync selection with current data
-            selectedRTTIdx = -1;
-            if (!data.renderTextureSourceName.empty())
-            {
-                for (int i = 0; i < static_cast<int>(rttCandidateNames.size()); ++i)
-                {
-                    if (rttCandidateNames[i] == data.renderTextureSourceName)
-                    {
-                        selectedRTTIdx = i;
-                        break;
-                    }
-                }
-            }
-        }
-
-        return changed;
-    }
-
-    void BillboardDrawer::refreshRTTCandidates()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        rttCandidates.clear();
-        rttCandidateNames.clear();
-        selectedRTTIdx = -1;
-
-        events::scene::GetEntitiesWithComponentQuery compQuery;
-        compQuery.componentType = services::ComponentTypeId::RenderTexture;
-        rttCandidates = dispatcher.query(compQuery);
-
-        for (const auto& candidate : rttCandidates)
-        {
-            events::scene::GetEntityQuery entityQuery;
-            entityQuery.entity = candidate;
-            auto entityDataOpt = dispatcher.query(entityQuery);
-
-            if (entityDataOpt.has_value() && !entityDataOpt->name.empty())
-            {
-                rttCandidateNames.push_back(entityDataOpt->name);
-            }
-            else
-            {
-                rttCandidateNames.push_back("Entity #" + std::to_string(candidate.id));
-            }
-        }
+        return rttPicker.draw("BillboardRTT", data.renderTextureSourceName, data.renderTextureSource);
     }
 
     bool BillboardDrawer::drawSizeInput(services::BillboardData& data)

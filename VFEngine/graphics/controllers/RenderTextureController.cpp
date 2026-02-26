@@ -80,6 +80,41 @@ namespace controllers
         return lastRenderedHandle;
     }
 
+    bool RenderTextureController::shouldRenderThisFrame(float deltaTime)
+    {
+        if (!enabled)
+            return false;
+
+        switch (desc.updateMode)
+        {
+        case rendertexture::UpdateMode::EveryFrame:
+            return true;
+
+        case rendertexture::UpdateMode::OnDemand:
+            if (renderRequested)
+            {
+                renderRequested = false;
+                return true;
+            }
+            return false;
+
+        case rendertexture::UpdateMode::FixedInterval:
+            timeSinceLastRender += deltaTime;
+            if (timeSinceLastRender >= desc.fixedIntervalSeconds)
+            {
+                // Subtract rather than reset to preserve leftover time
+                timeSinceLastRender -= desc.fixedIntervalSeconds;
+                // Clamp to avoid spiral-of-death if frames are very slow
+                if (timeSinceLastRender > desc.fixedIntervalSeconds)
+                    timeSinceLastRender = 0.0f;
+                return true;
+            }
+            return false;
+        }
+
+        return true;
+    }
+
     void RenderTextureController::resize(uint32_t w, uint32_t h)
     {
         desc.width = w;

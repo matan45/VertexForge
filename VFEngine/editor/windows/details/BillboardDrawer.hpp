@@ -1,8 +1,7 @@
 #pragma once
+#include "RenderTexturePickerWidget.hpp"
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
-#include <string>
-#include <vector>
 
 namespace windows::details
 {
@@ -18,11 +17,6 @@ namespace windows::details
         bool drawSizeInput(services::BillboardData& data);
         bool drawColorTint(services::BillboardData& data);
 
-        void refreshRTTCandidates();
-
-        std::vector<services::EntityHandle> rttCandidates;
-        std::vector<std::string> rttCandidateNames;
-        int selectedRTTIdx = -1;
-        bool rttNeedsRefresh = true;
+        RenderTexturePickerWidget rttPicker;
     };
 }

@@ -76,31 +76,32 @@ namespace core
             return;
         }
 
-        // Collect enabled controllers and sort by priority
-        std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> sorted;
-        sorted.reserve(controllers.size());
+        // Collect all enabled controllers (for frustum registration)
+        // and determine which actually need to render this frame (based on UpdateMode).
+        std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> enabled;
+        std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> toRender;
+        enabled.reserve(controllers.size());
 
         for (auto& [id, ctrl] : controllers)
         {
             if (ctrl && ctrl->isEnabled())
             {
-                sorted.emplace_back(id, ctrl.get());
+                enabled.emplace_back(id, ctrl.get());
+
+                if (ctrl->shouldRenderThisFrame(deltaTime))
+                {
+                    toRender.emplace_back(id, ctrl.get());
+                }
             }
         }
 
-        std::sort(sorted.begin(), sorted.end(),
-            [](const auto& a, const auto& b)
-            {
-                return a.second->getPriority() < b.second->getPriority();
-            });
-
-        // Register RTT camera frustums so terrain/water tiles visible to RTT cameras
-        // are loaded alongside the main camera's tiles (one frame delay is acceptable)
+        // Register RTT camera frustums for ALL enabled cameras so terrain/water
+        // tiles are loaded even when the camera is between renders (FixedInterval).
         if (mainOffScreen)
         {
             mainOffScreen->clearAdditionalTerrainFrustums();
             mainOffScreen->clearAdditionalWaterFrustums();
-            for (auto& [id, ctrl] : sorted)
+            for (auto& [id, ctrl] : enabled)
             {
                 glm::mat4 vp = ctrl->getProjectionMatrix() * ctrl->getViewMatrix();
                 mainOffScreen->addTerrainFrustum(vp, ctrl->getCameraPosition());
@@ -108,9 +109,14 @@ namespace core
             }
         }
 
-        // Render each RTT camera sequentially (they share GPUDrivenRenderer state)
-        // Each controller registers its texture with pipelines during render()
-        for (auto& [id, ctrl] : sorted)
+        // Sort by priority and render only those that need it this frame
+        std::sort(toRender.begin(), toRender.end(),
+            [](const auto& a, const auto& b)
+            {
+                return a.second->getPriority() < b.second->getPriority();
+            });
+
+        for (auto& [id, ctrl] : toRender)
         {
             ctrl->render(passHandler);
         }
@@ -169,12 +175,10 @@ namespace core
 
     void RenderTextureAdapter::requestRender(rendertexture::RenderTextureId id)
     {
-        // For OnDemand mode - flag the controller to render next frame
-        // This will be handled during renderAll()
         auto* controller = getController(id);
         if (controller)
         {
-            controller->setEnabled(true);
+            controller->requestRender();
         }
     }
 }

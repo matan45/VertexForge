@@ -266,19 +266,19 @@ namespace controllers
         auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
         if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
 
-        if (category == 1) // ObjectCategory::Terrain
+        if (category == render::gpudriven::ObjectCategory::Terrain)
         {
             renderHandler->setTerrainDrawDistance(distance);
         }
-        else if (category == 3) // ObjectCategory::VFX
+        else if (category == render::gpudriven::ObjectCategory::VFX)
         {
             renderHandler->setVFXDrawDistance(distance);
         }
-        else if (category == 5) // ObjectCategory::Billboard
+        else if (category == render::gpudriven::ObjectCategory::Billboard)
         {
             renderHandler->setBillboardDrawDistance(distance);
         }
-        else if (category == 6) // ObjectCategory::Water
+        else if (category == render::gpudriven::ObjectCategory::Water)
         {
             renderHandler->setWaterDrawDistance(distance);
         }

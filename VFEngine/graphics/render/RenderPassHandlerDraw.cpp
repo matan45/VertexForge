@@ -8,6 +8,7 @@
 #include "billboard/BillboardPipeline.hpp"
 #include "text/TextPipeline.hpp"
 #include "ui/UIRenderPipeline.hpp"
+#include <unordered_set>
 #include "ui/UITextPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
@@ -78,12 +79,13 @@ namespace render
             // available on the GPU for RTT render passes in the next frame.
             // Uses queryVisibleTiles (frustum+distance only) to avoid side effects
             // like LOD changes and isVisible flag corruption on the main camera tiles.
+            std::unordered_set<::terrain::TerrainTile*> terrainSeen(visibleTiles.begin(), visibleTiles.end());
             for (const auto& [rttFrustum, rttCameraPos] : additionalTerrainFrustums)
             {
                 auto rttTiles = terrainRenderProvider->queryVisibleTiles(rttFrustum, rttCameraPos);
                 for (auto* tile : rttTiles)
                 {
-                    if (std::find(visibleTiles.begin(), visibleTiles.end(), tile) == visibleTiles.end())
+                    if (terrainSeen.insert(tile).second)
                     {
                         visibleTiles.push_back(tile);
                     }
@@ -101,12 +103,13 @@ namespace render
             // Merge water tiles visible to additional cameras (RTT) so they are
             // available on the GPU for RTT render passes in the next frame.
             // Uses queryVisibleWaterTiles to avoid corrupting isVisible flags.
+            std::unordered_set<::water::WaterTile*> waterSeen(visibleTiles.begin(), visibleTiles.end());
             for (const auto& [rttFrustum, rttCameraPos] : additionalWaterFrustums)
             {
                 auto rttTiles = waterRenderProvider->queryVisibleWaterTiles(rttFrustum, rttCameraPos);
                 for (auto* tile : rttTiles)
                 {
-                    if (std::find(visibleTiles.begin(), visibleTiles.end(), tile) == visibleTiles.end())
+                    if (waterSeen.insert(tile).second)
                     {
                         visibleTiles.push_back(tile);
                     }

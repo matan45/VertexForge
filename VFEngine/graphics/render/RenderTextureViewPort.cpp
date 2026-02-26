@@ -221,7 +221,15 @@ namespace render
         );
 
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
-        device.getGraphicsQueue().waitIdle();
+
+        // Wait for THIS submission only (not the entire queue).
+        // A fence wait is required here because restoreMainCamera() and
+        // registerExternalTexture() write to shared HOST_COHERENT buffers
+        // that the GPU is still reading — a GPU-only semaphore cannot
+        // protect against that CPU-side write race.
+        // Full async (semaphore chain) would require per-RTT camera buffers.
+        (void)device.getLogicalDevice().waitForFences(
+            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
 
         // Restore the main camera's data so the main render pass uses the correct
         // frustum/projection. restoreMainCamera() restores GPUDrivenCameraBuffer;
