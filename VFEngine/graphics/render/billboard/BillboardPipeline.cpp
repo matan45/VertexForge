@@ -442,7 +442,9 @@ namespace render::billboard
 
         for (auto& [path, batchBillboards] : texturedBillboards)
         {
-            bool hasTexture = externalTextureCache.contains(path) || loadCustomTexture(path);
+            // RTT synthetic keys are only in externalTextureCache, never file-loaded
+            bool isRTTSynthetic = path.starts_with("__rtt_");
+            bool hasTexture = externalTextureCache.contains(path) || (!isRTTSynthetic && loadCustomTexture(path));
             if (hasTexture)
             {
                 CustomTextureBatch batch;

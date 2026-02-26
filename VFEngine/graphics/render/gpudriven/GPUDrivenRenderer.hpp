@@ -185,6 +185,15 @@ namespace render::gpudriven
             float time = 0.0f
         );
 
+        // Update only camera data for RTT rendering. Preserves existing mesh/object data.
+        void updateCameraForRTT(
+            const glm::mat4& view,
+            const glm::mat4& projection,
+            const glm::vec3& cameraPosition,
+            float nearPlane,
+            float farPlane
+        );
+
         void dispatchCompute(vk::CommandBuffer cmd);
 
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
@@ -281,7 +290,8 @@ namespace render::gpudriven
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition,
                            const std::string& terrainMaterialPath = "");
-        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                               uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
 
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }

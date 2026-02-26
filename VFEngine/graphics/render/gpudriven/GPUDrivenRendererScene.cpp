@@ -88,6 +88,45 @@ namespace render::gpudriven
         stats.totalObjects = mergedBuffer->getObjectCount();
     }
 
+    void GPUDrivenRenderer::updateCameraForRTT(
+        const glm::mat4& view,
+        const glm::mat4& projection,
+        const glm::vec3& cameraPosition,
+        float nearPlane,
+        float farPlane)
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        CameraUpdateParams cameraParams{
+            .view = view,
+            .projection = projection,
+            .cameraPosition = cameraPosition,
+            .nearPlane = nearPlane,
+            .farPlane = farPlane,
+            .time = 0.0f,
+            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .hiZMipLevels = hiZMipLevels,
+            .frustumCullingEnabled = frustumCullingEnabled,
+            .occlusionCullingEnabled = false,  // No HiZ data for RTT
+            .lodSelectionEnabled = lodSelectionEnabled,
+            .distanceCullingEnabled = distanceCullingEnabled,
+            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
+            .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
+            .batchManager = batchManager.get()
+        };
+        cameraBuffer->update(cameraParams);
+
+        // Update terrain frustum culling with RTT camera's view-projection
+        if (terrainPipeline)
+        {
+            terrainPipeline->setViewProjection(projection * view);
+        }
+    }
+
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                                  const glm::vec3& cameraPosition)
     {

@@ -8,7 +8,9 @@
 #include "RenderPassHandler.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
+#include <iostream>
 
 namespace render
 {
@@ -80,15 +82,30 @@ namespace render
         float farPlane)
     {
         if (!initialized || !mainPassHandler)
+        {
+            std::cout << "[RTT] ViewPort::render early exit: initialized=" << initialized
+                      << " passHandler=" << (mainPassHandler != nullptr) << std::endl;
             return nullptr;
+        }
 
         auto* gpuRenderer = mainPassHandler->getGPUDrivenRenderer();
         if (!gpuRenderer || !gpuRenderer->isEnabled())
+        {
+            std::cout << "[RTT] ViewPort::render: gpuRenderer=" << (gpuRenderer != nullptr)
+                      << " enabled=" << (gpuRenderer ? gpuRenderer->isEnabled() : false) << std::endl;
             return nullptr;
+        }
 
         auto* meshPipeline = mainPassHandler->getMeshPipeline();
         if (!meshPipeline)
+        {
+            std::cout << "[RTT] ViewPort::render: meshPipeline is null" << std::endl;
             return nullptr;
+        }
+
+        std::cout << "[RTT] ViewPort::render: totalObjects=" << gpuRenderer->getStats().totalObjects
+                  << " terrainEnabled=" << gpuRenderer->isTerrainRenderingEnabled()
+                  << " res=" << width << "x" << height << std::endl;
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();
         lastRenderedImageIndex = imageIndex;
@@ -98,11 +115,10 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Update GPUDrivenRenderer with RTT camera data
-        // Scene mesh data is already uploaded by the main render pass.
-        // We only re-cull with RTT camera frustum.
-        gpuRenderer->updateScene(
-            {}, // Empty - mesh data already uploaded by main pass
+        // Update only the camera buffer for RTT rendering.
+        // Mesh/object data is preserved from the main render pass.
+        // We only re-cull with the RTT camera frustum.
+        gpuRenderer->updateCameraForRTT(
             view,
             projection,
             cameraPosition,
@@ -156,7 +172,7 @@ namespace render
         // Draw terrain
         if (gpuRenderer->isTerrainRenderingEnabled())
         {
-            gpuRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+            gpuRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet, width, height);
         }
 
         // Draw water

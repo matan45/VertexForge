@@ -4,6 +4,7 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <vector>
+#include <iostream>
 
 namespace core
 {
@@ -72,7 +73,10 @@ namespace core
     {
         auto* passHandler = getMainRenderPassHandler();
         if (!passHandler)
+        {
+            std::cout << "[RTT] Adapter::renderAll: passHandler is null" << std::endl;
             return;
+        }
 
         // Collect enabled controllers and sort by priority
         std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> sorted;
@@ -85,6 +89,9 @@ namespace core
                 sorted.emplace_back(id, ctrl.get());
             }
         }
+
+        std::cout << "[RTT] Adapter::renderAll: " << sorted.size()
+                  << " enabled controllers of " << controllers.size() << " total" << std::endl;
 
         std::sort(sorted.begin(), sorted.end(),
             [](const auto& a, const auto& b)

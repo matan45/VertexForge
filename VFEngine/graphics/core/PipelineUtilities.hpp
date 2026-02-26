@@ -93,6 +93,8 @@ namespace core
 
 		// When non-empty, overrides the single blend attachment above with per-attachment states
 		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+
+		std::vector<vk::DynamicState> dynamicStates;
 	};
 
 	struct MeshShaderPipelineResult

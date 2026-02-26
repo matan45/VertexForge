@@ -4,6 +4,8 @@
 #include "../core/VulkanContext.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
+#include "print/Logger.hpp"
+#include <iostream>
 
 namespace controllers
 {
@@ -65,11 +67,17 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
 
+        std::cout << "[RTT] Controller::render result=" << (result ? "valid" : "null")
+                  << " key=" << textureKey << std::endl;
+
         // Register rendered texture with UI and Billboard pipelines
         if (!textureKey.empty() && mainPassHandler)
         {
             auto imageView = viewport->getLastRenderedImageView();
             auto texSampler = viewport->getTextureSampler();
+            std::cout << "[RTT] Registering external texture: key=" << textureKey
+                      << " imageView=" << (imageView ? "valid" : "null")
+                      << " sampler=" << (texSampler ? "valid" : "null") << std::endl;
             if (imageView && texSampler)
             {
                 mainPassHandler->registerExternalTexture(textureKey, imageView, texSampler);

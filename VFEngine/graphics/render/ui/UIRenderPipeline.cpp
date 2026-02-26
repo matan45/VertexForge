@@ -445,7 +445,9 @@ namespace render::ui
             for (auto& [path, instances] : texturedInstances)
             {
                 std::string pathStr(path);
-                bool hasTexture = externalTextureCache.contains(pathStr) || loadTexture(pathStr);
+                // RTT synthetic keys are only in externalTextureCache, never file-loaded
+                bool isRTTSynthetic = pathStr.starts_with("__rtt_");
+                bool hasTexture = externalTextureCache.contains(pathStr) || (!isRTTSynthetic && loadTexture(pathStr));
                 if (!hasTexture)
                 {
                     continue;

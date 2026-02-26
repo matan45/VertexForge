@@ -6,6 +6,8 @@
 #include "scene/EntityRegistry.hpp"
 #include <components/CoreComponents.hpp>
 #include "print/Logger.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 namespace services
 {
@@ -146,14 +148,51 @@ namespace services
                 !registry.all_of<components::TransformComponent>(enttEntity))
                 continue;
 
-            const auto& camera = registry.get<components::CameraComponent>(enttEntity);
-            const auto& transform = registry.get<components::TransformComponent>(enttEntity);
+            auto& camera = registry.get<components::CameraComponent>(enttEntity);
+
+            // Use world-space position/rotation for child entities.
+            // WorldTransformComponent contains the accumulated parent+child transform.
+            glm::vec3 worldPos;
+            glm::mat4 worldViewMatrix;
+
+            if (registry.all_of<components::WorldTransformComponent>(enttEntity))
+            {
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
+                // Extract world position from the world matrix
+                worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+                // View matrix is the inverse of the world model matrix
+                worldViewMatrix = glm::inverse(worldTransform.worldMatrix);
+            }
+            else
+            {
+                // Fallback: use local transform (for root entities, local == world)
+                const auto& transform = registry.get<components::TransformComponent>(enttEntity);
+                worldPos = transform.position;
+                camera.updateViewMatrix(transform.position, transform.rotation);
+                worldViewMatrix = camera.viewMatrix;
+            }
+
+            // Update aspect ratio from RTT dimensions and recompute projection
+            if (registry.all_of<components::RenderTextureComponent>(enttEntity))
+            {
+                const auto& rtComp = registry.get<components::RenderTextureComponent>(enttEntity);
+                float rttAspect = static_cast<float>(rtComp.width) / static_cast<float>(rtComp.height);
+                if (camera.aspectRatio != rttAspect)
+                {
+                    camera.aspectRatio = rttAspect;
+                    camera.updateProjectionMatrix();
+                }
+            }
+
+            std::cout << "[RTT] camera id=" << textureId
+                      << " worldPos=(" << worldPos.x << "," << worldPos.y << "," << worldPos.z << ")"
+                      << std::endl;
 
             provider->updateCamera(
                 textureId,
-                camera.viewMatrix,
+                worldViewMatrix,
                 camera.projectionMatrix,
-                transform.position,
+                worldPos,
                 camera.nearPlane,
                 camera.farPlane
             );

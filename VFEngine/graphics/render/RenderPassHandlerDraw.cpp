@@ -161,6 +161,15 @@ namespace render
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
+        // Set dynamic viewport/scissor for mesh shader pipelines
+        auto extent = swapChain.getSwapchainExtent();
+        vk::Viewport viewport{0.0f, 0.0f,
+                               static_cast<float>(extent.width), static_cast<float>(extent.height),
+                               0.0f, 1.0f};
+        commandBuffer.setViewport(0, viewport);
+        vk::Rect2D scissor{{0, 0}, extent};
+        commandBuffer.setScissor(0, scissor);
+
         gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
         bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
