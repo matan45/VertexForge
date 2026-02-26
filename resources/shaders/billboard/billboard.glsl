@@ -57,19 +57,18 @@ void main() {
     }
 
     float gridSize = pc.atlasGridSize;
-    float tileU = mod(atlasIndex, gridSize);
-    float tileV = floor(atlasIndex / gridSize);
-
-    // Map input UV (0-1) to tile UV within atlas
-    vec2 tileSize = vec2(1.0 / gridSize);
     vec2 uv = inTexCoord;
 
-    // Custom textures (gridSize == 1) need V flip since .vfImage stores top-to-bottom
     if (gridSize == 1.0) {
-        uv.y = 1.0 - uv.y;
+        // Custom/RTT textures: sample full texture, V flip for top-to-bottom storage
+        fragTexCoord = vec2(uv.x, 1.0 - uv.y);
+    } else {
+        // Atlas textures: map UV to the correct tile within the atlas grid
+        float tileU = mod(atlasIndex, gridSize);
+        float tileV = floor(atlasIndex / gridSize);
+        vec2 tileSize = vec2(1.0 / gridSize);
+        fragTexCoord = (vec2(tileU, tileV) + uv) * tileSize;
     }
-
-    fragTexCoord = (vec2(tileU, tileV) + uv) * tileSize;
 
     fragColorTint = inColorTint;
 }
