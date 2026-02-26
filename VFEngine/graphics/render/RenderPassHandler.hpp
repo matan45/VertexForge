@@ -252,6 +252,8 @@ namespace render
         void setBillboardDrawDistance(float distance);
         void setWaterDistanceCullingEnabled(bool enabled);
         void setWaterDrawDistance(float distance);
+        void setTerrainDistanceCullingEnabled(bool enabled);
+        void setTerrainDrawDistance(float distance);
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();

@@ -26,6 +26,12 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) = 0;
 
+        /// Lightweight frustum+distance query that does NOT modify tile state.
+        /// Used for RTT frustum merging.
+        virtual std::vector<water::WaterTile*> queryVisibleWaterTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition) = 0;
+
         virtual bool hasActiveWater() const = 0;
 
         virtual water::WaterGlobalSettings getWaterGlobalSettings() const = 0;

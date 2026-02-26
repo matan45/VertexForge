@@ -63,6 +63,8 @@ namespace controllers
         renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
         renderHandler->setWaterDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setWaterDrawDistance(settings.distanceCulling.waterDistance);
+        renderHandler->setTerrainDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setTerrainDrawDistance(settings.distanceCulling.terrainDistance);
 
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
@@ -253,6 +255,7 @@ namespace controllers
         renderHandler->setVFXDistanceCullingEnabled(enabled);
         renderHandler->setBillboardDistanceCullingEnabled(enabled);
         renderHandler->setWaterDistanceCullingEnabled(enabled);
+        renderHandler->setTerrainDistanceCullingEnabled(enabled);
     }
 
     void OffScreenController::setCategoryDistance(uint32_t category, float distance)
@@ -263,7 +266,11 @@ namespace controllers
         auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
         if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
 
-        if (category == 3) // ObjectCategory::VFX
+        if (category == 1) // ObjectCategory::Terrain
+        {
+            renderHandler->setTerrainDrawDistance(distance);
+        }
+        else if (category == 3) // ObjectCategory::VFX
         {
             renderHandler->setVFXDrawDistance(distance);
         }

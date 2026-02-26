@@ -331,6 +331,38 @@ namespace services
         return result;
     }
 
+    std::vector<water::WaterTile*> WaterService::queryVisibleWaterTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<water::WaterTile*> result;
+
+        for (auto& [entityId, grid] : waterGrids)
+        {
+            for (auto* tile : grid->getAllTiles())
+            {
+                if (!tile)
+                    continue;
+
+                if (!frustum.intersectsAABB(tile->worldBounds))
+                    continue;
+
+                if (distanceCullingEnabled_ && maxWaterDistSq_ > 0.0f)
+                {
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    glm::vec3 diff = tileCenter - cameraPosition;
+                    float distSq = glm::dot(diff, diff);
+                    if (distSq > maxWaterDistSq_)
+                        continue;
+                }
+
+                result.push_back(tile);
+            }
+        }
+
+        return result;
+    }
+
     bool WaterService::isPositionInWater(const glm::vec3& worldPos) const
     {
         for (const auto& [entityId, grid] : waterGrids)

@@ -70,6 +70,10 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<water::WaterTile*> queryVisibleWaterTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition);
+
         bool hasActiveWater() const { return !waterGrids.empty(); }
 
         bool isPositionInWater(const glm::vec3& worldPos) const;

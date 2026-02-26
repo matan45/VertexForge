@@ -290,6 +290,16 @@ namespace render
         if (waterRenderProvider) waterRenderProvider->setMaxDrawDistance(distance);
     }
 
+    void RenderPassHandler::setTerrainDistanceCullingEnabled(bool enabled)
+    {
+        if (terrainRenderProvider) terrainRenderProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setTerrainDrawDistance(float distance)
+    {
+        if (terrainRenderProvider) terrainRenderProvider->setMaxDrawDistance(distance);
+    }
+
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
     {
         terrainRenderProvider = provider;

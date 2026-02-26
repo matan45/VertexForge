@@ -76,9 +76,11 @@ namespace render
 
             // Merge terrain tiles visible to additional cameras (RTT) so they are
             // available on the GPU for RTT render passes in the next frame.
+            // Uses queryVisibleTiles (frustum+distance only) to avoid side effects
+            // like LOD changes and isVisible flag corruption on the main camera tiles.
             for (const auto& [rttFrustum, rttCameraPos] : additionalTerrainFrustums)
             {
-                auto rttTiles = terrainRenderProvider->getVisibleTiles(rttFrustum, rttCameraPos);
+                auto rttTiles = terrainRenderProvider->queryVisibleTiles(rttFrustum, rttCameraPos);
                 for (auto* tile : rttTiles)
                 {
                     if (std::find(visibleTiles.begin(), visibleTiles.end(), tile) == visibleTiles.end())
@@ -98,9 +100,10 @@ namespace render
 
             // Merge water tiles visible to additional cameras (RTT) so they are
             // available on the GPU for RTT render passes in the next frame.
+            // Uses queryVisibleWaterTiles to avoid corrupting isVisible flags.
             for (const auto& [rttFrustum, rttCameraPos] : additionalWaterFrustums)
             {
-                auto rttTiles = waterRenderProvider->getVisibleWaterTiles(rttFrustum, rttCameraPos);
+                auto rttTiles = waterRenderProvider->queryVisibleWaterTiles(rttFrustum, rttCameraPos);
                 for (auto* tile : rttTiles)
                 {
                     if (std::find(visibleTiles.begin(), visibleTiles.end(), tile) == visibleTiles.end())
