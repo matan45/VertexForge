@@ -465,6 +465,7 @@ namespace render::gpudriven
             .srcAlphaBlendFactor = vk::BlendFactor::eOne,
             .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
         };
+        config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 
         if (isWBOITMode)
         {

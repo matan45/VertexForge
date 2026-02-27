@@ -1,4 +1,5 @@
 #pragma once
+#include "RenderTexturePickerWidget.hpp"
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
 
@@ -12,7 +13,10 @@ namespace windows::details
     private:
         bool drawHeader(bool& outRemove);
         bool drawTexturePath(services::BillboardData& data);
+        bool drawRenderTextureSource(services::BillboardData& data);
         bool drawSizeInput(services::BillboardData& data);
         bool drawColorTint(services::BillboardData& data);
+
+        RenderTexturePickerWidget rttPicker;
     };
 }

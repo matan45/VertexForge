@@ -25,9 +25,16 @@ namespace core
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) override;
 
+        std::vector<terrain::TerrainTile*> queryVisibleTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition) override;
+
         bool hasActiveTerrain() const override;
 
         std::string getTerrainMaterialPath() const override;
+
+        void setDistanceCullingEnabled(bool enabled) override;
+        void setMaxDrawDistance(float distance) override;
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) override;
         void releaseTileRAMData(terrain::TerrainTile& tile) override;

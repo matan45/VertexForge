@@ -50,6 +50,11 @@ namespace render::ibl
         void cleanUpShader();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        
+        void renderToTarget(const vk::CommandBuffer& commandBuffer,
+                            const SkyboxTargetParams& target) const;
+
+        bool isInitialized() const { return initialized; }
 
         // Set camera matrices directly - works with both EditorCamera and CameraComponent
         void setCameraMatrices(const glm::mat4& view, const glm::mat4& projection)

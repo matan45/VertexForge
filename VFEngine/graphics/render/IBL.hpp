@@ -55,6 +55,9 @@ namespace render
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
+        void renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
+                                  const ibl::SkyboxTargetParams& target) const;
+
         void init(std::string_view path);
         void recreate();
         void remove();

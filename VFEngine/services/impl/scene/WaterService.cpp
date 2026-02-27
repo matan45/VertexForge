@@ -309,14 +309,14 @@ namespace services
         {
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
-            if (distanceCullingEnabled_ && maxWaterDistSq_ > 0.0f)
+            if (distanceCullingEnabled && maxWaterDistSq > 0.0f)
             {
                 for (auto* tile : visibleTiles)
                 {
                     glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
                     glm::vec3 diff = tileCenter - cameraPosition;
                     float distSq = glm::dot(diff, diff);
-                    if (distSq <= maxWaterDistSq_)
+                    if (distSq <= maxWaterDistSq)
                     {
                         result.push_back(tile);
                     }
@@ -325,6 +325,38 @@ namespace services
             else
             {
                 result.insert(result.end(), visibleTiles.begin(), visibleTiles.end());
+            }
+        }
+
+        return result;
+    }
+
+    std::vector<water::WaterTile*> WaterService::queryVisibleWaterTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<water::WaterTile*> result;
+
+        for (auto& [entityId, grid] : waterGrids)
+        {
+            for (auto* tile : grid->getAllTiles())
+            {
+                if (!tile)
+                    continue;
+
+                if (!frustum.intersectsAABB(tile->worldBounds))
+                    continue;
+
+                if (distanceCullingEnabled && maxWaterDistSq > 0.0f)
+                {
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    glm::vec3 diff = tileCenter - cameraPosition;
+                    float distSq = glm::dot(diff, diff);
+                    if (distSq > maxWaterDistSq)
+                        continue;
+                }
+
+                result.push_back(tile);
             }
         }
 

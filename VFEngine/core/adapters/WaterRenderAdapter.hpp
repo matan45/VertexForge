@@ -24,6 +24,10 @@ namespace core
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) override;
 
+        std::vector<water::WaterTile*> queryVisibleWaterTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition) override;
+
         bool hasActiveWater() const override;
 
         water::WaterGlobalSettings getWaterGlobalSettings() const override;

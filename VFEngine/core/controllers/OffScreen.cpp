@@ -412,4 +412,41 @@ namespace controllers {
 	{
 		return offScreenController->applyBrushGPU(heightData, params);
 	}
+
+	render::RenderPassHandler* OffScreen::getRenderPassHandler() const
+	{
+		return offScreenController ? offScreenController->getRenderPassHandler() : nullptr;
+	}
+
+	void OffScreen::addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+	{
+		if (offScreenController)
+		{
+			offScreenController->addTerrainFrustum(viewProjection, cameraPos);
+		}
+	}
+
+	void OffScreen::clearAdditionalTerrainFrustums()
+	{
+		if (offScreenController)
+		{
+			offScreenController->clearAdditionalTerrainFrustums();
+		}
+	}
+
+	void OffScreen::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+	{
+		if (offScreenController)
+		{
+			offScreenController->addWaterFrustum(viewProjection, cameraPos);
+		}
+	}
+
+	void OffScreen::clearAdditionalWaterFrustums()
+	{
+		if (offScreenController)
+		{
+			offScreenController->clearAdditionalWaterFrustums();
+		}
+	}
 }

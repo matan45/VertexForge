@@ -15,6 +15,18 @@ namespace core
         return terrainService->getRawVisibleTiles(frustum, cameraPosition);
     }
 
+    std::vector<terrain::TerrainTile*> TerrainRenderAdapter::queryVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        if (!terrainService)
+        {
+            return {};
+        }
+
+        return terrainService->queryVisibleTiles(frustum, cameraPosition);
+    }
+
     bool TerrainRenderAdapter::hasActiveTerrain() const
     {
         return terrainService && terrainService->hasActiveTerrain();
@@ -24,6 +36,16 @@ namespace core
     {
         if (!terrainService) return {};
         return terrainService->getTerrainMaterialPath();
+    }
+
+    void TerrainRenderAdapter::setDistanceCullingEnabled(bool enabled)
+    {
+        if (terrainService) terrainService->setDistanceCullingEnabled(enabled);
+    }
+
+    void TerrainRenderAdapter::setMaxDrawDistance(float distance)
+    {
+        if (terrainService) terrainService->setMaxDrawDistance(distance);
     }
 
     bool TerrainRenderAdapter::ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel)

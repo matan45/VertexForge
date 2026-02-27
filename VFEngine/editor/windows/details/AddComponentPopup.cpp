@@ -51,7 +51,7 @@ namespace windows::details
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
-                           c.hasNavmeshAgent;
+                           c.hasNavmeshAgent && c.hasRenderTexture;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -175,6 +175,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("SDF text rendering with custom fonts");
+            }
+        }
+
+        if (!c.hasRenderTexture)
+        {
+            if (ImGui::Selectable("  Render Texture"))
+            {
+                events::scene::AddRenderTextureComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Renders camera view to a texture (requires Camera component)");
             }
         }
     }

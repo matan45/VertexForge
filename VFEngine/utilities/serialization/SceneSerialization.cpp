@@ -195,6 +195,8 @@ namespace serialization
             deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
                               totalEntities);
 
+            resolveRenderTextureSourceNames();
+
             return true;
         }
         catch (const std::exception& e)
@@ -285,6 +287,8 @@ namespace serialization
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
             deserializeEntity(snapshot["root"], root, sceneGraph, true, nullptr, entitiesLoaded, totalEntities);
+
+            resolveRenderTextureSourceNames();
 
             vfLogInfo("Scene restored from snapshot successfully");
             return true;

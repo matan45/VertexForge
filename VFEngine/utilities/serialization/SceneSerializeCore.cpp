@@ -269,6 +269,10 @@ namespace serialization
         {
             j["texturePath"] = billboard.texturePath;
         }
+        if (!billboard.renderTextureSourceName.empty())
+        {
+            j["renderTextureSourceName"] = billboard.renderTextureSourceName;
+        }
         return j;
     }
 
@@ -291,6 +295,8 @@ namespace serialization
         billboard.editorOnly = j.value("editorOnly", true);
         billboard.selectable = j.value("selectable", true);
         billboard.texturePath = j.value("texturePath", std::string(""));
+        billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
+        billboard.renderTextureSource = entt::null; // Resolved post-load
     }
 
     json SceneSerialization::serializeText(const components::TextComponent& text)

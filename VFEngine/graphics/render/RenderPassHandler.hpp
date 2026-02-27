@@ -154,6 +154,11 @@ namespace render
         float brushOverlayFalloff_ = 0.0f;
         float brushOverlayShape_ = 0.0f;
 
+        // Additional frustums for RTT cameras — merged with main when loading terrain/water tiles.
+        // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
+        mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
+        mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalWaterFrustums;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -185,6 +190,8 @@ namespace render
         bool isTextPipelineInitialized() const { return textPipelineInitialized; }
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+
+        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler);
 
         void initUIRenderPipeline();
         ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }
@@ -245,12 +252,20 @@ namespace render
         void setBillboardDrawDistance(float distance);
         void setWaterDistanceCullingEnabled(bool enabled);
         void setWaterDrawDistance(float distance);
+        void setTerrainDistanceCullingEnabled(bool enabled);
+        void setTerrainDrawDistance(float distance);
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
 
+        void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
+        void clearAdditionalTerrainFrustums();
+
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
+
+        void addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
+        void clearAdditionalWaterFrustums();
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

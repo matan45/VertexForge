@@ -74,8 +74,10 @@ namespace render::gpudriven
 
         cachedCameraView = view;
         cachedCameraProjection = projection;
+        cachedCameraPosition = cameraPosition;
         cachedCameraNear = nearPlane;
         cachedCameraFar = farPlane;
+        cachedTime = time;
 
         if (terrainPipeline)
         {
@@ -86,6 +88,74 @@ namespace render::gpudriven
         updatePipelineDescriptors();
 
         stats.totalObjects = mergedBuffer->getObjectCount();
+    }
+
+    void GPUDrivenRenderer::updateCameraForRTT(const RTTCameraParams& params)
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        CameraUpdateParams cameraParams{
+            .view = params.view,
+            .projection = params.projection,
+            .cameraPosition = params.cameraPosition,
+            .nearPlane = params.nearPlane,
+            .farPlane = params.farPlane,
+            .time = 0.0f,
+            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .hiZMipLevels = hiZMipLevels,
+            .frustumCullingEnabled = frustumCullingEnabled,
+            .occlusionCullingEnabled = false,  // No HiZ data for RTT
+            .lodSelectionEnabled = lodSelectionEnabled,
+            .distanceCullingEnabled = distanceCullingEnabled,
+            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
+            .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
+            .batchManager = batchManager.get(),
+            .screenWidth = params.screenWidth,
+            .screenHeight = params.screenHeight
+        };
+        cameraBuffer->update(cameraParams);
+
+        if (terrainPipeline)
+        {
+            terrainPipeline->setViewProjection(params.projection * params.view);
+        }
+    }
+
+    void GPUDrivenRenderer::restoreMainCamera()
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        CameraUpdateParams cameraParams{
+            .view = cachedCameraView,
+            .projection = cachedCameraProjection,
+            .cameraPosition = cachedCameraPosition,
+            .nearPlane = cachedCameraNear,
+            .farPlane = cachedCameraFar,
+            .time = cachedTime,
+            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .hiZMipLevels = hiZMipLevels,
+            .frustumCullingEnabled = frustumCullingEnabled,
+            .occlusionCullingEnabled = occlusionCullingEnabled,
+            .lodSelectionEnabled = lodSelectionEnabled,
+            .distanceCullingEnabled = distanceCullingEnabled,
+            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
+            .shadowDistanceMultiplier = shadowDistanceMultiplier,
+            .globalLodBias = globalLodBias,
+            .batchManager = batchManager.get()
+        };
+        cameraBuffer->update(cameraParams);
+
+        if (terrainPipeline)
+        {
+            terrainPipeline->setViewProjection(cachedCameraProjection * cachedCameraView);
+        }
     }
 
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,

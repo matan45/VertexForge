@@ -48,6 +48,8 @@ namespace windows::details
 
             changed |= drawTexturePath(data);
             ImGui::Spacing();
+            changed |= drawRenderTextureSource(data);
+            ImGui::Spacing();
             changed |= drawSizeInput(data);
             ImGui::Spacing();
             changed |= drawColorTint(data);
@@ -146,6 +148,11 @@ namespace windows::details
         if (wasEmpty) ImGui::EndDisabled();
 
         return changed;
+    }
+
+    bool BillboardDrawer::drawRenderTextureSource(services::BillboardData& data)
+    {
+        return rttPicker.draw("BillboardRTT", data.renderTextureSourceName, data.renderTextureSource);
     }
 
     bool BillboardDrawer::drawSizeInput(services::BillboardData& data)

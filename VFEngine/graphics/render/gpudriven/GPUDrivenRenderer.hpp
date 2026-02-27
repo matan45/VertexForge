@@ -104,7 +104,6 @@ namespace render::gpudriven
         float terrainTextureScale = 0.1f;
         uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
 
-        // Water subsystem
         std::unique_ptr<render::water::WaterPipeline> waterPipeline;
         std::unique_ptr<render::water::WaterMeshBuffer> waterMeshBuffer;
         std::vector<render::water::WaterTileGPUData> waterTileData;
@@ -159,8 +158,10 @@ namespace render::gpudriven
 
         glm::mat4 cachedCameraView{1.0f};
         glm::mat4 cachedCameraProjection{1.0f};
+        glm::vec3 cachedCameraPosition{0.0f};
         float cachedCameraNear = 0.1f;
         float cachedCameraFar = 1000.0f;
+        float cachedTime = 0.0f;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -185,12 +186,25 @@ namespace render::gpudriven
             float time = 0.0f
         );
 
+        void updateCameraForRTT(const RTTCameraParams& params);
+
+        void restoreMainCamera();
+
+        // Cached main camera accessors (for restoring mesh pipeline UBO after RTT)
+        const glm::mat4& getCachedCameraView() const { return cachedCameraView; }
+        const glm::mat4& getCachedCameraProjection() const { return cachedCameraProjection; }
+        const glm::vec3& getCachedCameraPosition() const { return cachedCameraPosition; }
+
         void dispatchCompute(vk::CommandBuffer cmd);
 
-        void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
-        void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                        uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
 
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
@@ -281,7 +295,8 @@ namespace render::gpudriven
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition,
                            const std::string& terrainMaterialPath = "");
-        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                               uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
 
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
@@ -291,7 +306,6 @@ namespace render::gpudriven
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
         void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
 
-        // Water rendering
         void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
                          const ::water::WaterGlobalSettings& settings,
                          const ::water::WaterTileConfig& tileConfig);

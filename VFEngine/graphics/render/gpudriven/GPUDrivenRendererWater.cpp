@@ -38,7 +38,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Convert visible tiles to GPU data
         waterTileData.resize(visibleTiles.size());
         for (size_t i = 0; i < visibleTiles.size(); ++i)
         {
@@ -55,7 +54,6 @@ namespace render::gpudriven
             static_cast<uint32_t>(waterTileData.size())
         );
 
-        // Cache push constants for render time
         cachedWaterPushConstants.shallowColor = settings.shallowColor;
         cachedWaterPushConstants.deepColor = settings.deepColor;
         cachedWaterPushConstants.waveSpeed = settings.waveSpeed;

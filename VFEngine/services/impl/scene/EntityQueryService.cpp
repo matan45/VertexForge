@@ -126,6 +126,7 @@ namespace services
             COLLECT_CASE(UITabs, UITabsComponent);
             COLLECT_CASE(UISlider, UISliderComponent);
             COLLECT_CASE(UIProgressBar, UIProgressBarComponent);
+            COLLECT_CASE(RenderTexture, RenderTextureComponent);
         default:
             break;
         }
@@ -190,6 +191,7 @@ namespace services
             HAS_CASE(UITabs, UITabsComponent);
             HAS_CASE(UISlider, UISliderComponent);
             HAS_CASE(UIProgressBar, UIProgressBarComponent);
+            HAS_CASE(RenderTexture, RenderTextureComponent);
         default:
             return false;
         }
@@ -242,6 +244,7 @@ namespace services
         CHECK_COMP(UITabs, UITabsComponent);
         CHECK_COMP(UISlider, UISliderComponent);
         CHECK_COMP(UIProgressBar, UIProgressBarComponent);
+        CHECK_COMP(RenderTexture, RenderTextureComponent);
 
 #undef CHECK_COMP
 

@@ -211,6 +211,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // RenderTexture Component Events
+    // ============================================
+
+    struct AddRenderTextureComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddRenderTextureComponent"; }
+    };
+
+    struct RemoveRenderTextureComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveRenderTextureComponent"; }
+    };
+
+    struct SetRenderTextureDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::RenderTextureData renderTextureData;
+
+        std::string_view getName() const override { return "SetRenderTextureData"; }
+    };
+
+    struct HasRenderTextureComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasRenderTextureComponent"; }
+    };
+
+    struct GetRenderTextureDataQuery : IQuery<std::optional<services::RenderTextureData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetRenderTextureData"; }
+    };
+
+    // ============================================
     // Mesh Data Changed Notification
     // ============================================
 

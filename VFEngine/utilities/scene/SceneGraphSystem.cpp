@@ -106,9 +106,14 @@ namespace scene {
 		for (auto entityHandle : view) {
 			auto entity = Entity(entityHandle);
 			auto& camera = entity.getComponent<components::CameraComponent>();
-			const auto& transform = entity.getComponent<components::TransformComponent>();
 
-			camera.updateViewMatrix(transform.position, transform.rotation);
+			if (entity.hasComponent<components::WorldTransformComponent>()) {
+				const auto& worldTransform = entity.getComponent<components::WorldTransformComponent>();
+				camera.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+			} else {
+				const auto& transform = entity.getComponent<components::TransformComponent>();
+				camera.updateViewMatrix(transform.position, transform.rotation);
+			}
 		}
 	}
 

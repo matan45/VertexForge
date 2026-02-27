@@ -25,6 +25,7 @@ namespace core
 namespace render
 {
     class OffScreenViewPort;
+    class RenderPassHandler;
 }
 
 namespace render::gpudriven
@@ -202,6 +203,14 @@ namespace controllers
         bool applyBrushGPU(
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params);
+
+        render::RenderPassHandler* getRenderPassHandler() const;
+
+        void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalTerrainFrustums();
+
+        void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalWaterFrustums();
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

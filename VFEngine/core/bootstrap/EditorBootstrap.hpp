@@ -22,6 +22,7 @@ namespace services
     class ITerrainBrushComputeProvider;
     class IPostProcessProvider;
     class IWaterRenderProvider;
+    class IRenderTextureProvider;
 }
 
 namespace window
@@ -60,6 +61,7 @@ namespace core
     class TerrainBrushComputeAdapter;
     class PostProcessAdapter;
     class WaterRenderAdapter;
+    class RenderTextureAdapter;
 
     class EditorBootstrap
     {
@@ -85,6 +87,7 @@ namespace core
         std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
+        std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -134,6 +137,8 @@ namespace core
         services::ITerrainBrushComputeProvider* getTerrainBrushComputeProvider();
 
         services::IPostProcessProvider* getPostProcessProvider();
+
+        services::IRenderTextureProvider* getRenderTextureProvider();
 
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();

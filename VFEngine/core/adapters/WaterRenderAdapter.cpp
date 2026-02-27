@@ -15,6 +15,18 @@ namespace core
         return waterService->getVisibleWaterTiles(frustum, cameraPosition);
     }
 
+    std::vector<water::WaterTile*> WaterRenderAdapter::queryVisibleWaterTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        if (!waterService)
+        {
+            return {};
+        }
+
+        return waterService->queryVisibleWaterTiles(frustum, cameraPosition);
+    }
+
     bool WaterRenderAdapter::hasActiveWater() const
     {
         return waterService && waterService->hasActiveWater();

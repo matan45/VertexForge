@@ -42,8 +42,8 @@ namespace services
         mutable water::WaterGlobalSettings cachedGlobalSettings;
         mutable bool globalSettingsDirty = true;
 
-        bool distanceCullingEnabled_ = false;
-        float maxWaterDistSq_ = 0.0f;
+        bool distanceCullingEnabled = false;
+        float maxWaterDistSq = 0.0f;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
@@ -70,6 +70,10 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<water::WaterTile*> queryVisibleWaterTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition);
+
         bool hasActiveWater() const { return !waterGrids.empty(); }
 
         bool isPositionInWater(const glm::vec3& worldPos) const;
@@ -78,8 +82,8 @@ namespace services
         water::WaterGlobalSettings getWaterGlobalSettings() const;
         water::WaterTileConfig getWaterTileConfig() const;
 
-        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
-        void setMaxDrawDistance(float distance) { maxWaterDistSq_ = distance * distance; }
+        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
+        void setMaxDrawDistance(float distance) { maxWaterDistSq = distance * distance; }
 
         void setWaterTileHeight(EntityHandle waterEntity, int32_t tileX, int32_t tileZ, float height);
         void setWaterGlobalSettings(EntityHandle waterEntity, const WaterGlobalSettingsData& settings);

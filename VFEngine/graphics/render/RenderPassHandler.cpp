@@ -139,7 +139,6 @@ namespace render
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
 
-        // Initialize WBOIT pipeline for order-independent transparency
         wboitPipeline = std::make_unique<transparency::WBOITPipeline>(device, swapChain, offscreenResources);
         wboitPipeline->init();
         gpuDrivenRenderer->initWBOITPipeline(wboitPipeline->getWBOITRenderPass());
@@ -290,6 +289,16 @@ namespace render
         if (waterRenderProvider) waterRenderProvider->setMaxDrawDistance(distance);
     }
 
+    void RenderPassHandler::setTerrainDistanceCullingEnabled(bool enabled)
+    {
+        if (terrainRenderProvider) terrainRenderProvider->setDistanceCullingEnabled(enabled);
+    }
+
+    void RenderPassHandler::setTerrainDrawDistance(float distance)
+    {
+        if (terrainRenderProvider) terrainRenderProvider->setMaxDrawDistance(distance);
+    }
+
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
     {
         terrainRenderProvider = provider;
@@ -320,12 +329,32 @@ namespace render
         }
     }
 
+    void RenderPassHandler::addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
+    {
+        additionalTerrainFrustums.emplace_back(frustum, cameraPos);
+    }
+
+    void RenderPassHandler::clearAdditionalTerrainFrustums()
+    {
+        additionalTerrainFrustums.clear();
+    }
+
     void RenderPassHandler::clearWaterData()
     {
         if (gpuDrivenRenderer)
         {
             gpuDrivenRenderer->clearWaterData();
         }
+    }
+
+    void RenderPassHandler::addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
+    {
+        additionalWaterFrustums.emplace_back(frustum, cameraPos);
+    }
+
+    void RenderPassHandler::clearAdditionalWaterFrustums()
+    {
+        additionalWaterFrustums.clear();
     }
 
     void RenderPassHandler::recreateOverlayPipelines()

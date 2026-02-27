@@ -48,6 +48,8 @@ namespace windows::details
 
             changed |= drawTexturePath(data);
             ImGui::Spacing();
+            changed |= drawRenderTextureSource(data);
+            ImGui::Spacing();
             changed |= drawColorTint(data);
 
             if (changed)
@@ -144,6 +146,11 @@ namespace windows::details
         if (wasEmpty) ImGui::EndDisabled();
 
         return changed;
+    }
+
+    bool UIImageDrawer::drawRenderTextureSource(services::UIImageData& data)
+    {
+        return rttPicker.draw("UIImageRTT", data.renderTextureSourceName, data.renderTextureSource);
     }
 
     bool UIImageDrawer::drawColorTint(services::UIImageData& data)

@@ -249,12 +249,63 @@ namespace services
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
-            for (terrain::TerrainTile* tile : visibleTiles)
+            if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
             {
-                if (tile && tile->isVisible)
+                for (terrain::TerrainTile* tile : visibleTiles)
                 {
-                    result.push_back(tile);
+                    if (!tile || !tile->isVisible)
+                        continue;
+
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    glm::vec3 diff = tileCenter - cameraPosition;
+                    float distSq = glm::dot(diff, diff);
+                    if (distSq <= maxTerrainDistSq_)
+                    {
+                        result.push_back(tile);
+                    }
                 }
+            }
+            else
+            {
+                for (terrain::TerrainTile* tile : visibleTiles)
+                {
+                    if (tile && tile->isVisible)
+                    {
+                        result.push_back(tile);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    std::vector<terrain::TerrainTile*> TerrainService::queryVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<terrain::TerrainTile*> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            for (auto* tile : grid->getAllTiles())
+            {
+                if (!tile)
+                    continue;
+
+                if (!frustum.intersectsAABB(tile->worldBounds))
+                    continue;
+
+                if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
+                {
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    glm::vec3 diff = tileCenter - cameraPosition;
+                    float distSq = glm::dot(diff, diff);
+                    if (distSq > maxTerrainDistSq_)
+                        continue;
+                }
+
+                result.push_back(tile);
             }
         }
 

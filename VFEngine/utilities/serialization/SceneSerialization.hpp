@@ -203,6 +203,14 @@ namespace serialization
         static json serializeNavmeshAgent(const components::NavmeshAgentComponent& agent);
         static void deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent);
 
+        static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
+        static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
+
+        static std::string updateModeToString(rendertexture::UpdateMode mode);
+        static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
+
+        static void resolveRenderTextureSourceNames();
+
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);
 

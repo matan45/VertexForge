@@ -229,8 +229,6 @@ namespace render
         }
     }
 
-    // --- HiZ update ---
-
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

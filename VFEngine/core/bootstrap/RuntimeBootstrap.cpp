@@ -11,6 +11,7 @@
 #include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
+#include "../adapters/RenderTextureAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -38,6 +39,7 @@ namespace core
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
+        renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
 
         offScreen->init();
         audioAdapter->init();
@@ -91,6 +93,7 @@ namespace core
             navmeshAdapter->cleanUp();
         }
 
+        renderTextureAdapter.reset();
         postProcessAdapter.reset();
         waterRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
@@ -151,6 +154,11 @@ namespace core
     services::IPostProcessProvider* RuntimeBootstrap::getPostProcessProvider()
     {
         return postProcessAdapter.get();
+    }
+
+    services::IRenderTextureProvider* RuntimeBootstrap::getRenderTextureProvider()
+    {
+        return renderTextureAdapter.get();
     }
 
     WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()

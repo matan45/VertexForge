@@ -12,136 +12,149 @@
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 
-namespace services
+namespace render
 {
-	class IVFXRuntimeProvider;
-	class ITerrainRenderProvider;
-	class IWaterRenderProvider;
+    class RenderPassHandler;
 }
 
-namespace controllers {
+namespace services
+{
+    class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
+    class IWaterRenderProvider;
+}
 
-	using types::CameraId;
-	using types::MAIN_CAMERA_ID;
+namespace controllers
+{
+    using types::CameraId;
+    using types::MAIN_CAMERA_ID;
 
-	class OffScreenController;
+    class OffScreenController;
 
-	class OffScreen
-	{
-	private:
-		std::unique_ptr<controllers::OffScreenController> offScreenController;
+    class OffScreen
+    {
+    private:
+        std::unique_ptr<controllers::OffScreenController> offScreenController;
 
-	public:
-		explicit OffScreen();
-		~OffScreen();
+    public:
+        explicit OffScreen();
+        ~OffScreen();
 
-		void init();
-		void recreate();
-		void cleanUp();
+        void init();
+        void recreate();
+        void cleanUp();
 
-		void* render();
+        void* render();
 
-		void iblSet(std::string_view iblPath);
-		void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
-		void iblRemove();
+        void iblSet(std::string_view iblPath);
+        void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        void iblRemove();
 
-		std::string meshLoad(std::string_view meshPath);
-		void meshUnload(const std::string& meshId);
-		void meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
-		                      const glm::vec3& cameraPos, float time = 0.0f);
-		bool isMeshLoaded(const std::string& meshPath) const;
-		std::vector<std::string> getLoadedMeshes() const;
-		void prepareCameras();
-		std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
-		void prepareFrameMeshes();
+        std::string meshLoad(std::string_view meshPath);
+        void meshUnload(const std::string& meshId);
+        void meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
+                              const glm::vec3& cameraPos, float time = 0.0f);
+        bool isMeshLoaded(const std::string& meshPath) const;
+        std::vector<std::string> getLoadedMeshes() const;
+        void prepareCameras();
+        std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
+        void prepareFrameMeshes();
 
-		void removeCamera(CameraId id);
-		void prepareFrameCameraFrustums();
-		void prepareFrameAudioSpheres();
-		void prepareFrameLightGizmos();
+        void removeCamera(CameraId id);
+        void prepareFrameCameraFrustums();
+        void prepareFrameAudioSpheres();
+        void prepareFrameLightGizmos();
 
-		void prepareFrameBillboards();
-		void prepareFrameText();
-		void setShowBillboardIcons(bool show);
-		bool getShowBillboardIcons() const;
-		bool loadBillboardAtlas(const std::string& atlasPath);
+        void prepareFrameBillboards();
+        void prepareFrameText();
+        void setShowBillboardIcons(bool show);
+        bool getShowBillboardIcons() const;
+        bool loadBillboardAtlas(const std::string& atlasPath);
 
-		services::CullingDebugStats getCullingStats() const;
+        services::CullingDebugStats getCullingStats() const;
 
-		void applyShadowSettings(const types::RenderSettings& settings);
-		services::ShadowStats getShadowStats() const;
+        void applyShadowSettings(const types::RenderSettings& settings);
+        services::ShadowStats getShadowStats() const;
 
-		void setPlayMode(bool playMode);
+        void setPlayMode(bool playMode);
 
-		void setShowDebugRendering(bool show);
-		bool getShowDebugRendering() const;
+        void setShowDebugRendering(bool show);
+        bool getShowDebugRendering() const;
 
-		void setShowGrid(bool show);
-		bool getShowGrid() const;
-		void prepareGrid();
+        void setShowGrid(bool show);
+        bool getShowGrid() const;
+        void prepareGrid();
 
-		void setShowPhysicsDebug(bool show);
-		bool getShowPhysicsDebug() const;
-		void prepareFramePhysicsColliders();
+        void setShowPhysicsDebug(bool show);
+        bool getShowPhysicsDebug() const;
+        void prepareFramePhysicsColliders();
 
-		void setViewMode(uint32_t mode);
-		uint32_t getViewMode() const;
+        void setViewMode(uint32_t mode);
+        uint32_t getViewMode() const;
 
-		void setShowClusterDebug(bool show);
-		bool getShowClusterDebug() const;
-		void prepareFrameClusterDebug();
+        void setShowClusterDebug(bool show);
+        bool getShowClusterDebug() const;
+        void prepareFrameClusterDebug();
 
-		void setShowShadowDebug(bool show);
-		bool getShowShadowDebug() const;
-		void prepareFrameShadowDebug();
+        void setShowShadowDebug(bool show);
+        bool getShowShadowDebug() const;
+        void prepareFrameShadowDebug();
 
-		void setShowNavmeshDebug(bool show);
-		bool getShowNavmeshDebug() const;
-		void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
-		void clearNavmeshDebugMesh();
+        void setShowNavmeshDebug(bool show);
+        bool getShowNavmeshDebug() const;
+        void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
+        void clearNavmeshDebugMesh();
 
-		void prepareFrameUICanvasOutlines();
-		void prepareFrameUIImages();
+        void prepareFrameUICanvasOutlines();
+        void prepareFrameUIImages();
 
-		void setFrustumCullingEnabled(bool enabled);
-		void setOcclusionCullingEnabled(bool enabled);
-		void setLODSelectionEnabled(bool enabled);
-		void setMeshletFrustumCullingEnabled(bool enabled);
-		void setMeshletBackfaceCullingEnabled(bool enabled);
-		void setDistanceCullingEnabled(bool enabled);
-		void setCategoryDistance(uint32_t category, float distance);
-		void setShadowDistanceMultiplier(float multiplier);
-		void setGlobalLodBias(float bias);
-		void setTerrainFrustumCullingEnabled(bool enabled);
-		void setTerrainMeshletCullingEnabled(bool enabled);
+        void setFrustumCullingEnabled(bool enabled);
+        void setOcclusionCullingEnabled(bool enabled);
+        void setLODSelectionEnabled(bool enabled);
+        void setMeshletFrustumCullingEnabled(bool enabled);
+        void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setDistanceCullingEnabled(bool enabled);
+        void setCategoryDistance(uint32_t category, float distance);
+        void setShadowDistanceMultiplier(float multiplier);
+        void setGlobalLodBias(float bias);
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
 
-		void setWBOITEnabled(bool enabled);
+        void setWBOITEnabled(bool enabled);
 
-		void setTerrainRenderingEnabled(bool enabled);
-		void setTerrainLODBias(float bias);
-		void setTerrainErrorThreshold(float threshold);
-		void setTerrainTextureScale(float scale);
-		void setTerrainShadowLOD(uint32_t lod);
+        void setTerrainRenderingEnabled(bool enabled);
+        void setTerrainLODBias(float bias);
+        void setTerrainErrorThreshold(float threshold);
+        void setTerrainTextureScale(float scale);
+        void setTerrainShadowLOD(uint32_t lod);
 
-		void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
+        void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 
-		void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
-		postprocess::PostProcessSettings getPostProcessSettings() const;
-		void setPostProcessEnabled(bool enabled);
-		bool isPostProcessEnabled() const;
+        void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
+        postprocess::PostProcessSettings getPostProcessSettings() const;
+        void setPostProcessEnabled(bool enabled);
+        bool isPostProcessEnabled() const;
 
-		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
-		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
-		void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
 
-		void setRaycastCursorUV(const glm::vec2& uv);
-		void clearRaycastCursor();
-		terrain::TerrainHitResult getTerrainHitResult() const;
+        void setRaycastCursorUV(const glm::vec2& uv);
+        void clearRaycastCursor();
+        terrain::TerrainHitResult getTerrainHitResult() const;
 
-		void setBrushOverlayParams(float radius, float falloff, float shape);
+        void setBrushOverlayParams(float radius, float falloff, float shape);
 
-		bool applyBrushGPU(
-			std::vector<float>& heightData,
-			const terrain::BrushGPUParams& params);
-	};
+        bool applyBrushGPU(
+            std::vector<float>& heightData,
+            const terrain::BrushGPUParams& params);
+
+        render::RenderPassHandler* getRenderPassHandler() const;
+
+        void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalTerrainFrustums();
+
+        void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+        void clearAdditionalWaterFrustums();
+    };
 }

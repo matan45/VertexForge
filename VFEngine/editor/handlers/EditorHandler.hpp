@@ -24,6 +24,7 @@
 #include "interfaces/IPaintBrushService.hpp"
 #include "interfaces/ITerrainRaycastService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
+#include "interfaces/IRenderTextureService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -38,6 +39,7 @@ namespace services {
 	class PhysicsPlayModeHandler;
 	class VFXPlayModeHandler;
 	class VFXRuntimeServiceImpl;
+	class RenderTexturePlayModeHandler;
 }
 
 namespace handlers {
@@ -74,6 +76,8 @@ namespace handlers {
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
+		std::shared_ptr<services::IRenderTextureService> renderTextureService;
+		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
 
 		events::SubscriptionToken resizeSubscription;
 

@@ -69,6 +69,7 @@ namespace services {
         SocketAttachment,
         SocketOverride,
         NavmeshAgent,
+        RenderTexture,
     };
 
 }

@@ -63,6 +63,8 @@ namespace controllers
         renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
         renderHandler->setWaterDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setWaterDrawDistance(settings.distanceCulling.waterDistance);
+        renderHandler->setTerrainDistanceCullingEnabled(settings.distanceCulling.enabled);
+        renderHandler->setTerrainDrawDistance(settings.distanceCulling.terrainDistance);
 
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
@@ -253,6 +255,7 @@ namespace controllers
         renderHandler->setVFXDistanceCullingEnabled(enabled);
         renderHandler->setBillboardDistanceCullingEnabled(enabled);
         renderHandler->setWaterDistanceCullingEnabled(enabled);
+        renderHandler->setTerrainDistanceCullingEnabled(enabled);
     }
 
     void OffScreenController::setCategoryDistance(uint32_t category, float distance)
@@ -263,15 +266,19 @@ namespace controllers
         auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
         if (gpuDriven) gpuDriven->setCategoryDistance(category, distance);
 
-        if (category == 3) // ObjectCategory::VFX
+        if (category == render::gpudriven::ObjectCategory::Terrain)
+        {
+            renderHandler->setTerrainDrawDistance(distance);
+        }
+        else if (category == render::gpudriven::ObjectCategory::VFX)
         {
             renderHandler->setVFXDrawDistance(distance);
         }
-        else if (category == 5) // ObjectCategory::Billboard
+        else if (category == render::gpudriven::ObjectCategory::Billboard)
         {
             renderHandler->setBillboardDrawDistance(distance);
         }
-        else if (category == 6) // ObjectCategory::Water
+        else if (category == render::gpudriven::ObjectCategory::Water)
         {
             renderHandler->setWaterDrawDistance(distance);
         }
@@ -392,6 +399,51 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setWaterRenderProvider(provider);
+        }
+    }
+
+    render::RenderPassHandler* OffScreenController::getRenderPassHandler() const
+    {
+        return offScreen ? offScreen->getRenderPassHandler() : nullptr;
+    }
+
+    void OffScreenController::addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            math::Frustum frustum;
+            frustum.extractFromMatrix(viewProjection);
+            handler->addTerrainFrustum(frustum, cameraPos);
+        }
+    }
+
+    void OffScreenController::clearAdditionalTerrainFrustums()
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            handler->clearAdditionalTerrainFrustums();
+        }
+    }
+
+    void OffScreenController::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            math::Frustum frustum;
+            frustum.extractFromMatrix(viewProjection);
+            handler->addWaterFrustum(frustum, cameraPos);
+        }
+    }
+
+    void OffScreenController::clearAdditionalWaterFrustums()
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            handler->clearAdditionalWaterFrustums();
         }
     }
 }

@@ -45,6 +45,9 @@ namespace services
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
 
+        bool distanceCullingEnabled_ = false;
+        float maxTerrainDistSq_ = 0.0f;
+
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
 
         struct PendingTerrainLoad {
@@ -73,8 +76,15 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<terrain::TerrainTile*> queryVisibleTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition);
+
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
         std::string getTerrainMaterialPath() const;
+
+        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
+        void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);

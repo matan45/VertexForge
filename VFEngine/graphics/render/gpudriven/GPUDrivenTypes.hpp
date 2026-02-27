@@ -253,6 +253,17 @@ namespace render::gpudriven
         glm::vec3 aabbMax;
     };
 
+    struct RTTCameraParams
+    {
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::vec3 cameraPosition;
+        float nearPlane;
+        float farPlane;
+        uint32_t screenWidth = 0;
+        uint32_t screenHeight = 0;
+    };
+
     struct GPUDrivenStats
     {
         uint32_t totalObjects;

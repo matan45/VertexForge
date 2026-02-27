@@ -101,6 +101,7 @@ namespace render::ui
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         textureCache.clear();
+        externalTextureCache.clear();
         scissorGroups.clear();
         totalInstanceCount = 0;
 
@@ -177,7 +178,7 @@ namespace render::ui
 
     void UIRenderPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = 1 + MAX_UI_TEXTURES;
+        uint32_t totalSets = 1 + MAX_UI_TEXTURES + MAX_EXTERNAL_TEXTURES;
 
         std::vector<vk::DescriptorPoolSize> poolSizes(1);
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
@@ -322,6 +323,51 @@ namespace render::ui
         return true;
     }
 
+    void UIRenderPipeline::registerExternalTexture(const std::string& key,
+                                                     vk::ImageView imageView, vk::Sampler externalSampler)
+    {
+        if (!initialized || !imageView || !externalSampler)
+            return;
+
+        auto it = externalTextureCache.find(key);
+        if (it != externalTextureCache.end())
+        {
+            updateDescriptorSet(it->second, imageView, externalSampler);
+            return;
+        }
+
+        if (externalTextureCache.size() >= MAX_EXTERNAL_TEXTURES)
+            return;
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        updateDescriptorSet(newDescSet, imageView, externalSampler);
+        externalTextureCache[key] = newDescSet;
+    }
+
+    void UIRenderPipeline::unregisterExternalTexture(const std::string& key)
+    {
+        auto it = externalTextureCache.find(key);
+        if (it != externalTextureCache.end())
+        {
+            device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
+            externalTextureCache.erase(it);
+        }
+    }
+
+    void UIRenderPipeline::clearExternalTextures()
+    {
+        for (auto& [key, descSet] : externalTextureCache)
+        {
+            device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+        }
+        externalTextureCache.clear();
+    }
+
     void UIRenderPipeline::setUIImageDrawList(const std::vector<UIImageRenderData>& images)
     {
         scissorGroups.clear();
@@ -398,7 +444,11 @@ namespace render::ui
 
             for (auto& [path, instances] : texturedInstances)
             {
-                if (!loadTexture(std::string(path)))
+                std::string pathStr(path);
+                // RTT synthetic keys are only in externalTextureCache, never file-loaded
+                bool isRTTSynthetic = pathStr.starts_with("__rtt_");
+                bool hasTexture = externalTextureCache.contains(pathStr) || (!isRTTSynthetic && loadTexture(pathStr));
+                if (!hasTexture)
                 {
                     continue;
                 }
@@ -477,14 +527,27 @@ namespace render::ui
 
             for (const auto& batch : group.batches)
             {
+                vk::DescriptorSet texDescSet;
                 auto it = textureCache.find(batch.texturePath);
-                if (it == textureCache.end())
+                if (it != textureCache.end())
                 {
-                    continue;
+                    texDescSet = it->second.descriptorSet;
+                }
+                else
+                {
+                    auto extIt = externalTextureCache.find(batch.texturePath);
+                    if (extIt != externalTextureCache.end())
+                    {
+                        texDescSet = extIt->second;
+                    }
+                    else
+                    {
+                        continue;
+                    }
                 }
 
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                                  0, it->second.descriptorSet, nullptr);
+                                                  0, texDescSet, nullptr);
 
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
             }

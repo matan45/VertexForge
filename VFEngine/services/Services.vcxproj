@@ -126,6 +126,7 @@
     <ClInclude Include="events\PreviewEvents.hpp" />
     <ClInclude Include="events\ProjectEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
+    <ClInclude Include="events\RenderTextureEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
@@ -163,6 +164,8 @@
     <ClInclude Include="impl\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\ProjectServiceImpl.hpp" />
+    <ClInclude Include="impl\RenderTexturePlayModeHandler.hpp" />
+    <ClInclude Include="impl\RenderTextureServiceImpl.hpp" />
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
@@ -181,6 +184,7 @@
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
     <ClInclude Include="impl\components\PhysicsComponentService.hpp" />
+    <ClInclude Include="impl\components\RenderTextureComponentService.hpp" />
     <ClInclude Include="impl\components\SocketComponentService.hpp" />
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
@@ -207,6 +211,7 @@
     <ClInclude Include="interfaces\IPreviewService.hpp" />
     <ClInclude Include="interfaces\IProjectService.hpp" />
     <ClInclude Include="interfaces\IRenderService.hpp" />
+    <ClInclude Include="interfaces\IRenderTextureService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
     <ClInclude Include="interfaces\ISculptModeService.hpp" />
@@ -226,6 +231,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPostProcessProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
+    <ClInclude Include="providers\IRenderTextureProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
     <ClInclude Include="providers\ISocketProvider.hpp" />
     <ClInclude Include="providers\ITerrainBrushComputeProvider.hpp" />
@@ -253,6 +259,8 @@
     <ClCompile Include="impl\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\ProjectServiceImpl.cpp" />
+    <ClCompile Include="impl\RenderTexturePlayModeHandler.cpp" />
+    <ClCompile Include="impl\RenderTextureServiceImpl.cpp" />
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
@@ -271,6 +279,7 @@
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
     <ClCompile Include="impl\components\PhysicsComponentService.cpp" />
+    <ClCompile Include="impl\components\RenderTextureComponentService.cpp" />
     <ClCompile Include="impl\components\SocketComponentService.cpp" />
     <ClCompile Include="impl\components\TextComponentService.cpp" />
     <ClCompile Include="impl\components\UICanvasRectImageOps.cpp" />

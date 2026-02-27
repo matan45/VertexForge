@@ -220,7 +220,8 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                              uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
         {
@@ -242,7 +243,18 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
         );
 
-        auto extent = swapChain.getSwapchainExtent();
+        float dispatchWidth, dispatchHeight;
+        if (screenWidth > 0 && screenHeight > 0)
+        {
+            dispatchWidth = static_cast<float>(screenWidth);
+            dispatchHeight = static_cast<float>(screenHeight);
+        }
+        else
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            dispatchWidth = static_cast<float>(extent.width);
+            dispatchHeight = static_cast<float>(extent.height);
+        }
 
         float terrainDistSq = 0.0f;
         if (distanceCullingEnabled)
@@ -259,8 +271,8 @@ namespace render::gpudriven
         terrainPipeline->dispatch(
             cmd,
             viewMode,
-            static_cast<float>(extent.width),
-            static_cast<float>(extent.height),
+            dispatchWidth,
+            dispatchHeight,
             terrainLODBias,
             terrainErrorThreshold,
             terrainTextureScale

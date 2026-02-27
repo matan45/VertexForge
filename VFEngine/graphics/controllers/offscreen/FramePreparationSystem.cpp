@@ -337,6 +337,17 @@ namespace controllers::offscreen
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
             renderData.texturePath = billboard.texturePath;
+            
+            if (billboard.renderTextureSource != entt::null
+                && registry.valid(billboard.renderTextureSource)
+                && registry.all_of<components::RenderTextureComponent>(billboard.renderTextureSource))
+            {
+                const auto& rtt = registry.get<components::RenderTextureComponent>(billboard.renderTextureSource);
+                if (rtt.textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
+                {
+                    renderData.texturePath = "__rtt_" + std::to_string(rtt.textureId) + "__";
+                }
+            }
 
             billboardDrawList.push_back(renderData);
         }

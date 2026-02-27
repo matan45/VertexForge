@@ -34,6 +34,8 @@ namespace components
     {
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        entt::entity renderTextureSource = entt::null;
+        std::string renderTextureSourceName;
     };
 
     enum class ScrollbarVisibility : uint8_t
