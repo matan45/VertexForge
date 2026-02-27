@@ -39,6 +39,7 @@
 #include "print/EditorLogger.hpp"
 #include "Import.hpp"
 #include "core/PluginManager.hpp"
+#include <filesystem>
 
 namespace handlers
 {
@@ -65,7 +66,14 @@ namespace handlers
         editor::SplashScreen::instance().setStatus("Loading plugins...");
         pluginManager = std::make_unique<plugin::PluginManager>();
         pluginManager->setCapabilities({"editor", "audio", "physics", "import", "scripting"});
-        pluginManager->loadAll("plugins");
+        // Resolve plugins/ relative to the executable (bin/Editor/<Config>/x64/ -> repo root)
+        auto exePath = std::filesystem::current_path();
+        auto pluginsDir = exePath / "plugins";
+        if (!std::filesystem::exists(pluginsDir)) {
+            // When running from VS, working dir is project dir (VFEngine/editor/)
+            pluginsDir = exePath / "../../plugins";
+        }
+        pluginManager->loadAll(pluginsDir);
         pluginManager->initializeAll();
 
         bootstrap->setFrameCallback([this]()

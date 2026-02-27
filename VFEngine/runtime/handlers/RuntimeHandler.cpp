@@ -41,7 +41,13 @@ namespace handlers {
         // Load and initialize plugins (Runtime has no editor/import capabilities)
         pluginManager = std::make_unique<plugin::PluginManager>();
         pluginManager->setCapabilities({"audio", "physics", "scripting"});
-        pluginManager->loadAll("plugins");
+        // Resolve plugins/ relative to the executable
+        auto exePath = std::filesystem::current_path();
+        auto pluginsDir = exePath / "plugins";
+        if (!std::filesystem::exists(pluginsDir)) {
+            pluginsDir = exePath / "../../plugins";
+        }
+        pluginManager->loadAll(pluginsDir);
         pluginManager->initializeAll();
 
         bootstrap->setFrameCallback([this]() {
