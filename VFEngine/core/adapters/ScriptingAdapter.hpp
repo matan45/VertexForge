@@ -83,6 +83,8 @@ namespace core
 
         void setScriptLibraryPath(const std::string& path) override;
 
+        void registerPluginNativeFunction(const std::string& name, std::any function) override;
+
     private:
         void setError(::services::ScriptError::Type type, const std::string& message,
                       const std::string& file = "", int line = 0);

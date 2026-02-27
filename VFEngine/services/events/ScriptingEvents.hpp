@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include <string>
+#include <any>
 
 namespace events::scripting {
 
@@ -59,6 +60,16 @@ namespace events::scripting {
 
     struct IsScriptsCompiledQuery : IQuery<bool> {
         std::string_view getName() const override { return "IsScriptsCompiled"; }
+    };
+
+    // Register a native function callable from mType scripts.
+    // The function must be std::any wrapping services::NativeFunction
+    // (std::function<value::Value(const std::vector<value::Value>&)>)
+    struct RegisterNativeScriptFunctionCommand : ICommand<> {
+        std::string functionName;
+        std::any function;
+
+        std::string_view getName() const override { return "RegisterNativeScriptFunction"; }
     };
 
 }

@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <any>
+#include <functional>
 
 // Forward declarations
 struct ImGuiContext;
@@ -43,6 +45,12 @@ namespace plugin {
         // === Import Pipeline Extension ===
         // Only available when hasCapability("import") is true.
         virtual void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) = 0;
+
+        // === Script Native Function Registration ===
+        // Register a native function callable from mType scripts.
+        // The function signature must be: value::Value(const std::vector<value::Value>&)
+        // Wrap it in std::any before passing. Only available when hasCapability("scripting") is true.
+        virtual void registerScriptFunction(const std::string& name, std::any function) = 0;
 
         // === Capability Queries ===
         // Check if an engine capability is available. Examples: "editor", "audio", "physics", "import"

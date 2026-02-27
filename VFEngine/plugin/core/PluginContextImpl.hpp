@@ -30,6 +30,7 @@ namespace plugin {
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
+        void registerScriptFunction(const std::string& name, std::any function) override;
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;
         std::string getPluginDataPath() const override;

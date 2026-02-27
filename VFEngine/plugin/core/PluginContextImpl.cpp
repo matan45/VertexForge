@@ -1,5 +1,6 @@
 #include "PluginContextImpl.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/ScriptingEvents.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "Pipeline.hpp"
 #include "print/EditorLogger.hpp"
@@ -52,6 +53,21 @@ namespace plugin {
         // Import pipeline stage registration will be wired by PluginManager
         // For now, log that it was registered
         vfLogInfo("[Plugin:{}] Import stage registration requested (not yet wired)", pluginName);
+    }
+
+    void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
+    {
+        if (!hasCapability("scripting")) {
+            vfLogWarning("[Plugin:{}] Cannot register script function '{}' - scripting capability not available", pluginName, name);
+            return;
+        }
+
+        events::scripting::RegisterNativeScriptFunctionCommand cmd;
+        cmd.functionName = name;
+        cmd.function = std::move(function);
+        events::EventDispatcher::instance().execute(cmd);
+
+        vfLogInfo("[Plugin:{}] Registered native script function: {}", pluginName, name);
     }
 
     bool PluginContextImpl::hasCapability(const std::string& capability) const

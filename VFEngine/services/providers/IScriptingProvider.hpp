@@ -4,6 +4,8 @@
 #include <string>
 #include <optional>
 #include <vector>
+#include <functional>
+#include <any>
 
 namespace services {
     
@@ -53,6 +55,11 @@ namespace services {
 
         // === Script Library Path ===
         virtual void setScriptLibraryPath(const std::string& path) = 0;
+
+        // === Plugin Native Function Registration ===
+        // The function is type-erased as std::any wrapping a NativeFunction
+        // (std::function<value::Value(const std::vector<value::Value>&)>)
+        virtual void registerPluginNativeFunction(const std::string& name, std::any function) = 0;
     };
 
 }
