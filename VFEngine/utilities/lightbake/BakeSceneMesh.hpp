@@ -11,11 +11,28 @@ namespace lightbake
     // Progress callback: reports 0.0 to 1.0
     using BakeProgressCallback = std::function<void(float progress)>;
 
+    // Per-tile terrain bake info
+    struct TerrainTileBakeInfo
+    {
+        int32_t coordX = 0;
+        int32_t coordZ = 0;
+        glm::vec3 worldOrigin{0.0f};
+        float tileSize = 32.0f;
+        int firstVertexIndex = 0;  // Index into flat vertices array (vertex index, not float index)
+        int vertexCount = 0;
+        int firstTriangleIndex = 0; // Index into flat triangles array (triangle index, not int index)
+        int triangleCount = 0;
+    };
+
+    // Synthetic entity ID base for terrain tiles (high bit set to avoid collision with real entities)
+    constexpr uint32_t TERRAIN_ENTITY_BASE = 0x80000000u;
+
     // Flat terrain geometry data (world space), matching TerrainGeometryResult format
     struct TerrainBakeGeometry
     {
         std::vector<float> vertices;   // Flat: x,y,z,x,y,z,...
         std::vector<int> triangles;    // Index triplets
+        std::vector<TerrainTileBakeInfo> tileInfos; // Per-tile metadata for lightmap baking
     };
 
     // Per-tile water geometry params

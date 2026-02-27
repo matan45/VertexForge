@@ -1,4 +1,5 @@
 #include "LightmapAtlas.hpp"
+#include "BakeSceneMesh.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <spdlog/spdlog.h>
 #include <unordered_map>
@@ -35,7 +36,8 @@ namespace lightbake
         charts.reserve(chartMap.size());
         for (auto& [id, chart] : chartMap)
         {
-            uint32_t res = computeChartResolution(chart.surfaceArea, config);
+            bool isTerrain = (id >= TERRAIN_ENTITY_BASE);
+            uint32_t res = computeChartResolution(chart.surfaceArea, config, isTerrain);
             chart.width = res;
             chart.height = res;
             charts.push_back(std::move(chart));
@@ -152,10 +154,13 @@ namespace lightbake
         return true;
     }
 
-    uint32_t LightmapAtlas::computeChartResolution(float surfaceArea, const LightmapConfig& config) const
+    uint32_t LightmapAtlas::computeChartResolution(float surfaceArea, const LightmapConfig& config, bool isTerrain) const
     {
+        // Terrain tiles use 1/4 of the normal texels-per-unit to keep atlas manageable
+        float tpu = isTerrain ? (config.texelsPerUnit * 0.25f) : config.texelsPerUnit;
+
         // Resolution based on surface area: side = sqrt(area) * texelsPerUnit
-        float side = std::sqrt(surfaceArea) * config.texelsPerUnit;
+        float side = std::sqrt(surfaceArea) * tpu;
         uint32_t res = nextPowerOf2(static_cast<uint32_t>(std::ceil(side)));
         res = std::max(res, config.minResolution);
         res = std::min(res, config.maxResolution);

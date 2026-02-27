@@ -273,6 +273,70 @@ namespace lightbake
         }
 
         spdlog::info("[LightBake] Bake complete: {} texels processed", validTexelCount);
+
+        // Dilate lightmap: fill empty padding texels with nearest valid neighbor color.
+        // This prevents black seams when bilinear filtering samples across chart edges.
+        {
+            const uint32_t w = outLightmap.width;
+            const uint32_t h = outLightmap.height;
+            const uint32_t ch = outLightmap.channels;
+
+            // Build a mask of valid texels
+            std::vector<bool> valid(w * h, false);
+            for (uint32_t i = 0; i < w * h; ++i)
+            {
+                if (texelSamples[i].valid)
+                    valid[i] = true;
+            }
+
+            // Multi-pass dilation: each pass expands by 1 texel
+            const int dilationPasses = 4;
+            for (int pass = 0; pass < dilationPasses; ++pass)
+            {
+                std::vector<bool> newValid = valid;
+                for (uint32_t y = 0; y < h; ++y)
+                {
+                    for (uint32_t x = 0; x < w; ++x)
+                    {
+                        uint32_t idx = y * w + x;
+                        if (valid[idx]) continue;
+
+                        // Average valid neighbors
+                        glm::vec3 sum(0.0f);
+                        int count = 0;
+                        for (int dy = -1; dy <= 1; ++dy)
+                        {
+                            for (int dx = -1; dx <= 1; ++dx)
+                            {
+                                if (dx == 0 && dy == 0) continue;
+                                int nx = static_cast<int>(x) + dx;
+                                int ny = static_cast<int>(y) + dy;
+                                if (nx < 0 || ny < 0 || nx >= static_cast<int>(w) || ny >= static_cast<int>(h)) continue;
+                                uint32_t nIdx = ny * w + nx;
+                                if (valid[nIdx])
+                                {
+                                    sum.r += outLightmap.texels[nIdx * ch + 0];
+                                    sum.g += outLightmap.texels[nIdx * ch + 1];
+                                    sum.b += outLightmap.texels[nIdx * ch + 2];
+                                    count++;
+                                }
+                            }
+                        }
+
+                        if (count > 0)
+                        {
+                            float inv = 1.0f / static_cast<float>(count);
+                            outLightmap.texels[idx * ch + 0] = sum.r * inv;
+                            outLightmap.texels[idx * ch + 1] = sum.g * inv;
+                            outLightmap.texels[idx * ch + 2] = sum.b * inv;
+                            newValid[idx] = true;
+                        }
+                    }
+                }
+                valid = std::move(newValid);
+            }
+        }
+
         return true;
     }
 }

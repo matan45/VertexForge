@@ -522,6 +522,18 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
+    // Sample lightmap if available (baked irradiance)
+    vec3 lightmapContribution = vec3(0.0);
+    TerrainTileGPUData currentTile = tiles[fragTileIndex];
+    if (currentTile.lightmapData.x != 0xFFFFFFFFu) {
+        vec2 lmScale = unpackHalf2x16(currentTile.lightmapData.y);
+        vec2 lmOffset = unpackHalf2x16(currentTile.lightmapData.z);
+        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
+        uint lmIdx = currentTile.lightmapData.x;
+        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
+        lightmapContribution = lightmapIrradiance * albedo;
+    }
+
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -577,7 +589,7 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
-    vec3 color = ambient + directLighting;
+    vec3 color = ambient + directLighting + lightmapContribution;
 
     // Tone mapping
     color = color / (color + vec3(1.0));

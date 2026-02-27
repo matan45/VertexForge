@@ -220,6 +220,8 @@ namespace render::gpudriven
 
         pbrCache.clear();
         registeredMaterialPaths.clear();
+        lightmapTextureCache.clear();
+        registeredLightmapPaths.clear();
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();

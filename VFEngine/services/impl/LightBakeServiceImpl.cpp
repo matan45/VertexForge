@@ -61,6 +61,25 @@ namespace services
                 return loadLightmap(cmd.lightmapPath, cmd.texelsPerUnit);
             }
         );
+
+        dispatcher.registerQueryHandler<events::lightbake::GetTerrainLightmapDataQuery>(
+            [this](const events::lightbake::GetTerrainLightmapDataQuery&) -> std::vector<events::lightbake::TerrainTileLightmapEntry>
+            {
+                auto data = provider->getTerrainLightmapData();
+                std::vector<events::lightbake::TerrainTileLightmapEntry> result;
+                result.reserve(data.size());
+                for (const auto& info : data)
+                {
+                    events::lightbake::TerrainTileLightmapEntry entry;
+                    entry.coordX = info.coordX;
+                    entry.coordZ = info.coordZ;
+                    entry.scaleOffset = info.scaleOffset;
+                    entry.lightmapPath = info.lightmapPath;
+                    result.push_back(std::move(entry));
+                }
+                return result;
+            }
+        );
     }
 
     void LightBakeServiceImpl::startBake(const LightBakeConfig& config)

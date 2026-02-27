@@ -115,8 +115,9 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
+        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
     };
-    static_assert(sizeof(TerrainTileGPUData) == 208);
+    static_assert(sizeof(TerrainTileGPUData) == 224);
 
     // Per-layer texture indices for terrain material layers (16 bytes per layer)
     struct TerrainLayerGPUData

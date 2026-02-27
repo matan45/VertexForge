@@ -2,6 +2,8 @@
 #include "EventTypes.hpp"
 #include "../providers/ILightBakeProvider.hpp"
 #include <string>
+#include <vector>
+#include <glm/glm.hpp>
 
 namespace services::events::lightbake
 {
@@ -46,6 +48,20 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "GetBakeResult"; }
     };
 
+    // Terrain tile lightmap info from last bake
+    struct TerrainTileLightmapEntry
+    {
+        int32_t coordX = 0;
+        int32_t coordZ = 0;
+        glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
+        std::string lightmapPath;
+    };
+
+    struct GetTerrainLightmapDataQuery : ::events::IQuery<std::vector<TerrainTileLightmapEntry>>
+    {
+        std::string_view getName() const override { return "GetTerrainLightmapData"; }
+    };
+
     // ============================================================
     // NOTIFICATIONS
     // ============================================================
@@ -60,5 +76,11 @@ namespace services::events::lightbake
     {
         std::string errorMessage;
         std::string_view getName() const override { return "BakeFailed"; }
+    };
+
+    struct LightmapLoadedNotification : ::events::INotification
+    {
+        std::string lightmapPath;
+        std::string_view getName() const override { return "LightmapLoaded"; }
     };
 }

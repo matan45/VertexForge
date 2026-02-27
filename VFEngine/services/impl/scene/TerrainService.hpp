@@ -106,6 +106,7 @@ namespace services
         void releaseTileRAMData(terrain::TerrainTile& tile);
 
         ::events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh();
+        ::events::terrain::TerrainBakeGeometryResult getTerrainBakeGeometry();
         ::events::terrain::TerrainHeightfieldResult getTerrainHeightfield();
 
     private:

@@ -170,4 +170,29 @@ namespace events::terrain
     struct GetTerrainGeometryQuery : IQuery<TerrainGeometryResult> {
         std::string_view getName() const override { return "GetTerrainGeometry"; }
     };
+
+    // Per-tile geometry info for lightmap baking
+    struct TerrainTileGeometryInfo
+    {
+        int32_t coordX = 0;
+        int32_t coordZ = 0;
+        glm::vec3 worldOrigin{0.0f};
+        float tileSize = 32.0f;
+        int firstVertexIndex = 0;  // Vertex index (not float index)
+        int vertexCount = 0;
+        int firstTriangleIndex = 0; // Triangle index (not int index)
+        int triangleCount = 0;
+    };
+
+    // Returns combined LOD 0 terrain geometry with per-tile metadata for lightmap baking
+    struct TerrainBakeGeometryResult
+    {
+        std::vector<float> vertices;   // Flat: x,y,z,x,y,z,...
+        std::vector<int> triangles;    // Index triplets
+        std::vector<TerrainTileGeometryInfo> tileInfos;
+    };
+
+    struct GetTerrainBakeGeometryQuery : IQuery<TerrainBakeGeometryResult> {
+        std::string_view getName() const override { return "GetTerrainBakeGeometry"; }
+    };
 }

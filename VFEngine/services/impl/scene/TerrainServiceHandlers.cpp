@@ -88,6 +88,12 @@ namespace services
                 return getTerrainGeometryForNavmesh();
             });
 
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>(
+            [this](const events::terrain::GetTerrainBakeGeometryQuery&)
+            {
+                return getTerrainBakeGeometry();
+            });
+
         dispatcher.registerQueryHandler<events::terrain::GetTerrainHeightfieldQuery>(
             [this](const events::terrain::GetTerrainHeightfieldQuery&)
             {

@@ -81,7 +81,7 @@ namespace lightbake
         };
 
         // Compute required resolution for an entity based on its surface area
-        uint32_t computeChartResolution(float surfaceArea, const LightmapConfig& config) const;
+        uint32_t computeChartResolution(float surfaceArea, const LightmapConfig& config, bool isTerrain = false) const;
 
         // Round up to next power of 2
         static uint32_t nextPowerOf2(uint32_t v);

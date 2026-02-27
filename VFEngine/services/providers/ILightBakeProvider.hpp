@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <vector>
+#include <glm/glm.hpp>
 
 namespace lightbake
 {
@@ -26,6 +28,14 @@ namespace services
         std::string outputPath;  // Where to save the .vfLightmap
     };
 
+    struct TerrainLightmapTileInfo
+    {
+        int32_t coordX = 0;
+        int32_t coordZ = 0;
+        glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
+        std::string lightmapPath;
+    };
+
     class ILightBakeProvider
     {
     public:
@@ -37,5 +47,6 @@ namespace services
         virtual bool isBaking() const = 0;
         virtual LightBakeResult getResult() const = 0;
         virtual bool loadLightmap(const std::string& path, float texelsPerUnit) = 0;
+        virtual std::vector<TerrainLightmapTileInfo> getTerrainLightmapData() const = 0;
     };
 }

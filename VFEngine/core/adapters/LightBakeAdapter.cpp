@@ -142,20 +142,52 @@ namespace core
         return lights;
     }
 
-    lightbake::TerrainBakeGeometry LightBakeAdapter::collectTerrainGeometry() const
+    lightbake::TerrainBakeGeometry LightBakeAdapter::collectTerrainGeometry()
     {
         lightbake::TerrainBakeGeometry result;
 
         auto& dispatcher = ::events::EventDispatcher::instance();
-        ::events::terrain::GetTerrainGeometryQuery query;
+        ::events::terrain::GetTerrainBakeGeometryQuery query;
         auto terrainResult = dispatcher.query(query);
+
+        spdlog::info("[LightBake] collectTerrainGeometry: query returned {} vertices, {} triangles, {} tileInfos",
+                     terrainResult.vertices.size(), terrainResult.triangles.size(), terrainResult.tileInfos.size());
 
         if (!terrainResult.vertices.empty())
         {
             result.vertices = std::move(terrainResult.vertices);
             result.triangles = std::move(terrainResult.triangles);
-            spdlog::info("[LightBake] Collected terrain geometry: {} vertices, {} triangles",
-                         result.vertices.size() / 3, result.triangles.size() / 3);
+
+            // Convert per-tile info for lightmap baking
+            for (const auto& tileInfo : terrainResult.tileInfos)
+            {
+                lightbake::TerrainTileBakeInfo bakeInfo;
+                bakeInfo.coordX = tileInfo.coordX;
+                bakeInfo.coordZ = tileInfo.coordZ;
+                bakeInfo.worldOrigin = tileInfo.worldOrigin;
+                bakeInfo.tileSize = tileInfo.tileSize;
+                bakeInfo.firstVertexIndex = tileInfo.firstVertexIndex;
+                bakeInfo.vertexCount = tileInfo.vertexCount;
+                bakeInfo.firstTriangleIndex = tileInfo.firstTriangleIndex;
+                bakeInfo.triangleCount = tileInfo.triangleCount;
+                result.tileInfos.push_back(bakeInfo);
+                spdlog::info("[LightBake]   tile ({},{}) origin=({},{},{}), size={}, firstTri={}, triCount={}",
+                             bakeInfo.coordX, bakeInfo.coordZ,
+                             bakeInfo.worldOrigin.x, bakeInfo.worldOrigin.y, bakeInfo.worldOrigin.z,
+                             bakeInfo.tileSize,
+                             bakeInfo.firstTriangleIndex, bakeInfo.triangleCount);
+            }
+
+            // Store for reverse mapping in assignLightmapComponents
+            lastTerrainTileInfos_ = result.tileInfos;
+
+            spdlog::info("[LightBake] Collected terrain geometry: {} vertices, {} triangles, {} tiles",
+                         result.vertices.size() / 3, result.triangles.size() / 3, result.tileInfos.size());
+        }
+        else
+        {
+            spdlog::warn("[LightBake] collectTerrainGeometry: NO terrain vertices returned!");
+            lastTerrainTileInfos_.clear();
         }
 
         return result;
@@ -207,9 +239,31 @@ namespace core
         const std::string& outputPath, float texelsPerUnit)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
+        terrainLightmapInfos_.clear();
+
+        uint32_t entityCount = 0;
+        uint32_t terrainTileCount = 0;
 
         for (const auto& region : lightmapData.entityRegions)
         {
+            // Check if this is a terrain tile (synthetic entityId)
+            if (region.entityId >= lightbake::TERRAIN_ENTITY_BASE)
+            {
+                uint32_t tileIndex = region.entityId - lightbake::TERRAIN_ENTITY_BASE;
+                if (tileIndex < static_cast<uint32_t>(lastTerrainTileInfos_.size()))
+                {
+                    const auto& tileInfo = lastTerrainTileInfos_[tileIndex];
+                    services::TerrainLightmapTileInfo info;
+                    info.coordX = tileInfo.coordX;
+                    info.coordZ = tileInfo.coordZ;
+                    info.scaleOffset = region.scaleOffset;
+                    info.lightmapPath = outputPath;
+                    terrainLightmapInfos_.push_back(info);
+                    terrainTileCount++;
+                }
+                continue;
+            }
+
             auto entity = static_cast<entt::entity>(region.entityId);
             if (!registry.valid(entity))
             {
@@ -220,10 +274,16 @@ namespace core
             lm.lightmapPath = outputPath;
             lm.texelsPerUnit = texelsPerUnit;
             lm.atlasScaleOffset = region.scaleOffset;
+            entityCount++;
         }
 
-        spdlog::info("[LightBake] Assigned LightmapComponent to {} entities",
-                     lightmapData.entityRegions.size());
+        spdlog::info("[LightBake] Assigned LightmapComponent to {} entities, {} terrain tiles",
+                     entityCount, terrainTileCount);
+    }
+
+    std::vector<services::TerrainLightmapTileInfo> LightBakeAdapter::getTerrainLightmapData() const
+    {
+        return terrainLightmapInfos_;
     }
 
     void LightBakeAdapter::runBake(const services::LightBakeConfig& config)
@@ -373,10 +433,33 @@ namespace core
             return false;
         }
 
+        // Collect current terrain tile infos so assignLightmapComponents can
+        // map synthetic entityIds back to tile coordinates
+        bool hasTerrainRegions = false;
+        for (const auto& region : lightmapData.entityRegions)
+        {
+            if (region.entityId >= lightbake::TERRAIN_ENTITY_BASE)
+            {
+                hasTerrainRegions = true;
+                break;
+            }
+        }
+        if (hasTerrainRegions && lastTerrainTileInfos_.empty())
+        {
+            collectTerrainGeometry();
+        }
+
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
 
         spdlog::info("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
                      path, lightmapData.width, lightmapData.height, lightmapData.entityRegions.size());
+
+        // Notify that lightmap data has been loaded (triggers terrain lightmap update)
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        services::events::lightbake::LightmapLoadedNotification notif;
+        notif.lightmapPath = path;
+        dispatcher.publish(notif);
+
         return true;
     }
 }

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <future>
 #include <mutex>
+#include <unordered_map>
 
 namespace core
 {
@@ -22,6 +23,7 @@ namespace core
         bool isBaking() const override;
         services::LightBakeResult getResult() const override;
         bool loadLightmap(const std::string& path, float texelsPerUnit) override;
+        std::vector<services::TerrainLightmapTileInfo> getTerrainLightmapData() const override;
 
     private:
         std::atomic<bool> baking_{false};
@@ -32,11 +34,17 @@ namespace core
 
         lightbake::LightBaker baker_;
 
+        // Terrain lightmap data from last bake
+        std::vector<services::TerrainLightmapTileInfo> terrainLightmapInfos_;
+
+        // Tile bake info from last terrain geometry collection (used to map synthetic entityIds back to coords)
+        std::vector<lightbake::TerrainTileBakeInfo> lastTerrainTileInfos_;
+
         // Collect lights from the ECS for baking
         lightbake::BakeLightSet collectLightsFromScene() const;
 
         // Collect terrain/water geometry for BVH
-        lightbake::TerrainBakeGeometry collectTerrainGeometry() const;
+        lightbake::TerrainBakeGeometry collectTerrainGeometry();
         std::vector<lightbake::WaterBakeTile> collectWaterTiles() const;
 
         // Assign LightmapComponent to baked entities

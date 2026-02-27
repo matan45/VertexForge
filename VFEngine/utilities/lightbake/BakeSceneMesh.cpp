@@ -160,7 +160,29 @@ namespace lightbake
 
         size_t vertCount = terrain.vertices.size() / 3;
         size_t triCount = terrain.triangles.size() / 3;
-        spdlog::info("[LightBake] Adding {} terrain triangles ({} vertices)", triCount, vertCount);
+        spdlog::info("[LightBake] Adding {} terrain triangles ({} vertices, {} tiles)",
+                     triCount, vertCount, terrain.tileInfos.size());
+
+        // Build a lookup: for each triangle index, find which tile it belongs to
+        // This maps triangle index → tile info index
+        auto findTileForTriangle = [&](size_t triIdx) -> const TerrainTileBakeInfo* {
+            for (const auto& tile : terrain.tileInfos)
+            {
+                if (static_cast<int>(triIdx) >= tile.firstTriangleIndex &&
+                    static_cast<int>(triIdx) < tile.firstTriangleIndex + tile.triangleCount)
+                {
+                    return &tile;
+                }
+            }
+            return nullptr;
+        };
+
+        // Helper to compute tile-local UV from world position
+        auto computeTileUV = [](const glm::vec3& worldPos, const TerrainTileBakeInfo& tile) -> glm::vec2 {
+            float u = (worldPos.x - tile.worldOrigin.x) / tile.tileSize;
+            float v = (worldPos.z - tile.worldOrigin.z) / tile.tileSize;
+            return glm::vec2(glm::clamp(u, 0.0f, 1.0f), glm::clamp(v, 0.0f, 1.0f));
+        };
 
         for (size_t i = 0; i + 2 < terrain.triangles.size(); i += 3)
         {
@@ -185,9 +207,27 @@ namespace lightbake
             glm::vec3 faceNormal = glm::normalize(glm::cross(tri.v1 - tri.v0, tri.v2 - tri.v0));
             tri.n0 = tri.n1 = tri.n2 = faceNormal;
 
-            tri.uv0 = tri.uv1 = tri.uv2 = glm::vec2(0.0f);
-            tri.entityId = 0;
-            tri.submeshIdx = 0;
+            size_t triIdx = i / 3;
+            const auto* tileInfo = findTileForTriangle(triIdx);
+            if (tileInfo)
+            {
+                // Assign synthetic entity ID for this terrain tile
+                tri.entityId = TERRAIN_ENTITY_BASE + static_cast<uint32_t>(
+                    &(*tileInfo) - terrain.tileInfos.data());
+                tri.submeshIdx = 0;
+
+                // Compute tile-local UVs [0,1] for lightmap mapping
+                tri.uv0 = computeTileUV(tri.v0, *tileInfo);
+                tri.uv1 = computeTileUV(tri.v1, *tileInfo);
+                tri.uv2 = computeTileUV(tri.v2, *tileInfo);
+            }
+            else
+            {
+                // Fallback: shadow-only geometry (no lightmap)
+                tri.uv0 = tri.uv1 = tri.uv2 = glm::vec2(0.0f);
+                tri.entityId = 0;
+                tri.submeshIdx = 0;
+            }
 
             if (tri.computeArea() < 1e-8f)
             {
@@ -196,6 +236,7 @@ namespace lightbake
 
             triangles.push_back(tri);
         }
+
     }
 
     void BakeSceneMesh::addWaterTriangles(const std::vector<WaterBakeTile>& waterTiles,

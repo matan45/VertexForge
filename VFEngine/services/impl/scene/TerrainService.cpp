@@ -326,6 +326,89 @@ namespace services
         return result;
     }
 
+    events::terrain::TerrainBakeGeometryResult TerrainService::getTerrainBakeGeometry()
+    {
+        events::terrain::TerrainBakeGeometryResult result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            auto& generator = grid->getGenerator();
+            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+                return grid->getTile(coord);
+            };
+
+            // Try to use file cache to restore evicted height/LOD data
+            terrain::TerrainFileCache* cache = nullptr;
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt != fileCaches.end() && cacheIt->second)
+            {
+                cache = cacheIt->second.get();
+            }
+
+            auto allTiles = grid->getAllTiles();
+            for (auto* tile : allTiles)
+            {
+                if (!tile) { continue; }
+
+                // If height data was evicted by streaming, try to reload it
+                if (!tile->hasHeightData())
+                {
+                    if (cache)
+                    {
+                        cache->ensureHeightsLoaded(*tile);
+                    }
+
+                    // If still no height data (no cache or flat terrain never saved),
+                    // populate as flat at height 0
+                    if (!tile->hasHeightData())
+                    {
+                        uint32_t vc = tile->config.getVertexCount();
+                        tile->heightData.resize(static_cast<size_t>(vc) * vc, 0.0f);
+                    }
+                }
+
+                if (!tile->hasLODData(0))
+                {
+                    generator.regenerateLOD(*tile, 0, getTile);
+                }
+
+                const auto& lod0 = tile->lodLevels[0];
+
+                events::terrain::TerrainTileGeometryInfo tileInfo;
+                tileInfo.coordX = tile->coord.x;
+                tileInfo.coordZ = tile->coord.z;
+                tileInfo.worldOrigin = glm::vec3(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z);
+                tileInfo.tileSize = tile->config.worldTileSize;
+                tileInfo.firstVertexIndex = static_cast<int>(result.vertices.size() / 3);
+                tileInfo.vertexCount = static_cast<int>(lod0.vertices.size());
+
+                const glm::vec3 origin(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z);
+                for (const auto& vertex : lod0.vertices)
+                {
+                    glm::vec3 worldPos = origin + vertex.position;
+                    result.vertices.push_back(worldPos.x);
+                    result.vertices.push_back(worldPos.y);
+                    result.vertices.push_back(worldPos.z);
+                }
+
+                tileInfo.firstTriangleIndex = static_cast<int>(result.triangles.size() / 3);
+                tileInfo.triangleCount = static_cast<int>(lod0.indices.size() / 3);
+
+                int baseVertex = tileInfo.firstVertexIndex;
+                for (size_t i = 0; i < lod0.indices.size(); i += 3)
+                {
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i]));
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i + 1]));
+                    result.triangles.push_back(baseVertex + static_cast<int>(lod0.indices[i + 2]));
+                }
+
+                result.tileInfos.push_back(tileInfo);
+            }
+        }
+
+        return result;
+    }
+
     events::terrain::TerrainHeightfieldResult TerrainService::getTerrainHeightfield()
     {
         events::terrain::TerrainHeightfieldResult result;

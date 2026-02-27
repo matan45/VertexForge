@@ -65,23 +65,15 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
+
+            bool isStaticLight = false;
             if (auto* transform = registry.try_get<components::TransformComponent>(entity))
             {
-                if (transform->isStatic) continue;
+                isStaticLight = transform->isStatic;
             }
 
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-            GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
-            gpuLight.direction = direction;
-            gpuLight.intensity = light.intensity;
-            gpuLight.color = light.color;
-
+            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;
-
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
@@ -106,7 +98,23 @@ namespace render::lighting
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
+            }
 
+            // Static lights contribute shadows only, not Forward+ direct lighting
+            if (isStaticLight) continue;
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+            GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
+            gpuLight.direction = direction;
+            gpuLight.intensity = light.intensity;
+            gpuLight.color = light.color;
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
 
@@ -153,24 +161,15 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::PointLightComponent>(entity);
+
+            bool isStaticLight = false;
             if (auto* transform = registry.try_get<components::TransformComponent>(entity))
             {
-                if (transform->isStatic) continue;
+                isStaticLight = transform->isStatic;
             }
 
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-
-            GPUPointLight& gpuLight = cpuPointLights[pointCount];
-            gpuLight.position = position;
-            gpuLight.radius = light.radius;
-            gpuLight.color = light.color;
-            gpuLight.intensity = light.intensity;
-
+            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;
-
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
@@ -195,7 +194,24 @@ namespace render::lighting
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
+            }
 
+            // Static lights contribute shadows only, not Forward+ direct lighting
+            if (isStaticLight) continue;
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
+
+            GPUPointLight& gpuLight = cpuPointLights[pointCount];
+            gpuLight.position = position;
+            gpuLight.radius = light.radius;
+            gpuLight.color = light.color;
+            gpuLight.intensity = light.intensity;
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
@@ -245,28 +261,15 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::SpotLightComponent>(entity);
+
+            bool isStaticLight = false;
             if (auto* transform = registry.try_get<components::TransformComponent>(entity))
             {
-                if (transform->isStatic) continue;
+                isStaticLight = transform->isStatic;
             }
 
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-            GPUSpotLight& gpuLight = cpuSpotLights[spotCount];
-            gpuLight.position = position;
-            gpuLight.range = light.range;
-            gpuLight.direction = direction;
-            gpuLight.intensity = light.intensity;
-            gpuLight.color = light.color;
-            gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
-            gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
-
+            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;
-
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
@@ -291,7 +294,28 @@ namespace render::lighting
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
+            }
 
+            // Static lights contribute shadows only, not Forward+ direct lighting
+            if (isStaticLight) continue;
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
+            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+            GPUSpotLight& gpuLight = cpuSpotLights[spotCount];
+            gpuLight.position = position;
+            gpuLight.range = light.range;
+            gpuLight.direction = direction;
+            gpuLight.intensity = light.intensity;
+            gpuLight.color = light.color;
+            gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
+            gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
