@@ -38,6 +38,10 @@ namespace core
         lightbake::TerrainBakeGeometry collectTerrainGeometry() const;
         std::vector<lightbake::WaterBakeTile> collectWaterTiles() const;
 
+        // Assign LightmapComponent to baked entities
+        void assignLightmapComponents(const resource::LightmapData& lightmapData,
+                                       const std::string& outputPath, float texelsPerUnit);
+
         // Run the full bake pipeline on a background thread
         void runBake(const services::LightBakeConfig& config);
     };

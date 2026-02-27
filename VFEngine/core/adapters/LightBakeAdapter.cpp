@@ -202,6 +202,30 @@ namespace core
         return result;
     }
 
+    void LightBakeAdapter::assignLightmapComponents(
+        const resource::LightmapData& lightmapData,
+        const std::string& outputPath, float texelsPerUnit)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& region : lightmapData.entityRegions)
+        {
+            auto entity = static_cast<entt::entity>(region.entityId);
+            if (!registry.valid(entity))
+            {
+                continue;
+            }
+
+            auto& lm = registry.emplace_or_replace<components::LightmapComponent>(entity);
+            lm.lightmapPath = outputPath;
+            lm.texelsPerUnit = texelsPerUnit;
+            lm.atlasScaleOffset = region.scaleOffset;
+        }
+
+        spdlog::info("[LightBake] Assigned LightmapComponent to {} entities",
+                     lightmapData.entityRegions.size());
+    }
+
     void LightBakeAdapter::runBake(const services::LightBakeConfig& config)
     {
         auto startTime = std::chrono::high_resolution_clock::now();
