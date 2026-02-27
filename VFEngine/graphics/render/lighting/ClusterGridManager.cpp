@@ -387,7 +387,7 @@ namespace render::lighting
         cpuParams.gridDimensions = glm::uvec4(config.tilesX, config.tilesY,
                                                config.slicesZ, config.getTotalClusters());
         cpuParams.screenParams = glm::vec4(screenWidth, screenHeight, tileSizeX, tileSizeY);
-        cpuParams.depthParams = glm::vec4(zNear, zFar, logFarNear, 1.0f / logFarNear);
+        cpuParams.depthParams = glm::vec4(zNear, zFar, logFarNear, static_cast<float>(config.slicesZ) / logFarNear);
         cpuParams.invProjection = cachedCameraParams.invProjection;
 
         // Scale and bias for computing cluster index from screen position and depth

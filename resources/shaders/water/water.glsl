@@ -390,6 +390,7 @@ void main() {
 
     // Water PBR params for direct lighting
     float metallic = 0.0;
+    float directRoughness = 0.3; // Higher roughness for direct lights to spread sun specular
     vec3 albedo = waterColor;
 
     // --- Forward+ Direct Lighting ---
@@ -415,7 +416,7 @@ void main() {
             minShadow = min(minShadow, shadow);
 
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo,
-                                                 metallic, roughness, F0, light) * shadow;
+                                                 metallic, directRoughness, F0, light) * shadow;
         }
 
         for (uint i = 0u; i < clusterSpotCount; ++i) {
@@ -427,7 +428,7 @@ void main() {
             minShadow = min(minShadow, shadow);
 
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo,
-                                                metallic, roughness, F0, light) * shadow;
+                                                metallic, directRoughness, F0, light) * shadow;
         }
     }
 
@@ -441,7 +442,7 @@ void main() {
         }
         minShadow = min(minShadow, shadow);
 
-        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
+        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, directRoughness, F0, light);
         directLighting += lightContrib * shadow;
     }
 

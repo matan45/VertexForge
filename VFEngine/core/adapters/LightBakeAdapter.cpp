@@ -8,7 +8,7 @@
 #include "../../services/events/TerrainEvents.hpp"
 #include "../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../utilities/components/WaterComponents.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 #include <chrono>
 #include <cmath>
 
@@ -22,7 +22,7 @@ namespace core
             {
                 if (notif.success && !lastLightmapPath_.empty())
                 {
-                    spdlog::info("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath_);
+                    loggerInfo("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath_);
                     loadLightmap(lastLightmapPath_, lastTexelsPerUnit_);
                 }
             });
@@ -46,7 +46,7 @@ namespace core
     {
         if (baking_.load())
         {
-            spdlog::warn("[LightBake] Bake already in progress");
+            loggerWarning("[LightBake] Bake already in progress");
             return;
         }
 
@@ -167,7 +167,7 @@ namespace core
         ::events::terrain::GetTerrainBakeGeometryQuery query;
         auto terrainResult = dispatcher.query(query);
 
-        spdlog::info("[LightBake] collectTerrainGeometry: query returned {} vertices, {} triangles, {} tileInfos",
+        loggerInfo("[LightBake] collectTerrainGeometry: query returned {} vertices, {} triangles, {} tileInfos",
                      terrainResult.vertices.size(), terrainResult.triangles.size(), terrainResult.tileInfos.size());
 
         if (!terrainResult.vertices.empty())
@@ -188,7 +188,7 @@ namespace core
                 bakeInfo.firstTriangleIndex = tileInfo.firstTriangleIndex;
                 bakeInfo.triangleCount = tileInfo.triangleCount;
                 result.tileInfos.push_back(bakeInfo);
-                spdlog::info("[LightBake]   tile ({},{}) origin=({},{},{}), size={}, firstTri={}, triCount={}",
+                loggerInfo("[LightBake]   tile ({},{}) origin=({},{},{}), size={}, firstTri={}, triCount={}",
                              bakeInfo.coordX, bakeInfo.coordZ,
                              bakeInfo.worldOrigin.x, bakeInfo.worldOrigin.y, bakeInfo.worldOrigin.z,
                              bakeInfo.tileSize,
@@ -198,12 +198,12 @@ namespace core
             // Store for reverse mapping in assignLightmapComponents
             lastTerrainTileInfos_ = result.tileInfos;
 
-            spdlog::info("[LightBake] Collected terrain geometry: {} vertices, {} triangles, {} tiles",
+            loggerInfo("[LightBake] Collected terrain geometry: {} vertices, {} triangles, {} tiles",
                          result.vertices.size() / 3, result.triangles.size() / 3, result.tileInfos.size());
         }
         else
         {
-            spdlog::warn("[LightBake] collectTerrainGeometry: NO terrain vertices returned!");
+            loggerWarning("[LightBake] collectTerrainGeometry: NO terrain vertices returned!");
             lastTerrainTileInfos_.clear();
         }
 
@@ -245,7 +245,7 @@ namespace core
 
         if (!result.empty())
         {
-            spdlog::info("[LightBake] Collected {} water tiles", result.size());
+            loggerInfo("[LightBake] Collected {} water tiles", result.size());
         }
 
         return result;
@@ -294,7 +294,7 @@ namespace core
             entityCount++;
         }
 
-        spdlog::info("[LightBake] Assigned LightmapComponent to {} entities, {} terrain tiles",
+        loggerInfo("[LightBake] Assigned LightmapComponent to {} entities, {} terrain tiles",
                      entityCount, terrainTileCount);
     }
 
@@ -311,7 +311,7 @@ namespace core
         services::LightBakeResult result;
 
         // Step 1: Build scene mesh BVH (0% - 20%)
-        spdlog::info("[LightBake] Step 1/4: Building scene mesh BVH...");
+        loggerInfo("[LightBake] Step 1/4: Building scene mesh BVH...");
 
         auto terrainGeometry = collectTerrainGeometry();
         auto waterTiles = collectWaterTiles();
@@ -336,7 +336,7 @@ namespace core
         }
 
         // Step 2: Generate lightmap atlas (20% - 30%)
-        spdlog::info("[LightBake] Step 2/4: Generating lightmap UV atlas...");
+        loggerInfo("[LightBake] Step 2/4: Generating lightmap UV atlas...");
         progress_.store(0.2f);
 
         lightbake::LightmapConfig lmConfig;
@@ -356,7 +356,7 @@ namespace core
         progress_.store(0.3f);
 
         // Step 3: Collect lights (30%)
-        spdlog::info("[LightBake] Step 3/4: Collecting lights...");
+        loggerInfo("[LightBake] Step 3/4: Collecting lights...");
         auto lights = collectLightsFromScene();
         if (lights.empty())
         {
@@ -372,7 +372,7 @@ namespace core
             lights.directionalLights.size() + lights.pointLights.size() + lights.spotLights.size());
 
         // Step 4: Run baker (30% - 95%)
-        spdlog::info("[LightBake] Step 4/4: Baking irradiance...");
+        loggerInfo("[LightBake] Step 4/4: Baking irradiance...");
         auto& lightmapData = atlas.getLightmapData();
 
         bool bakeSuccess = baker_.bake(sceneMesh, atlas, lights, lightmapData,
@@ -440,7 +440,7 @@ namespace core
         notif.result = result;
         dispatcher.publish(notif);
 
-        spdlog::info("[LightBake] Bake complete: {}x{} atlas, {} lights, {:.2f}s",
+        loggerInfo("[LightBake] Bake complete: {}x{} atlas, {} lights, {:.2f}s",
                      result.atlasWidth, result.atlasHeight, result.bakedLightCount, result.bakeTimeSeconds);
     }
 
@@ -463,7 +463,7 @@ namespace core
             lastResult_ = {};
         }
 
-        spdlog::info("[LightBake] Lightmap cleared");
+        loggerInfo("[LightBake] Lightmap cleared");
 
         // Notify renderer to update
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -477,7 +477,7 @@ namespace core
 
         if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
         {
-            spdlog::warn("[LightBake] Failed to load lightmap from: {}", path);
+            loggerWarning("[LightBake] Failed to load lightmap from: {}", path);
             return false;
         }
 
@@ -503,7 +503,7 @@ namespace core
         lastLightmapPath_ = path;
         lastTexelsPerUnit_ = texelsPerUnit;
 
-        spdlog::info("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
+        loggerInfo("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
                      path, lightmapData.width, lightmapData.height, lightmapData.entityRegions.size());
 
         // Notify that lightmap data has been loaded (triggers terrain lightmap update)
