@@ -23,6 +23,7 @@ namespace services
     class IPostProcessProvider;
     class IWaterRenderProvider;
     class IRenderTextureProvider;
+    class ILightBakeProvider;
 }
 
 namespace window
@@ -62,6 +63,7 @@ namespace core
     class PostProcessAdapter;
     class WaterRenderAdapter;
     class RenderTextureAdapter;
+    class LightBakeAdapter;
 
     class EditorBootstrap
     {
@@ -88,6 +90,7 @@ namespace core
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
+        std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -139,6 +142,8 @@ namespace core
         services::IPostProcessProvider* getPostProcessProvider();
 
         services::IRenderTextureProvider* getRenderTextureProvider();
+
+        services::ILightBakeProvider* getLightBakeProvider();
 
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();

@@ -27,6 +27,7 @@
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
+#include "impl/LightBakeServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -141,6 +142,7 @@ namespace handlers
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
+        lightBakeService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -216,6 +218,10 @@ namespace handlers
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
             renderTexturePlayModeHandler->subscribeToEvents();
         }
+
+        lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
+            bootstrap->getLightBakeProvider()
+        );
     }
 
     void EditorHandler::createMediaServices()
@@ -329,6 +335,7 @@ namespace handlers
         paintBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
+        lightBakeService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

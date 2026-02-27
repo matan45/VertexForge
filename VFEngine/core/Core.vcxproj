@@ -103,6 +103,7 @@
     <ClInclude Include="adapters\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\AudioAdapter.hpp" />
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
+    <ClInclude Include="adapters\LightBakeAdapter.hpp" />
     <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
@@ -181,6 +182,7 @@
     <ClCompile Include="adapters\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\AudioAdapter.cpp" />
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\LightBakeAdapter.cpp" />
     <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />

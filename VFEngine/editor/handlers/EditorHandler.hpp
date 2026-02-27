@@ -25,6 +25,7 @@
 #include "interfaces/ITerrainRaycastService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
 #include "interfaces/IRenderTextureService.hpp"
+#include "interfaces/ILightBakeService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -78,6 +79,7 @@ namespace handlers {
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
+		std::shared_ptr<services::ILightBakeService> lightBakeService;
 
 		events::SubscriptionToken resizeSubscription;
 

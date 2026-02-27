@@ -210,6 +210,9 @@ namespace windows
         case PhysAnim:
             icon = AtlasIcon::PhysAnim;
             break;
+        case Lightmap:
+            icon = AtlasIcon::Texture;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

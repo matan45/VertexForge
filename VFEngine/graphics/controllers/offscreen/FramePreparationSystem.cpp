@@ -14,6 +14,7 @@
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 
@@ -148,6 +149,13 @@ namespace controllers::offscreen
                                              ? meshComp.showBoundingBox
                                              : false;
             renderData.maxDrawDistance = meshComp.maxDrawDistance;
+
+            if (registry.all_of<components::LightmapComponent>(entity))
+            {
+                const auto& lmComp = registry.get<components::LightmapComponent>(entity);
+                renderData.lightmapScaleOffset = lmComp.atlasScaleOffset;
+                // lightmapTextureIndex is resolved by the bindless texture system when the lightmap is loaded
+            }
 
             if (registry.all_of<components::MaterialComponent>(entity))
             {

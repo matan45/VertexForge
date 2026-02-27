@@ -1,7 +1,7 @@
 #ifndef GPU_TYPES_GLSL
 #define GPU_TYPES_GLSL
 
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
+// Must match PerDrawData in GPUDrivenTypes.hpp (256 bytes)
 struct PerDrawData {
     mat4 modelMatrix;
     mat4 normalMatrix;
@@ -26,6 +26,8 @@ struct PerDrawData {
     uint boneMatrixOffset;
     uint boneCount;
     uint blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
+
+    uvec4 lightmapData; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
 };
 
 // Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
@@ -43,7 +45,7 @@ void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCo
     primitiveCount = (packed >> 8) & 0xFFu;
 }
 
-// Must match GPUObjectData in GPUDrivenTypes.hpp (336 bytes)
+// Must match GPUObjectData in GPUDrivenTypes.hpp (352 bytes)
 struct GPUObjectData {
     mat4 modelMatrix;
 
@@ -73,6 +75,8 @@ struct GPUObjectData {
     uvec4 meshletLod1;
     uvec4 meshletLod2;
     uvec4 meshletLod3;
+
+    uvec4 lightmapData; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
 };
 
 // Must match BatchDrawStats in GPUDrivenTypes.hpp (32 bytes)

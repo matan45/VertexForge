@@ -129,6 +129,8 @@
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportModalDialog.hpp" />
     <ClInclude Include="windows\ImportProgressWindow.hpp" />
+    <ClInclude Include="windows\LightBakeWindow.hpp" />
+    <ClInclude Include="windows\LightmapPreviewWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MainMenuBar.hpp" />
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
@@ -241,6 +243,8 @@
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportModalDialog.cpp" />
     <ClCompile Include="windows\ImportProgressWindow.cpp" />
+    <ClCompile Include="windows\LightBakeWindow.cpp" />
+    <ClCompile Include="windows\LightmapPreviewWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MainMenuBar.cpp" />
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />

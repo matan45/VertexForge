@@ -20,6 +20,7 @@
 #include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../adapters/RenderTextureAdapter.hpp"
+#include "../adapters/LightBakeAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -57,6 +58,7 @@ namespace core
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
+        lightBakeAdapter = std::make_unique<LightBakeAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -134,6 +136,7 @@ namespace core
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
         renderTextureAdapter.reset();
+        lightBakeAdapter.reset();
         waterRenderAdapter.reset();
 
         if (coreInterface)
@@ -225,6 +228,11 @@ namespace core
     services::IRenderTextureProvider* EditorBootstrap::getRenderTextureProvider()
     {
         return renderTextureAdapter.get();
+    }
+
+    services::ILightBakeProvider* EditorBootstrap::getLightBakeProvider()
+    {
+        return lightBakeAdapter.get();
     }
 
     WaterRenderAdapter* EditorBootstrap::getWaterRenderAdapterInternal()

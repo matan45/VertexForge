@@ -3,6 +3,7 @@
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 #include <material/MaterialInstanceTypes.hpp>
+#include <glm/gtc/packing.hpp>
 #include <cmath>
 
 namespace render::gpudriven
@@ -235,6 +236,21 @@ namespace render::gpudriven
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
         obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
                                    ? shaderGroupResolver(materialPath) : 0;
+
+        // Lightmap data
+        if (meshRender.lightmapTextureIndex != INVALID_TEXTURE_INDEX)
+        {
+            obj.lightmapData = glm::uvec4(
+                meshRender.lightmapTextureIndex,
+                glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.x, meshRender.lightmapScaleOffset.y)),
+                glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.z, meshRender.lightmapScaleOffset.w)),
+                0
+            );
+        }
+        else
+        {
+            obj.lightmapData = glm::uvec4(INVALID_TEXTURE_INDEX, 0, 0, 0);
+        }
     }
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,

@@ -346,4 +346,6 @@ void main() {
     uint alphaCutoffBits = uint(clamp(obj.iblParams.z, 0.0, 1.0) * 255.0);
     uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
     perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);
+
+    perDrawData[globalDrawIndex].lightmapData = obj.lightmapData;
 }

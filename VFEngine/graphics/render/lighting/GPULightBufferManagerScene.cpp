@@ -6,6 +6,7 @@
 #include "print/Logger.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/LightTextComponents.hpp"
 #include <cmath>
 
 namespace render::lighting
@@ -64,6 +65,11 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
+            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
+            {
+                if (transform->isStatic) continue;
+            }
+
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
@@ -147,6 +153,11 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::PointLightComponent>(entity);
+            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
+            {
+                if (transform->isStatic) continue;
+            }
+
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
@@ -234,6 +245,11 @@ namespace render::lighting
             }
 
             const auto& light = view.get<components::SpotLightComponent>(entity);
+            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
+            {
+                if (transform->isStatic) continue;
+            }
+
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);

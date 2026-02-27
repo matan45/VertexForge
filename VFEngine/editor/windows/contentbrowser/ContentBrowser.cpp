@@ -427,6 +427,7 @@ namespace windows
         if (extension == ".vfTerrain") return Terrain;
         if (extension == ".vfNavmesh") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
+        if (extension == ".vfLightmap") return Lightmap;
         if (extension == ".mt") return Script;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||

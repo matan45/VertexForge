@@ -107,6 +107,37 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeLightmap(const components::LightmapComponent& lm)
+    {
+        json j;
+        j["lightmapPath"] = lm.lightmapPath;
+        j["texelsPerUnit"] = lm.texelsPerUnit;
+        j["atlasScaleOffset"] = json::array({
+            lm.atlasScaleOffset.x, lm.atlasScaleOffset.y,
+            lm.atlasScaleOffset.z, lm.atlasScaleOffset.w
+        });
+        return j;
+    }
+
+    void SceneSerialization::deserializeLightmap(const json& j, components::LightmapComponent& lm)
+    {
+        if (auto it = j.find("lightmapPath"); it != j.end() && it->is_string())
+        {
+            lm.lightmapPath = it->get<std::string>();
+        }
+        if (auto it = j.find("texelsPerUnit"); it != j.end() && it->is_number())
+        {
+            lm.texelsPerUnit = it->get<float>();
+        }
+        if (auto it = j.find("atlasScaleOffset"); it != j.end() && it->is_array() && it->size() >= 4)
+        {
+            lm.atlasScaleOffset = glm::vec4(
+                (*it)[0].get<float>(), (*it)[1].get<float>(),
+                (*it)[2].get<float>(), (*it)[3].get<float>()
+            );
+        }
+    }
+
     json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain)
     {
         json j;

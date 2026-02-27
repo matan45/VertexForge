@@ -71,8 +71,9 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
+        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
     };
-    static_assert(sizeof(GPUObjectData) == 336);
+    static_assert(sizeof(GPUObjectData) == 352);
 
     namespace ObjectFlags
     {
@@ -162,8 +163,9 @@ namespace render::gpudriven
         uint32_t boneMatrixOffset;
         uint32_t boneCount;
         uint32_t blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
+        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
     };
-    static_assert(sizeof(PerDrawData) == 240);
+    static_assert(sizeof(PerDrawData) == 256);
 
     struct alignas(16) GPUCameraData
     {
