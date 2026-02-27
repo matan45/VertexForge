@@ -17,6 +17,26 @@ namespace core
     LightBakeAdapter::LightBakeAdapter()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
+
+        sceneClearedToken_ = dispatcher.subscribe<::events::scene::SceneClearedNotification>(
+            [this](const ::events::scene::SceneClearedNotification&)
+            {
+                // Reset all lightmap state so stale data doesn't persist into the next scene
+                terrainLightmapInfos_.clear();
+                lastLightmapPath_.clear();
+                lastTerrainTileInfos_.clear();
+
+                {
+                    std::lock_guard<std::mutex> lock(resultMutex_);
+                    lastResult_ = {};
+                }
+
+                // Notify terrain renderer to clear lightmap data
+                auto& d = ::events::EventDispatcher::instance();
+                services::events::lightbake::LightmapClearedNotification notif;
+                d.publish(notif);
+            });
+
         sceneLoadedToken_ = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
             [this](const ::events::scene::SceneLoadedNotification&)
             {
@@ -55,6 +75,7 @@ namespace core
             }
         }
         auto& dispatcher = ::events::EventDispatcher::instance();
+        dispatcher.unsubscribe(sceneClearedToken_);
         dispatcher.unsubscribe(sceneLoadedToken_);
     }
 

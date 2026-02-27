@@ -39,6 +39,7 @@ namespace core
         // Last applied lightmap info for re-applying after scene load
         std::string lastLightmapPath_;
         float lastTexelsPerUnit_ = 16.0f;
+        events::SubscriptionToken sceneClearedToken_;
         events::SubscriptionToken sceneLoadedToken_;
 
         // Terrain lightmap data from last bake
