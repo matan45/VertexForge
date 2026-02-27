@@ -325,9 +325,14 @@ namespace core
         if (!sceneBuilt || baker_.wasCancelled())
         {
             baking_.store(false);
-            if (!baker_.wasCancelled())
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            if (baker_.wasCancelled())
             {
-                auto& dispatcher = ::events::EventDispatcher::instance();
+                services::events::lightbake::BakeCancelledNotification notif;
+                dispatcher.publish(notif);
+            }
+            else
+            {
                 services::events::lightbake::BakeFailedNotification notif;
                 notif.errorMessage = "Failed to build scene mesh BVH";
                 dispatcher.publish(notif);
@@ -382,9 +387,14 @@ namespace core
         if (!bakeSuccess)
         {
             baking_.store(false);
-            if (!baker_.wasCancelled())
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            if (baker_.wasCancelled())
             {
-                auto& dispatcher = ::events::EventDispatcher::instance();
+                services::events::lightbake::BakeCancelledNotification notif;
+                dispatcher.publish(notif);
+            }
+            else
+            {
                 services::events::lightbake::BakeFailedNotification notif;
                 notif.errorMessage = "Bake failed";
                 dispatcher.publish(notif);

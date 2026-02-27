@@ -43,5 +43,6 @@ namespace windows
 
         events::SubscriptionToken bakeCompleteToken;
         events::SubscriptionToken bakeFailedToken;
+        events::SubscriptionToken bakeCancelledToken;
     };
 }

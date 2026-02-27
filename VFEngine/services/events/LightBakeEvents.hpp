@@ -83,6 +83,11 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "BakeFailed"; }
     };
 
+    struct BakeCancelledNotification : ::events::INotification
+    {
+        std::string_view getName() const override { return "BakeCancelled"; }
+    };
+
     struct LightmapLoadedNotification : ::events::INotification
     {
         std::string lightmapPath;

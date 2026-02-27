@@ -26,6 +26,12 @@ namespace windows
                 baking.store(false);
                 bakeProgress.store(0.0f);
             });
+
+        bakeCancelledToken = dispatcher.subscribe<services::events::lightbake::BakeCancelledNotification>(
+            [this](const services::events::lightbake::BakeCancelledNotification&) {
+                baking.store(false);
+                bakeProgress.store(0.0f);
+            });
     }
 
     LightBakeWindow::~LightBakeWindow()
@@ -33,6 +39,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unsubscribe(bakeCompleteToken);
         dispatcher.unsubscribe(bakeFailedToken);
+        dispatcher.unsubscribe(bakeCancelledToken);
     }
 
     void LightBakeWindow::show()
