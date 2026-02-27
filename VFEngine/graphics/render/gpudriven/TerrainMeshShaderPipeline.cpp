@@ -651,9 +651,15 @@ namespace render::gpudriven
 
     void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
     {
-        if (!terrainLayerBufferMapped_ || layers.empty()) return;
+        if (!terrainLayerBufferMapped_) return;
 
         constexpr uint32_t maxLayers = 16;
+        if (layers.empty())
+        {
+            std::memset(terrainLayerBufferMapped_, 0, maxLayers * sizeof(TerrainLayerGPUData));
+            return;
+        }
+
         uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
         std::memcpy(terrainLayerBufferMapped_, layers.data(), count * sizeof(TerrainLayerGPUData));
     }
