@@ -451,13 +451,18 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     int cubeMapIndex = int(sd.pcfParams.w);
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
-    vec3 lightToFrag = biasedPos - lightPos;
-    float linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
     float near = sd.rangeParams.x;
     float far = sd.rangeParams.y;
+    vec3 lightToFrag = worldPos - lightPos;
+    float linearDepth = length(lightToFrag);
+
+    // Beyond light range - no shadow contribution
+    if (linearDepth >= far) return 1.0;
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    lightToFrag = biasedPos - lightPos;
+    linearDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
 
     float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
     float viewSpaceZ = linearDepth * majorComponent;
@@ -552,7 +557,13 @@ void main() {
 
             float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
                                              light.position, light.radius);
-            minShadow = min(minShadow, shadow);
+
+            // Weight shadow contribution to ambient by attenuation
+            // so edge-of-radius precision artifacts don't darken ambient
+            float dist = length(light.position - fragWorldPos);
+            float atten = physicalAttenuation(dist, light.radius);
+            float weightedShadow = mix(1.0, shadow, clamp(atten * 10.0, 0.0, 1.0));
+            minShadow = min(minShadow, weightedShadow);
 
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo,
                                                  metallic, roughness, F0, light) * shadow;
@@ -564,7 +575,11 @@ void main() {
             SpotLight light = spotLights[lightIdx];
 
             float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
-            minShadow = min(minShadow, shadow);
+
+            float spotDist = length(light.position - fragWorldPos);
+            float spotAtten = physicalAttenuation(spotDist, light.range);
+            float weightedSpotShadow = mix(1.0, shadow, clamp(spotAtten * 10.0, 0.0, 1.0));
+            minShadow = min(minShadow, weightedSpotShadow);
 
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo,
                                                 metallic, roughness, F0, light) * shadow;
