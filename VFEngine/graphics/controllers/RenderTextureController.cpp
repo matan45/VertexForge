@@ -66,7 +66,6 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
 
-        // Register rendered texture with UI and Billboard pipelines
         if (!textureKey.empty() && mainPassHandler)
         {
             auto imageView = viewport->getLastRenderedImageView();
@@ -102,7 +101,6 @@ namespace controllers
             timeSinceLastRender += deltaTime;
             if (timeSinceLastRender >= desc.fixedIntervalSeconds)
             {
-                // Subtract rather than reset to preserve leftover time
                 timeSinceLastRender -= desc.fixedIntervalSeconds;
                 // Clamp to avoid spiral-of-death if frames are very slow
                 if (timeSinceLastRender > desc.fixedIntervalSeconds)

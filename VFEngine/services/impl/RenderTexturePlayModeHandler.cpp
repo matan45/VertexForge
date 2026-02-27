@@ -61,7 +61,6 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Find all entities with CameraComponent + RenderTextureComponent
         auto view = registry.view<components::CameraComponent, components::RenderTextureComponent,
                                    components::TransformComponent>();
 
@@ -72,7 +71,6 @@ namespace services
             if (!rtComp.enabled)
                 continue;
 
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -80,7 +78,6 @@ namespace services
                     continue;
             }
 
-            // Create render texture
             rendertexture::RenderTextureDesc desc;
             desc.width = rtComp.width;
             desc.height = rtComp.height;
@@ -109,12 +106,10 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Destroy all active render textures
         for (const auto& [handle, textureId] : activeTextures)
         {
             provider->destroyRenderTexture(textureId);
 
-            // Reset component state
             auto enttEntity = internal::fromHandle(handle);
             if (registry.valid(enttEntity) && registry.all_of<components::RenderTextureComponent>(enttEntity))
             {
@@ -136,7 +131,6 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Update camera data for each active RTT entity
         for (const auto& [handle, textureId] : activeTextures)
         {
             auto enttEntity = internal::fromHandle(handle);
@@ -162,7 +156,6 @@ namespace services
             }
             glm::mat4 worldViewMatrix = camera.viewMatrix;
 
-            // Update aspect ratio from RTT dimensions and recompute projection
             if (registry.all_of<components::RenderTextureComponent>(enttEntity))
             {
                 const auto& rtComp = registry.get<components::RenderTextureComponent>(enttEntity);
@@ -184,7 +177,6 @@ namespace services
             );
         }
 
-        // Render all active textures
         provider->renderAll(deltaTime);
     }
 }

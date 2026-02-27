@@ -90,14 +90,7 @@ namespace render::gpudriven
         stats.totalObjects = mergedBuffer->getObjectCount();
     }
 
-    void GPUDrivenRenderer::updateCameraForRTT(
-        const glm::mat4& view,
-        const glm::mat4& projection,
-        const glm::vec3& cameraPosition,
-        float nearPlane,
-        float farPlane,
-        uint32_t screenWidth,
-        uint32_t screenHeight)
+    void GPUDrivenRenderer::updateCameraForRTT(const RTTCameraParams& params)
     {
         if (!initialized || !enabled)
         {
@@ -105,11 +98,11 @@ namespace render::gpudriven
         }
 
         CameraUpdateParams cameraParams{
-            .view = view,
-            .projection = projection,
-            .cameraPosition = cameraPosition,
-            .nearPlane = nearPlane,
-            .farPlane = farPlane,
+            .view = params.view,
+            .projection = params.projection,
+            .cameraPosition = params.cameraPosition,
+            .nearPlane = params.nearPlane,
+            .farPlane = params.farPlane,
             .time = 0.0f,
             .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
             .hiZMipLevels = hiZMipLevels,
@@ -121,15 +114,14 @@ namespace render::gpudriven
             .shadowDistanceMultiplier = shadowDistanceMultiplier,
             .globalLodBias = globalLodBias,
             .batchManager = batchManager.get(),
-            .screenWidth = screenWidth,
-            .screenHeight = screenHeight
+            .screenWidth = params.screenWidth,
+            .screenHeight = params.screenHeight
         };
         cameraBuffer->update(cameraParams);
 
-        // Update terrain frustum culling with RTT camera's view-projection
         if (terrainPipeline)
         {
-            terrainPipeline->setViewProjection(projection * view);
+            terrainPipeline->setViewProjection(params.projection * params.view);
         }
     }
 
@@ -160,7 +152,6 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
-        // Restore terrain frustum culling with main camera's view-projection
         if (terrainPipeline)
         {
             terrainPipeline->setViewProjection(cachedCameraProjection * cachedCameraView);

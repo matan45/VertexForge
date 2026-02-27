@@ -63,8 +63,6 @@ namespace controllers
         uint32_t getPriority() const { return desc.priority; }
         void* getLastRenderedHandle() const { return lastRenderedHandle; }
 
-        // Returns true if this controller should render during this frame,
-        // based on updateMode, deltaTime accumulation, and one-shot requests.
         bool shouldRenderThisFrame(float deltaTime);
 
         // Flag a one-shot render for OnDemand mode (consumed after the next render).

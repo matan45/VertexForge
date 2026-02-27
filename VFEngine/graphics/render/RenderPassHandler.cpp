@@ -139,7 +139,6 @@ namespace render
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
 
-        // Initialize WBOIT pipeline for order-independent transparency
         wboitPipeline = std::make_unique<transparency::WBOITPipeline>(device, swapChain, offscreenResources);
         wboitPipeline->init();
         gpuDrivenRenderer->initWBOITPipeline(wboitPipeline->getWBOITRenderPass());

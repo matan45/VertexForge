@@ -243,7 +243,6 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
         );
 
-        // Use provided dimensions (RTT) or fall back to swapchain extent (main viewport)
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
         {

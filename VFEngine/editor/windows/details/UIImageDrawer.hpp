@@ -7,6 +7,8 @@ namespace windows::details
 {
     class UIImageDrawer
     {
+    private:
+        RenderTexturePickerWidget rttPicker;
     public:
         bool draw(services::EntityHandle handle);
 
@@ -15,7 +17,5 @@ namespace windows::details
         bool drawTexturePath(services::UIImageData& data);
         bool drawRenderTextureSource(services::UIImageData& data);
         bool drawColorTint(services::UIImageData& data);
-
-        RenderTexturePickerWidget rttPicker;
     };
 }

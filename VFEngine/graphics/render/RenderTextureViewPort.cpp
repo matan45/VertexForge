@@ -114,15 +114,15 @@ namespace render
         // 1. GPUDrivenCameraBuffer — used by the compute cull pipeline for object-level frustum culling
         // 2. StaticMeshPipeline CameraUBO — used by mesh/task/fragment shaders for vertex
         //    transformation, meshlet-level frustum culling, and lighting calculations
-        gpuRenderer->updateCameraForRTT(
-            view,
-            projection,
-            cameraPosition,
-            nearPlane,
-            farPlane,
-            width,
-            height
-        );
+        gpuRenderer->updateCameraForRTT({
+            .view = view,
+            .projection = projection,
+            .cameraPosition = cameraPosition,
+            .nearPlane = nearPlane,
+            .farPlane = farPlane,
+            .screenWidth = width,
+            .screenHeight = height
+        });
 
         meshPipeline->updateCameraUBO(view, projection, cameraPosition);
 
@@ -130,7 +130,6 @@ namespace render
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        // Dispatch compute culling with RTT camera frustum
         gpuRenderer->dispatchCompute(commandBuffer);
 
         // Phase 1: Skybox / clear pass (color-only, eClear)
@@ -139,9 +138,15 @@ namespace render
         auto* ibl = mainPassHandler->getIBL();
         if (ibl && ibl->isInitialized())
         {
-            ibl->renderSkyboxToTarget(commandBuffer, skyboxRenderPass,
-                                       skyboxFramebuffers[imageIndex],
-                                       width, height, view, projection, clearColor);
+            ibl->renderSkyboxToTarget(commandBuffer, {
+                .renderPass = skyboxRenderPass,
+                .framebuffer = skyboxFramebuffers[imageIndex],
+                .width = width,
+                .height = height,
+                .view = view,
+                .projection = projection,
+                .clearColor = clearColor
+            });
         }
         else
         {
@@ -178,7 +183,6 @@ namespace render
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Set viewport and scissor for RTT dimensions
         vk::Viewport viewport{0.0f, 0.0f,
                                static_cast<float>(width), static_cast<float>(height),
                                0.0f, 1.0f};
@@ -189,22 +193,15 @@ namespace render
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
-        // Draw opaque meshes
         gpuRenderer->renderDraw(commandBuffer, iblDescriptorSet, width, height);
-
-        // Draw transparent meshes
         gpuRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet, width, height);
-
-        // Draw blend/additive meshes
         gpuRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet, width, height);
 
-        // Draw terrain
         if (gpuRenderer->isTerrainRenderingEnabled())
         {
             gpuRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet, width, height);
         }
 
-        // Draw water
         if (gpuRenderer->isWaterRenderingEnabled())
         {
             gpuRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
@@ -451,7 +448,6 @@ namespace render
         vk::Format colorFormat = swapChain.getSwapchainImageFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
-        // Create color images - one per swapchain image for double/triple buffering
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageColorInfo.width = width;
         imageColorInfo.height = height;
@@ -462,7 +458,6 @@ namespace render
                              | vk::ImageUsageFlagBits::eTransferDst;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        // Create depth image
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageDepthInfo.width = width;
         imageDepthInfo.height = height;

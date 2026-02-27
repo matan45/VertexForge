@@ -55,12 +55,8 @@ namespace render
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
-        // Render skybox to an external target (e.g., RTT framebuffer)
         void renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
-                                  vk::RenderPass targetPass, vk::Framebuffer targetFramebuffer,
-                                  uint32_t targetWidth, uint32_t targetHeight,
-                                  const glm::mat4& view, const glm::mat4& projection,
-                                  const glm::vec4& clearColor) const;
+                                  const ibl::SkyboxTargetParams& target) const;
 
         void init(std::string_view path);
         void recreate();

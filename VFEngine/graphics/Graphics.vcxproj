@@ -125,6 +125,7 @@
     <ClInclude Include="controllers\offscreen\UICommon.hpp" />
     <ClInclude Include="controllers\offscreen\UIFrameBuilder.hpp" />
     <ClInclude Include="controllers\offscreen\UIInteractionSystem.hpp" />
+    <ClInclude Include="controllers\offscreen\UIScreenSpaceScroll.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
@@ -307,6 +308,8 @@
     <ClCompile Include="controllers\offscreen\UIInteractionSystem.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystemTextInput.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystemWidgets.cpp" />
+    <ClCompile Include="controllers\offscreen\UIScreenSpaceScroll.cpp" />
+    <ClCompile Include="controllers\offscreen\UIScreenSpaceWidgets.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\DeferredDeletionQueue.cpp" />

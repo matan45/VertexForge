@@ -337,8 +337,7 @@ namespace controllers::offscreen
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
             renderData.texturePath = billboard.texturePath;
-
-            // Resolve render texture source if set
+            
             if (billboard.renderTextureSource != entt::null
                 && registry.valid(billboard.renderTextureSource)
                 && registry.all_of<components::RenderTextureComponent>(billboard.renderTextureSource))

@@ -1,7 +1,6 @@
 #include "RenderTextureAdapter.hpp"
 #include "../../graphics/controllers/RenderTextureController.hpp"
 #include "../controllers/OffScreen.hpp"
-#include "print/Logger.hpp"
 #include <algorithm>
 #include <cassert>
 #include <vector>
@@ -13,10 +12,7 @@ namespace core
     {
     }
 
-    RenderTextureAdapter::~RenderTextureAdapter() noexcept
-    {
-        controllers.clear();
-    }
+    RenderTextureAdapter::~RenderTextureAdapter() noexcept = default;
 
     ::controllers::RenderTextureController* RenderTextureAdapter::getController(
         rendertexture::RenderTextureId id) const
@@ -78,8 +74,6 @@ namespace core
             return;
         }
 
-        // Collect all enabled controllers (for frustum registration)
-        // and determine which actually need to render this frame (based on UpdateMode).
         std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> enabled;
         std::vector<std::pair<rendertexture::RenderTextureId, ::controllers::RenderTextureController*>> toRender;
         enabled.reserve(controllers.size());
@@ -111,7 +105,6 @@ namespace core
             }
         }
 
-        // Sort by priority and render only those that need it this frame
         std::sort(toRender.begin(), toRender.end(),
             [](const auto& a, const auto& b)
             {

@@ -387,24 +387,21 @@ namespace render::ibl
     }
 
     void SkyboxRenderer::renderToTarget(const vk::CommandBuffer& commandBuffer,
-                                         vk::RenderPass targetPass, vk::Framebuffer targetFramebuffer,
-                                         uint32_t targetWidth, uint32_t targetHeight,
-                                         const glm::mat4& view, const glm::mat4& projection,
-                                         const glm::vec4& clearCol) const
+                                         const SkyboxTargetParams& target) const
     {
         if (!initialized)
             return;
 
-        updateUniformBuffer(view, projection);
+        updateUniformBuffer(target.view, target.projection);
 
         vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = targetPass;
-        renderPassInfo.framebuffer = targetFramebuffer;
+        renderPassInfo.renderPass = target.renderPass;
+        renderPassInfo.framebuffer = target.framebuffer;
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = vk::Extent2D{targetWidth, targetHeight};
+        renderPassInfo.renderArea.extent = vk::Extent2D{target.width, target.height};
 
         std::array<vk::ClearValue, 1> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array{clearCol.r, clearCol.g, clearCol.b, clearCol.a});
+        clearValues[0].color = vk::ClearColorValue(std::array{target.clearColor.r, target.clearColor.g, target.clearColor.b, target.clearColor.a});
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 
@@ -413,11 +410,11 @@ namespace render::ibl
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
         vk::Viewport viewport{0.0f, 0.0f,
-                               static_cast<float>(targetWidth), static_cast<float>(targetHeight),
+                               static_cast<float>(target.width), static_cast<float>(target.height),
                                0.0f, 1.0f};
         commandBuffer.setViewport(0, 1, &viewport);
 
-        vk::Rect2D scissor{{0, 0}, {targetWidth, targetHeight}};
+        vk::Rect2D scissor{{0, 0}, {target.width, target.height}};
         commandBuffer.setScissor(0, 1, &scissor);
 
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,

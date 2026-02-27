@@ -104,7 +104,6 @@ namespace render::gpudriven
         float terrainTextureScale = 0.1f;
         uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
 
-        // Water subsystem
         std::unique_ptr<render::water::WaterPipeline> waterPipeline;
         std::unique_ptr<render::water::WaterMeshBuffer> waterMeshBuffer;
         std::vector<render::water::WaterTileGPUData> waterTileData;
@@ -187,18 +186,8 @@ namespace render::gpudriven
             float time = 0.0f
         );
 
-        // Update only camera data for RTT rendering. Preserves existing mesh/object data.
-        void updateCameraForRTT(
-            const glm::mat4& view,
-            const glm::mat4& projection,
-            const glm::vec3& cameraPosition,
-            float nearPlane,
-            float farPlane,
-            uint32_t screenWidth = 0,
-            uint32_t screenHeight = 0
-        );
+        void updateCameraForRTT(const RTTCameraParams& params);
 
-        // Restore main camera data to the GPU buffer after RTT rendering.
         void restoreMainCamera();
 
         // Cached main camera accessors (for restoring mesh pipeline UBO after RTT)
@@ -317,7 +306,6 @@ namespace render::gpudriven
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
         void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
 
-        // Water rendering
         void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
                          const ::water::WaterGlobalSettings& settings,
                          const ::water::WaterTileConfig& tileConfig);

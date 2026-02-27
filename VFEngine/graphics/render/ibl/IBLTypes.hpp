@@ -43,6 +43,17 @@ namespace render::ibl
         inline static const glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     };
 
+    struct SkyboxTargetParams
+    {
+        vk::RenderPass renderPass;
+        vk::Framebuffer framebuffer;
+        uint32_t width;
+        uint32_t height;
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::vec4 clearColor;
+    };
+
     struct OffScreenHelper
     {
         vk::Image image;

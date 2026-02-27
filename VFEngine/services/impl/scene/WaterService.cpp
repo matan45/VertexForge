@@ -309,14 +309,14 @@ namespace services
         {
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
-            if (distanceCullingEnabled_ && maxWaterDistSq_ > 0.0f)
+            if (distanceCullingEnabled && maxWaterDistSq > 0.0f)
             {
                 for (auto* tile : visibleTiles)
                 {
                     glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
                     glm::vec3 diff = tileCenter - cameraPosition;
                     float distSq = glm::dot(diff, diff);
-                    if (distSq <= maxWaterDistSq_)
+                    if (distSq <= maxWaterDistSq)
                     {
                         result.push_back(tile);
                     }
@@ -347,12 +347,12 @@ namespace services
                 if (!frustum.intersectsAABB(tile->worldBounds))
                     continue;
 
-                if (distanceCullingEnabled_ && maxWaterDistSq_ > 0.0f)
+                if (distanceCullingEnabled && maxWaterDistSq > 0.0f)
                 {
                     glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
                     glm::vec3 diff = tileCenter - cameraPosition;
                     float distSq = glm::dot(diff, diff);
-                    if (distSq > maxWaterDistSq_)
+                    if (distSq > maxWaterDistSq)
                         continue;
                 }
 
