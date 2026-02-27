@@ -250,7 +250,7 @@ namespace windows
                 const auto& region = lightmapData.entityRegions[i];
                 ImGui::PushID(static_cast<int>(i));
 
-                if (ImGui::TreeNode("Entity %u", region.entityId))
+                if (ImGui::TreeNode("##entity", "Entity %u", region.entityId))
                 {
                     ImGui::Text("Offset: %u, %u", region.x, region.y);
                     ImGui::Text("Size: %ux%u", region.width, region.height);
