@@ -370,7 +370,13 @@ namespace render::gpudriven
 
             if (waterPipeline)
             {
-                waterPipeline->recreate(cachedIBLLayout, cachedRenderPass);
+                waterPipeline->recreate(cachedIBLLayout,
+                                        lightBufferManager->getDescriptorSetLayout(),
+                                        clusterGridManager->getDescriptorSetLayout(),
+                                        lightCullingPipeline->getDescriptorSetLayout(),
+                                        shadowSystem->getShadowDataLayout(),
+                                        shadowSystem->getShadowTextureLayout(),
+                                        cachedRenderPass);
             }
         }
         else

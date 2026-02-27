@@ -24,24 +24,42 @@ namespace render::water
         cleanup();
     }
 
-    void WaterPipeline::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
+    void WaterPipeline::init(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                              vk::DescriptorSetLayout lightDataLayout,
+                              vk::DescriptorSetLayout clusterGridLayout,
+                              vk::DescriptorSetLayout cullingOutputLayout,
+                              vk::DescriptorSetLayout shadowDataLayout,
+                              vk::DescriptorSetLayout shadowTextureLayout,
+                              vk::RenderPass renderPass)
     {
         if (initialized)
             return;
 
         cachedIBLLayout = iblDescriptorSetLayout;
+        cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         loadShader();
         createWaterTileDescriptor();
         createDuDvTexture();
         createDuDvDescriptor();
-        createGraphicsPipeline(iblDescriptorSetLayout, renderPass);
+        createGraphicsPipeline(iblDescriptorSetLayout, lightDataLayout, clusterGridLayout,
+                                cullingOutputLayout, shadowDataLayout, shadowTextureLayout, renderPass);
 
         initialized = true;
         loggerInfo("WaterPipeline: Initialized");
     }
 
-    void WaterPipeline::recreate(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
+    void WaterPipeline::recreate(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                  vk::DescriptorSetLayout lightDataLayout,
+                                  vk::DescriptorSetLayout clusterGridLayout,
+                                  vk::DescriptorSetLayout cullingOutputLayout,
+                                  vk::DescriptorSetLayout shadowDataLayout,
+                                  vk::DescriptorSetLayout shadowTextureLayout,
+                                  vk::RenderPass renderPass)
     {
         if (!initialized)
             return;
@@ -49,6 +67,11 @@ namespace render::water
         vk::Device vkDevice = device.getLogicalDevice();
 
         cachedIBLLayout = iblDescriptorSetLayout;
+        cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         if (graphicsPipeline)
         {
@@ -62,7 +85,8 @@ namespace render::water
             pipelineLayout = nullptr;
         }
 
-        createGraphicsPipeline(iblDescriptorSetLayout, renderPass);
+        createGraphicsPipeline(iblDescriptorSetLayout, lightDataLayout, clusterGridLayout,
+                                cullingOutputLayout, shadowDataLayout, shadowTextureLayout, renderPass);
         loggerInfo("WaterPipeline: Recreated after resize");
     }
 
@@ -403,7 +427,13 @@ namespace render::water
         vkDevice.updateDescriptorSets(write, nullptr);
     }
 
-    void WaterPipeline::createGraphicsPipeline(vk::DescriptorSetLayout iblLayout, vk::RenderPass renderPass)
+    void WaterPipeline::createGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
+                                                vk::DescriptorSetLayout lightDataLayout,
+                                                vk::DescriptorSetLayout clusterGridLayout,
+                                                vk::DescriptorSetLayout cullingOutputLayout,
+                                                vk::DescriptorSetLayout shadowDataLayout,
+                                                vk::DescriptorSetLayout shadowTextureLayout,
+                                                vk::RenderPass renderPass)
     {
         vk::VertexInputBindingDescription vertexBinding{};
         vertexBinding.binding = 0;
@@ -430,7 +460,16 @@ namespace render::water
             .vertexBindings = {vertexBinding},
             .vertexAttributes = std::move(vertexAttributes),
             .topology = vk::PrimitiveTopology::eTriangleList,
-            .descriptorSetLayouts = {iblLayout, waterTileLayout, dudvTextureLayout},
+            .descriptorSetLayouts = {
+                iblLayout,              // Set 0
+                waterTileLayout,        // Set 1
+                dudvTextureLayout,      // Set 2
+                lightDataLayout,        // Set 3
+                clusterGridLayout,      // Set 4
+                cullingOutputLayout,    // Set 5
+                shadowDataLayout,       // Set 6
+                shadowTextureLayout     // Set 7
+            },
             .pushConstantSize = sizeof(WaterPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
@@ -470,6 +509,11 @@ namespace render::water
     }
 
     void WaterPipeline::render(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                vk::DescriptorSet lightDataDescSet,
+                                vk::DescriptorSet clusterGridDescSet,
+                                vk::DescriptorSet cullingOutputDescSet,
+                                vk::DescriptorSet shadowDataDescSet,
+                                vk::DescriptorSet shadowTextureDescSet,
                                 WaterMeshBuffer& meshBuffer,
                                 const WaterPushConstants& pushConstants)
     {
@@ -483,8 +527,17 @@ namespace render::water
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         cmd.bindIndexBuffer(meshBuffer.getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-        // Bind descriptor sets: Set 0 = IBL/camera, Set 1 = water tile SSBO, Set 2 = dudv texture
-        std::array<vk::DescriptorSet, 3> descriptorSets = {iblDescriptorSet, waterTileDescriptorSet, dudvTextureDescriptorSet};
+        // Bind descriptor sets 0-7
+        std::array<vk::DescriptorSet, 8> descriptorSets = {
+            iblDescriptorSet,           // Set 0: IBL/camera
+            waterTileDescriptorSet,     // Set 1: water tile SSBO
+            dudvTextureDescriptorSet,   // Set 2: DuDv texture
+            lightDataDescSet,           // Set 3: light buffers
+            clusterGridDescSet,         // Set 4: cluster grid params
+            cullingOutputDescSet,       // Set 5: cluster culling output
+            shadowDataDescSet,          // Set 6: shadow data
+            shadowTextureDescSet        // Set 7: shadow textures
+        };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                 0, descriptorSets, nullptr);
 

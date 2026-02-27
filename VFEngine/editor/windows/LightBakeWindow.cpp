@@ -153,7 +153,7 @@ namespace windows
                 }
             }
 
-            if (hasResult && ImGui::Button("Clear Lightmap", ImVec2(-1.0f, 0.0f)))
+            if (ImGui::Button("Clear Lightmap", ImVec2(-1.0f, 0.0f)))
             {
                 services::events::lightbake::ClearLightmapCommand cmd;
                 events::EventDispatcher::instance().execute(cmd);

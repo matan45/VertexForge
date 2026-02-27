@@ -42,8 +42,13 @@ namespace render::water
         vk::ImageView dudvImageView;
         vk::Sampler dudvSampler;
 
-        // Cached shared layout (Set 0 = IBL/camera)
+        // Cached shared layouts
         vk::DescriptorSetLayout cachedIBLLayout;
+        vk::DescriptorSetLayout cachedLightDataLayout;
+        vk::DescriptorSetLayout cachedClusterGridLayout;
+        vk::DescriptorSetLayout cachedCullingOutputLayout;
+        vk::DescriptorSetLayout cachedShadowDataLayout;
+        vk::DescriptorSetLayout cachedShadowTextureLayout;
 
         bool initialized = false;
         uint32_t lastDescriptorTileCount = 0;
@@ -52,13 +57,30 @@ namespace render::water
         WaterPipeline(core::Device& device, core::SwapChain& swapChain);
         ~WaterPipeline();
 
-        void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
-        void recreate(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void init(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                  vk::DescriptorSetLayout lightDataLayout,
+                  vk::DescriptorSetLayout clusterGridLayout,
+                  vk::DescriptorSetLayout cullingOutputLayout,
+                  vk::DescriptorSetLayout shadowDataLayout,
+                  vk::DescriptorSetLayout shadowTextureLayout,
+                  vk::RenderPass renderPass);
+        void recreate(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                      vk::DescriptorSetLayout lightDataLayout,
+                      vk::DescriptorSetLayout clusterGridLayout,
+                      vk::DescriptorSetLayout cullingOutputLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout,
+                      vk::RenderPass renderPass);
         void cleanup();
 
         void updateDescriptors(vk::Buffer tileSSBO, uint32_t tileCount);
 
         void render(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                    vk::DescriptorSet lightDataDescSet,
+                    vk::DescriptorSet clusterGridDescSet,
+                    vk::DescriptorSet cullingOutputDescSet,
+                    vk::DescriptorSet shadowDataDescSet,
+                    vk::DescriptorSet shadowTextureDescSet,
                     WaterMeshBuffer& meshBuffer,
                     const WaterPushConstants& pushConstants);
 
@@ -69,6 +91,12 @@ namespace render::water
         void createWaterTileDescriptor();
         void createDuDvTexture();
         void createDuDvDescriptor();
-        void createGraphicsPipeline(vk::DescriptorSetLayout iblLayout, vk::RenderPass renderPass);
+        void createGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
+                                    vk::DescriptorSetLayout lightDataLayout,
+                                    vk::DescriptorSetLayout clusterGridLayout,
+                                    vk::DescriptorSetLayout cullingOutputLayout,
+                                    vk::DescriptorSetLayout shadowDataLayout,
+                                    vk::DescriptorSetLayout shadowTextureLayout,
+                                    vk::RenderPass renderPass);
     };
 }

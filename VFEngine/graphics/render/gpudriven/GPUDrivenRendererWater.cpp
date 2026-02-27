@@ -20,7 +20,13 @@ namespace render::gpudriven
         );
 
         waterPipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
-        waterPipeline->init(iblDescriptorSetLayout, renderPass);
+        waterPipeline->init(iblDescriptorSetLayout,
+                            lightBufferManager->getDescriptorSetLayout(),
+                            clusterGridManager->getDescriptorSetLayout(),
+                            lightCullingPipeline->getDescriptorSetLayout(),
+                            shadowSystem->getShadowDataLayout(),
+                            shadowSystem->getShadowTextureLayout(),
+                            renderPass);
 
         loggerInfo("GPUDrivenRenderer: Water pipeline initialized");
     }
@@ -71,7 +77,13 @@ namespace render::gpudriven
         if (!initialized || !waterRenderingEnabled || !waterPipeline || waterTileData.empty())
             return;
 
-        waterPipeline->render(cmd, iblDescriptorSet, *waterMeshBuffer, cachedWaterPushConstants);
+        waterPipeline->render(cmd, iblDescriptorSet,
+            lightBufferManager->getDescriptorSet(),
+            clusterGridManager->getDescriptorSet(),
+            lightCullingPipeline->getDescriptorSet(),
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
+            *waterMeshBuffer, cachedWaterPushConstants);
     }
 
     void GPUDrivenRenderer::clearWaterData()
