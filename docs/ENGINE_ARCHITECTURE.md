@@ -10,8 +10,17 @@
 │  │  (ImGui UI) │    │ (Assets) │       │ (Standalone)│     │
 │  └──────┬──────┘    └────┬─────┘       └──────┬──────┘     │
 │         │                │                    │            │
-│         └────────────────┼────────────────────┘            │
-│                          ▼                                  │
+│         └────────┬───────┼────────────────────┘            │
+│                  ▼       ▼                                  │
+├─────────────────────────────────────────────────────────────┤
+│                    PLUGIN LAYER                             │
+│        (DLL-based runtime extensibility)                    │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │  PluginManager │ DynamicLibrary │ PluginContext    │    │
+│  │  IPlugin (SDK) │ PluginRegistry │ Auto-cleanup     │    │
+│  └────────────────────────────────────────────────────┘    │
+│                        │                                    │
+│                        ▼                                    │
 ├─────────────────────────────────────────────────────────────┤
 │                    SERVICES LAYER                           │
 │  ┌────────────────────────────────────────────────────┐    │
@@ -49,8 +58,9 @@
 ## Dependency Rules
 
 ### Allowed Dependencies (Top to Bottom)
-- **Editor** → Services, Import (direct), Utilities
-- **Runtime** → Services, Utilities
+- **Editor** → Plugin, Services, Import (direct), Utilities
+- **Runtime** → Plugin, Services, Utilities
+- **Plugin** → Services, Utilities (headers from Import, Core/ImguiWindow)
 - **Services** → Utilities (uses provider interfaces implemented by Core)
 - **Core** → Graphics, Window, Services (implements provider adapters)
 - **Import** → Utilities
@@ -63,6 +73,7 @@
 - Services CANNOT directly access Core/Graphics/Window (uses provider interfaces)
 - Editor windows CANNOT include Core/Graphics headers (use Services interfaces)
 - Editor calls Import directly (no service wrapper needed for import operations)
+- Plugin DLLs CANNOT include Core/Graphics headers (use EventDispatcher and PluginContext only)
 
 ## Layer Responsibilities
 
@@ -71,6 +82,16 @@
 |---------|---------------|
 | **Editor** | ImGui-based editor UI, windows, gizmos, event subscriptions |
 | **Runtime** | Standalone game execution |
+
+### Plugin Layer
+| Component | Responsibility |
+|-----------|---------------|
+| **IPlugin** | Abstract interface plugin authors implement (SDK header) |
+| **PluginContext** | Engine facade given to plugins: EventDispatcher, window registration, import stages, logging |
+| **PluginManager** | Discovery, loading, lifecycle management (loadAll → initializeAll → updateAll → shutdownAll) |
+| **DynamicLibrary** | RAII wrapper for LoadLibraryW/GetProcAddress/FreeLibrary |
+| **PluginRegistry** | Tracks loaded plugin instances and metadata |
+| **PluginContextImpl** | Concrete PluginContext with auto-cleanup of subscriptions and windows on unload |
 
 ### Services Layer
 | Component | Responsibility |
@@ -211,6 +232,48 @@ auto token = dispatcher.subscribe<WindowResizedNotification>(
     [](const auto& event) { /* handle */ }
 );
 ```
+
+### Plugin System
+
+External DLL-based plugins extend the engine at runtime. Plugins are discovered in a `plugins/` directory, loaded via `LoadLibraryW`, and managed through a lifecycle:
+
+```
+1. Bootstrap::init()              -- Core, Graphics, Window
+2. initializeServices()           -- All services + event handlers
+3. PluginManager::loadAll()       -- Scan plugins/ dir, load DLLs, validate API version
+4. PluginManager::initializeAll() -- Call onInitialize(context) per plugin
+5. Main loop                      -- pluginManager->updateAll(dt) each frame
+6. Shutdown (reverse order)       -- onShutdown + auto-cleanup + FreeLibrary
+```
+
+**Plugin authors implement `IPlugin`** and use `VF_IMPLEMENT_PLUGIN(MyPlugin)` to export:
+
+```cpp
+class MyPlugin : public plugin::IPlugin {
+    bool onInitialize(plugin::PluginContext* ctx) override {
+        ImGui::SetCurrentContext(ctx->getImGuiContext());
+        ctx->registerEditorWindow(std::make_shared<MyWindow>());
+
+        auto& d = ctx->getEventDispatcher();
+        auto token = d.subscribe<events::scene::EntityCreatedNotification>(...);
+        ctx->managedSubscribe(token);  // auto-cleanup on unload
+        return true;
+    }
+    void onShutdown() override { /* cleanup */ }
+};
+VF_IMPLEMENT_PLUGIN(MyPlugin)
+```
+
+**PluginContext** provides access to:
+- `getEventDispatcher()` — execute commands, queries, subscribe to notifications
+- `registerEditorWindow()` — add ImGui windows (editor only)
+- `registerImportStage()` — add custom asset import stages
+- `managedSubscribe()` — tracked subscriptions auto-unregistered on unload
+- `hasCapability()` — check available features ("editor", "audio", "physics", etc.)
+- `getImGuiContext()` — required for ImGui rendering in plugin windows
+
+**Good plugin candidates**: networking, analytics, debug tools, custom editor panels, audio middleware, new asset formats.
+**Not suited for plugins**: core rendering pipeline, GPU buffer management, ECS internals, performance-critical streaming.
 
 ## Data Flow Examples
 
@@ -360,6 +423,17 @@ VFEngine/
 │   │   └── RuntimeHandler.hpp/cpp
 │   └── run/
 │       └── Main.cpp
+├── plugin/                 # Plugin system
+│   ├── api/                # Plugin SDK (header-only, shipped to plugin authors)
+│   │   ├── IPlugin.hpp             # Abstract plugin interface
+│   │   ├── PluginContext.hpp       # Engine facade for plugins
+│   │   ├── PluginVersion.hpp       # API version constant
+│   │   └── PluginExport.hpp        # DLL export macros + VF_IMPLEMENT_PLUGIN
+│   └── core/               # Engine-internal infrastructure
+│       ├── PluginManager.hpp/cpp   # Discovery, loading, lifecycle
+│       ├── PluginContextImpl.hpp/cpp # Concrete context with auto-cleanup
+│       ├── DynamicLibrary.hpp/cpp  # Platform DLL loading RAII wrapper
+│       └── PluginRegistry.hpp/cpp  # Loaded plugin tracking
 ├── graphics/               # Vulkan rendering
 ├── window/                 # GLFW window & input
 ├── import/                 # Asset pipeline
@@ -374,9 +448,10 @@ VFEngine/
 3. Graphics → depends on Window, Utilities
 4. Import → depends on Utilities
 5. Services → depends on Utilities (interfaces only)
-6. Core → depends on Graphics, Window, Services (implements adapters)
-7. Editor → depends on Services, Import, Core
-8. Runtime → depends on Services, Core
+6. Plugin → depends on Services, Utilities
+7. Core → depends on Graphics, Window, Services (implements adapters)
+8. Editor → depends on Plugin, Services, Import, Core
+9. Runtime → depends on Plugin, Services, Core
 ```
 
 ## Application Events

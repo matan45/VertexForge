@@ -53,13 +53,15 @@ project "Editor"
 	  "dependencies/IconFontCppHeaders",
 	  "VFEngine/import/controllers",
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
-	  "VFEngine/services"                 -- Services layer interfaces
+	  "VFEngine/services",                -- Services layer interfaces
+	  "VFEngine/plugin"                   -- Plugin system
    }
 
    links {
       "Core",                           -- Link Core project
 	  "Import",
 	  "Services",                       -- Link Services project
+	  "Plugin",                         -- Plugin system
 	  "imgui"                           -- For imgui-node-editor in ShaderGraphEditor
    }
 
@@ -247,11 +249,12 @@ project "Runtime"
       "dependencies/entt/single_include",
       "VFEngine/utilities",
       "VFEngine/services",              -- Services interfaces only
-      "VFEngine/core/bootstrap"         -- For RuntimeBootstrap
+      "VFEngine/core/bootstrap",        -- For RuntimeBootstrap
+      "VFEngine/plugin"                 -- Plugin system
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Services", "Core" }  -- Core linked for RuntimeBootstrap, not direct access
+   links { "Services", "Core", "Plugin" }  -- Core linked for RuntimeBootstrap, not direct access
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -325,6 +328,41 @@ project "Services"
    }
 
    links { "Utilities", "Window" }  -- Window needed for InputServiceImpl
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: Plugin (Plugin system infrastructure)
+-- Plugin provides the SDK API for external DLL plugins and the loading/lifecycle management
+project "Plugin"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/plugin"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/plugin/**.hpp", "VFEngine/plugin/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/imgui",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "VFEngine/import/pipeline",          -- For PipelineStage base class
+      "VFEngine/core/controllers"          -- For ImguiWindow base class
+   }
+
+   links { "Services", "Utilities" }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

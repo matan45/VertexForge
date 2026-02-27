@@ -15,6 +15,10 @@
 #include "interfaces/IRenderTextureService.hpp"
 #include "events/EventTypes.hpp"
 
+namespace plugin {
+    class PluginManager;
+}
+
 namespace core::audio {
     class AudioSceneUpdater;
 }
@@ -49,6 +53,8 @@ namespace handlers {
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
         std::shared_ptr<services::IRenderTextureService> renderTextureService;
         std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
+
+        std::unique_ptr<plugin::PluginManager> pluginManager;
 
         events::SubscriptionToken resizeSubscription;
 

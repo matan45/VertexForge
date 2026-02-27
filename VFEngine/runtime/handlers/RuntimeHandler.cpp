@@ -24,6 +24,7 @@
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
+#include "core/PluginManager.hpp"
 
 namespace handlers {
 
@@ -34,9 +35,15 @@ namespace handlers {
 
     void RuntimeHandler::init() {
         bootstrap->init();
-        
+
         initializeServices();
-        
+
+        // Load and initialize plugins (Runtime has no editor/import capabilities)
+        pluginManager = std::make_unique<plugin::PluginManager>();
+        pluginManager->setCapabilities({"audio", "physics", "scripting"});
+        pluginManager->loadAll("plugins");
+        pluginManager->initializeAll();
+
         bootstrap->setFrameCallback([this]() {
             if (inputService) {
                 inputService->update();
@@ -63,6 +70,11 @@ namespace handlers {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
+
+            // Update plugins every frame
+            if (pluginManager) {
+                pluginManager->updateAll(deltaTime);
+            }
         });
         
         setupEventSubscriptions();
@@ -73,6 +85,12 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
+        // Shutdown plugins first
+        if (pluginManager) {
+            pluginManager->shutdownAll();
+            pluginManager.reset();
+        }
+
         cleanupEventSubscriptions();
 
         if (physicsPlayModeHandler)

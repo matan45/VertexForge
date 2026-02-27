@@ -38,6 +38,7 @@
 #include "events/ProjectEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include "Import.hpp"
+#include "core/PluginManager.hpp"
 
 namespace handlers
 {
@@ -60,6 +61,12 @@ namespace handlers
 
         editor::SplashScreen::instance().setStatus("Registering services...");
         initializeServices();
+
+        editor::SplashScreen::instance().setStatus("Loading plugins...");
+        pluginManager = std::make_unique<plugin::PluginManager>();
+        pluginManager->setCapabilities({"editor", "audio", "physics", "import", "scripting"});
+        pluginManager->loadAll("plugins");
+        pluginManager->initializeAll();
 
         bootstrap->setFrameCallback([this]()
         {
@@ -107,6 +114,13 @@ namespace handlers
                     audioSceneUpdater->updateListenerFromPrimaryCamera();
                 }
             }
+
+            // Update plugins every frame (regardless of play/edit mode)
+            if (pluginManager)
+            {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                pluginManager->updateAll(dt);
+            }
         });
 
         setupEventSubscriptions();
@@ -122,6 +136,13 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        // Shutdown plugins first (unregisters windows, unsubscribes events)
+        if (pluginManager)
+        {
+            pluginManager->shutdownAll();
+            pluginManager.reset();
+        }
+
         cleanupEventSubscriptions();
 
         windowImguiHandler->cleanUp();
