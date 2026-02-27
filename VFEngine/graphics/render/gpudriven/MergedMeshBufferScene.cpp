@@ -167,6 +167,7 @@ namespace render::gpudriven
                                               const TextureIndexResolver& textureResolver,
                                               const ShaderGroupResolver& shaderGroupResolver,
                                               const BoneOffsetResolver& boneOffsetResolver,
+                                              const LightmapIndexResolver& lightmapResolver,
                                               float time)
     {
         obj.modelMatrix = meshRender.modelMatrix;
@@ -238,10 +239,16 @@ namespace render::gpudriven
                                    ? shaderGroupResolver(materialPath) : 0;
 
         // Lightmap data
-        if (meshRender.lightmapTextureIndex != INVALID_TEXTURE_INDEX)
+        uint32_t lightmapIdx = INVALID_TEXTURE_INDEX;
+        if (!meshRender.lightmapPath.empty() && lightmapResolver)
+        {
+            lightmapIdx = lightmapResolver(meshRender.lightmapPath);
+        }
+
+        if (lightmapIdx != INVALID_TEXTURE_INDEX)
         {
             obj.lightmapData = glm::uvec4(
-                meshRender.lightmapTextureIndex,
+                lightmapIdx,
                 glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.x, meshRender.lightmapScaleOffset.y)),
                 glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.z, meshRender.lightmapScaleOffset.w)),
                 0
@@ -257,6 +264,7 @@ namespace render::gpudriven
                                          const TextureIndexResolver& textureResolver,
                                          const ShaderGroupResolver& shaderGroupResolver,
                                          const BoneOffsetResolver& boneOffsetResolver,
+                                         const LightmapIndexResolver& lightmapResolver,
                                          float time)
     {
         currentObjectCount = 0;
@@ -288,7 +296,7 @@ namespace render::gpudriven
                 }
 
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
+                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time);
                 obj.entityId = currentObjectCount;
 
                 if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)

@@ -88,6 +88,29 @@ namespace windows
         {
             maxAtlasSize = atlasSizes[currentIdx];
         }
+
+        ImGui::Spacing();
+        ImGui::Text("Output Path");
+        if (outputPath.empty())
+        {
+            ImGui::TextDisabled("(default: lightmap.vfLightmap)");
+        }
+        else
+        {
+            ImGui::TextWrapped("%s", outputPath.c_str());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Browse..."))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Lightmap (*.vfLightmap)", L"*.vfLightmap"}
+            };
+            std::string path = fileDialog.saveFileDialog(fileTypes, L"vfLightmap");
+            if (!path.empty())
+            {
+                outputPath = path;
+            }
+        }
     }
 
     void LightBakeWindow::drawBakeActions()
@@ -109,10 +132,30 @@ namespace windows
                 services::events::lightbake::StartBakeCommand cmd;
                 cmd.config.texelsPerUnit = texelsPerUnit;
                 cmd.config.maxAtlasSize = static_cast<uint32_t>(maxAtlasSize);
+                cmd.config.outputPath = outputPath;
                 events::EventDispatcher::instance().execute(cmd);
                 baking.store(true);
                 bakeProgress.store(0.0f);
                 hasResult = false;
+            }
+
+            if (ImGui::Button("Load Lightmap", ImVec2(-1.0f, 0.0f)))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Lightmap (*.vfLightmap)", L"*.vfLightmap"}
+                };
+                std::string path = fileDialog.openFileDialog(fileTypes);
+                if (!path.empty())
+                {
+                    services::events::lightbake::LoadLightmapCommand cmd;
+                    cmd.lightmapPath = path;
+                    cmd.texelsPerUnit = texelsPerUnit;
+                    bool success = events::EventDispatcher::instance().execute(cmd);
+                    if (success)
+                    {
+                        outputPath = path;
+                    }
+                }
             }
         }
     }

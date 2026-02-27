@@ -21,6 +21,7 @@ namespace core
         float getBakeProgress() const override;
         bool isBaking() const override;
         services::LightBakeResult getResult() const override;
+        bool loadLightmap(const std::string& path, float texelsPerUnit) override;
 
     private:
         std::atomic<bool> baking_{false};

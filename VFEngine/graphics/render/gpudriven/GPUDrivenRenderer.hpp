@@ -23,6 +23,7 @@
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
+#include "../../core/Texture.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
@@ -141,6 +142,9 @@ namespace render::gpudriven
 
         std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
         material::CallbackId materialChangeCallbackId{};
+
+        std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
+        std::unordered_set<std::string> registeredLightmapPaths;
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
@@ -346,6 +350,8 @@ namespace render::gpudriven
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        void registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        LightmapIndexResolver createLightmapResolver();
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);

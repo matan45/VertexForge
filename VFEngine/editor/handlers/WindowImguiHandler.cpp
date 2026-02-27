@@ -9,7 +9,6 @@
 #include "../windows/FolderStructureWindow.hpp"
 #include "../windows/ImportProgressWindow.hpp"
 #include "../windows/NavmeshWindow.hpp"
-#include "../windows/LightBakeWindow.hpp"
 
 namespace handlers
 {
@@ -32,7 +31,6 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ImportProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::NavmeshWindow>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::LightBakeWindow>());
     }
 
     void WindowImguiHandler::cleanUp() const

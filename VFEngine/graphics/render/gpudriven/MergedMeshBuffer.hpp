@@ -50,6 +50,8 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
+    using LightmapIndexResolver = std::function<uint32_t(const std::string& lightmapPath)>;
+
     class MergedMeshBuffer
     {
     private:
@@ -113,6 +115,7 @@ namespace render::gpudriven
                            const TextureIndexResolver& textureResolver = nullptr,
                            const ShaderGroupResolver& shaderGroupResolver = nullptr,
                            const BoneOffsetResolver& boneOffsetResolver = nullptr,
+                           const LightmapIndexResolver& lightmapResolver = nullptr,
                            float time = 0.0f);
 
         void uploadObjects(vk::CommandBuffer cmd);
@@ -169,6 +172,7 @@ namespace render::gpudriven
                                 const TextureIndexResolver& textureResolver,
                                 const ShaderGroupResolver& shaderGroupResolver,
                                 const BoneOffsetResolver& boneOffsetResolver,
+                                const LightmapIndexResolver& lightmapResolver,
                                 float time);
 
         void populateLODData(GPUObjectData& obj, const mesh::MeshRenderData& meshRender,

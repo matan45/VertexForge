@@ -153,8 +153,8 @@ namespace controllers::offscreen
             if (registry.all_of<components::LightmapComponent>(entity))
             {
                 const auto& lmComp = registry.get<components::LightmapComponent>(entity);
+                renderData.lightmapPath = lmComp.lightmapPath;
                 renderData.lightmapScaleOffset = lmComp.atlasScaleOffset;
-                // lightmapTextureIndex is resolved by the bindless texture system when the lightmap is loaded
             }
 
             if (registry.all_of<components::MaterialComponent>(entity))

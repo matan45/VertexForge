@@ -192,6 +192,7 @@ namespace render::mesh
         float maxDrawDistance = 0.0f; // 0 = use category default
 
         // Lightmap data (populated from LightmapComponent if present)
+        std::string lightmapPath;
         uint32_t lightmapTextureIndex = 0xFFFFFFFF; // INVALID = no lightmap
         glm::vec4 lightmapScaleOffset{0.0f}; // xy=scale, zw=offset
 

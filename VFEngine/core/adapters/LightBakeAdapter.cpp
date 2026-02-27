@@ -362,4 +362,21 @@ namespace core
         spdlog::info("[LightBake] Bake complete: {}x{} atlas, {} lights, {:.2f}s",
                      result.atlasWidth, result.atlasHeight, result.bakedLightCount, result.bakeTimeSeconds);
     }
+
+    bool LightBakeAdapter::loadLightmap(const std::string& path, float texelsPerUnit)
+    {
+        auto lightmapData = lightbake::LightmapAtlas::load(path);
+
+        if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
+        {
+            spdlog::warn("[LightBake] Failed to load lightmap from: {}", path);
+            return false;
+        }
+
+        assignLightmapComponents(lightmapData, path, texelsPerUnit);
+
+        spdlog::info("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
+                     path, lightmapData.width, lightmapData.height, lightmapData.entityRegions.size());
+        return true;
+    }
 }

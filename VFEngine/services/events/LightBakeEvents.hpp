@@ -20,6 +20,13 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "CancelBake"; }
     };
 
+    struct LoadLightmapCommand : ::events::ICommand<bool>
+    {
+        std::string lightmapPath;
+        float texelsPerUnit = 16.0f;
+        std::string_view getName() const override { return "LoadLightmap"; }
+    };
+
     // ============================================================
     // QUERIES
     // ============================================================

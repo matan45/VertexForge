@@ -54,6 +54,13 @@ namespace services
                 return getResult();
             }
         );
+
+        dispatcher.registerCommandHandler<events::lightbake::LoadLightmapCommand>(
+            [this](const events::lightbake::LoadLightmapCommand& cmd) -> bool
+            {
+                return loadLightmap(cmd.lightmapPath, cmd.texelsPerUnit);
+            }
+        );
     }
 
     void LightBakeServiceImpl::startBake(const LightBakeConfig& config)
@@ -79,5 +86,10 @@ namespace services
     LightBakeResult LightBakeServiceImpl::getResult() const
     {
         return provider->getResult();
+    }
+
+    bool LightBakeServiceImpl::loadLightmap(const std::string& path, float texelsPerUnit)
+    {
+        return provider->loadLightmap(path, texelsPerUnit);
     }
 }

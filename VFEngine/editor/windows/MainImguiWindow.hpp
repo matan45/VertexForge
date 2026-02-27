@@ -12,6 +12,7 @@
 #include "TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "NavmeshWindow.hpp"
+#include "LightBakeWindow.hpp"
 #include "SculptToolPanel.hpp"
 #include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
@@ -42,6 +43,7 @@ namespace windows
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
         NavmeshWindow navmeshWindow;
+        LightBakeWindow lightBakeWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         MainMenuBar menuBar;

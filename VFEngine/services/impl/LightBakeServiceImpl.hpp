@@ -26,6 +26,7 @@ namespace services
         float getBakeProgress() const override;
         bool isBaking() const override;
         LightBakeResult getResult() const override;
+        bool loadLightmap(const std::string& path, float texelsPerUnit) override;
 
     private:
         void registerBakeHandlers(::events::EventDispatcher& dispatcher);

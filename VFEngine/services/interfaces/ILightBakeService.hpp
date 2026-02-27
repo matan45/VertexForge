@@ -15,5 +15,6 @@ namespace services
         virtual float getBakeProgress() const = 0;
         virtual bool isBaking() const = 0;
         virtual LightBakeResult getResult() const = 0;
+        virtual bool loadLightmap(const std::string& path, float texelsPerUnit) = 0;
     };
 }

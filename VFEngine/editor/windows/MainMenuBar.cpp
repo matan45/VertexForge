@@ -11,6 +11,7 @@
 #include "WaterEditorWindow.hpp"
 #include "PostProcessConfigWindow.hpp"
 #include "NavmeshWindow.hpp"
+#include "LightBakeWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -168,6 +169,13 @@ namespace windows
                 if (navmeshWindow)
                 {
                     navmeshWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Light Bake"))
+            {
+                if (lightBakeWindow)
+                {
+                    lightBakeWindow->show();
                 }
             }
             ImGui::EndMenu();

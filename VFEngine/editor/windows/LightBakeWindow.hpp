@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/LightBakeEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <string>
 #include <memory>
 #include <mutex>
@@ -31,11 +32,14 @@ namespace windows
         // Settings
         float texelsPerUnit = 16.0f;
         int maxAtlasSize = 4096;
+        std::string outputPath;
 
         // Result
         services::LightBakeResult lastResult;
         bool hasResult = false;
         mutable std::mutex resultMutex;
+
+        nfd::FileDialog fileDialog;
 
         events::SubscriptionToken bakeCompleteToken;
         events::SubscriptionToken bakeFailedToken;

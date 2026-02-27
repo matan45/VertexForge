@@ -15,6 +15,7 @@ namespace windows
     class PostProcessConfigWindow;
     class WaterEditorWindow;
     class NavmeshWindow;
+    class LightBakeWindow;
 
     class MainMenuBar
     {
@@ -33,6 +34,7 @@ namespace windows
         WaterEditorWindow* waterEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
+        LightBakeWindow* lightBakeWindow = nullptr;
 
     public:
         void draw();
@@ -74,6 +76,11 @@ namespace windows
         void setNavmeshWindow(NavmeshWindow* window)
         {
             navmeshWindow = window;
+        }
+
+        void setLightBakeWindow(LightBakeWindow* window)
+        {
+            lightBakeWindow = window;
         }
 
     private:
