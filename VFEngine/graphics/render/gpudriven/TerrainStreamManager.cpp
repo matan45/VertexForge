@@ -182,8 +182,10 @@ namespace render::gpudriven
             if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap())
                 continue;
 
-            adapter.uploadWeightMap(*tile);
-            tile->weightMapGPUDirty = false;
+            if (adapter.uploadWeightMap(*tile))
+            {
+                tile->weightMapGPUDirty = false;
+            }
         }
 
         while (!uploadQueue.empty())
