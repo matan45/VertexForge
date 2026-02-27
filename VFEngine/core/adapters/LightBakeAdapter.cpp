@@ -17,13 +17,29 @@ namespace core
     LightBakeAdapter::LightBakeAdapter()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        sceneLoadedToken_ = dispatcher.subscribe<::events::scene::SceneLoadingCompletedNotification>(
-            [this](const ::events::scene::SceneLoadingCompletedNotification& notif)
+        sceneLoadedToken_ = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
             {
-                if (notif.success && !lastLightmapPath_.empty())
+                // If we already have a lightmap path from a previous bake/load, re-apply it
+                if (!lastLightmapPath_.empty())
                 {
                     loggerInfo("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath_);
                     loadLightmap(lastLightmapPath_, lastTexelsPerUnit_);
+                    return;
+                }
+
+                // Otherwise check if the scene has a LightmapComponent with a saved path
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::LightmapComponent>();
+                for (auto entity : view)
+                {
+                    const auto& lm = view.get<components::LightmapComponent>(entity);
+                    if (!lm.lightmapPath.empty())
+                    {
+                        loggerInfo("[LightBake] Scene loaded, loading lightmap from component: {}", lm.lightmapPath);
+                        loadLightmap(lm.lightmapPath, lm.texelsPerUnit);
+                        return;
+                    }
                 }
             });
     }

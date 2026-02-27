@@ -51,8 +51,6 @@ namespace windows
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
-        events::SubscriptionToken terrainLoadStartedToken;
-        bool isLoadingTerrain = false;
 
     public:
         explicit MainImguiWindow();
@@ -68,6 +66,5 @@ namespace windows
     private:
         void subscribeToEvents();
         void onSceneCleared();
-        void pollTerrainLoad();
     };
 }

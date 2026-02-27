@@ -11,7 +11,6 @@
 #include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
-#include <future>
 #include <memory>
 #include <vector>
 
@@ -49,14 +48,6 @@ namespace services
         float maxTerrainDistSq_ = 0.0f;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
-
-        struct PendingTerrainLoad {
-            std::future<bool> ioFuture;
-            terrain::TerrainFileHeader header;
-            std::vector<terrain::TileIndexEntry> index;
-            std::string path;
-        };
-        std::unique_ptr<PendingTerrainLoad> pendingLoad;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);

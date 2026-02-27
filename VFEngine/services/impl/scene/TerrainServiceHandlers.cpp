@@ -198,12 +198,6 @@ namespace services
         dispatcher.registerCommandHandler<events::terrain::BeginTerrainLoadCommand>(
             [this](const events::terrain::BeginTerrainLoadCommand& cmd) -> bool
             {
-                if (pendingLoad)
-                {
-                    vfLogWarning("TerrainService: Load already in progress");
-                    return false;
-                }
-
                 saveInProgress.store(true, std::memory_order_release);
 
                 std::vector<uint64_t> toDelete;
@@ -212,60 +206,35 @@ namespace services
                 for (auto id : toDelete)
                     deleteTerrain(EntityHandle{id});
 
-                pendingLoad = std::make_unique<PendingTerrainLoad>();
-                pendingLoad->path = cmd.path;
+                terrain::TerrainFileHeader header;
+                std::vector<terrain::TileIndexEntry> index;
 
-                auto* pending = pendingLoad.get();
-                pendingLoad->ioFuture = std::async(std::launch::async,
-                    [pending]()
-                    {
-                        return terrain::TerrainSerializer::readHeader(
-                            pending->path, pending->header, pending->index);
-                    });
-
-                events::terrain::TerrainLoadStartedNotification notification;
-                notification.path = cmd.path;
-                events::EventDispatcher::instance().publish(notification);
-
-                vfLogInfo("TerrainService: Started async terrain load from {}", cmd.path);
-                return true;
-            });
-
-        dispatcher.registerCommandHandler<events::terrain::PollTerrainLoadCommand>(
-            [this](const events::terrain::PollTerrainLoadCommand&) -> std::optional<EntityHandle>
-            {
-                if (!pendingLoad)
-                    return std::nullopt;
-
-                if (pendingLoad->ioFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
-                    return std::nullopt;
-
-                bool success = pendingLoad->ioFuture.get();
-
-                if (!success)
+                if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index))
                 {
-                    vfLogError("TerrainService: Async terrain load failed for {}", pendingLoad->path);
-                    pendingLoad.reset();
+                    vfLogError("TerrainService: Failed to read terrain header from {}", cmd.path);
                     saveInProgress.store(false, std::memory_order_release);
-                    return EntityHandle{};
+                    return false;
                 }
 
-                EntityHandle result = finishLoadTerrain(
-                    pendingLoad->header, pendingLoad->index, pendingLoad->path);
-
-                std::string loadPath = pendingLoad->path;
-                pendingLoad.reset();
+                EntityHandle result = finishLoadTerrain(header, index, cmd.path);
                 saveInProgress.store(false, std::memory_order_release);
 
                 if (result.id != 0)
                 {
                     events::terrain::TerrainLoadedNotification notification;
                     notification.terrainEntity = result;
-                    notification.path = loadPath;
+                    notification.path = cmd.path;
                     events::EventDispatcher::instance().publish(notification);
                 }
 
-                return result;
+                vfLogInfo("TerrainService: Loaded terrain from {}", cmd.path);
+                return result.id != 0;
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::PollTerrainLoadCommand>(
+            [this](const events::terrain::PollTerrainLoadCommand&) -> std::optional<EntityHandle>
+            {
+                return std::nullopt;
             });
     }
 }

@@ -66,6 +66,8 @@ namespace windows
                 ImGui::Separator();
                 drawResult();
             }
+
+            drawSaveToScene();
         }
         ImGui::End();
     }
@@ -221,19 +223,24 @@ namespace windows
                 auto previewWindow = std::make_shared<LightmapPreviewWindow>(lastResult.lightmapPath);
                 controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
             }
+        }
+    }
 
-            if (lastResult.success && ImGui::Button("Save to Scene", ImVec2(-1.0f, 0.0f)))
+    void LightBakeWindow::drawSaveToScene()
+    {
+        ImGui::Separator();
+
+        if (ImGui::Button("Save to Scene", ImVec2(-1.0f, 0.0f)))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> sceneFileTypes = {
+                {L"VF Scene Files (*.vfScene)", L"*.vfScene"}
+            };
+            std::string scenePath = fileDialog.saveFileDialog(sceneFileTypes, L"vfScene");
+            if (!scenePath.empty())
             {
-                std::vector<std::pair<std::wstring, std::wstring>> sceneFileTypes = {
-                    {L"VF Scene Files (*.vfScene)", L"*.vfScene"}
-                };
-                std::string scenePath = fileDialog.saveFileDialog(sceneFileTypes, L"vfScene");
-                if (!scenePath.empty())
-                {
-                    events::scene::SaveSceneCommand cmd;
-                    cmd.filePath = scenePath;
-                    events::EventDispatcher::instance().execute(cmd);
-                }
+                events::scene::SaveSceneCommand cmd;
+                cmd.filePath = scenePath;
+                events::EventDispatcher::instance().execute(cmd);
             }
         }
     }

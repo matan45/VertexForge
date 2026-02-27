@@ -24,6 +24,7 @@ namespace windows
         void drawBakeActions();
         void drawProgress();
         void drawResult();
+        void drawSaveToScene();
 
         bool visible = false;
         std::atomic<bool> baking{false};
