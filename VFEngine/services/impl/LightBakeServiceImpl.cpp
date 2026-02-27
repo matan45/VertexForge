@@ -62,6 +62,13 @@ namespace services
             }
         );
 
+        dispatcher.registerCommandHandler<events::lightbake::ClearLightmapCommand>(
+            [this](const events::lightbake::ClearLightmapCommand&)
+            {
+                clearLightmap();
+            }
+        );
+
         dispatcher.registerQueryHandler<events::lightbake::GetTerrainLightmapDataQuery>(
             [this](const events::lightbake::GetTerrainLightmapDataQuery&) -> std::vector<events::lightbake::TerrainTileLightmapEntry>
             {
@@ -110,5 +117,10 @@ namespace services
     bool LightBakeServiceImpl::loadLightmap(const std::string& path, float texelsPerUnit)
     {
         return provider->loadLightmap(path, texelsPerUnit);
+    }
+
+    void LightBakeServiceImpl::clearLightmap()
+    {
+        provider->clearLightmap();
     }
 }

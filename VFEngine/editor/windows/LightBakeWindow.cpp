@@ -1,6 +1,7 @@
 #include "LightBakeWindow.hpp"
 #include "LightmapPreviewWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include "imgui.h"
 
 namespace windows
@@ -88,29 +89,6 @@ namespace windows
         {
             maxAtlasSize = atlasSizes[currentIdx];
         }
-
-        ImGui::Spacing();
-        ImGui::Text("Output Path");
-        if (outputPath.empty())
-        {
-            ImGui::TextDisabled("(default: lightmap.vfLightmap)");
-        }
-        else
-        {
-            ImGui::TextWrapped("%s", outputPath.c_str());
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Browse..."))
-        {
-            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                {L"VF Lightmap (*.vfLightmap)", L"*.vfLightmap"}
-            };
-            std::string path = fileDialog.saveFileDialog(fileTypes, L"vfLightmap");
-            if (!path.empty())
-            {
-                outputPath = path;
-            }
-        }
     }
 
     void LightBakeWindow::drawBakeActions()
@@ -129,14 +107,31 @@ namespace windows
         {
             if (ImGui::Button(hasResult ? "Re-Bake" : "Bake", ImVec2(-1.0f, 0.0f)))
             {
-                services::events::lightbake::StartBakeCommand cmd;
-                cmd.config.texelsPerUnit = texelsPerUnit;
-                cmd.config.maxAtlasSize = static_cast<uint32_t>(maxAtlasSize);
-                cmd.config.outputPath = outputPath;
-                events::EventDispatcher::instance().execute(cmd);
-                baking.store(true);
-                bakeProgress.store(0.0f);
-                hasResult = false;
+                // Open save dialog if no output path set
+                std::string bakePath = outputPath;
+                if (bakePath.empty())
+                {
+                    std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                        {L"VF Lightmap (*.vfLightmap)", L"*.vfLightmap"}
+                    };
+                    bakePath = fileDialog.saveFileDialog(fileTypes, L"vfLightmap");
+                    if (!bakePath.empty())
+                    {
+                        outputPath = bakePath;
+                    }
+                }
+
+                if (!bakePath.empty())
+                {
+                    services::events::lightbake::StartBakeCommand cmd;
+                    cmd.config.texelsPerUnit = texelsPerUnit;
+                    cmd.config.maxAtlasSize = static_cast<uint32_t>(maxAtlasSize);
+                    cmd.config.outputPath = outputPath;
+                    events::EventDispatcher::instance().execute(cmd);
+                    baking.store(true);
+                    bakeProgress.store(0.0f);
+                    hasResult = false;
+                }
             }
 
             if (ImGui::Button("Load Lightmap", ImVec2(-1.0f, 0.0f)))
@@ -156,6 +151,15 @@ namespace windows
                         outputPath = path;
                     }
                 }
+            }
+
+            if (hasResult && ImGui::Button("Clear Lightmap", ImVec2(-1.0f, 0.0f)))
+            {
+                services::events::lightbake::ClearLightmapCommand cmd;
+                events::EventDispatcher::instance().execute(cmd);
+                hasResult = false;
+                bakeProgress.store(0.0f);
+                lastResult = {};
             }
         }
     }
@@ -209,6 +213,20 @@ namespace windows
             {
                 auto previewWindow = std::make_shared<LightmapPreviewWindow>(lastResult.lightmapPath);
                 controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+            }
+
+            if (lastResult.success && ImGui::Button("Save to Scene", ImVec2(-1.0f, 0.0f)))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> sceneFileTypes = {
+                    {L"VF Scene Files (*.vfScene)", L"*.vfScene"}
+                };
+                std::string scenePath = fileDialog.saveFileDialog(sceneFileTypes, L"vfScene");
+                if (!scenePath.empty())
+                {
+                    events::scene::SaveSceneCommand cmd;
+                    cmd.filePath = scenePath;
+                    events::EventDispatcher::instance().execute(cmd);
+                }
             }
         }
     }

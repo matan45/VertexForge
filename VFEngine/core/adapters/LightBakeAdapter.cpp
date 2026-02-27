@@ -6,6 +6,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/LightBakeEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../utilities/components/WaterComponents.hpp"
 #include <spdlog/spdlog.h>
 #include <chrono>
@@ -13,6 +14,20 @@
 
 namespace core
 {
+    LightBakeAdapter::LightBakeAdapter()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        sceneLoadedToken_ = dispatcher.subscribe<::events::scene::SceneLoadingCompletedNotification>(
+            [this](const ::events::scene::SceneLoadingCompletedNotification& notif)
+            {
+                if (notif.success && !lastLightmapPath_.empty())
+                {
+                    spdlog::info("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath_);
+                    loadLightmap(lastLightmapPath_, lastTexelsPerUnit_);
+                }
+            });
+    }
+
     LightBakeAdapter::~LightBakeAdapter() noexcept
     {
         if (baking_.load())
@@ -23,6 +38,8 @@ namespace core
                 bakeFuture_.wait();
             }
         }
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        dispatcher.unsubscribe(sceneLoadedToken_);
     }
 
     void LightBakeAdapter::startBake(const services::LightBakeConfig& config)
@@ -72,18 +89,19 @@ namespace core
         // Collect directional lights from static entities
         {
             auto view = registry.view<components::DirectionalLightComponent,
-                                       components::TransformComponent>();
+                                       components::TransformComponent,
+                                       components::WorldTransformComponent>();
             for (auto entity : view)
             {
                 const auto& transform = view.get<components::TransformComponent>(entity);
                 if (!transform.isStatic) continue;
 
                 const auto& light = view.get<components::DirectionalLightComponent>(entity);
+                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
                 lightbake::BakeDirectionalLight bakeLight;
-                // Direction from rotation
-                glm::mat4 rotMat = transform.getMatrix();
-                bakeLight.direction = glm::normalize(glm::vec3(rotMat * glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)));
+                // Direction must match GPU forward rendering: forward = -Z axis
+                bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
                 bakeLight.color = light.color;
                 bakeLight.intensity = light.intensity;
                 lights.directionalLights.push_back(bakeLight);
@@ -127,9 +145,8 @@ namespace core
 
                 lightbake::BakeSpotLight bakeLight;
                 bakeLight.position = glm::vec3(worldTransform.worldMatrix[3]);
-                // Direction from world matrix forward vector
-                glm::mat4 rotMat = transform.getMatrix();
-                bakeLight.direction = glm::normalize(glm::vec3(rotMat * glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)));
+                // Direction must match GPU forward rendering: forward = -Z axis
+                bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
                 bakeLight.color = light.color;
                 bakeLight.intensity = light.intensity;
                 bakeLight.range = light.range;
@@ -396,6 +413,10 @@ namespace core
         // Assign LightmapComponent to each baked entity
         assignLightmapComponents(lightmapData, outputPath, config.texelsPerUnit);
 
+        // Store for scene load re-apply
+        lastLightmapPath_ = outputPath;
+        lastTexelsPerUnit_ = config.texelsPerUnit;
+
         auto endTime = std::chrono::high_resolution_clock::now();
         float elapsedSeconds = std::chrono::duration<float>(endTime - startTime).count();
 
@@ -421,6 +442,33 @@ namespace core
 
         spdlog::info("[LightBake] Bake complete: {}x{} atlas, {} lights, {:.2f}s",
                      result.atlasWidth, result.atlasHeight, result.bakedLightCount, result.bakeTimeSeconds);
+    }
+
+    void LightBakeAdapter::clearLightmap()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Remove LightmapComponent from all entities
+        auto view = registry.view<components::LightmapComponent>();
+        for (auto entity : view)
+        {
+            registry.remove<components::LightmapComponent>(entity);
+        }
+
+        terrainLightmapInfos_.clear();
+        lastLightmapPath_.clear();
+
+        {
+            std::lock_guard<std::mutex> lock(resultMutex_);
+            lastResult_ = {};
+        }
+
+        spdlog::info("[LightBake] Lightmap cleared");
+
+        // Notify renderer to update
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        services::events::lightbake::LightmapClearedNotification notif;
+        dispatcher.publish(notif);
     }
 
     bool LightBakeAdapter::loadLightmap(const std::string& path, float texelsPerUnit)
@@ -450,6 +498,10 @@ namespace core
         }
 
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
+
+        // Store for scene load re-apply
+        lastLightmapPath_ = path;
+        lastTexelsPerUnit_ = texelsPerUnit;
 
         spdlog::info("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
                      path, lightmapData.width, lightmapData.height, lightmapData.entityRegions.size());

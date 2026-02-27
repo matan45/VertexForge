@@ -29,6 +29,11 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "LoadLightmap"; }
     };
 
+    struct ClearLightmapCommand : ::events::ICommand<void>
+    {
+        std::string_view getName() const override { return "ClearLightmap"; }
+    };
+
     // ============================================================
     // QUERIES
     // ============================================================
@@ -82,5 +87,10 @@ namespace services::events::lightbake
     {
         std::string lightmapPath;
         std::string_view getName() const override { return "LightmapLoaded"; }
+    };
+
+    struct LightmapClearedNotification : ::events::INotification
+    {
+        std::string_view getName() const override { return "LightmapCleared"; }
     };
 }

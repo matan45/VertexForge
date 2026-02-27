@@ -22,6 +22,13 @@ namespace core
                 terrainLightmapDirty_.store(true);
             });
         lightmapLoadedToken_ = std::make_unique<events::SubscriptionToken>(loadToken);
+
+        auto clearToken = dispatcher.subscribe<services::events::lightbake::LightmapClearedNotification>(
+            [this](const services::events::lightbake::LightmapClearedNotification&)
+            {
+                terrainLightmapDirty_.store(true);
+            });
+        lightmapClearedToken_ = std::make_unique<events::SubscriptionToken>(clearToken);
     }
 
     TerrainRenderAdapter::~TerrainRenderAdapter()
@@ -31,6 +38,8 @@ namespace core
             dispatcher.unsubscribe(*bakeCompleteToken_);
         if (lightmapLoadedToken_ && lightmapLoadedToken_->isValid())
             dispatcher.unsubscribe(*lightmapLoadedToken_);
+        if (lightmapClearedToken_ && lightmapClearedToken_->isValid())
+            dispatcher.unsubscribe(*lightmapClearedToken_);
     }
 
     std::vector<terrain::TerrainTile*> TerrainRenderAdapter::getVisibleTiles(

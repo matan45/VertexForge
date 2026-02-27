@@ -23,6 +23,7 @@ namespace core
         std::atomic<bool> terrainLightmapDirty_{false};
         std::unique_ptr<events::SubscriptionToken> bakeCompleteToken_;
         std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken_;
+        std::unique_ptr<events::SubscriptionToken> lightmapClearedToken_;
 
     public:
         TerrainRenderAdapter();

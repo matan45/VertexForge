@@ -3,6 +3,7 @@
 #include "../../utilities/lightbake/BakeSceneMesh.hpp"
 #include "../../utilities/lightbake/LightmapAtlas.hpp"
 #include "../../utilities/lightbake/LightBaker.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 #include <memory>
 #include <atomic>
 #include <future>
@@ -14,7 +15,7 @@ namespace core
     class LightBakeAdapter : public services::ILightBakeProvider
     {
     public:
-        LightBakeAdapter() = default;
+        LightBakeAdapter();
         ~LightBakeAdapter() noexcept override;
 
         void startBake(const services::LightBakeConfig& config) override;
@@ -23,6 +24,7 @@ namespace core
         bool isBaking() const override;
         services::LightBakeResult getResult() const override;
         bool loadLightmap(const std::string& path, float texelsPerUnit) override;
+        void clearLightmap() override;
         std::vector<services::TerrainLightmapTileInfo> getTerrainLightmapData() const override;
 
     private:
@@ -33,6 +35,11 @@ namespace core
         std::future<void> bakeFuture_;
 
         lightbake::LightBaker baker_;
+
+        // Last applied lightmap info for re-applying after scene load
+        std::string lastLightmapPath_;
+        float lastTexelsPerUnit_ = 16.0f;
+        events::SubscriptionToken sceneLoadedToken_;
 
         // Terrain lightmap data from last bake
         std::vector<services::TerrainLightmapTileInfo> terrainLightmapInfos_;
