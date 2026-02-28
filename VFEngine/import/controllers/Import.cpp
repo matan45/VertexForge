@@ -92,6 +92,17 @@ namespace controllers
         setupPipeline();
     }
 
+    void Import::addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage)
+    {
+        if (!importPipeline)
+        {
+            initialize();
+        }
+
+        vfLogInfo("Adding custom import pipeline stage: {}", stage->getName());
+        importPipeline->addStage(std::move(stage));
+    }
+
     void Import::requestCancel()
     {
         cancelRequested.store(true);
