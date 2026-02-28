@@ -31,7 +31,6 @@ namespace render::mesh
 
 namespace render::gpudriven
 {
-   
     enum class TextureSlotType : uint8_t
     {
         Albedo = 0,
@@ -51,6 +50,23 @@ namespace render::gpudriven
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
     using LightmapIndexResolver = std::function<uint32_t(const std::string& lightmapPath)>;
+
+    struct ObjectResolvers
+    {
+        TextureIndexResolver textureResolver;
+        ShaderGroupResolver shaderGroupResolver;
+        BoneOffsetResolver boneOffsetResolver;
+        LightmapIndexResolver lightmapResolver;
+        float time = 0.0f;
+    };
+
+    struct LODUploadData
+    {
+        const resource::Vertex* vertexData = nullptr;
+        uint32_t vertexCount = 0;
+        const uint32_t* indexData = nullptr;
+        uint32_t indexCount = 0;
+    };
 
     class MergedMeshBuffer
     {
@@ -112,11 +128,7 @@ namespace render::gpudriven
         void cleanup();
 
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
-                           const TextureIndexResolver& textureResolver = nullptr,
-                           const ShaderGroupResolver& shaderGroupResolver = nullptr,
-                           const BoneOffsetResolver& boneOffsetResolver = nullptr,
-                           const LightmapIndexResolver& lightmapResolver = nullptr,
-                           float time = 0.0f);
+                           const ObjectResolvers& resolvers = {});
 
         void uploadObjects(vk::CommandBuffer cmd);
 
@@ -141,8 +153,7 @@ namespace render::gpudriven
                        const std::string& submeshName,
                        uint32_t submeshIndex,
                        uint32_t lodLevel,
-                       const resource::Vertex* vertexData, uint32_t vertexCount,
-                       const uint32_t* indexData, uint32_t indexCount);
+                       const LODUploadData& data);
 
         void markLODReady(const std::string& meshPath,
                           const std::string& submeshName,
@@ -169,17 +180,13 @@ namespace render::gpudriven
         void populateObjectData(GPUObjectData& obj,
                                 const mesh::MeshRenderData& meshRender,
                                 const SubmeshLocation& submeshLoc,
-                                const TextureIndexResolver& textureResolver,
-                                const ShaderGroupResolver& shaderGroupResolver,
-                                const BoneOffsetResolver& boneOffsetResolver,
-                                const LightmapIndexResolver& lightmapResolver,
-                                float time);
+                                const ObjectResolvers& resolvers);
 
         void populateLODData(GPUObjectData& obj, const mesh::MeshRenderData& meshRender,
                              const SubmeshLocation& submeshLoc, const BoneOffsetResolver& boneOffsetResolver);
 
         std::string resolveMaterialProperties(GPUObjectData& obj, const mesh::MeshRenderData& meshRender,
-                                               const SubmeshLocation& submeshLoc);
+                                              const SubmeshLocation& submeshLoc);
 
         void applyDynamicEmission(GPUObjectData& obj, const std::string& materialPath, float time);
 

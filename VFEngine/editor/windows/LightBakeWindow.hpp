@@ -4,7 +4,6 @@
 #include "events/LightBakeEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <string>
-#include <memory>
 #include <mutex>
 #include <atomic>
 
@@ -12,8 +11,27 @@ namespace windows
 {
     class LightBakeWindow : public controllers::imguiHandler::ImguiWindow
     {
+    private:
+        bool visible = false;
+        std::atomic<bool> baking{false};
+        std::atomic<float> bakeProgress{0.0f};
+
+        float texelsPerUnit = 16.0f;
+        int maxAtlasSize = 4096;
+        std::string outputPath;
+
+        services::LightBakeResult lastResult;
+        bool hasResult = false;
+        mutable std::mutex resultMutex;
+
+        nfd::FileDialog fileDialog;
+
+        events::SubscriptionToken bakeCompleteToken;
+        events::SubscriptionToken bakeFailedToken;
+        events::SubscriptionToken bakeCancelledToken;
+
     public:
-        LightBakeWindow();
+        explicit LightBakeWindow();
         ~LightBakeWindow() override;
 
         void draw() override;
@@ -25,25 +43,5 @@ namespace windows
         void drawProgress();
         void drawResult();
         void drawSaveToScene();
-
-        bool visible = false;
-        std::atomic<bool> baking{false};
-        std::atomic<float> bakeProgress{0.0f};
-
-        // Settings
-        float texelsPerUnit = 16.0f;
-        int maxAtlasSize = 4096;
-        std::string outputPath;
-
-        // Result
-        services::LightBakeResult lastResult;
-        bool hasResult = false;
-        mutable std::mutex resultMutex;
-
-        nfd::FileDialog fileDialog;
-
-        events::SubscriptionToken bakeCompleteToken;
-        events::SubscriptionToken bakeFailedToken;
-        events::SubscriptionToken bakeCancelledToken;
     };
 }

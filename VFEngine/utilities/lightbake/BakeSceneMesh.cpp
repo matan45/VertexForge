@@ -2,7 +2,7 @@
 #include "../resource/MeshStreamHandle.hpp"
 #include "../components/CoreComponents.hpp"
 #include "../scene/EntityRegistry.hpp"
-#include <spdlog/spdlog.h>
+#include "../print/EditorLogger.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
 
 namespace lightbake
@@ -14,36 +14,45 @@ namespace lightbake
     {
         clear();
 
-        auto& registry = scene::EntityRegistry::getRegistry();
+        auto meshEntities = collectStaticMeshEntities();
+        vfLogInfo("[LightBake] Found {} static mesh entities for baking", meshEntities.size());
 
-        // Collect all static mesh entities
-        struct MeshEntity
+        std::vector<math::RayBVHTriangle> triangles;
+        loadMeshTriangles(meshEntities, triangles, progressCallback);
+        addTerrainTriangles(terrain, triangles);
+        addWaterTriangles(waterTiles, triangles);
+
+        if (triangles.empty())
         {
-            std::string meshPath;
-            glm::mat4 worldMatrix;
-            glm::mat3 normalMatrix;
-            uint32_t entityId;
-        };
+            vfLogWarning("[LightBake] No valid triangles found in scene");
+            return false;
+        }
 
+        vfLogInfo("[LightBake] Building BVH from {} triangles", triangles.size());
+        bvh_.build(std::move(triangles));
+        vfLogInfo("[LightBake] BVH built: {} nodes", bvh_.getNodeCount());
+
+        return true;
+    }
+
+    std::vector<BakeSceneMesh::MeshEntity> BakeSceneMesh::collectStaticMeshEntities()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
         std::vector<MeshEntity> meshEntities;
 
         auto view = registry.view<components::MeshComponent,
-                                   components::TransformComponent,
-                                   components::WorldTransformComponent>();
+                                  components::TransformComponent,
+                                  components::WorldTransformComponent>();
 
         for (auto entity : view)
         {
             const auto& transform = view.get<components::TransformComponent>(entity);
             if (!transform.isStatic)
-            {
                 continue;
-            }
 
             const auto& meshComp = view.get<components::MeshComponent>(entity);
             if (meshComp.meshPath.empty())
-            {
                 continue;
-            }
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -55,40 +64,36 @@ namespace lightbake
             meshEntities.push_back(std::move(me));
         }
 
-        spdlog::info("[LightBake] Found {} static mesh entities for baking", meshEntities.size());
+        return meshEntities;
+    }
 
-        // Load meshes and build triangle list
-        std::vector<math::RayBVHTriangle> triangles;
+    void BakeSceneMesh::loadMeshTriangles(const std::vector<MeshEntity>& meshEntities,
+                                          std::vector<math::RayBVHTriangle>& triangles,
+                                          BakeProgressCallback progressCallback)
+    {
         size_t totalEntities = meshEntities.size();
 
         for (size_t entityIdx = 0; entityIdx < totalEntities; ++entityIdx)
         {
             const auto& me = meshEntities[entityIdx];
 
-            // Load mesh from disk (synchronous — CPU-only)
             auto meshData = resource::MeshStreamResource::loadAll(me.meshPath);
             if (meshData.meshes.empty())
             {
-                spdlog::warn("[LightBake] Failed to load mesh: {}", me.meshPath);
+                vfLogWarning("[LightBake] Failed to load mesh: {}", me.meshPath);
                 continue;
             }
 
-            // Process all submeshes, LOD 0 only
             for (uint32_t submeshIdx = 0; submeshIdx < static_cast<uint32_t>(meshData.meshes.size()); ++submeshIdx)
             {
                 const auto& mesh = meshData.meshes[submeshIdx];
                 if (mesh.lodLevels.empty())
-                {
                     continue;
-                }
 
                 const auto& lod0 = mesh.lodLevels[0];
                 if (lod0.vertices.empty() || lod0.indices.empty())
-                {
                     continue;
-                }
 
-                // Convert triangles to world space
                 for (size_t i = 0; i + 2 < lod0.indices.size(); i += 3)
                 {
                     const auto& vert0 = lod0.vertices[lod0.indices[i]];
@@ -96,18 +101,14 @@ namespace lightbake
                     const auto& vert2 = lod0.vertices[lod0.indices[i + 2]];
 
                     math::RayBVHTriangle tri;
-
-                    // Transform positions to world space
                     tri.v0 = glm::vec3(me.worldMatrix * glm::vec4(vert0.position, 1.0f));
                     tri.v1 = glm::vec3(me.worldMatrix * glm::vec4(vert1.position, 1.0f));
                     tri.v2 = glm::vec3(me.worldMatrix * glm::vec4(vert2.position, 1.0f));
 
-                    // Transform normals using normal matrix (inverse transpose)
                     tri.n0 = glm::normalize(me.normalMatrix * vert0.normal);
                     tri.n1 = glm::normalize(me.normalMatrix * vert1.normal);
                     tri.n2 = glm::normalize(me.normalMatrix * vert2.normal);
 
-                    // UVs don't need transformation
                     tri.uv0 = vert0.texCoords;
                     tri.uv1 = vert1.texCoords;
                     tri.uv2 = vert2.texCoords;
@@ -115,11 +116,8 @@ namespace lightbake
                     tri.entityId = me.entityId;
                     tri.submeshIdx = submeshIdx;
 
-                    // Skip degenerate triangles
                     if (tri.computeArea() < 1e-8f)
-                    {
                         continue;
-                    }
 
                     triangles.push_back(tri);
                 }
@@ -130,28 +128,10 @@ namespace lightbake
                 progressCallback(static_cast<float>(entityIdx + 1) / static_cast<float>(totalEntities));
             }
         }
-
-        // Add terrain geometry
-        addTerrainTriangles(terrain, triangles);
-
-        // Add water geometry
-        addWaterTriangles(waterTiles, triangles);
-
-        if (triangles.empty())
-        {
-            spdlog::warn("[LightBake] No valid triangles found in scene");
-            return false;
-        }
-
-        spdlog::info("[LightBake] Building BVH from {} triangles", triangles.size());
-        bvh_.build(std::move(triangles));
-        spdlog::info("[LightBake] BVH built: {} nodes", bvh_.getNodeCount());
-
-        return true;
     }
 
     void BakeSceneMesh::addTerrainTriangles(const TerrainBakeGeometry& terrain,
-                                             std::vector<math::RayBVHTriangle>& triangles)
+                                            std::vector<math::RayBVHTriangle>& triangles)
     {
         if (terrain.vertices.empty() || terrain.triangles.empty())
         {
@@ -160,12 +140,11 @@ namespace lightbake
 
         size_t vertCount = terrain.vertices.size() / 3;
         size_t triCount = terrain.triangles.size() / 3;
-        spdlog::info("[LightBake] Adding {} terrain triangles ({} vertices, {} tiles)",
+        vfLogInfo("[LightBake] Adding {} terrain triangles ({} vertices, {} tiles)",
                      triCount, vertCount, terrain.tileInfos.size());
 
-        // Build a lookup: for each triangle index, find which tile it belongs to
-        // This maps triangle index → tile info index
-        auto findTileForTriangle = [&](size_t triIdx) -> const TerrainTileBakeInfo* {
+        auto findTileForTriangle = [&](size_t triIdx) -> const TerrainTileBakeInfo*
+        {
             for (const auto& tile : terrain.tileInfos)
             {
                 if (static_cast<int>(triIdx) >= tile.firstTriangleIndex &&
@@ -177,8 +156,8 @@ namespace lightbake
             return nullptr;
         };
 
-        // Helper to compute tile-local UV from world position
-        auto computeTileUV = [](const glm::vec3& worldPos, const TerrainTileBakeInfo& tile) -> glm::vec2 {
+        auto computeTileUV = [](const glm::vec3& worldPos, const TerrainTileBakeInfo& tile) -> glm::vec2
+        {
             float u = (worldPos.x - tile.worldOrigin.x) / tile.tileSize;
             float v = (worldPos.z - tile.worldOrigin.z) / tile.tileSize;
             return glm::vec2(glm::clamp(u, 0.0f, 1.0f), glm::clamp(v, 0.0f, 1.0f));
@@ -203,7 +182,6 @@ namespace lightbake
             tri.v1 = glm::vec3(terrain.vertices[i1 * 3], terrain.vertices[i1 * 3 + 1], terrain.vertices[i1 * 3 + 2]);
             tri.v2 = glm::vec3(terrain.vertices[i2 * 3], terrain.vertices[i2 * 3 + 1], terrain.vertices[i2 * 3 + 2]);
 
-            // Compute face normal from geometry
             glm::vec3 faceNormal = glm::normalize(glm::cross(tri.v1 - tri.v0, tri.v2 - tri.v0));
             tri.n0 = tri.n1 = tri.n2 = faceNormal;
 
@@ -211,12 +189,10 @@ namespace lightbake
             const auto* tileInfo = findTileForTriangle(triIdx);
             if (tileInfo)
             {
-                // Assign synthetic entity ID for this terrain tile
                 tri.entityId = TERRAIN_ENTITY_BASE + static_cast<uint32_t>(
                     &(*tileInfo) - terrain.tileInfos.data());
                 tri.submeshIdx = 0;
 
-                // Compute tile-local UVs [0,1] for lightmap mapping
                 tri.uv0 = computeTileUV(tri.v0, *tileInfo);
                 tri.uv1 = computeTileUV(tri.v1, *tileInfo);
                 tri.uv2 = computeTileUV(tri.v2, *tileInfo);
@@ -236,11 +212,10 @@ namespace lightbake
 
             triangles.push_back(tri);
         }
-
     }
 
     void BakeSceneMesh::addWaterTriangles(const std::vector<WaterBakeTile>& waterTiles,
-                                           std::vector<math::RayBVHTriangle>& triangles)
+                                          std::vector<math::RayBVHTriangle>& triangles)
     {
         if (waterTiles.empty())
         {
@@ -259,15 +234,19 @@ namespace lightbake
             {
                 for (uint32_t x = 0; x < N; ++x)
                 {
-                    // Quad corners in world space
                     glm::vec3 p00(tile.worldOrigin.x + x * spacing, tile.waterHeight, tile.worldOrigin.z + z * spacing);
-                    glm::vec3 p10(tile.worldOrigin.x + (x + 1) * spacing, tile.waterHeight, tile.worldOrigin.z + z * spacing);
-                    glm::vec3 p01(tile.worldOrigin.x + x * spacing, tile.waterHeight, tile.worldOrigin.z + (z + 1) * spacing);
-                    glm::vec3 p11(tile.worldOrigin.x + (x + 1) * spacing, tile.waterHeight, tile.worldOrigin.z + (z + 1) * spacing);
+                    glm::vec3 p10(tile.worldOrigin.x + (x + 1) * spacing, tile.waterHeight,
+                                  tile.worldOrigin.z + z * spacing);
+                    glm::vec3 p01(tile.worldOrigin.x + x * spacing, tile.waterHeight,
+                                  tile.worldOrigin.z + (z + 1) * spacing);
+                    glm::vec3 p11(tile.worldOrigin.x + (x + 1) * spacing, tile.waterHeight,
+                                  tile.worldOrigin.z + (z + 1) * spacing);
 
                     // Triangle 1: topLeft, bottomLeft, topRight
                     math::RayBVHTriangle tri1;
-                    tri1.v0 = p00; tri1.v1 = p01; tri1.v2 = p10;
+                    tri1.v0 = p00;
+                    tri1.v1 = p01;
+                    tri1.v2 = p10;
                     tri1.n0 = tri1.n1 = tri1.n2 = normal;
                     tri1.uv0 = tri1.uv1 = tri1.uv2 = glm::vec2(0.0f);
                     tri1.entityId = 0;
@@ -276,7 +255,9 @@ namespace lightbake
 
                     // Triangle 2: topRight, bottomLeft, bottomRight
                     math::RayBVHTriangle tri2;
-                    tri2.v0 = p10; tri2.v1 = p01; tri2.v2 = p11;
+                    tri2.v0 = p10;
+                    tri2.v1 = p01;
+                    tri2.v2 = p11;
                     tri2.n0 = tri2.n1 = tri2.n2 = normal;
                     tri2.uv0 = tri2.uv1 = tri2.uv2 = glm::vec2(0.0f);
                     tri2.entityId = 0;
@@ -288,7 +269,7 @@ namespace lightbake
             }
         }
 
-        spdlog::info("[LightBake] Added {} water triangles from {} tiles", totalWaterTris, waterTiles.size());
+        vfLogInfo("[LightBake] Added {} water triangles from {} tiles", totalWaterTris, waterTiles.size());
     }
 
     std::optional<math::RayHitResult> BakeSceneMesh::traceRay(

@@ -375,8 +375,7 @@ namespace render::gpudriven
                                      const std::string& submeshName,
                                      uint32_t submeshIndex,
                                      uint32_t lodLevel,
-                                     const resource::Vertex* vertexData, uint32_t vertexCount,
-                                     const uint32_t* indexData, uint32_t indexCount)
+                                     const LODUploadData& data)
     {
         if (!initialized || lodLevel >= LOD_LEVEL_COUNT)
         {
@@ -393,33 +392,32 @@ namespace render::gpudriven
 
         const auto& lodInfo = loc->lods[lodLevel];
 
-        if (lodInfo.vertexCount != vertexCount || lodInfo.indexCount != indexCount)
+        if (lodInfo.vertexCount != data.vertexCount || lodInfo.indexCount != data.indexCount)
         {
             loggerError("MergedMeshBuffer::uploadLOD: Count mismatch for {}:{} LOD{}: "
                         "expected {}v/{}i, got {}v/{}i",
                         meshPath, submeshName, lodLevel,
                         lodInfo.vertexCount, lodInfo.indexCount,
-                        vertexCount, indexCount);
+                        data.vertexCount, data.indexCount);
             return false;
         }
 
-        if (vertexData && vertexCount > 0)
+        if (data.vertexData && data.vertexCount > 0)
         {
-            logFirstVertexBoneData(meshPath, vertexData);
-            uploadVertexDataAt(lodInfo.vertexOffset, vertexData, vertexCount);
+            logFirstVertexBoneData(meshPath, data.vertexData);
+            uploadVertexDataAt(lodInfo.vertexOffset, data.vertexData, data.vertexCount);
         }
 
-        if (indexData && indexCount > 0)
+        if (data.indexData && data.indexCount > 0)
         {
-            uploadIndexDataAt(lodInfo.indexOffset, indexData, indexCount);
+            uploadIndexDataAt(lodInfo.indexOffset, data.indexData, data.indexCount);
         }
 
         loc->lodStates[lodLevel] = LODStreamState::Uploading;
 
-
         bool boundsNotComputed = (loc->aabbMin == glm::vec3(0.0f) && loc->aabbMax == glm::vec3(0.0f));
-        if (vertexData && vertexCount > 0 && boundsNotComputed)
-            computeSubmeshBounds(*loc, vertexData, vertexCount);
+        if (data.vertexData && data.vertexCount > 0 && boundsNotComputed)
+            computeSubmeshBounds(*loc, data.vertexData, data.vertexCount);
 
         return true;
     }

@@ -164,11 +164,7 @@ namespace render::gpudriven
     void MergedMeshBuffer::populateObjectData(GPUObjectData& obj,
                                               const mesh::MeshRenderData& meshRender,
                                               const SubmeshLocation& submeshLoc,
-                                              const TextureIndexResolver& textureResolver,
-                                              const ShaderGroupResolver& shaderGroupResolver,
-                                              const BoneOffsetResolver& boneOffsetResolver,
-                                              const LightmapIndexResolver& lightmapResolver,
-                                              float time)
+                                              const ObjectResolvers& resolvers)
     {
         obj.modelMatrix = meshRender.modelMatrix;
         float drawDistSq = meshRender.maxDrawDistance > 0.0f
@@ -176,14 +172,14 @@ namespace render::gpudriven
         obj.aabbMin = glm::vec4(submeshLoc.aabbMin, drawDistSq);
         obj.aabbMax = glm::vec4(submeshLoc.aabbMax, 0.0f);
 
-        populateLODData(obj, meshRender, submeshLoc, boneOffsetResolver);
+        populateLODData(obj, meshRender, submeshLoc, resolvers.boneOffsetResolver);
 
         std::string materialPath = resolveMaterialProperties(obj, meshRender, submeshLoc);
 
-        if (!materialPath.empty() && time > 0.0f)
-            applyDynamicEmission(obj, materialPath, time);
+        if (!materialPath.empty() && resolvers.time > 0.0f)
+            applyDynamicEmission(obj, materialPath, resolvers.time);
 
-        resolveTextureIndices(obj, materialPath, textureResolver);
+        resolveTextureIndices(obj, materialPath, resolvers.textureResolver);
 
         const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         obj.flags = 0;
@@ -235,14 +231,13 @@ namespace render::gpudriven
         }
 
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
-        obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
-                                   ? shaderGroupResolver(materialPath) : 0;
+        obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
+                                   ? resolvers.shaderGroupResolver(materialPath) : 0;
 
-        // Lightmap data
         uint32_t lightmapIdx = INVALID_TEXTURE_INDEX;
-        if (!meshRender.lightmapPath.empty() && lightmapResolver)
+        if (!meshRender.lightmapPath.empty() && resolvers.lightmapResolver)
         {
-            lightmapIdx = lightmapResolver(meshRender.lightmapPath);
+            lightmapIdx = resolvers.lightmapResolver(meshRender.lightmapPath);
         }
 
         if (lightmapIdx != INVALID_TEXTURE_INDEX)
@@ -261,11 +256,7 @@ namespace render::gpudriven
     }
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
-                                         const TextureIndexResolver& textureResolver,
-                                         const ShaderGroupResolver& shaderGroupResolver,
-                                         const BoneOffsetResolver& boneOffsetResolver,
-                                         const LightmapIndexResolver& lightmapResolver,
-                                         float time)
+                                         const ObjectResolvers& resolvers)
     {
         currentObjectCount = 0;
         transparentObjectCount = 0;
@@ -296,7 +287,7 @@ namespace render::gpudriven
                 }
 
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time);
+                populateObjectData(obj, meshRender, submeshLoc, resolvers);
                 obj.entityId = currentObjectCount;
 
                 if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)

@@ -55,7 +55,7 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time);
+        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time});
 
         CameraUpdateParams cameraParams{
             .view = view,

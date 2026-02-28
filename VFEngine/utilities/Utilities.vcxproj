@@ -211,6 +211,7 @@
     <ClCompile Include="material\MaterialGraphHelper.cpp" />
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
+    <ClCompile Include="math\RayBVH.cpp" />
     <ClCompile Include="navigation\NavmeshSerializer.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />

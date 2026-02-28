@@ -7,10 +7,6 @@
 
 namespace services::events::lightbake
 {
-    // ============================================================
-    // COMMANDS
-    // ============================================================
-
     struct StartBakeCommand : ::events::ICommand<void>
     {
         services::LightBakeConfig config;
@@ -34,10 +30,6 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "ClearLightmap"; }
     };
 
-    // ============================================================
-    // QUERIES
-    // ============================================================
-
     struct GetBakeProgressQuery : ::events::IQuery<float>
     {
         std::string_view getName() const override { return "GetBakeProgress"; }
@@ -53,7 +45,6 @@ namespace services::events::lightbake
         std::string_view getName() const override { return "GetBakeResult"; }
     };
 
-    // Terrain tile lightmap info from last bake
     struct TerrainTileLightmapEntry
     {
         int32_t coordX = 0;
@@ -66,10 +57,6 @@ namespace services::events::lightbake
     {
         std::string_view getName() const override { return "GetTerrainLightmapData"; }
     };
-
-    // ============================================================
-    // NOTIFICATIONS
-    // ============================================================
 
     struct BakeCompletedNotification : ::events::INotification
     {

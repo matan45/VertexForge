@@ -3,7 +3,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "lightbake/LightmapAtlas.hpp"
-#include <glm/glm.hpp>
 #include <filesystem>
 #include <cmath>
 #include <algorithm>
@@ -124,7 +123,6 @@ namespace windows
 
         texData.mipData.push_back(std::move(mip0));
 
-        // Upload to GPU
         events::render::LoadEditorTextureFromDataCommand loadCmd;
         loadCmd.textureData = std::move(texData);
         textureHandle = events::EventDispatcher::instance().execute(loadCmd);
@@ -194,7 +192,6 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Exposure control - re-upload texture when changed
         if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float prevExposure = exposure;
@@ -202,7 +199,6 @@ namespace windows
 
             if (prevExposure != exposure && lightmapData.width > 0)
             {
-                // Release old texture and reload with new exposure
                 if (textureHandle.isValid())
                 {
                     events::render::ReleaseEditorTextureCommand releaseCmd;
@@ -241,7 +237,6 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Entity regions list
         if (!lightmapData.entityRegions.empty() &&
             ImGui::CollapsingHeader("Entity Regions"))
         {

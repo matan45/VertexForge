@@ -174,13 +174,12 @@ namespace resource
         std::vector<short> data;
     };
 
-    // Per-entity region in a lightmap atlas
     struct LightmapEntityRegion
     {
         uint32_t entityId = 0;
-        uint32_t x = 0;           // Pixel offset in atlas
+        uint32_t x = 0;
         uint32_t y = 0;
-        uint32_t width = 0;       // Region dimensions
+        uint32_t width = 0;
         uint32_t height = 0;
         glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f}; // xy=scale, zw=offset into atlas UV
     };
@@ -191,8 +190,8 @@ namespace resource
         FileVersion version{};
         uint32_t width = 0;
         uint32_t height = 0;
-        uint32_t channels = 3;    // RGB irradiance
-        std::vector<float> texels; // width * height * channels float values (HDR)
+        uint32_t channels = 3;
+        std::vector<float> texels;
         std::vector<LightmapEntityRegion> entityRegions;
     };
 

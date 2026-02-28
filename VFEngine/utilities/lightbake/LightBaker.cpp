@@ -1,5 +1,5 @@
 #include "LightBaker.hpp"
-#include <spdlog/spdlog.h>
+#include "../print/EditorLogger.hpp"
 #include <future>
 #include <thread>
 #include <algorithm>
@@ -7,10 +7,6 @@
 
 namespace lightbake
 {
-    // -----------------------------------------------------------------------
-    // Attenuation functions — must exactly match lighting_functions.glsl
-    // -----------------------------------------------------------------------
-
     float LightBaker::smoothDistanceAttenuation(float distance, float range)
     {
         float distRatio = distance / range;
@@ -38,17 +34,13 @@ namespace lightbake
         return std::clamp((cosAngle - cosOuter) / (cosInner - cosOuter), 0.0f, 1.0f);
     }
 
-    // -----------------------------------------------------------------------
-    // Per-texel irradiance computation
-    // -----------------------------------------------------------------------
-
     glm::vec3 LightBaker::computeDirectionalIrradiance(
         const BakeDirectionalLight& light,
         const glm::vec3& worldPos,
         const glm::vec3& worldNormal,
         const BakeSceneMesh& sceneMesh) const
     {
-        glm::vec3 lightDir = glm::normalize(-light.direction); // Direction toward light
+        glm::vec3 lightDir = glm::normalize(-light.direction);
         float NdotL = glm::dot(worldNormal, lightDir);
 
         if (NdotL <= 0.0f)
@@ -56,11 +48,10 @@ namespace lightbake
             return glm::vec3(0.0f);
         }
 
-        // Cast shadow ray from surface toward light
         math::Ray shadowRay(worldPos + worldNormal * SHADOW_BIAS, lightDir);
         if (sceneMesh.traceOcclusion(shadowRay))
         {
-            return glm::vec3(0.0f); // In shadow
+            return glm::vec3(0.0f);
         }
 
         return light.color * light.intensity * NdotL;
@@ -80,7 +71,7 @@ namespace lightbake
             return glm::vec3(0.0f);
         }
 
-        glm::vec3 lightDir = toLight / distance; // Normalized direction toward light
+        glm::vec3 lightDir = toLight / distance;
         float NdotL = glm::dot(worldNormal, lightDir);
 
         if (NdotL <= 0.0f)
@@ -88,7 +79,6 @@ namespace lightbake
             return glm::vec3(0.0f);
         }
 
-        // Shadow ray
         math::Ray shadowRay(worldPos + worldNormal * SHADOW_BIAS, lightDir);
         if (sceneMesh.traceOcclusion(shadowRay, distance))
         {
@@ -121,7 +111,6 @@ namespace lightbake
             return glm::vec3(0.0f);
         }
 
-        // Spot cone attenuation
         float spotAtt = spotAngleAttenuation(lightDir, light.direction,
                                               light.cosInnerAngle, light.cosOuterAngle);
         if (spotAtt <= 0.0f)
@@ -129,7 +118,6 @@ namespace lightbake
             return glm::vec3(0.0f);
         }
 
-        // Shadow ray
         math::Ray shadowRay(worldPos + worldNormal * SHADOW_BIAS, lightDir);
         if (sceneMesh.traceOcclusion(shadowRay, distance))
         {
@@ -140,10 +128,6 @@ namespace lightbake
         return light.color * light.intensity * distAtt * spotAtt * NdotL;
     }
 
-    // -----------------------------------------------------------------------
-    // Main bake function
-    // -----------------------------------------------------------------------
-
     bool LightBaker::bake(
         const BakeSceneMesh& sceneMesh,
         const LightmapAtlas& atlas,
@@ -151,11 +135,11 @@ namespace lightbake
         resource::LightmapData& outLightmap,
         BakerProgressCallback progressCallback)
     {
-        cancelled_.store(false);
+        cancelled.store(false);
 
         if (!sceneMesh.isBuilt() || !atlas.isBuilt() || lights.empty())
         {
-            spdlog::warn("[LightBake] Baker prerequisites not met");
+            vfLogWarning("[LightBake] Baker prerequisites not met");
             return false;
         }
 
@@ -164,19 +148,17 @@ namespace lightbake
         uint32_t height = atlas.getHeight();
         uint32_t totalTexels = width * height;
 
-        // Ensure output lightmap has correct dimensions
         outLightmap.width = width;
         outLightmap.height = height;
         outLightmap.channels = 3;
         outLightmap.texels.resize(totalTexels * 3, 0.0f);
 
-        spdlog::info("[LightBake] Starting bake: {}x{} atlas, {} dir + {} point + {} spot lights",
+        vfLogInfo("[LightBake] Starting bake: {}x{} atlas, {} dir + {} point + {} spot lights",
                      width, height,
                      lights.directionalLights.size(),
                      lights.pointLights.size(),
                      lights.spotLights.size());
 
-        // Count valid texels for progress reporting
         uint32_t validTexelCount = 0;
         for (const auto& sample : texelSamples)
         {
@@ -185,13 +167,34 @@ namespace lightbake
 
         if (validTexelCount == 0)
         {
-            spdlog::warn("[LightBake] No valid texel samples to bake");
-            return true; // Not an error — just nothing to bake
+            vfLogWarning("[LightBake] No valid texel samples to bake");
+            return true;
         }
 
-        spdlog::info("[LightBake] {} valid texels out of {} total", validTexelCount, totalTexels);
+        vfLogInfo("[LightBake] {} valid texels out of {} total", validTexelCount, totalTexels);
 
-        // Multi-threaded bake: divide texels into chunks
+        if (!bakeIrradianceMultithreaded(texelSamples, lights, sceneMesh, outLightmap,
+                                          validTexelCount, progressCallback))
+        {
+            return false;
+        }
+
+        vfLogInfo("[LightBake] Bake complete: {} texels processed", validTexelCount);
+
+        dilateLightmap(outLightmap, texelSamples);
+
+        return true;
+    }
+
+    bool LightBaker::bakeIrradianceMultithreaded(
+        const std::vector<TexelSample>& texelSamples,
+        const BakeLightSet& lights,
+        const BakeSceneMesh& sceneMesh,
+        resource::LightmapData& outLightmap,
+        uint32_t validTexelCount,
+        BakerProgressCallback progressCallback)
+    {
+        uint32_t totalTexels = static_cast<uint32_t>(texelSamples.size());
         uint32_t threadCount = std::max(1u, std::thread::hardware_concurrency());
         uint32_t chunkSize = (totalTexels + threadCount - 1) / threadCount;
 
@@ -210,41 +213,33 @@ namespace lightbake
                 {
                     for (uint32_t i = start; i < end; ++i)
                     {
-                        if (cancelled_.load())
-                        {
+                        if (cancelled.load())
                             return;
-                        }
 
                         const auto& sample = texelSamples[i];
                         if (!sample.valid)
-                        {
                             continue;
-                        }
 
                         glm::vec3 irradiance(0.0f);
 
-                        // Accumulate directional lights
                         for (const auto& light : lights.directionalLights)
                         {
                             irradiance += computeDirectionalIrradiance(
                                 light, sample.worldPosition, sample.worldNormal, sceneMesh);
                         }
 
-                        // Accumulate point lights
                         for (const auto& light : lights.pointLights)
                         {
                             irradiance += computePointIrradiance(
                                 light, sample.worldPosition, sample.worldNormal, sceneMesh);
                         }
 
-                        // Accumulate spot lights
                         for (const auto& light : lights.spotLights)
                         {
                             irradiance += computeSpotIrradiance(
                                 light, sample.worldPosition, sample.worldNormal, sceneMesh);
                         }
 
-                        // Write to lightmap (no race — each texel written by one thread)
                         uint32_t idx = i * 3;
                         outLightmap.texels[idx + 0] = irradiance.r;
                         outLightmap.texels[idx + 1] = irradiance.g;
@@ -260,83 +255,79 @@ namespace lightbake
             ));
         }
 
-        // Wait for all threads
         for (auto& f : futures)
         {
             f.get();
         }
 
-        if (cancelled_.load())
+        if (cancelled.load())
         {
-            spdlog::info("[LightBake] Bake cancelled");
+            vfLogInfo("[LightBake] Bake cancelled");
             return false;
         }
 
-        spdlog::info("[LightBake] Bake complete: {} texels processed", validTexelCount);
+        return true;
+    }
 
-        // Dilate lightmap: fill empty padding texels with nearest valid neighbor color.
-        // This prevents black seams when bilinear filtering samples across chart edges.
+    // Fills empty padding texels with nearest valid neighbor color
+    // to prevent black seams when bilinear filtering samples across chart edges.
+    void LightBaker::dilateLightmap(resource::LightmapData& lightmap,
+                                    const std::vector<TexelSample>& texelSamples)
+    {
+        const uint32_t w = lightmap.width;
+        const uint32_t h = lightmap.height;
+        const uint32_t ch = lightmap.channels;
+
+        std::vector<bool> valid(w * h, false);
+        for (uint32_t i = 0; i < w * h; ++i)
         {
-            const uint32_t w = outLightmap.width;
-            const uint32_t h = outLightmap.height;
-            const uint32_t ch = outLightmap.channels;
-
-            // Build a mask of valid texels
-            std::vector<bool> valid(w * h, false);
-            for (uint32_t i = 0; i < w * h; ++i)
-            {
-                if (texelSamples[i].valid)
-                    valid[i] = true;
-            }
-
-            // Multi-pass dilation: each pass expands by 1 texel
-            const int dilationPasses = 4;
-            for (int pass = 0; pass < dilationPasses; ++pass)
-            {
-                std::vector<bool> newValid = valid;
-                for (uint32_t y = 0; y < h; ++y)
-                {
-                    for (uint32_t x = 0; x < w; ++x)
-                    {
-                        uint32_t idx = y * w + x;
-                        if (valid[idx]) continue;
-
-                        // Average valid neighbors
-                        glm::vec3 sum(0.0f);
-                        int count = 0;
-                        for (int dy = -1; dy <= 1; ++dy)
-                        {
-                            for (int dx = -1; dx <= 1; ++dx)
-                            {
-                                if (dx == 0 && dy == 0) continue;
-                                int nx = static_cast<int>(x) + dx;
-                                int ny = static_cast<int>(y) + dy;
-                                if (nx < 0 || ny < 0 || nx >= static_cast<int>(w) || ny >= static_cast<int>(h)) continue;
-                                uint32_t nIdx = ny * w + nx;
-                                if (valid[nIdx])
-                                {
-                                    sum.r += outLightmap.texels[nIdx * ch + 0];
-                                    sum.g += outLightmap.texels[nIdx * ch + 1];
-                                    sum.b += outLightmap.texels[nIdx * ch + 2];
-                                    count++;
-                                }
-                            }
-                        }
-
-                        if (count > 0)
-                        {
-                            float inv = 1.0f / static_cast<float>(count);
-                            outLightmap.texels[idx * ch + 0] = sum.r * inv;
-                            outLightmap.texels[idx * ch + 1] = sum.g * inv;
-                            outLightmap.texels[idx * ch + 2] = sum.b * inv;
-                            newValid[idx] = true;
-                        }
-                    }
-                }
-                valid = std::move(newValid);
-            }
+            if (texelSamples[i].valid)
+                valid[i] = true;
         }
 
-        return true;
+        const int dilationPasses = 4;
+        for (int pass = 0; pass < dilationPasses; ++pass)
+        {
+            std::vector<bool> newValid = valid;
+            for (uint32_t y = 0; y < h; ++y)
+            {
+                for (uint32_t x = 0; x < w; ++x)
+                {
+                    uint32_t idx = y * w + x;
+                    if (valid[idx]) continue;
+
+                    glm::vec3 sum(0.0f);
+                    int count = 0;
+                    for (int dy = -1; dy <= 1; ++dy)
+                    {
+                        for (int dx = -1; dx <= 1; ++dx)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = static_cast<int>(x) + dx;
+                            int ny = static_cast<int>(y) + dy;
+                            if (nx < 0 || ny < 0 || nx >= static_cast<int>(w) || ny >= static_cast<int>(h)) continue;
+                            uint32_t nIdx = ny * w + nx;
+                            if (valid[nIdx])
+                            {
+                                sum.r += lightmap.texels[nIdx * ch + 0];
+                                sum.g += lightmap.texels[nIdx * ch + 1];
+                                sum.b += lightmap.texels[nIdx * ch + 2];
+                                count++;
+                            }
+                        }
+                    }
+
+                    if (count > 0)
+                    {
+                        float inv = 1.0f / static_cast<float>(count);
+                        lightmap.texels[idx * ch + 0] = sum.r * inv;
+                        lightmap.texels[idx * ch + 1] = sum.g * inv;
+                        lightmap.texels[idx * ch + 2] = sum.b * inv;
+                        newValid[idx] = true;
+                    }
+                }
+            }
+            valid = std::move(newValid);
+        }
     }
 }

@@ -32,7 +32,6 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    // Shader group indices for material blend modes
     constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)
     constexpr uint32_t SHADER_GROUP_BLEND = 4;        // Additive / Multiply objects
 
@@ -102,14 +101,14 @@ namespace render::gpudriven
 
     struct alignas(16) TerrainTileGPUData
     {
-        glm::mat4 modelMatrix;          // Usually identity for world-space terrain
+        glm::mat4 modelMatrix;
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
         glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
         glm::vec4 aabbMax;              // xyz = world AABB max, w = activeLayerCount (1-16)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
-        glm::uvec4 lod1MeshletData;     // Same layout
-        glm::uvec4 lod2MeshletData;     // Same layout
-        glm::uvec4 lod3MeshletData;     // Same layout
+        glm::uvec4 lod1MeshletData;
+        glm::uvec4 lod2MeshletData;
+        glm::uvec4 lod3MeshletData;
         glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds (world units)
         int32_t coordX;
         int32_t coordZ;
@@ -119,12 +118,11 @@ namespace render::gpudriven
     };
     static_assert(sizeof(TerrainTileGPUData) == 224);
 
-    // Per-layer texture indices for terrain material layers (16 bytes per layer)
     struct TerrainLayerGPUData
     {
         uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
         uint32_t normalTextureIndex;   // Bindless index (0 = default)
-        float tilingScale;             // UV tiling multiplier
+        float tilingScale;
         uint32_t padding;
     };
     static_assert(sizeof(TerrainLayerGPUData) == 16);

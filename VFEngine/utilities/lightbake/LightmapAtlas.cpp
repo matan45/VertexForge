@@ -1,7 +1,7 @@
 #include "LightmapAtlas.hpp"
 #include "BakeSceneMesh.hpp"
 #include "../resource/EndianUtils.hpp"
-#include <spdlog/spdlog.h>
+#include "../print/EditorLogger.hpp"
 #include <unordered_map>
 #include <algorithm>
 #include <fstream>
@@ -18,7 +18,24 @@ namespace lightbake
             return false;
         }
 
-        // Group triangles by entity
+        auto charts = buildEntityCharts(bvh, config);
+
+        if (!packCharts(charts, bvh, config))
+        {
+            vfLogError("[LightBake] Failed to pack all charts into atlas (max {}x{})",
+                        config.maxAtlasSize, config.maxAtlasSize);
+            clear();
+            return false;
+        }
+
+        vfLogInfo("[LightBake] Atlas built: {}x{}, {} entity charts",
+                   lightmapData.width, lightmapData.height, charts.size());
+        return true;
+    }
+
+    std::vector<LightmapAtlas::EntityChart> LightmapAtlas::buildEntityCharts(
+        const math::RayBVH& bvh, const LightmapConfig& config)
+    {
         std::unordered_map<uint32_t, EntityChart> chartMap;
         const auto& triangles = bvh.getTriangles();
 
@@ -31,7 +48,6 @@ namespace lightbake
             chart.triangleIndices.push_back(i);
         }
 
-        // Compute per-entity chart resolutions
         std::vector<EntityChart> charts;
         charts.reserve(chartMap.size());
         for (auto& [id, chart] : chartMap)
@@ -43,18 +59,21 @@ namespace lightbake
             charts.push_back(std::move(chart));
         }
 
-        // Sort charts by height (descending) for better packing
         std::sort(charts.begin(), charts.end(), [](const EntityChart& a, const EntityChart& b)
         {
             return a.height > b.height;
         });
 
-        // Determine atlas size via skyline bin packing
-        // Start with a reasonable initial size and grow if needed
+        return charts;
+    }
+
+    bool LightmapAtlas::packCharts(std::vector<EntityChart>& charts,
+                                   const math::RayBVH& bvh,
+                                   const LightmapConfig& config)
+    {
         uint32_t atlasW = 256;
         uint32_t atlasH = 256;
 
-        // Estimate minimum atlas area
         uint32_t totalArea = 0;
         for (const auto& chart : charts)
         {
@@ -63,7 +82,6 @@ namespace lightbake
             totalArea += paddedW * paddedH;
         }
 
-        // Start from an atlas that can at least fit the total area
         while (atlasW * atlasH < totalArea)
         {
             if (atlasW <= atlasH)
@@ -75,15 +93,13 @@ namespace lightbake
         atlasW = std::min(atlasW, config.maxAtlasSize);
         atlasH = std::min(atlasH, config.maxAtlasSize);
 
-        // Try to pack all charts
-        bool packed = false;
-        while (!packed && atlasW <= config.maxAtlasSize && atlasH <= config.maxAtlasSize)
+        while (atlasW <= config.maxAtlasSize && atlasH <= config.maxAtlasSize)
         {
             std::vector<SkylineNode> skyline;
             skyline.push_back({0, 0, atlasW});
 
-            packed = true;
             std::vector<std::pair<uint32_t, uint32_t>> positions(charts.size());
+            bool allPacked = true;
 
             for (size_t i = 0; i < charts.size(); ++i)
             {
@@ -93,24 +109,22 @@ namespace lightbake
 
                 if (!skylineInsert(skyline, paddedW, paddedH, atlasW, atlasH, outX, outY))
                 {
-                    packed = false;
+                    allPacked = false;
                     break;
                 }
 
                 positions[i] = {outX + config.padding, outY + config.padding};
             }
 
-            if (packed)
+            if (allPacked)
             {
-                // Initialize lightmap data
-                lightmapData_.width = atlasW;
-                lightmapData_.height = atlasH;
-                lightmapData_.channels = 3;
-                lightmapData_.texels.resize(atlasW * atlasH * 3, 0.0f);
-                texelSamples_.resize(atlasW * atlasH);
+                lightmapData.width = atlasW;
+                lightmapData.height = atlasH;
+                lightmapData.channels = 3;
+                lightmapData.texels.resize(atlasW * atlasH * 3, 0.0f);
+                texelSamples.resize(atlasW * atlasH);
 
-                // Fill entity regions and rasterize
-                lightmapData_.entityRegions.reserve(charts.size());
+                lightmapData.entityRegions.reserve(charts.size());
 
                 for (size_t i = 0; i < charts.size(); ++i)
                 {
@@ -128,30 +142,21 @@ namespace lightbake
                         static_cast<float>(px) / static_cast<float>(atlasW),
                         static_cast<float>(py) / static_cast<float>(atlasH)
                     );
-                    lightmapData_.entityRegions.push_back(region);
+                    lightmapData.entityRegions.push_back(region);
 
                     rasterizeChart(charts[i], bvh, px, py, charts[i].width, charts[i].height);
                 }
+
+                return true;
             }
+
+            if (atlasW <= atlasH)
+                atlasW *= 2;
             else
-            {
-                // Grow atlas
-                if (atlasW <= atlasH)
-                    atlasW *= 2;
-                else
-                    atlasH *= 2;
-            }
+                atlasH *= 2;
         }
 
-        if (!packed)
-        {
-            spdlog::error("[LightBake] Failed to pack all charts into atlas (max {}x{})", config.maxAtlasSize, config.maxAtlasSize);
-            clear();
-            return false;
-        }
-
-        spdlog::info("[LightBake] Atlas built: {}x{}, {} entity charts", atlasW, atlasH, charts.size());
-        return true;
+        return false;
     }
 
     uint32_t LightmapAtlas::computeChartResolution(float surfaceArea, const LightmapConfig& config, bool isTerrain) const
@@ -192,7 +197,6 @@ namespace lightbake
 
         for (size_t i = 0; i < skyline.size(); ++i)
         {
-            // Check if rect fits starting at this node
             if (skyline[i].x + rectW > atlasW)
             {
                 continue;
@@ -247,28 +251,23 @@ namespace lightbake
         outX = skyline[bestIdx].x;
         outY = bestY;
 
-        // Insert new skyline node
         SkylineNode newNode{outX, outY + rectH, rectW};
 
-        // Remove overlapping nodes and insert new one
         uint32_t rightEdge = outX + rectW;
         size_t i = static_cast<size_t>(bestIdx);
 
-        // Trim/remove nodes covered by the new rect
         while (i < skyline.size() && skyline[i].x < rightEdge)
         {
             uint32_t nodeRight = skyline[i].x + skyline[i].width;
 
             if (nodeRight > rightEdge)
             {
-                // Trim this node
                 skyline[i].width = nodeRight - rightEdge;
                 skyline[i].x = rightEdge;
                 break;
             }
             else
             {
-                // Remove this node entirely
                 skyline.erase(skyline.begin() + i);
             }
         }
@@ -306,7 +305,6 @@ namespace lightbake
         // Map the entity's triangles into the chart using their existing UV0 coordinates
         const auto& triangles = bvh.getTriangles();
 
-        // Find UV bounds for this entity's triangles
         glm::vec2 uvMin(std::numeric_limits<float>::max());
         glm::vec2 uvMax(std::numeric_limits<float>::lowest());
 
@@ -321,8 +319,6 @@ namespace lightbake
         if (uvRange.x < 1e-6f) uvRange.x = 1.0f;
         if (uvRange.y < 1e-6f) uvRange.y = 1.0f;
 
-        // For each texel in the chart, find which triangle it maps to
-        // and compute the world-space position and normal
         float invW = 1.0f / static_cast<float>(chartW);
         float invH = 1.0f / static_cast<float>(chartH);
 
@@ -330,12 +326,10 @@ namespace lightbake
         {
             for (uint32_t lx = 0; lx < chartW; ++lx)
             {
-                // Map texel center to UV space
                 float u = uvMin.x + (static_cast<float>(lx) + 0.5f) * invW * uvRange.x;
                 float v = uvMin.y + (static_cast<float>(ly) + 0.5f) * invH * uvRange.y;
                 glm::vec2 sampleUV(u, v);
 
-                // Find which triangle contains this UV point
                 for (uint32_t triIdx : chart.triangleIndices)
                 {
                     const auto& tri = triangles[triIdx];
@@ -362,13 +356,13 @@ namespace lightbake
                     constexpr float eps = -1e-4f;
                     if (baryU >= eps && baryV >= eps && (baryU + baryV) <= (1.0f - eps))
                     {
-                        uint32_t atlasIdx = (atlasY + ly) * lightmapData_.width + (atlasX + lx);
+                        uint32_t atlasIdx = (atlasY + ly) * lightmapData.width + (atlasX + lx);
 
-                        texelSamples_[atlasIdx].worldPosition = tri.interpolatePosition(baryU, baryV);
-                        texelSamples_[atlasIdx].worldNormal = tri.interpolateNormal(baryU, baryV);
-                        texelSamples_[atlasIdx].triangleIdx = triIdx;
-                        texelSamples_[atlasIdx].valid = true;
-                        break; // Found the triangle for this texel
+                        texelSamples[atlasIdx].worldPosition = tri.interpolatePosition(baryU, baryV);
+                        texelSamples[atlasIdx].worldNormal = tri.interpolateNormal(baryU, baryV);
+                        texelSamples[atlasIdx].triangleIdx = triIdx;
+                        texelSamples[atlasIdx].valid = true;
+                        break;
                     }
                 }
             }
@@ -377,8 +371,8 @@ namespace lightbake
 
     void LightmapAtlas::clear()
     {
-        lightmapData_ = {};
-        texelSamples_.clear();
+        lightmapData = {};
+        texelSamples.clear();
     }
 
     bool LightmapAtlas::save(const resource::LightmapData& data, const std::string& path)
@@ -386,7 +380,7 @@ namespace lightbake
         std::ofstream file(path, std::ios::binary);
         if (!file.is_open())
         {
-            spdlog::error("[LightBake] Failed to open file for writing: {}", path);
+            vfLogError("[LightBake] Failed to open file for writing: {}", path);
             return false;
         }
 
@@ -434,7 +428,7 @@ namespace lightbake
         std::ifstream file(path, std::ios::binary);
         if (!file.is_open())
         {
-            spdlog::error("[LightBake] Failed to open lightmap file: {}", path);
+            vfLogError("[LightBake] Failed to open lightmap file: {}", path);
             return data;
         }
 

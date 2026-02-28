@@ -8,10 +8,8 @@
 
 namespace lightbake
 {
-    // Progress callback: reports 0.0 to 1.0
     using BakeProgressCallback = std::function<void(float progress)>;
 
-    // Per-tile terrain bake info
     struct TerrainTileBakeInfo
     {
         int32_t coordX = 0;
@@ -27,7 +25,6 @@ namespace lightbake
     // Synthetic entity ID base for terrain tiles (high bit set to avoid collision with real entities)
     constexpr uint32_t TERRAIN_ENTITY_BASE = 0x80000000u;
 
-    // Flat terrain geometry data (world space), matching TerrainGeometryResult format
     struct TerrainBakeGeometry
     {
         std::vector<float> vertices;   // Flat: x,y,z,x,y,z,...
@@ -35,7 +32,6 @@ namespace lightbake
         std::vector<TerrainTileBakeInfo> tileInfos; // Per-tile metadata for lightmap baking
     };
 
-    // Per-tile water geometry params
     struct WaterBakeTile
     {
         glm::vec3 worldOrigin{0.0f};
@@ -44,44 +40,44 @@ namespace lightbake
         uint32_t subdivisions = 32;
     };
 
-    // Loads static mesh data from disk, transforms to world space,
-    // and builds a triangle-level BVH for ray intersection during light baking.
-    // CPU-only — independent of GPU mesh cache.
     class BakeSceneMesh
     {
     public:
         BakeSceneMesh() = default;
 
-        // Build the scene BVH from all static mesh entities in the ECS registry,
-        // plus optional terrain and water geometry.
-        // Loads .vfMesh files from disk, transforms vertices to world space,
-        // and constructs a RayBVH from all triangles.
-        // Returns true if at least one triangle was loaded.
         bool buildFromScene(
             const TerrainBakeGeometry& terrain = {},
             const std::vector<WaterBakeTile>& waterTiles = {},
             BakeProgressCallback progressCallback = nullptr);
 
-        // Trace a ray and find the closest hit
         std::optional<math::RayHitResult> traceRay(
             const math::Ray& ray,
             float maxDist = std::numeric_limits<float>::max()) const;
 
-        // Shadow/occlusion test — returns true if any geometry blocks the ray
         bool traceOcclusion(
             const math::Ray& ray,
             float maxDist = std::numeric_limits<float>::max()) const;
 
-        // Release all CPU mesh data and BVH
         void clear();
 
-        // Accessors
         bool isBuilt() const { return bvh_.isBuilt(); }
         size_t getTriangleCount() const { return bvh_.getTriangleCount(); }
 
         const math::RayBVH& getBVH() const { return bvh_; }
 
     private:
+        struct MeshEntity
+        {
+            std::string meshPath;
+            glm::mat4 worldMatrix;
+            glm::mat3 normalMatrix;
+            uint32_t entityId;
+        };
+
+        std::vector<MeshEntity> collectStaticMeshEntities();
+        void loadMeshTriangles(const std::vector<MeshEntity>& meshEntities,
+                               std::vector<math::RayBVHTriangle>& triangles,
+                               BakeProgressCallback progressCallback);
         void addTerrainTriangles(const TerrainBakeGeometry& terrain,
                                  std::vector<math::RayBVHTriangle>& triangles);
         void addWaterTriangles(const std::vector<WaterBakeTile>& waterTiles,

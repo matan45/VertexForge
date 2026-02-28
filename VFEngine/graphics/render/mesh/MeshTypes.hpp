@@ -189,9 +189,8 @@ namespace render::mesh
 
         float lodBias = 0.0f;
         int forceLODLevel = -1;
-        float maxDrawDistance = 0.0f; // 0 = use category default
+        float maxDrawDistance = 0.0f;
 
-        // Lightmap data (populated from LightmapComponent if present)
         std::string lightmapPath;
         uint32_t lightmapTextureIndex = 0xFFFFFFFF; // INVALID = no lightmap
         glm::vec4 lightmapScaleOffset{0.0f}; // xy=scale, zw=offset
@@ -209,7 +208,6 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    // Must match CameraData in GLSL shaders
     struct CameraUBO
     {
         alignas(16) glm::mat4 view;

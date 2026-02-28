@@ -37,6 +37,27 @@ namespace render::lighting
         }
     }
 
+    void GPULightBufferManager::updateShadowRegistration(uint32_t entityId,
+                                                          shadow::ShadowMapType type,
+                                                          const shadow::ShadowSettings& settings)
+    {
+        bool isRegistered = registeredShadowLights.contains(entityId);
+        bool shadowsEnabled = shadowSystem->isShadowsEnabled();
+
+        if (shadowsEnabled)
+        {
+            if (shadowSystem->registerLight(entityId, type, settings))
+            {
+                registeredShadowLights.insert(entityId);
+            }
+        }
+        else if (isRegistered)
+        {
+            shadowSystem->unregisterLight(entityId);
+            registeredShadowLights.erase(entityId);
+        }
+    }
+
     void GPULightBufferManager::collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -54,9 +75,7 @@ namespace render::lighting
             }
 
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
-            {
                 continue;
-            }
 
             if (directionalCount >= LightConstants::MAX_DIRECTIONAL_LIGHTS)
             {
@@ -68,55 +87,30 @@ namespace render::lighting
 
             bool isStaticLight = false;
             if (auto* transform = registry.try_get<components::TransformComponent>(entity))
-            {
                 isStaticLight = transform->isStatic;
-            }
 
-            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
-                bool isRegistered = registeredShadowLights.contains(entityId);
-                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
-
-                if (shadowsEnabled)
-                {
-                    shadow::ShadowSettings settings{};
-                    settings.depthBias = shadowSystem->getGlobalDepthBias();
-                    settings.normalBias = shadowSystem->getGlobalNormalBias();
-                    settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
-                    settings.enabled = true;
-                    settings.castShadows = true;
-
-                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::DirectionalCSM, settings))
-                    {
-                        registeredShadowLights.insert(entityId);
-                    }
-                }
-                else if (!shadowsEnabled && isRegistered)
-                {
-                    shadowSystem->unregisterLight(entityId);
-                    registeredShadowLights.erase(entityId);
-                }
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
+                settings.enabled = true;
+                settings.castShadows = true;
+                updateShadowRegistration(entityId, shadow::ShadowMapType::DirectionalCSM, settings);
             }
 
-            // Static lights contribute shadows only, not Forward+ direct lighting
             if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
-            gpuLight.shadowIndex = -1;
-
-            if (shadowSystem)
-            {
-                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
-            }
+            gpuLight.shadowIndex = shadowSystem ? shadowSystem->getShadowViewIndex(entityId) : -1;
 
             ++directionalCount;
         }
@@ -168,35 +162,18 @@ namespace render::lighting
                 isStaticLight = transform->isStatic;
             }
 
-            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
-                bool isRegistered = registeredShadowLights.contains(entityId);
-                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
-
-                if (shadowsEnabled)
-                {
-                    shadow::ShadowSettings settings{};
-                    settings.depthBias = shadowSystem->getGlobalDepthBias();
-                    settings.normalBias = shadowSystem->getGlobalNormalBias();
-                    settings.farPlane = light.radius;
-                    settings.enabled = true;
-                    settings.castShadows = true;
-
-                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::PointCube, settings))
-                    {
-                        registeredShadowLights.insert(entityId);
-                    }
-                }
-                else if (!shadowsEnabled && isRegistered)
-                {
-                    shadowSystem->unregisterLight(entityId);
-                    registeredShadowLights.erase(entityId);
-                }
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.farPlane = light.radius;
+                settings.enabled = true;
+                settings.castShadows = true;
+                updateShadowRegistration(entityId, shadow::ShadowMapType::PointCube, settings);
             }
 
-            // Static lights contribute shadows only, not Forward+ direct lighting
             if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
@@ -268,35 +245,18 @@ namespace render::lighting
                 isStaticLight = transform->isStatic;
             }
 
-            // Always register shadows (even for static/baked lights)
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
-                bool isRegistered = registeredShadowLights.contains(entityId);
-                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
-
-                if (shadowsEnabled)
-                {
-                    shadow::ShadowSettings settings{};
-                    settings.depthBias = shadowSystem->getGlobalDepthBias();
-                    settings.normalBias = shadowSystem->getGlobalNormalBias();
-                    settings.farPlane = light.range;
-                    settings.enabled = true;
-                    settings.castShadows = true;
-
-                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::Spot2D, settings))
-                    {
-                        registeredShadowLights.insert(entityId);
-                    }
-                }
-                else if (!shadowsEnabled && isRegistered)
-                {
-                    shadowSystem->unregisterLight(entityId);
-                    registeredShadowLights.erase(entityId);
-                }
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.farPlane = light.range;
+                settings.enabled = true;
+                settings.castShadows = true;
+                updateShadowRegistration(entityId, shadow::ShadowMapType::Spot2D, settings);
             }
 
-            // Static lights contribute shadows only, not Forward+ direct lighting
             if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);

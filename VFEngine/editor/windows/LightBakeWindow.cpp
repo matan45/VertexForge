@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "imgui.h"
+#include <memory>
 
 namespace windows
 {
@@ -116,7 +117,6 @@ namespace windows
         {
             if (ImGui::Button(hasResult ? "Re-Bake" : "Bake", ImVec2(-1.0f, 0.0f)))
             {
-                // Open save dialog if no output path set
                 std::string bakePath = outputPath;
                 if (bakePath.empty())
                 {
@@ -179,7 +179,6 @@ namespace windows
 
         if (isBaking)
         {
-            // Query live progress from service
             services::events::lightbake::GetBakeProgressQuery query;
             float progress = events::EventDispatcher::instance().query(query);
             bakeProgress.store(progress);

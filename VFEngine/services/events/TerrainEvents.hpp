@@ -161,7 +161,6 @@ namespace events::terrain
         std::string_view getName() const override { return "TerrainLoaded"; }
     };
 
-    // Returns packed terrain heightfield for VFX particle collision
     struct TerrainHeightfieldResult
     {
         float worldOriginX = 0.0f;
@@ -180,7 +179,6 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainHeightfield"; }
     };
 
-    // Returns combined LOD 0 terrain geometry for navmesh baking
     struct TerrainGeometryResult
     {
         std::vector<float> vertices; // Flat: x,y,z,x,y,z,...
@@ -194,7 +192,6 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainGeometry"; }
     };
 
-    // Per-tile geometry info for lightmap baking
     struct TerrainTileGeometryInfo
     {
         int32_t coordX = 0;
@@ -207,7 +204,6 @@ namespace events::terrain
         int triangleCount = 0;
     };
 
-    // Returns combined LOD 0 terrain geometry with per-tile metadata for lightmap baking
     struct TerrainBakeGeometryResult
     {
         std::vector<float> vertices; // Flat: x,y,z,x,y,z,...
