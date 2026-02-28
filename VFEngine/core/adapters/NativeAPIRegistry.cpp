@@ -14,6 +14,7 @@
 #include "api/SocketAPI.hpp"
 #include "api/NavmeshAPI.hpp"
 #include "api/RenderTextureAPI.hpp"
+#include "api/ControllerAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -50,6 +51,7 @@ namespace core
         api::SocketAPI::registerAPI(interpreter);
         api::NavmeshAPI::registerAPI(interpreter);
         api::RenderTextureAPI::registerAPI(interpreter);
+        api::ControllerAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

@@ -462,5 +462,54 @@ namespace services
             {
                 return removeNavmeshAgentComponent(cmd.entity);
             });
+
+        // Controller component handlers
+        dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
+            [this](const events::scene::AddControllerComponentCommand& cmd)
+            {
+                return addControllerComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveControllerComponentCommand>(
+            [this](const events::scene::RemoveControllerComponentCommand& cmd)
+            {
+                return removeControllerComponent(cmd.entity);
+            });
+    }
+
+    // ========== CONTROLLER COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addControllerComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ControllerComponent>())
+        {
+            sceneEntity.addComponent<components::ControllerComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeControllerComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::ControllerComponent>())
+        {
+            sceneEntity.removeComponent<components::ControllerComponent>();
+            return true;
+        }
+        return false;
     }
 }

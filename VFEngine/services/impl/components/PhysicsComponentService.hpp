@@ -47,6 +47,10 @@ namespace services {
         // NavmeshAgent Component Operations
         bool addNavmeshAgentComponent(EntityHandle entity);
         bool removeNavmeshAgentComponent(EntityHandle entity);
+
+        // Controller Component Operations
+        bool addControllerComponent(EntityHandle entity);
+        bool removeControllerComponent(EntityHandle entity);
     };
 
 }

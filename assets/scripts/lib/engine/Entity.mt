@@ -5,8 +5,10 @@
 //   int self = Entity::self();
 //   int player = Entity::findByName("Player");
 //   int[] enemies = Entity::findAll("Enemy");
-//   float[] pos = Entity::getPosition(self);
-//   Entity::setPosition(self, 1.0, 2.0, 3.0);
+//   Vec3f pos = Entity::getPosition(self);
+//   Entity::setPosition(self, new Vec3f(1.0, 2.0, 3.0));
+
+import * from "../math/Vec3f.mt";
 
 public class Entity {
     public constructor() {
@@ -80,34 +82,37 @@ public class Entity {
     // Transform Operations
     // ============================================
 
-    // Get local position as float[3] (x, y, z)
-    public static function getPosition(int entityId): float[] {
-        return _native_entity_getPosition(entityId);
+    // Get local position
+    public static function getPosition(int entityId): Vec3f {
+        float[] v = _native_entity_getPosition(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Set local position
-    public static function setPosition(int entityId, float x, float y, float z): void {
-        _native_entity_setPosition(entityId, x, y, z);
+    public static function setPosition(int entityId, Vec3f position): void {
+        _native_entity_setPosition(entityId, position.x, position.y, position.z);
     }
 
-    // Get local rotation (Euler angles in degrees) as float[3]
-    public static function getRotation(int entityId): float[] {
-        return _native_entity_getRotation(entityId);
+    // Get local rotation (Euler angles in degrees)
+    public static function getRotation(int entityId): Vec3f {
+        float[] v = _native_entity_getRotation(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Set local rotation (Euler angles in degrees)
-    public static function setRotation(int entityId, float x, float y, float z): void {
-        _native_entity_setRotation(entityId, x, y, z);
+    public static function setRotation(int entityId, Vec3f rotation): void {
+        _native_entity_setRotation(entityId, rotation.x, rotation.y, rotation.z);
     }
 
-    // Get local scale as float[3]
-    public static function getScale(int entityId): float[] {
-        return _native_entity_getScale(entityId);
+    // Get local scale
+    public static function getScale(int entityId): Vec3f {
+        float[] v = _native_entity_getScale(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Set local scale
-    public static function setScale(int entityId, float x, float y, float z): void {
-        _native_entity_setScale(entityId, x, y, z);
+    public static function setScale(int entityId, Vec3f scale): void {
+        _native_entity_setScale(entityId, scale.x, scale.y, scale.z);
     }
 
     // Set uniform scale

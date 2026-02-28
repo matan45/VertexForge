@@ -70,6 +70,7 @@ namespace services {
         SocketOverride,
         NavmeshAgent,
         RenderTexture,
+        Controller,
     };
 
 }

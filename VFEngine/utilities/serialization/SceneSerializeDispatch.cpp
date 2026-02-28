@@ -228,6 +228,12 @@ namespace serialization
                 entity.getComponent<components::RenderTextureComponent>());
         }
 
+        if (entity.hasComponent<components::ControllerComponent>())
+        {
+            componentsJson["controller"] = serializeController(
+                entity.getComponent<components::ControllerComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -497,6 +503,12 @@ namespace serialization
         {
             auto& rttComp = entity.addOrReplaceComponent<components::RenderTextureComponent>();
             deserializeRenderTexture(componentsJson["renderTexture"], rttComp);
+        }
+
+        if (componentsJson.contains("controller"))
+        {
+            auto& controllerComp = entity.addOrReplaceComponent<components::ControllerComponent>();
+            deserializeController(componentsJson["controller"], controllerComp);
         }
     }
 

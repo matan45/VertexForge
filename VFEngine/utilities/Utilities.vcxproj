@@ -97,6 +97,7 @@
     <ClInclude Include="animator\SocketTypes.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="components\Components.hpp" />
+    <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />

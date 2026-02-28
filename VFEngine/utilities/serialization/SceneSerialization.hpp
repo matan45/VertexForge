@@ -209,6 +209,9 @@ namespace serialization
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 
+        static json serializeController(const components::ControllerComponent& controller);
+        static void deserializeController(const json& j, components::ControllerComponent& controller);
+
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
 

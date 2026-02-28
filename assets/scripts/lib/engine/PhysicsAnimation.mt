@@ -13,20 +13,22 @@
 //       PhysicsAnimation::activateRagdoll(self);
 //
 //       // Activate ragdoll with an impulse (e.g., hit by explosion)
-//       PhysicsAnimation::activateRagdollWithImpulse(self, 0.0, 500.0, 0.0);
+//       PhysicsAnimation::activateRagdollWithImpulse(self, new Vec3f(0.0, 500.0, 0.0));
 //
 //       // Activate ragdoll with impulse on a specific bone
-//       PhysicsAnimation::activateRagdollAtBone(self, 0.0, 500.0, 0.0, boneIndex);
+//       PhysicsAnimation::activateRagdollAtBone(self, new Vec3f(0.0, 500.0, 0.0), boneIndex);
 //
 //       // Apply impulse to an active ragdoll
-//       PhysicsAnimation::applyRagdollImpulse(self, 100.0, 0.0, 0.0);
+//       PhysicsAnimation::applyRagdollImpulse(self, new Vec3f(100.0, 0.0, 0.0));
 //
 //       // Apply impulse to a specific bone
-//       PhysicsAnimation::applyRagdollBoneImpulse(self, 3, 100.0, 0.0, 0.0);
+//       PhysicsAnimation::applyRagdollBoneImpulse(self, 3, new Vec3f(100.0, 0.0, 0.0));
 //
 //       // Deactivate ragdoll (return to animation)
 //       PhysicsAnimation::deactivateRagdoll(self);
 //   }
+
+import * from "../math/Vec3f.mt";
 
 public class PhysicsAnimation {
     // ============================================
@@ -69,14 +71,14 @@ public class PhysicsAnimation {
     }
 
     // Activate ragdoll with an initial impulse applied to all bodies
-    public static function activateRagdollWithImpulse(int entityId, float ix, float iy, float iz): void {
-        _native_physanim_activateRagdoll(entityId, ix, iy, iz);
+    public static function activateRagdollWithImpulse(int entityId, Vec3f impulse): void {
+        _native_physanim_activateRagdoll(entityId, impulse.x, impulse.y, impulse.z);
     }
 
     // Activate ragdoll with an impulse on a specific bone
     // boneIndex is the animation bone index from the skeleton
-    public static function activateRagdollAtBone(int entityId, float ix, float iy, float iz, int boneIndex): void {
-        _native_physanim_activateRagdoll(entityId, ix, iy, iz, boneIndex);
+    public static function activateRagdollAtBone(int entityId, Vec3f impulse, int boneIndex): void {
+        _native_physanim_activateRagdoll(entityId, impulse.x, impulse.y, impulse.z, boneIndex);
     }
 
     // Deactivate ragdoll and return to animation-driven mode
@@ -91,14 +93,14 @@ public class PhysicsAnimation {
 
     // Apply an impulse to the entire ragdoll (all bodies)
     // Only works when ragdoll is active
-    public static function applyRagdollImpulse(int entityId, float x, float y, float z): void {
-        _native_physanim_applyRagdollImpulse(entityId, x, y, z);
+    public static function applyRagdollImpulse(int entityId, Vec3f impulse): void {
+        _native_physanim_applyRagdollImpulse(entityId, impulse.x, impulse.y, impulse.z);
     }
 
     // Apply an impulse to a specific ragdoll bone
     // boneIndex is the animation bone index from the skeleton
     // Only works when ragdoll is active
-    public static function applyRagdollBoneImpulse(int entityId, int boneIndex, float x, float y, float z): void {
-        _native_physanim_applyRagdollBoneImpulse(entityId, boneIndex, x, y, z);
+    public static function applyRagdollBoneImpulse(int entityId, int boneIndex, Vec3f impulse): void {
+        _native_physanim_applyRagdollBoneImpulse(entityId, boneIndex, impulse.x, impulse.y, impulse.z);
     }
 }

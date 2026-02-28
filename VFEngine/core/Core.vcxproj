@@ -128,6 +128,7 @@
     <ClInclude Include="adapters\WaterRenderAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
+    <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
@@ -208,6 +209,7 @@
     <ClCompile Include="adapters\WaterRenderAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
+    <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />

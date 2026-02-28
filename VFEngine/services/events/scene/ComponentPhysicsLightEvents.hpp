@@ -201,6 +201,22 @@ namespace events::scene {
     };
 
     // ============================================
+    // Controller Component Events
+    // ============================================
+
+    struct AddControllerComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddControllerComponent"; }
+    };
+
+    struct RemoveControllerComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveControllerComponent"; }
+    };
+
+    // ============================================
     // Light Component Events (Directional)
     // ============================================
 

@@ -13,6 +13,7 @@
 #include "interfaces/INavmeshService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
 #include "interfaces/IRenderTextureService.hpp"
+#include "interfaces/IControllerService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace plugin {
@@ -53,6 +54,7 @@ namespace handlers {
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
         std::shared_ptr<services::IRenderTextureService> renderTextureService;
         std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
+        std::shared_ptr<services::IControllerService> controllerService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 
