@@ -116,76 +116,83 @@ namespace core
     lightbake::BakeLightSet LightBakeAdapter::collectLightsFromScene() const
     {
         lightbake::BakeLightSet lights;
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        {
-            auto view = registry.view<components::DirectionalLightComponent,
-                                       components::TransformComponent,
-                                       components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (!transform.isStatic) continue;
-
-                const auto& light = view.get<components::DirectionalLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                lightbake::BakeDirectionalLight bakeLight;
-                // Direction must match GPU forward rendering: forward = -Z axis
-                bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-                bakeLight.color = light.color;
-                bakeLight.intensity = light.intensity;
-                lights.directionalLights.push_back(bakeLight);
-            }
-        }
-
-        {
-            auto view = registry.view<components::PointLightComponent,
-                                       components::TransformComponent,
-                                       components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (!transform.isStatic) continue;
-
-                const auto& light = view.get<components::PointLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                lightbake::BakePointLight bakeLight;
-                bakeLight.position = glm::vec3(worldTransform.worldMatrix[3]);
-                bakeLight.color = light.color;
-                bakeLight.intensity = light.intensity;
-                bakeLight.radius = light.radius;
-                lights.pointLights.push_back(bakeLight);
-            }
-        }
-
-        {
-            auto view = registry.view<components::SpotLightComponent,
-                                       components::TransformComponent,
-                                       components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (!transform.isStatic) continue;
-
-                const auto& light = view.get<components::SpotLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                lightbake::BakeSpotLight bakeLight;
-                bakeLight.position = glm::vec3(worldTransform.worldMatrix[3]);
-                // Direction must match GPU forward rendering: forward = -Z axis
-                bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-                bakeLight.color = light.color;
-                bakeLight.intensity = light.intensity;
-                bakeLight.range = light.range;
-                bakeLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
-                bakeLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
-                lights.spotLights.push_back(bakeLight);
-            }
-        }
-
+        collectDirectionalLights(lights);
+        collectPointLights(lights);
+        collectSpotLights(lights);
         return lights;
+    }
+
+    void LightBakeAdapter::collectDirectionalLights(lightbake::BakeLightSet& lights) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::DirectionalLightComponent,
+                                   components::TransformComponent,
+                                   components::WorldTransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            if (!transform.isStatic) continue;
+
+            const auto& light = view.get<components::DirectionalLightComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            lightbake::BakeDirectionalLight bakeLight;
+            // Direction must match GPU forward rendering: forward = -Z axis
+            bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+            bakeLight.color = light.color;
+            bakeLight.intensity = light.intensity;
+            lights.directionalLights.push_back(bakeLight);
+        }
+    }
+
+    void LightBakeAdapter::collectPointLights(lightbake::BakeLightSet& lights) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::PointLightComponent,
+                                   components::TransformComponent,
+                                   components::WorldTransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            if (!transform.isStatic) continue;
+
+            const auto& light = view.get<components::PointLightComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            lightbake::BakePointLight bakeLight;
+            bakeLight.position = glm::vec3(worldTransform.worldMatrix[3]);
+            bakeLight.color = light.color;
+            bakeLight.intensity = light.intensity;
+            bakeLight.radius = light.radius;
+            lights.pointLights.push_back(bakeLight);
+        }
+    }
+
+    void LightBakeAdapter::collectSpotLights(lightbake::BakeLightSet& lights) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::SpotLightComponent,
+                                   components::TransformComponent,
+                                   components::WorldTransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            if (!transform.isStatic) continue;
+
+            const auto& light = view.get<components::SpotLightComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            lightbake::BakeSpotLight bakeLight;
+            bakeLight.position = glm::vec3(worldTransform.worldMatrix[3]);
+            // Direction must match GPU forward rendering: forward = -Z axis
+            bakeLight.direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+            bakeLight.color = light.color;
+            bakeLight.intensity = light.intensity;
+            bakeLight.range = light.range;
+            bakeLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
+            bakeLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
+            lights.spotLights.push_back(bakeLight);
+        }
     }
 
     lightbake::TerrainBakeGeometry LightBakeAdapter::collectTerrainGeometry()
@@ -327,126 +334,32 @@ namespace core
         return terrainLightmapInfos;
     }
 
-    void LightBakeAdapter::runBake(const services::LightBakeConfig& config)
+    void LightBakeAdapter::publishBakeFailure(const std::string& errorMessage)
     {
-        auto startTime = std::chrono::high_resolution_clock::now();
-        baker.reset();
-
-        services::LightBakeResult result;
-
-        // Step 1: Build scene mesh BVH (0% - 20%)
-        loggerInfo("[LightBake] Step 1/4: Building scene mesh BVH...");
-
-        auto terrainGeometry = collectTerrainGeometry();
-        auto waterTiles = collectWaterTiles();
-
-        lightbake::BakeSceneMesh sceneMesh;
-        bool sceneBuilt = sceneMesh.buildFromScene(
-            terrainGeometry, waterTiles,
-            [this](float p) { progress.store(p * 0.2f); }
-        );
-
-        if (!sceneBuilt || baker.wasCancelled())
+        baking.store(false);
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        if (baker.wasCancelled())
         {
-            baking.store(false);
-            auto& dispatcher = ::events::EventDispatcher::instance();
-            if (baker.wasCancelled())
-            {
-                services::events::lightbake::BakeCancelledNotification notif;
-                dispatcher.publish(notif);
-            }
-            else
-            {
-                services::events::lightbake::BakeFailedNotification notif;
-                notif.errorMessage = "Failed to build scene mesh BVH";
-                dispatcher.publish(notif);
-            }
-            return;
-        }
-
-        // Step 2: Generate lightmap atlas (20% - 30%)
-        loggerInfo("[LightBake] Step 2/4: Generating lightmap UV atlas...");
-        progress.store(0.2f);
-
-        lightbake::LightmapConfig lmConfig;
-        lmConfig.texelsPerUnit = config.texelsPerUnit;
-        lmConfig.maxAtlasSize = config.maxAtlasSize;
-
-        lightbake::LightmapAtlas atlas;
-        if (!atlas.build(sceneMesh.getBVH(), lmConfig))
-        {
-            baking.store(false);
-            auto& dispatcher = ::events::EventDispatcher::instance();
-            services::events::lightbake::BakeFailedNotification notif;
-            notif.errorMessage = "Failed to build lightmap atlas";
+            services::events::lightbake::BakeCancelledNotification notif;
             dispatcher.publish(notif);
-            return;
         }
-        progress.store(0.3f);
-
-        // Step 3: Collect lights (30%)
-        loggerInfo("[LightBake] Step 3/4: Collecting lights...");
-        auto lights = collectLightsFromScene();
-        if (lights.empty())
+        else
         {
-            baking.store(false);
-            auto& dispatcher = ::events::EventDispatcher::instance();
             services::events::lightbake::BakeFailedNotification notif;
-            notif.errorMessage = "No static lights found in scene";
+            notif.errorMessage = errorMessage;
             dispatcher.publish(notif);
-            return;
         }
+    }
 
-        result.bakedLightCount = static_cast<uint32_t>(
-            lights.directionalLights.size() + lights.pointLights.size() + lights.spotLights.size());
-
-        // Step 4: Run baker (30% - 95%)
-        loggerInfo("[LightBake] Step 4/4: Baking irradiance...");
-        auto& lightmapData = atlas.getLightmapData();
-
-        bool bakeSuccess = baker.bake(sceneMesh, atlas, lights, lightmapData,
-            [this](float p) { progress.store(0.3f + p * 0.65f); }
-        );
-
-        if (!bakeSuccess)
-        {
-            baking.store(false);
-            auto& dispatcher = ::events::EventDispatcher::instance();
-            if (baker.wasCancelled())
-            {
-                services::events::lightbake::BakeCancelledNotification notif;
-                dispatcher.publish(notif);
-            }
-            else
-            {
-                services::events::lightbake::BakeFailedNotification notif;
-                notif.errorMessage = "Bake failed";
-                dispatcher.publish(notif);
-            }
-            return;
-        }
-
-        progress.store(0.95f);
-        std::string outputPath = config.outputPath;
-        if (outputPath.empty())
-        {
-            outputPath = "lightmap." + FileExtension::lightmap;
-        }
-
-        if (!lightbake::LightmapAtlas::save(lightmapData, outputPath))
-        {
-            baking.store(false);
-            auto& dispatcher = ::events::EventDispatcher::instance();
-            services::events::lightbake::BakeFailedNotification notif;
-            notif.errorMessage = "Failed to save lightmap to: " + outputPath;
-            dispatcher.publish(notif);
-            return;
-        }
-
-        assignLightmapComponents(lightmapData, outputPath, config.texelsPerUnit);
+    void LightBakeAdapter::finalizeBake(services::LightBakeResult& result,
+                                         const resource::LightmapData& lightmapData,
+                                         const std::string& outputPath, float texelsPerUnit,
+                                         std::chrono::high_resolution_clock::time_point startTime)
+    {
+        assignLightmapComponents(lightmapData, outputPath, texelsPerUnit);
 
         lastLightmapPath = outputPath;
-        lastTexelsPerUnit = config.texelsPerUnit;
+        lastTexelsPerUnit = texelsPerUnit;
 
         auto endTime = std::chrono::high_resolution_clock::now();
         float elapsedSeconds = std::chrono::duration<float>(endTime - startTime).count();
@@ -472,6 +385,86 @@ namespace core
 
         loggerInfo("[LightBake] Bake complete: {}x{} atlas, {} lights, {:.2f}s",
                      result.atlasWidth, result.atlasHeight, result.bakedLightCount, result.bakeTimeSeconds);
+    }
+
+    void LightBakeAdapter::runBake(const services::LightBakeConfig& config)
+    {
+        auto startTime = std::chrono::high_resolution_clock::now();
+        baker.reset();
+
+        services::LightBakeResult result;
+
+        // Step 1: Build scene mesh BVH (0% - 20%)
+        loggerInfo("[LightBake] Step 1/4: Building scene mesh BVH...");
+        auto terrainGeometry = collectTerrainGeometry();
+        auto waterTiles = collectWaterTiles();
+
+        lightbake::BakeSceneMesh sceneMesh;
+        bool sceneBuilt = sceneMesh.buildFromScene(
+            terrainGeometry, waterTiles,
+            [this](float p) { progress.store(p * 0.2f); }
+        );
+        if (!sceneBuilt || baker.wasCancelled())
+        {
+            publishBakeFailure("Failed to build scene mesh BVH");
+            return;
+        }
+
+        // Step 2: Generate lightmap atlas (20% - 30%)
+        loggerInfo("[LightBake] Step 2/4: Generating lightmap UV atlas...");
+        progress.store(0.2f);
+
+        lightbake::LightmapConfig lmConfig;
+        lmConfig.texelsPerUnit = config.texelsPerUnit;
+        lmConfig.maxAtlasSize = config.maxAtlasSize;
+
+        lightbake::LightmapAtlas atlas;
+        if (!atlas.build(sceneMesh.getBVH(), lmConfig))
+        {
+            publishBakeFailure("Failed to build lightmap atlas");
+            return;
+        }
+        progress.store(0.3f);
+
+        // Step 3: Collect lights (30%)
+        loggerInfo("[LightBake] Step 3/4: Collecting lights...");
+        auto lights = collectLightsFromScene();
+        if (lights.empty())
+        {
+            publishBakeFailure("No static lights found in scene");
+            return;
+        }
+
+        result.bakedLightCount = static_cast<uint32_t>(
+            lights.directionalLights.size() + lights.pointLights.size() + lights.spotLights.size());
+
+        // Step 4: Run baker (30% - 95%)
+        loggerInfo("[LightBake] Step 4/4: Baking irradiance...");
+        auto& lightmapData = atlas.getLightmapData();
+
+        bool bakeSuccess = baker.bake(sceneMesh, atlas, lights, lightmapData,
+            [this](float p) { progress.store(0.3f + p * 0.65f); }
+        );
+        if (!bakeSuccess)
+        {
+            publishBakeFailure("Bake failed");
+            return;
+        }
+
+        progress.store(0.95f);
+        std::string outputPath = config.outputPath;
+        if (outputPath.empty())
+        {
+            outputPath = "lightmap." + FileExtension::lightmap;
+        }
+
+        if (!lightbake::LightmapAtlas::save(lightmapData, outputPath))
+        {
+            publishBakeFailure("Failed to save lightmap to: " + outputPath);
+            return;
+        }
+
+        finalizeBake(result, lightmapData, outputPath, config.texelsPerUnit, startTime);
     }
 
     void LightBakeAdapter::clearLightmap()

@@ -5,6 +5,7 @@
 #include "../../utilities/lightbake/LightBaker.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include <atomic>
+#include <chrono>
 #include <future>
 #include <mutex>
 
@@ -45,10 +46,18 @@ namespace core
 
     private:
         lightbake::BakeLightSet collectLightsFromScene() const;
+        void collectDirectionalLights(lightbake::BakeLightSet& lights) const;
+        void collectPointLights(lightbake::BakeLightSet& lights) const;
+        void collectSpotLights(lightbake::BakeLightSet& lights) const;
         lightbake::TerrainBakeGeometry collectTerrainGeometry();
         std::vector<lightbake::WaterBakeTile> collectWaterTiles() const;
         void assignLightmapComponents(const resource::LightmapData& lightmapData,
                                        const std::string& outputPath, float texelsPerUnit);
         void runBake(const services::LightBakeConfig& config);
+        void publishBakeFailure(const std::string& errorMessage);
+        void finalizeBake(services::LightBakeResult& result,
+                          const resource::LightmapData& lightmapData,
+                          const std::string& outputPath, float texelsPerUnit,
+                          std::chrono::high_resolution_clock::time_point startTime);
     };
 }

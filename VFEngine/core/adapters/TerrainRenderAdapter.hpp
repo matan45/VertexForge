@@ -20,13 +20,13 @@ namespace core
     {
     private:
         services::TerrainService* terrainService = nullptr;
-        std::atomic<bool> terrainLightmapDirty_{false};
-        std::unique_ptr<events::SubscriptionToken> bakeCompleteToken_;
-        std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken_;
-        std::unique_ptr<events::SubscriptionToken> lightmapClearedToken_;
+        std::atomic<bool> terrainLightmapDirty{false};
+        std::unique_ptr<events::SubscriptionToken> bakeCompleteToken;
+        std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken;
+        std::unique_ptr<events::SubscriptionToken> lightmapClearedToken;
 
     public:
-        TerrainRenderAdapter();
+        explicit TerrainRenderAdapter();
         ~TerrainRenderAdapter() override;
 
         void setTerrainService(services::TerrainService* service) { terrainService = service; }
