@@ -12,7 +12,6 @@ namespace core::api
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // _native_controller_setMoveInput(entityId, x, y, z) -> void
         interpreter->registerNativeFunction("_native_controller_setMoveInput",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -25,7 +24,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_setJump(entityId, wantsJump) -> void
         interpreter->registerNativeFunction("_native_controller_setJump",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -38,7 +36,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_setSprint(entityId, wantsSprint) -> void
         interpreter->registerNativeFunction("_native_controller_setSprint",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -51,7 +48,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_moveTo(entityId, x, y, z) -> bool
         interpreter->registerNativeFunction("_native_controller_moveTo",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -63,7 +59,6 @@ namespace core::api
                 return value::Value(dispatcher.execute(cmd));
             });
 
-        // _native_controller_stopMovement(entityId) -> void
         interpreter->registerNativeFunction("_native_controller_stopMovement",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -75,7 +70,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_hasReachedDestination(entityId) -> bool
         interpreter->registerNativeFunction("_native_controller_hasReachedDestination",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -86,7 +80,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_getDistanceTo(entityId, x, y, z) -> float
         interpreter->registerNativeFunction("_native_controller_getDistanceTo",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -98,7 +91,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_getMoveSpeed(entityId) -> float
         interpreter->registerNativeFunction("_native_controller_getMoveSpeed",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -109,7 +101,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_setMoveSpeed(entityId, speed) -> void
         interpreter->registerNativeFunction("_native_controller_setMoveSpeed",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -122,7 +113,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_getJumpForce(entityId) -> float
         interpreter->registerNativeFunction("_native_controller_getJumpForce",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -133,7 +123,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_setJumpForce(entityId, force) -> void
         interpreter->registerNativeFunction("_native_controller_setJumpForce",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -146,7 +135,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_getSprintMultiplier(entityId) -> float
         interpreter->registerNativeFunction("_native_controller_getSprintMultiplier",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -157,7 +145,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_setSprintMultiplier(entityId, multiplier) -> void
         interpreter->registerNativeFunction("_native_controller_setSprintMultiplier",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -170,7 +157,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_getArrivalDistance(entityId) -> float
         interpreter->registerNativeFunction("_native_controller_getArrivalDistance",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -181,7 +167,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_setArrivalDistance(entityId, distance) -> void
         interpreter->registerNativeFunction("_native_controller_setArrivalDistance",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -194,7 +179,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_controller_isGrounded(entityId) -> bool
         interpreter->registerNativeFunction("_native_controller_isGrounded",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -205,7 +189,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // _native_controller_setGrounded(entityId, grounded) -> void
         interpreter->registerNativeFunction("_native_controller_setGrounded",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {

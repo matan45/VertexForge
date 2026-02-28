@@ -2,10 +2,12 @@
 // Provides queries, property access, and commands for water bodies
 //
 // Usage examples:
-//   bool inWater = Water::isInWater(x, y, z);
+//   bool inWater = Water::isInWater(new Vec3f(x, y, z));
 //   float height = Water::getHeightAt(x, z);
 //   float density = Water::getDensity(waterEntityId);
 //   Water::setTileHeight(waterEntityId, tileX, tileZ, 5.0);
+
+import * from "../math/Vec3f.mt";
 
 public class Water {
     public constructor() {
@@ -16,8 +18,8 @@ public class Water {
     // ============================================
 
     // Check if a world position is inside any water volume
-    public static function isInWater(float x, float y, float z): bool {
-        return _native_water_isInWater(x, y, z);
+    public static function isInWater(Vec3f position): bool {
+        return _native_water_isInWater(position.x, position.y, position.z);
     }
 
     // Get the water surface height at a world XZ position

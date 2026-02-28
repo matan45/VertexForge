@@ -3,9 +3,9 @@
 //
 // Usage examples:
 //   int self = Entity::self();
-//   Physics::applyForce(self, 0.0, 100.0, 0.0);  // Apply upward force
-//   Physics::applyImpulse(self, 10.0, 0.0, 0.0); // Instant velocity change
-//   float[] vel = Physics::getLinearVelocity(self);
+//   Physics::applyForce(self, new Vec3f(0.0, 100.0, 0.0));  // Apply upward force
+//   Physics::applyImpulse(self, new Vec3f(10.0, 0.0, 0.0)); // Instant velocity change
+//   Vec3f vel = Physics::getLinearVelocity(self);
 //   bool hasRb = Physics::hasRigidBody(self);
 //
 // ============================================
@@ -33,6 +33,9 @@
 //   }
 //
 // You can also implement just the callbacks you need without using interfaces (duck typing).
+
+import * from "../math/Vec3f.mt";
+import * from "../math/Quaternion.mt";
 
 public class Physics {
     // ============================================
@@ -83,14 +86,16 @@ public class Physics {
         return _native_physics_getAngularDamping(entityId);
     }
 
-    // Get current linear velocity as float[3] (x, y, z)
-    public static function getLinearVelocity(int entityId): float[] {
-        return _native_physics_getLinearVelocity(entityId);
+    // Get current linear velocity
+    public static function getLinearVelocity(int entityId): Vec3f {
+        float[] v = _native_physics_getLinearVelocity(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
-    // Get current angular velocity as float[3] (x, y, z)
-    public static function getAngularVelocity(int entityId): float[] {
-        return _native_physics_getAngularVelocity(entityId);
+    // Get current angular velocity
+    public static function getAngularVelocity(int entityId): Vec3f {
+        float[] v = _native_physics_getAngularVelocity(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // ============================================
@@ -120,13 +125,13 @@ public class Physics {
     }
 
     // Set linear velocity directly
-    public static function setLinearVelocity(int entityId, float x, float y, float z): void {
-        _native_physics_setLinearVelocity(entityId, x, y, z);
+    public static function setLinearVelocity(int entityId, Vec3f velocity): void {
+        _native_physics_setLinearVelocity(entityId, velocity.x, velocity.y, velocity.z);
     }
 
     // Set angular velocity directly
-    public static function setAngularVelocity(int entityId, float x, float y, float z): void {
-        _native_physics_setAngularVelocity(entityId, x, y, z);
+    public static function setAngularVelocity(int entityId, Vec3f velocity): void {
+        _native_physics_setAngularVelocity(entityId, velocity.x, velocity.y, velocity.z);
     }
 
     // ============================================
@@ -135,47 +140,49 @@ public class Physics {
 
     // Apply continuous force (use in onUpdate for sustained effects)
     // Force is applied at the center of mass
-    public static function applyForce(int entityId, float x, float y, float z): void {
-        _native_physics_applyForce(entityId, x, y, z);
+    public static function applyForce(int entityId, Vec3f force): void {
+        _native_physics_applyForce(entityId, force.x, force.y, force.z);
     }
 
     // Apply force at a specific world position (creates torque)
-    public static function applyForceAtPosition(int entityId, float fx, float fy, float fz, float px, float py, float pz): void {
-        _native_physics_applyForceAtPosition(entityId, fx, fy, fz, px, py, pz);
+    public static function applyForceAtPosition(int entityId, Vec3f force, Vec3f position): void {
+        _native_physics_applyForceAtPosition(entityId, force.x, force.y, force.z, position.x, position.y, position.z);
     }
 
-    // Apply instant velocity change (use for jumps, explosions)
-    public static function applyImpulse(int entityId, float x, float y, float z): void {
-        _native_physics_applyImpulse(entityId, x, y, z);
+    // Apply instant velocity change (use for jumps, explosions, bullets)
+    public static function applyImpulse(int entityId, Vec3f impulse): void {
+        _native_physics_applyImpulse(entityId, impulse.x, impulse.y, impulse.z);
     }
 
     // Apply torque (angular force)
-    public static function applyTorque(int entityId, float x, float y, float z): void {
-        _native_physics_applyTorque(entityId, x, y, z);
+    public static function applyTorque(int entityId, Vec3f torque): void {
+        _native_physics_applyTorque(entityId, torque.x, torque.y, torque.z);
     }
 
     // ============================================
     // Physics Transform (direct body access)
     // ============================================
 
-    // Get physics body position as float[3] (x, y, z)
-    public static function getPosition(int entityId): float[] {
-        return _native_physics_getPosition(entityId);
+    // Get physics body position
+    public static function getPosition(int entityId): Vec3f {
+        float[] v = _native_physics_getPosition(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Set physics body position directly (teleport)
-    public static function setPosition(int entityId, float x, float y, float z): void {
-        _native_physics_setPosition(entityId, x, y, z);
+    public static function setPosition(int entityId, Vec3f position): void {
+        _native_physics_setPosition(entityId, position.x, position.y, position.z);
     }
 
-    // Get physics body rotation as quaternion float[4] (x, y, z, w)
-    public static function getRotation(int entityId): float[] {
-        return _native_physics_getRotation(entityId);
+    // Get physics body rotation
+    public static function getRotation(int entityId): Quaternion {
+        float[] q = _native_physics_getRotation(entityId);
+        return new Quaternion(q[0], q[1], q[2], q[3]);
     }
 
-    // Set physics body rotation directly (quaternion x, y, z, w)
-    public static function setRotation(int entityId, float x, float y, float z, float w): void {
-        _native_physics_setRotation(entityId, x, y, z, w);
+    // Set physics body rotation directly
+    public static function setRotation(int entityId, Quaternion rotation): void {
+        _native_physics_setRotation(entityId, rotation.x, rotation.y, rotation.z, rotation.w);
     }
 
     // ============================================
@@ -192,9 +199,10 @@ public class Physics {
         return _native_physics_getColliderShape(entityId);
     }
 
-    // Get collider size as float[3] (half-extents for box, radius for sphere)
-    public static function getColliderSize(int entityId): float[] {
-        return _native_physics_getColliderSize(entityId);
+    // Get collider size (half-extents for box, radius for sphere)
+    public static function getColliderSize(int entityId): Vec3f {
+        float[] v = _native_physics_getColliderSize(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Get capsule height
@@ -202,9 +210,10 @@ public class Physics {
         return _native_physics_getColliderHeight(entityId);
     }
 
-    // Get collider offset from entity center as float[3]
-    public static function getColliderOffset(int entityId): float[] {
-        return _native_physics_getColliderOffset(entityId);
+    // Get collider offset from entity center
+    public static function getColliderOffset(int entityId): Vec3f {
+        float[] v = _native_physics_getColliderOffset(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Check if collider is a trigger (no collision response)
@@ -232,8 +241,8 @@ public class Physics {
     // ============================================
 
     // Set collider size (half-extents for box, radius for sphere)
-    public static function setColliderSize(int entityId, float x, float y, float z): void {
-        _native_physics_setColliderSize(entityId, x, y, z);
+    public static function setColliderSize(int entityId, Vec3f size): void {
+        _native_physics_setColliderSize(entityId, size.x, size.y, size.z);
     }
 
     // Set capsule height
@@ -266,11 +275,10 @@ public class Physics {
     // ============================================
 
     // Cast a ray and return hit information as float[]
-    // Parameters: origin (x,y,z), direction (x,y,z), maxDistance
     // Returns: [hit(0/1), entityId, hitX, hitY, hitZ, normalX, normalY, normalZ, distance]
     // Returns [0] if no hit
-    public static function raycast(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance): float[] {
-        return _native_physics_raycast(ox, oy, oz, dx, dy, dz, maxDistance);
+    public static function raycast(Vec3f origin, Vec3f direction, float maxDistance): float[] {
+        return _native_physics_raycast(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance);
     }
 
     // Check if two entities are overlapping
@@ -282,13 +290,14 @@ public class Physics {
     // World Settings
     // ============================================
 
-    // Get current gravity as float[3] (x, y, z)
-    public static function getGravity(): float[] {
-        return _native_physics_getGravity();
+    // Get current gravity
+    public static function getGravity(): Vec3f {
+        float[] v = _native_physics_getGravity();
+        return new Vec3f(v[0], v[1], v[2]);
     }
 
     // Set world gravity
-    public static function setGravity(float x, float y, float z): void {
-        _native_physics_setGravity(x, y, z);
+    public static function setGravity(Vec3f gravity): void {
+        _native_physics_setGravity(gravity.x, gravity.y, gravity.z);
     }
 }

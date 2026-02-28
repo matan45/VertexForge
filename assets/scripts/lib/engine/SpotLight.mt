@@ -3,13 +3,15 @@
 //
 // Usage examples:
 //   int self = Entity::self();
-//   SpotLight::setColor(self, 1.0, 1.0, 1.0);      // White light
-//   SpotLight::setIntensity(self, 5.0);            // Set brightness
-//   SpotLight::setInnerAngle(self, 25.0);          // Inner cone angle
-//   SpotLight::setOuterAngle(self, 35.0);          // Outer cone angle
-//   SpotLight::setRange(self, 30.0);               // Light distance
+//   SpotLight::setColor(self, new Vec3f(1.0, 1.0, 1.0));  // White light
+//   SpotLight::setIntensity(self, 5.0);                   // Set brightness
+//   SpotLight::setInnerAngle(self, 25.0);                 // Inner cone angle
+//   SpotLight::setOuterAngle(self, 35.0);                 // Outer cone angle
+//   SpotLight::setRange(self, 30.0);                      // Light distance
 //
 // Note: Position and direction are derived from the entity's Transform, not stored in the component
+
+import * from "../math/Vec3f.mt";
 
 public class SpotLight {
     public constructor() {
@@ -19,15 +21,15 @@ public class SpotLight {
     // Color Control
     // ============================================
 
-    // Get the light color as [r, g, b] array
-    // Returns null if entity doesn't have SpotLightComponent
-    public static function getColor(int entityId): float[] {
-        return _native_spotLight_getColor(entityId);
+    // Get the light color as Vec3f (r, g, b)
+    public static function getColor(int entityId): Vec3f {
+        float[] c = _native_spotLight_getColor(entityId);
+        return new Vec3f(c[0], c[1], c[2]);
     }
 
     // Set the light color (r, g, b values from 0.0 to 1.0)
-    public static function setColor(int entityId, float r, float g, float b): void {
-        _native_spotLight_setColor(entityId, r, g, b);
+    public static function setColor(int entityId, Vec3f color): void {
+        _native_spotLight_setColor(entityId, color.x, color.y, color.z);
     }
 
     // ============================================
