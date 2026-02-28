@@ -513,4 +513,40 @@ namespace serialization
         agent.isActive = false;
         agent.crowdAgentIndex = -1;
     }
+
+    // ============================================
+    // Controller Component
+    // ============================================
+
+    json SceneSerialization::serializeController(const components::ControllerComponent& controller)
+    {
+        json j;
+        j["moveSpeed"] = controller.moveSpeed;
+        j["sprintMultiplier"] = controller.sprintMultiplier;
+        j["jumpForce"] = controller.jumpForce;
+        return j;
+    }
+
+    void SceneSerialization::deserializeController(const json& j, components::ControllerComponent& controller)
+    {
+        if (auto it = j.find("moveSpeed"); it != j.end() && it->is_number())
+        {
+            controller.moveSpeed = it->get<float>();
+        }
+        if (auto it = j.find("sprintMultiplier"); it != j.end() && it->is_number())
+        {
+            controller.sprintMultiplier = it->get<float>();
+        }
+        if (auto it = j.find("jumpForce"); it != j.end() && it->is_number())
+        {
+            controller.jumpForce = it->get<float>();
+        }
+
+        // Reset runtime state
+        controller.moveInput = glm::vec3(0.0f);
+        controller.wantsJump = false;
+        controller.wantsSprint = false;
+        controller.hasMoveToTarget = false;
+        controller.moveToDestination = glm::vec3(0.0f);
+    }
 }

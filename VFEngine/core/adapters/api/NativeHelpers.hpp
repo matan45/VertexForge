@@ -162,6 +162,7 @@ namespace core::api
         if (type == "SocketAttachment") return services::ComponentTypeId::SocketAttachment;
         if (type == "SocketOverride") return services::ComponentTypeId::SocketOverride;
         if (type == "NavmeshAgent") return services::ComponentTypeId::NavmeshAgent;
+        if (type == "Controller") return services::ComponentTypeId::Controller;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -208,6 +209,7 @@ namespace core::api
         case services::ComponentTypeId::SocketAttachment: return "SocketAttachment";
         case services::ComponentTypeId::SocketOverride: return "SocketOverride";
         case services::ComponentTypeId::NavmeshAgent: return "NavmeshAgent";
+        case services::ComponentTypeId::Controller: return "Controller";
         default: return "Unknown";
         }
     }

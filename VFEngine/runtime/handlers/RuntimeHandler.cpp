@@ -12,6 +12,7 @@
 #include "impl/PhysicsAnimationServiceImpl.hpp"
 #include "impl/NavmeshServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
+#include "impl/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
@@ -61,13 +62,17 @@ namespace handlers {
 
             float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
 
-            // Update order: Physics → Scripts → Audio
+            // Update order: Physics → Scripts → Controller Movement → Audio
             if (physicsPlayModeHandler) {
                 physicsPlayModeHandler->update(deltaTime);
             }
 
             if (scriptingService) {
                 scriptingService->updateScripts(deltaTime);
+            }
+
+            if (controllerService) {
+                controllerService->applyControllerMovement(deltaTime);
             }
 
             if (renderTexturePlayModeHandler) {
@@ -106,6 +111,7 @@ namespace handlers {
 
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        controllerService.reset();
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
@@ -214,6 +220,8 @@ namespace handlers {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
+        controllerService = std::make_shared<services::ControllerServiceImpl>();
+
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()
         );
@@ -245,6 +253,7 @@ namespace handlers {
             navmeshService->registerEventHandlers();
         }
         renderTextureService->registerEventHandlers();
+        controllerService->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()

@@ -121,6 +121,12 @@ namespace serialization
             out["socketOverride"] = SceneSerialization::serializeSocketOverride(
                 entity.getComponent<components::SocketOverrideComponent>());
         }
+
+        if (entity.hasComponent<components::ControllerComponent>())
+        {
+            out["controller"] = SceneSerialization::serializeController(
+                entity.getComponent<components::ControllerComponent>());
+        }
     }
 
     json PrefabSerialization::serializeEntityTreeComponents(const scene::Entity& entity)
@@ -238,6 +244,12 @@ namespace serialization
         {
             auto& socketOverride = entity.addOrReplaceComponent<components::SocketOverrideComponent>();
             SceneSerialization::deserializeSocketOverride(componentsJson["socketOverride"], socketOverride);
+        }
+
+        if (componentsJson.contains("controller"))
+        {
+            auto& controllerComp = entity.addOrReplaceComponent<components::ControllerComponent>();
+            SceneSerialization::deserializeController(componentsJson["controller"], controllerComp);
         }
     }
 

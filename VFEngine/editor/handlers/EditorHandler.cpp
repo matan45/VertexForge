@@ -28,6 +28,7 @@
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
 #include "impl/LightBakeServiceImpl.hpp"
+#include "impl/ControllerServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -102,10 +103,11 @@ namespace handlers
                 float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
 
                 // Update order is critical:
-                // 1. Physics - steps simulation and syncs transforms to ECS
-                // 2. Scripts - can read updated transforms and apply game logic
-                // 3. VFX     - updates particle simulations
-                // 4. Audio   - uses final camera/listener positions
+                // 1. Physics  - steps simulation and syncs transforms to ECS
+                // 2. Scripts  - read input, set moveInput/jump/sprint on controllers
+                // 3. Controller - applies movement from scripts via physics/navmesh/transform
+                // 4. VFX      - updates particle simulations
+                // 5. Audio    - uses final camera/listener positions
 
                 if (physicsPlayModeHandler)
                 {
@@ -115,6 +117,11 @@ namespace handlers
                 if (scriptingService)
                 {
                     scriptingService->updateScripts(deltaTime);
+                }
+
+                if (controllerService)
+                {
+                    controllerService->applyControllerMovement(deltaTime);
                 }
 
                 if (vfxPlayModeHandler)
@@ -177,6 +184,7 @@ namespace handlers
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
         lightBakeService.reset();
+        controllerService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -282,6 +290,8 @@ namespace handlers
         {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
+
+        controllerService = std::make_shared<services::ControllerServiceImpl>();
     }
 
     void EditorHandler::createVFXServices()
@@ -370,6 +380,7 @@ namespace handlers
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
         lightBakeService->registerEventHandlers();
+        controllerService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

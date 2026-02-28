@@ -51,7 +51,7 @@ namespace windows::details
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
-                           c.hasNavmeshAgent && c.hasRenderTexture;
+                           c.hasNavmeshAgent && c.hasRenderTexture && c.hasController;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -255,6 +255,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
+            }
+        }
+
+        if (!c.hasController)
+        {
+            if (ImGui::Selectable("  Controller"))
+            {
+                events::scene::AddControllerComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Player or AI controller for character movement and input");
             }
         }
     }

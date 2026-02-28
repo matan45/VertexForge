@@ -37,6 +37,9 @@ public class ComponentType {
     // Navigation
     public static final string NAVMESH_AGENT = "NavmeshAgent";
 
+    // Controller
+    public static final string CONTROLLER = "Controller";
+
     // Socket attachment
     public static final string SOCKET_ATTACHMENT = "SocketAttachment";
     public static final string SOCKET_OVERRIDE = "SocketOverride";

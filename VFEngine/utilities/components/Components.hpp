@@ -8,6 +8,7 @@
 #include "WaterComponents.hpp"
 #include "UIComponents.hpp"
 #include "NavmeshComponents.hpp"
+#include "ControllerComponents.hpp"
 
 namespace components
 {
@@ -23,5 +24,5 @@ namespace components
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
-                                               NavmeshAgentComponent, LightmapComponent>;
+                                               NavmeshAgentComponent, ControllerComponent, LightmapComponent>;
 }

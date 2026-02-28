@@ -80,6 +80,7 @@ namespace core::api
                 {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeAddFn<events::scene::AddNavmeshAgentComponentCommand>()},
+                {services::ComponentTypeId::Controller, makeAddFn<events::scene::AddControllerComponentCommand>()},
             };
             return map;
         }
@@ -111,6 +112,7 @@ namespace core::api
                 {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeRemoveFn<events::scene::RemoveNavmeshAgentComponentCommand>()},
+                {services::ComponentTypeId::Controller, makeRemoveFn<events::scene::RemoveControllerComponentCommand>()},
             };
             return map;
         }

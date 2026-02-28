@@ -36,6 +36,7 @@ namespace windows::details {
         bool hasSocketAttachment = false;
         bool hasNavmeshAgent = false;
         bool hasRenderTexture = false;
+        bool hasController = false;
     };
 
     class AddComponentPopup {
