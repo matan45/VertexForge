@@ -121,5 +121,53 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
+
+        // _native_controller_getJumpForce(entityId) -> float
+        interpreter->registerNativeFunction("_native_controller_getJumpForce",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetJumpForceQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        // _native_controller_setJumpForce(entityId, force) -> void
+        interpreter->registerNativeFunction("_native_controller_setJumpForce",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetJumpForceCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.jumpForce = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_controller_getSprintMultiplier(entityId) -> float
+        interpreter->registerNativeFunction("_native_controller_getSprintMultiplier",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetSprintMultiplierQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        // _native_controller_setSprintMultiplier(entityId, multiplier) -> void
+        interpreter->registerNativeFunction("_native_controller_setSprintMultiplier",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetSprintMultiplierCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.sprintMultiplier = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
     }
 }

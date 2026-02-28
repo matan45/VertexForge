@@ -78,4 +78,24 @@ public class Controller {
     public static function setMoveSpeed(int entityId, float speed): void {
         _native_controller_setMoveSpeed(entityId, speed);
     }
+
+    // Get current jump force
+    public static function getJumpForce(int entityId): float {
+        return _native_controller_getJumpForce(entityId);
+    }
+
+    // Set jump force
+    public static function setJumpForce(int entityId, float force): void {
+        _native_controller_setJumpForce(entityId, force);
+    }
+
+    // Get current sprint multiplier
+    public static function getSprintMultiplier(int entityId): float {
+        return _native_controller_getSprintMultiplier(entityId);
+    }
+
+    // Set sprint multiplier
+    public static function setSprintMultiplier(int entityId, float multiplier): void {
+        _native_controller_setSprintMultiplier(entityId, multiplier);
+    }
 }

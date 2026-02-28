@@ -153,6 +153,54 @@ namespace services
                 }
                 return registry.get<components::ControllerComponent>(entity).moveSpeed;
             });
+
+        dispatcher.registerCommandHandler<::events::controller::SetJumpForceCommand>(
+            [](const ::events::controller::SetJumpForceCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).jumpForce = cmd.jumpForce;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetSprintMultiplierCommand>(
+            [](const ::events::controller::SetSprintMultiplierCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).sprintMultiplier = cmd.sprintMultiplier;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetJumpForceQuery>(
+            [](const ::events::controller::GetJumpForceQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).jumpForce;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetSprintMultiplierQuery>(
+            [](const ::events::controller::GetSprintMultiplierQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).sprintMultiplier;
+            });
     }
 
     void ControllerServiceImpl::applyControllerMovement(float deltaTime)

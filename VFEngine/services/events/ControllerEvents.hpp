@@ -50,6 +50,20 @@ namespace events::controller {
         std::string_view getName() const override { return "SetMoveSpeed"; }
     };
 
+    struct SetJumpForceCommand : ICommand<> {
+        services::EntityHandle entity;
+        float jumpForce;
+
+        std::string_view getName() const override { return "SetJumpForce"; }
+    };
+
+    struct SetSprintMultiplierCommand : ICommand<> {
+        services::EntityHandle entity;
+        float sprintMultiplier;
+
+        std::string_view getName() const override { return "SetSprintMultiplier"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -71,6 +85,18 @@ namespace events::controller {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetMoveSpeed"; }
+    };
+
+    struct GetJumpForceQuery : IQuery<float> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetJumpForce"; }
+    };
+
+    struct GetSprintMultiplierQuery : IQuery<float> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetSprintMultiplier"; }
     };
 
 }
