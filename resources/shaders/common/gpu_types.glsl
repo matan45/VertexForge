@@ -100,14 +100,14 @@ struct MeshTasksCommand {
 
 // Must match TerrainTileGPUData in GPUDrivenTypes.hpp (224 bytes)
 struct TerrainTileGPUData {
-    mat4 modelMatrix;           // Usually identity for world-space terrain
+    mat4 modelMatrix;
     vec4 boundingSphere;        // xyz = world center, w = radius
     vec4 aabbMin;               // xyz = world AABB min, w = weightMapResolution (33/65/129)
     vec4 aabbMax;               // xyz = world AABB max, w = activeLayerCount (1-16)
     uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
-    uvec4 lod1MeshletData;      // Same layout
-    uvec4 lod2MeshletData;      // Same layout
-    uvec4 lod3MeshletData;      // Same layout
+    uvec4 lod1MeshletData;
+    uvec4 lod2MeshletData;
+    uvec4 lod3MeshletData;
     vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds (world units)
     int coordX;
     int coordZ;

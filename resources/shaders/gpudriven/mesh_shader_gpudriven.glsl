@@ -678,7 +678,6 @@ const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
 const uint FLAG_TRANSLUCENT = 1u << 5;
 const uint FLAG_ADDITIVE_BLEND = 1u << 10;
-const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
@@ -789,7 +788,6 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // Sample lightmap if available (baked irradiance)
     vec3 lightmapContribution = vec3(0.0);
     if (drawData.lightmapData.x != INVALID_TEXTURE_INDEX) {
         vec2 lmScale = unpackHalf2x16(drawData.lightmapData.y);

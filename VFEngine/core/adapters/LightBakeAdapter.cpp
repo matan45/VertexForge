@@ -18,37 +18,33 @@ namespace core
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        sceneClearedToken_ = dispatcher.subscribe<::events::scene::SceneClearedNotification>(
+        sceneClearedToken = dispatcher.subscribe<::events::scene::SceneClearedNotification>(
             [this](const ::events::scene::SceneClearedNotification&)
             {
-                // Reset all lightmap state so stale data doesn't persist into the next scene
-                terrainLightmapInfos_.clear();
-                lastLightmapPath_.clear();
-                lastTerrainTileInfos_.clear();
+                terrainLightmapInfos.clear();
+                lastLightmapPath.clear();
+                lastTerrainTileInfos.clear();
 
                 {
-                    std::lock_guard<std::mutex> lock(resultMutex_);
-                    lastResult_ = {};
+                    std::lock_guard<std::mutex> lock(resultMutex);
+                    lastResult = {};
                 }
 
-                // Notify terrain renderer to clear lightmap data
                 auto& d = ::events::EventDispatcher::instance();
                 services::events::lightbake::LightmapClearedNotification notif;
                 d.publish(notif);
             });
 
-        sceneLoadedToken_ = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
             [this](const ::events::scene::SceneLoadedNotification&)
             {
-                // If we already have a lightmap path from a previous bake/load, re-apply it
-                if (!lastLightmapPath_.empty())
+                if (!lastLightmapPath.empty())
                 {
-                    loggerInfo("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath_);
-                    loadLightmap(lastLightmapPath_, lastTexelsPerUnit_);
+                    loggerInfo("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath);
+                    loadLightmap(lastLightmapPath, lastTexelsPerUnit);
                     return;
                 }
 
-                // Otherwise check if the scene has a LightmapComponent with a saved path
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::LightmapComponent>();
                 for (auto entity : view)
@@ -66,56 +62,55 @@ namespace core
 
     LightBakeAdapter::~LightBakeAdapter() noexcept
     {
-        if (baking_.load())
+        if (baking.load())
         {
-            baker_.cancel();
-            if (bakeFuture_.valid())
+            baker.cancel();
+            if (bakeFuture.valid())
             {
-                bakeFuture_.wait();
+                bakeFuture.wait();
             }
         }
         auto& dispatcher = ::events::EventDispatcher::instance();
-        dispatcher.unsubscribe(sceneClearedToken_);
-        dispatcher.unsubscribe(sceneLoadedToken_);
+        dispatcher.unsubscribe(sceneClearedToken);
+        dispatcher.unsubscribe(sceneLoadedToken);
     }
 
     void LightBakeAdapter::startBake(const services::LightBakeConfig& config)
     {
-        if (baking_.load())
+        if (baking.load())
         {
             loggerWarning("[LightBake] Bake already in progress");
             return;
         }
 
-        // Launch bake on background thread
-        baking_.store(true);
-        progress_.store(0.0f);
+        baking.store(true);
+        progress.store(0.0f);
 
-        bakeFuture_ = std::async(std::launch::async, &LightBakeAdapter::runBake, this, config);
+        bakeFuture = std::async(std::launch::async, &LightBakeAdapter::runBake, this, config);
     }
 
     void LightBakeAdapter::cancelBake()
     {
-        if (baking_.load())
+        if (baking.load())
         {
-            baker_.cancel();
+            baker.cancel();
         }
     }
 
     float LightBakeAdapter::getBakeProgress() const
     {
-        return progress_.load();
+        return progress.load();
     }
 
     bool LightBakeAdapter::isBaking() const
     {
-        return baking_.load();
+        return baking.load();
     }
 
     services::LightBakeResult LightBakeAdapter::getResult() const
     {
-        std::lock_guard<std::mutex> lock(resultMutex_);
-        return lastResult_;
+        std::lock_guard<std::mutex> lock(resultMutex);
+        return lastResult;
     }
 
     lightbake::BakeLightSet LightBakeAdapter::collectLightsFromScene() const
@@ -123,7 +118,6 @@ namespace core
         lightbake::BakeLightSet lights;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Collect directional lights from static entities
         {
             auto view = registry.view<components::DirectionalLightComponent,
                                        components::TransformComponent,
@@ -145,7 +139,6 @@ namespace core
             }
         }
 
-        // Collect point lights from static entities
         {
             auto view = registry.view<components::PointLightComponent,
                                        components::TransformComponent,
@@ -167,7 +160,6 @@ namespace core
             }
         }
 
-        // Collect spot lights from static entities
         {
             auto view = registry.view<components::SpotLightComponent,
                                        components::TransformComponent,
@@ -212,7 +204,6 @@ namespace core
             result.vertices = std::move(terrainResult.vertices);
             result.triangles = std::move(terrainResult.triangles);
 
-            // Convert per-tile info for lightmap baking
             for (const auto& tileInfo : terrainResult.tileInfos)
             {
                 lightbake::TerrainTileBakeInfo bakeInfo;
@@ -232,8 +223,7 @@ namespace core
                              bakeInfo.firstTriangleIndex, bakeInfo.triangleCount);
             }
 
-            // Store for reverse mapping in assignLightmapComponents
-            lastTerrainTileInfos_ = result.tileInfos;
+            lastTerrainTileInfos = result.tileInfos;
 
             loggerInfo("[LightBake] Collected terrain geometry: {} vertices, {} triangles, {} tiles",
                          result.vertices.size() / 3, result.triangles.size() / 3, result.tileInfos.size());
@@ -241,7 +231,7 @@ namespace core
         else
         {
             loggerWarning("[LightBake] collectTerrainGeometry: NO terrain vertices returned!");
-            lastTerrainTileInfos_.clear();
+            lastTerrainTileInfos.clear();
         }
 
         return result;
@@ -252,7 +242,6 @@ namespace core
         std::vector<lightbake::WaterBakeTile> result;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Find water config from WaterComponent entities
         float worldTileSize = 32.0f;
         auto waterView = registry.view<components::WaterComponent>();
         for (auto entity : waterView)
@@ -262,7 +251,6 @@ namespace core
             break; // Use first water entity's config
         }
 
-        // Collect all water tiles
         auto tileView = registry.view<components::WaterTileComponent>();
         for (auto entity : tileView)
         {
@@ -293,26 +281,25 @@ namespace core
         const std::string& outputPath, float texelsPerUnit)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
-        terrainLightmapInfos_.clear();
+        terrainLightmapInfos.clear();
 
         uint32_t entityCount = 0;
         uint32_t terrainTileCount = 0;
 
         for (const auto& region : lightmapData.entityRegions)
         {
-            // Check if this is a terrain tile (synthetic entityId)
             if (region.entityId >= lightbake::TERRAIN_ENTITY_BASE)
             {
                 uint32_t tileIndex = region.entityId - lightbake::TERRAIN_ENTITY_BASE;
-                if (tileIndex < static_cast<uint32_t>(lastTerrainTileInfos_.size()))
+                if (tileIndex < static_cast<uint32_t>(lastTerrainTileInfos.size()))
                 {
-                    const auto& tileInfo = lastTerrainTileInfos_[tileIndex];
+                    const auto& tileInfo = lastTerrainTileInfos[tileIndex];
                     services::TerrainLightmapTileInfo info;
                     info.coordX = tileInfo.coordX;
                     info.coordZ = tileInfo.coordZ;
                     info.scaleOffset = region.scaleOffset;
                     info.lightmapPath = outputPath;
-                    terrainLightmapInfos_.push_back(info);
+                    terrainLightmapInfos.push_back(info);
                     terrainTileCount++;
                 }
                 continue;
@@ -337,13 +324,13 @@ namespace core
 
     std::vector<services::TerrainLightmapTileInfo> LightBakeAdapter::getTerrainLightmapData() const
     {
-        return terrainLightmapInfos_;
+        return terrainLightmapInfos;
     }
 
     void LightBakeAdapter::runBake(const services::LightBakeConfig& config)
     {
         auto startTime = std::chrono::high_resolution_clock::now();
-        baker_.reset();
+        baker.reset();
 
         services::LightBakeResult result;
 
@@ -356,14 +343,14 @@ namespace core
         lightbake::BakeSceneMesh sceneMesh;
         bool sceneBuilt = sceneMesh.buildFromScene(
             terrainGeometry, waterTiles,
-            [this](float p) { progress_.store(p * 0.2f); }
+            [this](float p) { progress.store(p * 0.2f); }
         );
 
-        if (!sceneBuilt || baker_.wasCancelled())
+        if (!sceneBuilt || baker.wasCancelled())
         {
-            baking_.store(false);
+            baking.store(false);
             auto& dispatcher = ::events::EventDispatcher::instance();
-            if (baker_.wasCancelled())
+            if (baker.wasCancelled())
             {
                 services::events::lightbake::BakeCancelledNotification notif;
                 dispatcher.publish(notif);
@@ -379,7 +366,7 @@ namespace core
 
         // Step 2: Generate lightmap atlas (20% - 30%)
         loggerInfo("[LightBake] Step 2/4: Generating lightmap UV atlas...");
-        progress_.store(0.2f);
+        progress.store(0.2f);
 
         lightbake::LightmapConfig lmConfig;
         lmConfig.texelsPerUnit = config.texelsPerUnit;
@@ -388,21 +375,21 @@ namespace core
         lightbake::LightmapAtlas atlas;
         if (!atlas.build(sceneMesh.getBVH(), lmConfig))
         {
-            baking_.store(false);
+            baking.store(false);
             auto& dispatcher = ::events::EventDispatcher::instance();
             services::events::lightbake::BakeFailedNotification notif;
             notif.errorMessage = "Failed to build lightmap atlas";
             dispatcher.publish(notif);
             return;
         }
-        progress_.store(0.3f);
+        progress.store(0.3f);
 
         // Step 3: Collect lights (30%)
         loggerInfo("[LightBake] Step 3/4: Collecting lights...");
         auto lights = collectLightsFromScene();
         if (lights.empty())
         {
-            baking_.store(false);
+            baking.store(false);
             auto& dispatcher = ::events::EventDispatcher::instance();
             services::events::lightbake::BakeFailedNotification notif;
             notif.errorMessage = "No static lights found in scene";
@@ -417,15 +404,15 @@ namespace core
         loggerInfo("[LightBake] Step 4/4: Baking irradiance...");
         auto& lightmapData = atlas.getLightmapData();
 
-        bool bakeSuccess = baker_.bake(sceneMesh, atlas, lights, lightmapData,
-            [this](float p) { progress_.store(0.3f + p * 0.65f); }
+        bool bakeSuccess = baker.bake(sceneMesh, atlas, lights, lightmapData,
+            [this](float p) { progress.store(0.3f + p * 0.65f); }
         );
 
         if (!bakeSuccess)
         {
-            baking_.store(false);
+            baking.store(false);
             auto& dispatcher = ::events::EventDispatcher::instance();
-            if (baker_.wasCancelled())
+            if (baker.wasCancelled())
             {
                 services::events::lightbake::BakeCancelledNotification notif;
                 dispatcher.publish(notif);
@@ -439,8 +426,7 @@ namespace core
             return;
         }
 
-        // Save lightmap
-        progress_.store(0.95f);
+        progress.store(0.95f);
         std::string outputPath = config.outputPath;
         if (outputPath.empty())
         {
@@ -449,7 +435,7 @@ namespace core
 
         if (!lightbake::LightmapAtlas::save(lightmapData, outputPath))
         {
-            baking_.store(false);
+            baking.store(false);
             auto& dispatcher = ::events::EventDispatcher::instance();
             services::events::lightbake::BakeFailedNotification notif;
             notif.errorMessage = "Failed to save lightmap to: " + outputPath;
@@ -457,12 +443,10 @@ namespace core
             return;
         }
 
-        // Assign LightmapComponent to each baked entity
         assignLightmapComponents(lightmapData, outputPath, config.texelsPerUnit);
 
-        // Store for scene load re-apply
-        lastLightmapPath_ = outputPath;
-        lastTexelsPerUnit_ = config.texelsPerUnit;
+        lastLightmapPath = outputPath;
+        lastTexelsPerUnit = config.texelsPerUnit;
 
         auto endTime = std::chrono::high_resolution_clock::now();
         float elapsedSeconds = std::chrono::duration<float>(endTime - startTime).count();
@@ -474,14 +458,13 @@ namespace core
         result.bakeTimeSeconds = elapsedSeconds;
 
         {
-            std::lock_guard<std::mutex> lock(resultMutex_);
-            lastResult_ = result;
+            std::lock_guard<std::mutex> lock(resultMutex);
+            lastResult = result;
         }
 
-        progress_.store(1.0f);
-        baking_.store(false);
+        progress.store(1.0f);
+        baking.store(false);
 
-        // Publish completion notification
         auto& dispatcher = ::events::EventDispatcher::instance();
         services::events::lightbake::BakeCompletedNotification notif;
         notif.result = result;
@@ -495,24 +478,22 @@ namespace core
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Remove LightmapComponent from all entities
         auto view = registry.view<components::LightmapComponent>();
         for (auto entity : view)
         {
             registry.remove<components::LightmapComponent>(entity);
         }
 
-        terrainLightmapInfos_.clear();
-        lastLightmapPath_.clear();
+        terrainLightmapInfos.clear();
+        lastLightmapPath.clear();
 
         {
-            std::lock_guard<std::mutex> lock(resultMutex_);
-            lastResult_ = {};
+            std::lock_guard<std::mutex> lock(resultMutex);
+            lastResult = {};
         }
 
         loggerInfo("[LightBake] Lightmap cleared");
 
-        // Notify renderer to update
         auto& dispatcher = ::events::EventDispatcher::instance();
         services::events::lightbake::LightmapClearedNotification notif;
         dispatcher.publish(notif);
@@ -528,8 +509,6 @@ namespace core
             return false;
         }
 
-        // Collect current terrain tile infos so assignLightmapComponents can
-        // map synthetic entityIds back to tile coordinates
         bool hasTerrainRegions = false;
         for (const auto& region : lightmapData.entityRegions)
         {
@@ -539,21 +518,19 @@ namespace core
                 break;
             }
         }
-        if (hasTerrainRegions && lastTerrainTileInfos_.empty())
+        if (hasTerrainRegions && lastTerrainTileInfos.empty())
         {
             collectTerrainGeometry();
         }
 
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
 
-        // Store for scene load re-apply
-        lastLightmapPath_ = path;
-        lastTexelsPerUnit_ = texelsPerUnit;
+        lastLightmapPath = path;
+        lastTexelsPerUnit = texelsPerUnit;
 
         loggerInfo("[LightBake] Loaded lightmap from: {} ({}x{}, {} entities)",
                      path, lightmapData.width, lightmapData.height, lightmapData.entityRegions.size());
 
-        // Notify that lightmap data has been loaded (triggers terrain lightmap update)
         auto& dispatcher = ::events::EventDispatcher::instance();
         services::events::lightbake::LightmapLoadedNotification notif;
         notif.lightmapPath = path;

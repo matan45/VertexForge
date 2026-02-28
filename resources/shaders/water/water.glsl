@@ -8,7 +8,6 @@ layout(location = 0) out vec3 fragWorldPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
 
-// Set 0: Camera (matches CameraUBO in MeshTypes.hpp, 240 bytes)
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
@@ -16,7 +15,6 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     float u_Time;
 } camera;
 
-// Set 1: Per-tile SSBO
 struct WaterTileData {
     vec4 worldOriginAndSize;   // xyz = origin, w = tileSize
     vec4 heightAndWave;        // x = height, y = waveIntensity
@@ -25,7 +23,6 @@ layout(set = 1, binding = 0) readonly buffer TileBuffer {
     WaterTileData tiles[];
 } tileData;
 
-// Push constants (global water settings)
 layout(push_constant) uniform PushConstants {
     vec4 shallowColor;
     vec4 deepColor;
@@ -47,7 +44,6 @@ vec2 rotateDir(vec2 dir, float angle) {
     return vec2(c * dir.x - s * dir.y, s * dir.x + c * dir.y);
 }
 
-// Gerstner wave displacement
 vec3 gerstnerWave(vec2 pos, vec2 dir, float steepness, float wavelength, float speed, float time) {
     float k = 2.0 * PI / wavelength;
     float c = speed / k;
@@ -67,14 +63,12 @@ void main() {
     float waterHeight = heightWave.x;
     float waveIntensity = heightWave.y;
 
-    // Scale unit quad to world tile
     vec3 worldPos = vec3(
         tileOrigin.x + inPosition.x * tileSize,
         waterHeight,
         tileOrigin.z + inPosition.z * tileSize
     );
 
-    // Apply Gerstner waves (3 overlapping waves) with user-controlled direction
     float time = camera.u_Time * pc.waveSpeed;
     float amp = pc.waveAmplitude * waveIntensity;
 
@@ -130,36 +124,28 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     float u_Time;
 } camera;
 
-// IBL cubemaps (same bindings as mesh.glsl)
 layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Set 2: DuDv distortion texture
 layout(set = 2, binding = 0) uniform sampler2D dudvMap;
 
-// Shared lighting includes
 #include "../common/lighting_functions.glsl"
 #include "../common/shadow_sampling.glsl"
 #include "../common/cluster_culling.glsl"
 
-// Set 3: Light buffers
 layout(std430, set = 3, binding = 0) readonly buffer DirectionalLightBuffer { DirectionalLight directionalLights[]; };
 layout(std430, set = 3, binding = 1) readonly buffer PointLightBuffer { PointLight pointLights[]; };
 layout(std430, set = 3, binding = 2) readonly buffer SpotLightBuffer { SpotLight spotLights[]; };
 layout(std140, set = 3, binding = 3) uniform LightCountsUBO { LightCounts lightCounts; };
 
-// Set 4: Cluster grid params
 layout(std140, set = 4, binding = 0) uniform ClusterParamsUBO { ClusterGridParams clusterParams; };
 
-// Set 5: Cluster culling output
 layout(std430, set = 5, binding = 0) readonly buffer ClusterLightGridBuffer { ClusterLightData clusterLightGrid[]; };
 layout(std430, set = 5, binding = 1) readonly buffer ClusterLightIndexListBuffer { uint lightIndexList[]; };
 
-// Set 6: Shadow data
 layout(std430, set = 6, binding = 0) readonly buffer ShadowDataBuffer { ShadowData shadowDataArray[]; };
 
-// Set 7: Shadow textures
 layout(set = 7, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 7, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 7, binding = 2) uniform samplerCubeShadow shadowCubes[];
@@ -177,9 +163,6 @@ layout(push_constant) uniform PushConstants {
     float waveDirection;
 } pc;
 
-//-----------------------------------------------------------------------------
-// Shadow Constants (must match ShadowTypes.hpp)
-//-----------------------------------------------------------------------------
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
@@ -357,7 +340,6 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 void main() {
     vec3 N = normalize(fragNormal);
 
-    // Animated dudv sampling (two layers scrolling in different directions)
     float moveSpeed = pc.waveSpeed * 0.03;
     vec2 dudvUV1 = fragTexCoord * pc.dudvTiling + vec2(camera.u_Time * moveSpeed);
     vec2 dudvUV2 = fragTexCoord * pc.dudvTiling * 0.8 + vec2(-camera.u_Time * moveSpeed * 0.7, camera.u_Time * moveSpeed * 0.5);
@@ -366,41 +348,34 @@ void main() {
     vec2 distortion2 = texture(dudvMap, dudvUV2).rg * 2.0 - 1.0;
     vec2 totalDistortion = (distortion1 + distortion2) * pc.dudvStrength;
 
-    // Perturb normal with dudv distortion
     N = normalize(N + vec3(totalDistortion.x, 0.0, totalDistortion.y));
 
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
     vec3 R = reflect(-V, N);
 
-    // Fresnel (Schlick approximation)
     float NdotV = max(dot(N, V), 0.0);
     float fresnel = pow(1.0 - NdotV, pc.fresnelPower);
     fresnel = clamp(fresnel, 0.0, 1.0);
 
-    // Depth-based color blend: view angle scaled by maxVisibleDepth
     float depthFactor = clamp((1.0 - NdotV) * pc.maxVisibleDepth, 0.0, 1.0);
     vec3 waterColor = mix(pc.shallowColor.rgb, pc.deepColor.rgb, depthFactor);
 
-    // IBL reflection
     float roughness = 0.05; // Water is highly reflective
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
     vec3 F0 = vec3(0.02); // Water IOR ~1.33
     vec3 specular = prefilteredColor * (F0 * brdf.x + brdf.y);
 
-    // Water PBR params for direct lighting
     float metallic = 0.0;
     float directRoughness = 0.3; // Higher roughness for direct lights to spread sun specular
     vec3 albedo = waterColor;
 
-    // --- Forward+ Direct Lighting ---
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
     float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
     uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
 
-    // Cluster-culled point and spot lights
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
         uint clusterPointCount = getClusterPointLightCount(clusterData);
@@ -432,7 +407,6 @@ void main() {
         }
     }
 
-    // Directional lights
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
@@ -446,21 +420,15 @@ void main() {
         directLighting += lightContrib * shadow;
     }
 
-    // Apply shadow intensity to ambient (IBL)
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
     float adjustedShadow = pow(minShadow, shadowContrast);
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
 
-    // Blend water color with reflection via Fresnel, modulated by shadow
     vec3 color = mix(waterColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
-    // Tone mapping (Reinhard)
     color = color / (color + vec3(1.0));
-
-    // Gamma correction
     color = pow(color, vec3(1.0 / 2.2));
 
-    // Alpha from shallow color alpha, modulated by Fresnel
     float alpha = mix(pc.shallowColor.a, 1.0, fresnel);
 
     outColor = vec4(color, alpha);
