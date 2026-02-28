@@ -498,13 +498,20 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 l
     int cubeMapIndex = int(sd.pcfParams.w);
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
-    vec3 lightToFrag = biasedPos - lightPos;
-    float linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
     float near = sd.rangeParams.x;
     float far = sd.rangeParams.y;
+    vec3 lightToFrag = worldPos - lightPos;
+    float linearDepth = length(lightToFrag);
+
+    // Beyond shadow range - no shadow contribution
+    // Without this, perspectiveDepth exceeds 1.0 for distant fragments,
+    // failing the depth comparison and producing false shadows
+    if (linearDepth >= far) return 1.0;
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    lightToFrag = biasedPos - lightPos;
+    linearDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
 
     float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
     float viewSpaceZ = linearDepth * majorComponent;
