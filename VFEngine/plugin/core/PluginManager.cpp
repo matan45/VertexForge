@@ -49,20 +49,17 @@ namespace plugin {
     {
         vfLogInfo("Loading plugin: {}", dllPath.filename().string());
 
-        // Load the DLL
         auto library = std::make_unique<DynamicLibrary>(dllPath);
         if (!library->isLoaded()) {
             vfLogError("Failed to load plugin DLL: {}", dllPath.string());
             return false;
         }
 
-        // Validate API version
         if (!validatePluginVersion(*library)) {
             vfLogError("Plugin '{}' has incompatible API version", dllPath.filename().string());
             return false;
         }
 
-        // Get factory and destroy functions
         auto createFunc = library->getFunction<IPlugin*(*)()>("vfCreatePlugin");
         if (!createFunc) {
             vfLogError("Plugin '{}' missing vfCreatePlugin export", dllPath.filename().string());
@@ -75,18 +72,15 @@ namespace plugin {
             return false;
         }
 
-        // Create plugin instance
         IPlugin* instance = createFunc();
         if (!instance) {
             vfLogError("Plugin '{}' vfCreatePlugin returned null", dllPath.filename().string());
             return false;
         }
 
-        // Get plugin info
         PluginInfo info = instance->getInfo();
         vfLogInfo("  Name: {} v{}.{}.{} by {}", info.name, info.versionMajor, info.versionMinor, info.versionPatch, info.author);
 
-        // Register the plugin
         LoadedPlugin loaded;
         loaded.library = std::move(library);
         loaded.instance = instance;
@@ -106,10 +100,8 @@ namespace plugin {
                 continue;
             }
 
-            // Create context for this plugin
             plugin.context = std::make_unique<PluginContextImpl>(plugin.info.name, capabilities);
 
-            // Initialize the plugin
             bool success = false;
             try {
                 success = plugin.instance->onInitialize(plugin.context.get());
@@ -124,10 +116,8 @@ namespace plugin {
             }
             else {
                 vfLogError("Plugin '{}' initialization failed", plugin.info.name);
-                // Cleanup the failed plugin's context
                 plugin.context->cleanupAll();
                 plugin.context.reset();
-                // Destroy the plugin instance
                 if (plugin.destroyFunc && plugin.instance) {
                     plugin.destroyFunc(plugin.instance);
                     plugin.instance = nullptr;
@@ -154,7 +144,6 @@ namespace plugin {
 
     void PluginManager::shutdownAll()
     {
-        // Shutdown in reverse order
         for (auto it = plugins.rbegin(); it != plugins.rend(); ++it) {
             auto& plugin = *it;
 
@@ -169,19 +158,15 @@ namespace plugin {
                 plugin.initialized = false;
             }
 
-            // Clean up context (unsubscribes events, removes windows)
             if (plugin.context) {
                 plugin.context->cleanupAll();
                 plugin.context.reset();
             }
 
-            // Destroy plugin instance via the DLL's destroy function
             if (plugin.destroyFunc && plugin.instance) {
                 plugin.destroyFunc(plugin.instance);
                 plugin.instance = nullptr;
             }
-
-            // DynamicLibrary destructor will call FreeLibrary
         }
 
         plugins.clear();

@@ -6,8 +6,6 @@
 #include <memory>
 #include <string>
 
-struct ImGuiContext;
-
 namespace controllers::imguiHandler {
     class ImguiWindow;
 }
@@ -20,12 +18,18 @@ namespace plugin {
 
     class PluginContextImpl : public PluginContext
     {
+    private:
+        std::string pluginName;
+        std::unordered_set<std::string> capabilities;
+        std::vector<events::SubscriptionToken> managedSubscriptions;
+        std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
+        std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
+        
     public:
-        PluginContextImpl(const std::string& pluginName,
+        explicit PluginContextImpl(const std::string& pluginName,
                           const std::unordered_set<std::string>& capabilities);
         ~PluginContextImpl() override;
 
-        // PluginContext interface
         events::EventDispatcher& getEventDispatcher() override;
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
@@ -44,12 +48,7 @@ namespace plugin {
         // Returns and releases ownership of all registered import stages.
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
 
-    private:
-        std::string pluginName;
-        std::unordered_set<std::string> capabilities;
-        std::vector<events::SubscriptionToken> managedSubscriptions;
-        std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
-        std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
+   
     };
 
 }

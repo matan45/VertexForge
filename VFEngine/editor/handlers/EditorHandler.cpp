@@ -154,8 +154,6 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
-        // Shutdown plugins first (unregisters windows, unsubscribes events)
-        // ~PluginManager calls shutdownAll(), so reset() is sufficient.
         pluginManager.reset();
 
         cleanupEventSubscriptions();

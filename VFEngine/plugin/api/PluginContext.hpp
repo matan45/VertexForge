@@ -2,12 +2,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
-#include <cstdint>
 #include <any>
-#include <functional>
 
-// Forward declarations
 struct ImGuiContext;
 
 namespace events {

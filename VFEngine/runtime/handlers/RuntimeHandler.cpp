@@ -38,13 +38,11 @@ namespace handlers {
 
         initializeServices();
 
-        // Load and initialize plugins (Runtime has no editor/import capabilities)
         pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
             std::string(plugin::capability::audio),
             std::string(plugin::capability::physics),
             std::string(plugin::capability::scripting)
         });
-        // Resolve plugins/ relative to the executable
         auto exePath = std::filesystem::current_path();
         auto pluginsDir = exePath / "plugins";
         if (!std::filesystem::exists(pluginsDir)) {
@@ -80,7 +78,6 @@ namespace handlers {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
 
-            // Update plugins every frame
             if (pluginManager) {
                 pluginManager->updateAll(deltaTime);
             }
@@ -94,7 +91,6 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
-        // Shutdown plugins first (destructor calls shutdownAll())
         pluginManager.reset();
 
         cleanupEventSubscriptions();

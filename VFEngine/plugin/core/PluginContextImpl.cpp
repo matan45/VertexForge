@@ -127,7 +127,6 @@ namespace plugin {
 
     void PluginContextImpl::cleanupAll()
     {
-        // Unsubscribe all managed event subscriptions
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& token : managedSubscriptions) {
             if (token.isValid()) {
@@ -136,7 +135,6 @@ namespace plugin {
         }
         managedSubscriptions.clear();
 
-        // Remove all registered editor windows
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);
         }
