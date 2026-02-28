@@ -197,15 +197,18 @@ namespace render::mesh
 
     void MeshStreamManager::handleCompletedRead(const StreamingResult& result)
     {
+        gpudriven::LODUploadData uploadData{
+            result.vertices.data(),
+            static_cast<uint32_t>(result.vertices.size()),
+            result.indices.data(),
+            static_cast<uint32_t>(result.indices.size())
+        };
         bool uploaded = mergedBuffer.uploadLOD(
             result.meshPath,
             result.submeshName,
             result.submeshIndex,
             result.lodLevel,
-            result.vertices.data(),
-            static_cast<uint32_t>(result.vertices.size()),
-            result.indices.data(),
-            static_cast<uint32_t>(result.indices.size())
+            uploadData
         );
 
         if (!uploaded) return;

@@ -457,6 +457,26 @@ namespace core
         vfLogInfo("[ScriptingAdapter] Script library path set to: {}", path);
     }
 
+    void ScriptingAdapter::registerPluginNativeFunction(const std::string& name, std::any function)
+    {
+        if (!interpreter)
+        {
+            vfLogError("[ScriptingAdapter] Cannot register native function '{}': interpreter not initialized", name);
+            return;
+        }
+
+        try
+        {
+            auto nativeFunc = std::any_cast<::services::NativeFunction>(function);
+            interpreter->registerNativeFunction(name, std::move(nativeFunc));
+            vfLogInfo("[ScriptingAdapter] Registered plugin native function: {}", name);
+        }
+        catch (const std::bad_any_cast&)
+        {
+            vfLogError("[ScriptingAdapter] Failed to register '{}': invalid function type", name);
+        }
+    }
+
     void ScriptingAdapter::setError(services::ScriptError::Type type, const std::string& message,
                                     const std::string& file, int line)
     {

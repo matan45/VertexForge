@@ -38,6 +38,7 @@ namespace resource
         SKELETON,
         ANIMATOR,
         TERRAIN,
+        LIGHTMAP,
         UNKNOWN
     };
 
@@ -171,6 +172,27 @@ namespace resource
         uint32_t sampleRate = 0;
         uint32_t frames = 0;
         std::vector<short> data;
+    };
+
+    struct LightmapEntityRegion
+    {
+        uint32_t entityId = 0;
+        uint32_t x = 0;
+        uint32_t y = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f}; // xy=scale, zw=offset into atlas UV
+    };
+
+    struct LightmapData
+    {
+        FileType headerFileType = FileType::LIGHTMAP;
+        FileVersion version{};
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t channels = 3;
+        std::vector<float> texels;
+        std::vector<LightmapEntityRegion> entityRegions;
     };
 
     struct SkeletonInfo

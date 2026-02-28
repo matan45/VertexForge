@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GPULightTypes.hpp"
+#include "../shadow/ShadowTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <optional>
 #include <vector>
@@ -121,6 +122,8 @@ namespace render::lighting
         void collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
         void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
         void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+        void updateShadowRegistration(uint32_t entityId, shadow::ShadowMapType type,
+                                       const shadow::ShadowSettings& settings);
         void cleanupStaleShadowRegistrations();
         void updateCountsBuffer();
         bool detectChanges();

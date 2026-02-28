@@ -43,6 +43,16 @@ namespace terrain
                 if (tile.hasHeightData())
                     tile.updateWorldBounds();
 
+                if (entry->weightDataOffset != 0)
+                {
+                    TileWeightMapData weights;
+                    if (TerrainSerializer::readTileWeights(filePath, *entry, weights))
+                    {
+                        tile.weightMap = std::move(weights);
+                        tile.weightMapGPUDirty = true;
+                    }
+                }
+
                 size_t newUsage = estimateTileRAMUsage(tile);
                 currentRAMUsage += (newUsage - oldUsage);
                 return true;

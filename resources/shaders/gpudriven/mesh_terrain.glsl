@@ -25,7 +25,6 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
 
-// Set 11 - terrain-specific data
 layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
@@ -46,7 +45,6 @@ layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
 
-// Payload from task shader
 struct TerrainMeshletPayload {
     uint tileIndex;
     uint lodLevel;
@@ -106,7 +104,6 @@ void main() {
     unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
-    // For terrain, model matrix is usually identity, but support transforms
     mat4 modelMatrix = tile.modelMatrix;
     mat3 normalMatrix = mat3(modelMatrix);  // For orthonormal transforms
     mat4 viewProjection = pc.viewProjection;
@@ -203,12 +200,10 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Set 11 - terrain tile data (needed for weight map offsets and layer counts)
 layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
-// Weight map SSBO (packed RGBA uint8 data for all tiles)
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -227,7 +222,6 @@ float sampleWeightTexel(uint tileOffset, uint res, uint layer, uint x, uint z) {
     return readWeightByte(tileOffset + texIdx * texSize + (z * res + x) * 4u + channel);
 }
 
-// Bilinear interpolation of weight map for a specific layer
 float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
     if (res == 0u) return (layer == 0u) ? 1.0 : 0.0;
     uv = clamp(uv, 0.0, 1.0);
@@ -246,7 +240,6 @@ float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
     return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
 }
 
-// Terrain layer info SSBO (per-layer texture indices and tiling)
 layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
     TerrainLayerGPUData terrainLayers[];
 };
@@ -272,7 +265,6 @@ layout(push_constant) uniform PushConstants {
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
-// Light buffers (Set 6 - same as mesh shader)
 layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
 };
@@ -289,12 +281,10 @@ layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
     LightCounts lightCounts;
 };
 
-// Cluster grid params (Set 7)
 layout(std140, set = 7, binding = 0) uniform ClusterParamsUBO {
     ClusterGridParams clusterParams;
 };
 
-// Cluster culling output (Set 8)
 layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer {
     ClusterLightData clusterLightGrid[];
 };
@@ -303,24 +293,18 @@ layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer
     uint lightIndexList[];
 };
 
-// Shadow data (Set 9)
 layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowDataArray[];
 };
 
-// Shadow textures (Set 10)
 layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
-//-----------------------------------------------------------------------------
-// Shadow Constants (must match ShadowTypes.hpp)
-//-----------------------------------------------------------------------------
-const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
-const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
+const int MAX_SHADOW_VIEWS = 272;
+const int MAX_POINT_SHADOW_CUBES = 32;
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
@@ -361,7 +345,6 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
@@ -401,13 +384,11 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     int cascadeCount = int(shadowDataArray[baseShadowIndex].rangeParams.z);
     cascadeCount = clamp(cascadeCount, 1, 4);
 
-    // Ensure we don't access beyond buffer bounds with cascades
     if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
         cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
         if (cascadeCount <= 0) return 1.0;
@@ -443,7 +424,6 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
                         vec3 lightPos, float lightRadius) {
-    // Bounds validation to prevent GPU crash from invalid indices
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
@@ -451,13 +431,17 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     int cubeMapIndex = int(sd.pcfParams.w);
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
-    vec3 lightToFrag = biasedPos - lightPos;
-    float linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
     float near = sd.rangeParams.x;
     float far = sd.rangeParams.y;
+    vec3 lightToFrag = worldPos - lightPos;
+    float linearDepth = length(lightToFrag);
+
+    if (linearDepth >= far) return 1.0;
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    lightToFrag = biasedPos - lightPos;
+    linearDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
 
     float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
     float viewSpaceZ = linearDepth * majorComponent;
@@ -512,7 +496,6 @@ void main() {
     vec3 kS = F;
     vec3 kD = (1.0 - kS) * (1.0 - metallic);
 
-    // IBL ambient
     vec3 irradiance = texture(irradianceMap, N).rgb;
     vec3 diffuse = irradiance * albedo;
 
@@ -521,6 +504,17 @@ void main() {
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
     vec3 ambient = (kD * diffuse + specular) * ao;
+
+    vec3 lightmapContribution = vec3(0.0);
+    TerrainTileGPUData currentTile = tiles[fragTileIndex];
+    if (currentTile.lightmapData.x != 0xFFFFFFFFu) {
+        vec2 lmScale = unpackHalf2x16(currentTile.lightmapData.y);
+        vec2 lmOffset = unpackHalf2x16(currentTile.lightmapData.z);
+        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
+        uint lmIdx = currentTile.lightmapData.x;
+        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
+        lightmapContribution = lightmapIrradiance * albedo;
+    }
 
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
@@ -540,7 +534,13 @@ void main() {
 
             float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
                                              light.position, light.radius);
-            minShadow = min(minShadow, shadow);
+
+            // Weight shadow contribution to ambient by attenuation
+            // so edge-of-radius precision artifacts don't darken ambient
+            float dist = length(light.position - fragWorldPos);
+            float atten = physicalAttenuation(dist, light.radius);
+            float weightedShadow = mix(1.0, shadow, clamp(atten * 10.0, 0.0, 1.0));
+            minShadow = min(minShadow, weightedShadow);
 
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo,
                                                  metallic, roughness, F0, light) * shadow;
@@ -552,7 +552,11 @@ void main() {
             SpotLight light = spotLights[lightIdx];
 
             float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
-            minShadow = min(minShadow, shadow);
+
+            float spotDist = length(light.position - fragWorldPos);
+            float spotAtten = physicalAttenuation(spotDist, light.range);
+            float weightedSpotShadow = mix(1.0, shadow, clamp(spotAtten * 10.0, 0.0, 1.0));
+            minShadow = min(minShadow, weightedSpotShadow);
 
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo,
                                                 metallic, roughness, F0, light) * shadow;
@@ -577,16 +581,14 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
-    vec3 color = ambient + directLighting;
+    vec3 color = ambient + directLighting + lightmapContribution;
 
-    // Tone mapping
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
     uint viewModeValue = pc.viewMode & 0xFFu;
 
     if (viewModeValue == 1u) {
-        // Meshlet visualization
         uint h = fragMeshletIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
@@ -601,7 +603,6 @@ void main() {
     }
 
     if (viewModeValue == 2u) {
-        // LOD visualization
         vec3 lodColors[4] = vec3[4](
             vec3(0.0, 1.0, 0.0),
             vec3(1.0, 1.0, 0.0),
@@ -613,7 +614,6 @@ void main() {
     }
 
     if (viewModeValue == 3u) {
-        // Mipmap visualization (using world UV derivatives)
         vec2 uvDx = dFdx(fragWorldUV);
         vec2 uvDy = dFdy(fragWorldUV);
         float dx = max(length(uvDx), length(uvDy));
@@ -632,7 +632,6 @@ void main() {
     }
 
     if (viewModeValue == 4u) {
-        // Cluster visualization
         uint h = clusterIdx;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
@@ -647,7 +646,6 @@ void main() {
     }
 
     if (viewModeValue == 5u) {
-        // Depth visualization
         float near = clusterParams.depthParams.x;
         float far = clusterParams.depthParams.y;
         float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
@@ -664,13 +662,11 @@ void main() {
     }
 
     if (viewModeValue == 6u) {
-        // Shadow visualization
         vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), minShadow);
         color = shadowColor;
     }
 
     if (viewModeValue == 7u) {
-        // Terrain Tile visualization
         uint h = fragTileIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
@@ -685,12 +681,10 @@ void main() {
     }
 
     if (viewModeValue == 8u) {
-        // Terrain UV visualization
         color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.0);
     }
 
     if (viewModeValue == 9u) {
-        // Weight map debug visualization - distinct color per layer, blended by weight
         vec3 layerColors[8] = vec3[8](
             vec3(0.20, 0.55, 0.20),  // Layer 0: green (grass)
             vec3(0.55, 0.40, 0.20),  // Layer 1: brown (dirt)
@@ -711,7 +705,6 @@ void main() {
         color = c;
     }
 
-    // Brush overlay visualization
     if (pc.brushWorldRadius > 0.0) {
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);
         vec2 delta = fragWorldPos.xz - brushPos;
@@ -724,7 +717,6 @@ void main() {
             dist = length(delta) / pc.brushWorldRadius;
         }
 
-        // Falloff fill
         if (dist <= 1.0) {
             float falloffValue;
             uint falloffType = uint(pc.brushFalloff);
@@ -738,7 +730,6 @@ void main() {
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
-        // Edge ring/border
         float edgeWidth = 0.02;
         float edgeDist = abs(dist - 1.0);
         if (edgeDist < edgeWidth) {

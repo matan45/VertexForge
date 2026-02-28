@@ -498,13 +498,20 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 l
     int cubeMapIndex = int(sd.pcfParams.w);
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
-    vec3 lightToFrag = biasedPos - lightPos;
-    float linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
     float near = sd.rangeParams.x;
     float far = sd.rangeParams.y;
+    vec3 lightToFrag = worldPos - lightPos;
+    float linearDepth = length(lightToFrag);
+
+    // Beyond shadow range - no shadow contribution
+    // Without this, perspectiveDepth exceeds 1.0 for distant fragments,
+    // failing the depth comparison and producing false shadows
+    if (linearDepth >= far) return 1.0;
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    lightToFrag = biasedPos - lightPos;
+    linearDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
 
     float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
     float viewSpaceZ = linearDepth * majorComponent;
@@ -671,7 +678,6 @@ const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
 const uint FLAG_TRANSLUCENT = 1u << 5;
 const uint FLAG_ADDITIVE_BLEND = 1u << 10;
-const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
@@ -782,6 +788,16 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
+    vec3 lightmapContribution = vec3(0.0);
+    if (drawData.lightmapData.x != INVALID_TEXTURE_INDEX) {
+        vec2 lmScale = unpackHalf2x16(drawData.lightmapData.y);
+        vec2 lmOffset = unpackHalf2x16(drawData.lightmapData.z);
+        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
+        uint lmIdx = drawData.lightmapData.x;
+        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
+        lightmapContribution = lightmapIrradiance * albedo;
+    }
+
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -837,7 +853,7 @@ void main() {
         emissive = albedo * emissionMultiplier;
     }
 
-    vec3 color = ambient + directLighting + emissive;
+    vec3 color = ambient + directLighting + lightmapContribution + emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
@@ -963,6 +979,19 @@ void main() {
 
         vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
         color = shadowColor;
+    }
+
+    if (viewModeValue == 7u) {
+        // Lightmap debug view: show baked irradiance only
+        if (drawData.lightmapData.x != INVALID_TEXTURE_INDEX) {
+            vec2 lmScale = unpackHalf2x16(drawData.lightmapData.y);
+            vec2 lmOffset = unpackHalf2x16(drawData.lightmapData.z);
+            vec2 lmUV = fragTexCoord * lmScale + lmOffset;
+            uint lmIdx = drawData.lightmapData.x;
+            color = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
+        } else {
+            color = vec3(0.0);
+        }
     }
 
 #ifdef WBOIT_ENABLED

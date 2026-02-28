@@ -104,6 +104,12 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
+        if (entity.hasComponent<components::LightmapComponent>())
+        {
+            out["lightmap"] = SceneSerialization::serializeLightmap(
+                entity.getComponent<components::LightmapComponent>());
+        }
+
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
             out["socketAttachment"] = SceneSerialization::serializeSocketAttachment(
@@ -304,6 +310,12 @@ namespace serialization
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::SpotLight;
             }
+        }
+
+        if (componentsJson.contains("lightmap"))
+        {
+            auto& lmComp = entity.addOrReplaceComponent<components::LightmapComponent>();
+            SceneSerialization::deserializeLightmap(componentsJson["lightmap"], lmComp);
         }
     }
 

@@ -2,6 +2,12 @@
 
 #include "../../services/providers/ITerrainRenderProvider.hpp"
 #include <memory>
+#include <atomic>
+
+namespace events
+{
+    struct SubscriptionToken;
+}
 
 namespace services
 {
@@ -14,10 +20,14 @@ namespace core
     {
     private:
         services::TerrainService* terrainService = nullptr;
+        std::atomic<bool> terrainLightmapDirty{false};
+        std::unique_ptr<events::SubscriptionToken> bakeCompleteToken;
+        std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken;
+        std::unique_ptr<events::SubscriptionToken> lightmapClearedToken;
 
     public:
-        TerrainRenderAdapter() = default;
-        ~TerrainRenderAdapter() override = default;
+        explicit TerrainRenderAdapter();
+        ~TerrainRenderAdapter() override;
 
         void setTerrainService(services::TerrainService* service) { terrainService = service; }
 
@@ -38,5 +48,8 @@ namespace core
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) override;
         void releaseTileRAMData(terrain::TerrainTile& tile) override;
+
+        std::vector<services::TerrainTileLightmapInfo> getTerrainLightmapData() const override;
+        bool consumeTerrainLightmapDirty() override;
     };
 }

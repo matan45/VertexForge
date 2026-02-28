@@ -62,7 +62,7 @@ namespace render::gpudriven
         vk::DeviceMemory statsBufferMemory;
         TerrainCullingStats cachedStats{};
 
-        void* tileDataBufferMapped_ = nullptr;
+        void* tileDataBufferMapped = nullptr;
 
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::DescriptorSetLayout cachedBindlessLayout;
@@ -79,14 +79,14 @@ namespace render::gpudriven
         vk::DescriptorSet emptyDescriptorSet5;
 
         // Weight map + layer info descriptor (Set 1)
-        vk::DescriptorSetLayout weightMapLayout_;
-        vk::DescriptorPool weightMapPool_;
-        vk::DescriptorSet weightMapDescriptorSet_;
+        vk::DescriptorSetLayout weightMapLayout;
+        vk::DescriptorPool weightMapPool;
+        vk::DescriptorSet weightMapDescriptorSet;
 
         // Terrain layer info buffer (Set 1, binding 1) - host-visible for easy updates
-        vk::Buffer terrainLayerBuffer_;
-        vk::DeviceMemory terrainLayerBufferMemory_;
-        void* terrainLayerBufferMapped_ = nullptr;
+        vk::Buffer terrainLayerBuffer;
+        vk::DeviceMemory terrainLayerBufferMemory;
+        void* terrainLayerBufferMapped = nullptr;
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
@@ -104,12 +104,12 @@ namespace render::gpudriven
 
         bool initialized = false;
 
-        glm::vec2 brushWorldPos_{0.0f};
-        float brushWorldRadius_ = 0.0f;
-        float brushFalloff_ = 0.0f;
-        float brushShape_ = 0.0f;
-        float terrainMaxDrawDistSq_ = 0.0f;
-        glm::mat4 viewProjection_{1.0f};
+        glm::vec2 brushWorldPos{0.0f};
+        float brushWorldRadius = 0.0f;
+        float brushFalloff = 0.0f;
+        float brushShape = 0.0f;
+        float terrainMaxDrawDistSq = 0.0f;
+        glm::mat4 viewProjection{1.0f};
 
     public:
         explicit TerrainMeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -177,19 +177,19 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
-        void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq_ = distSq; }
+        void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {
-            brushWorldPos_ = worldPos;
-            brushWorldRadius_ = worldRadius;
-            brushFalloff_ = falloff;
-            brushShape_ = shape;
+            brushWorldPos = worldPos;
+            brushWorldRadius = worldRadius;
+            brushFalloff = falloff;
+            brushShape = shape;
         }
 
         void setViewProjection(const glm::mat4& viewProj)
         {
-            viewProjection_ = viewProj;
+            viewProjection = viewProj;
         }
 
     private:

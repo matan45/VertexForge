@@ -48,6 +48,9 @@ namespace controllers
         static void setLocation(std::string_view newLocation);
         static void initialize();
 
+        // Add a custom pipeline stage (appended after built-in stages).
+        static void addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage);
+
         // Cancellation support
         static void requestCancel();
         static bool isCancellationRequested();

@@ -55,6 +55,10 @@ struct PointLight {
     float radius;
     vec3 color;
     float intensity;
+    int shadowIndex;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 
 layout(std430, set = 1, binding = 1) readonly buffer PointLightBuffer {

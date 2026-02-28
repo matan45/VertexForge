@@ -8,107 +8,124 @@
 
 namespace events::terrain
 {
-    struct CreateTerrainCommand : ICommand<services::EntityHandle> {
+    struct CreateTerrainCommand : ICommand<services::EntityHandle>
+    {
         services::TerrainCreationData config;
 
         std::string_view getName() const override { return "CreateTerrain"; }
     };
 
-    struct DeleteTerrainCommand : ICommand<bool> {
+    struct DeleteTerrainCommand : ICommand<bool>
+    {
         services::EntityHandle terrainEntity;
 
         std::string_view getName() const override { return "DeleteTerrain"; }
     };
 
-    struct GetTerrainDataQuery : IQuery<std::optional<services::TerrainData>> {
+    struct GetTerrainDataQuery : IQuery<std::optional<services::TerrainData>>
+    {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetTerrainData"; }
     };
 
-    struct HasTerrainComponentQuery : IQuery<bool> {
+    struct HasTerrainComponentQuery : IQuery<bool>
+    {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "HasTerrainComponent"; }
     };
 
-    struct HasTerrainTileComponentQuery : IQuery<bool> {
+    struct HasTerrainTileComponentQuery : IQuery<bool>
+    {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "HasTerrainTileComponent"; }
     };
 
-    struct GetTerrainTileDataQuery : IQuery<std::optional<services::TerrainTileData>> {
+    struct GetTerrainTileDataQuery : IQuery<std::optional<services::TerrainTileData>>
+    {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetTerrainTileData"; }
     };
 
-    struct RemapTerrainEntitiesCommand : ICommand<void> {
+    struct RemapTerrainEntitiesCommand : ICommand<void>
+    {
         std::string_view getName() const override { return "RemapTerrainEntities"; }
     };
 
-    struct TerrainCreatedNotification : INotification {
+    struct TerrainCreatedNotification : INotification
+    {
         services::EntityHandle terrainEntity;
         services::TerrainCreationData config;
 
         std::string_view getName() const override { return "TerrainCreated"; }
     };
 
-    struct TerrainDeletedNotification : INotification {
+    struct TerrainDeletedNotification : INotification
+    {
         services::EntityHandle terrainEntity;
 
         std::string_view getName() const override { return "TerrainDeleted"; }
     };
 
-    struct SetTerrainMaterialPathCommand : ICommand<> {
+    struct SetTerrainMaterialPathCommand : ICommand<>
+    {
         services::EntityHandle terrainEntity;
         std::string materialPath;
 
         std::string_view getName() const override { return "SetTerrainMaterialPath"; }
     };
 
-    struct SaveWeightMapsCommand : ICommand<bool> {
+    struct SaveWeightMapsCommand : ICommand<bool>
+    {
         services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "SaveWeightMaps"; }
     };
 
-    struct LoadWeightMapsCommand : ICommand<bool> {
+    struct LoadWeightMapsCommand : ICommand<bool>
+    {
         services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "LoadWeightMaps"; }
     };
 
-    struct SaveTerrainCommand : ICommand<bool> {
+    struct SaveTerrainCommand : ICommand<bool>
+    {
         services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "SaveTerrain"; }
     };
 
-    struct LoadTerrainCommand : ICommand<services::EntityHandle> {
+    struct LoadTerrainCommand : ICommand<services::EntityHandle>
+    {
         std::string path;
 
         std::string_view getName() const override { return "LoadTerrain"; }
     };
 
-    struct SetTerrainSaveLockCommand : ICommand<> {
+    struct SetTerrainSaveLockCommand : ICommand<>
+    {
         bool locked = false;
 
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
     };
 
-    struct TerrainSavedNotification : INotification {
+    struct TerrainSavedNotification : INotification
+    {
         services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "TerrainSaved"; }
     };
 
-    struct SetTerrainColliderPropertiesCommand : ICommand<> {
+    struct SetTerrainColliderPropertiesCommand : ICommand<>
+    {
         services::EntityHandle entity;
         uint8_t collisionLayer = 0;
         float friction = 0.5f;
@@ -117,30 +134,33 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainColliderProperties"; }
     };
 
-    struct BeginTerrainLoadCommand : ICommand<bool> {
+    struct BeginTerrainLoadCommand : ICommand<bool>
+    {
         std::string path;
 
         std::string_view getName() const override { return "BeginTerrainLoad"; }
     };
 
-    struct PollTerrainLoadCommand : ICommand<std::optional<services::EntityHandle>> {
+    struct PollTerrainLoadCommand : ICommand<std::optional<services::EntityHandle>>
+    {
         std::string_view getName() const override { return "PollTerrainLoad"; }
     };
 
-    struct TerrainLoadStartedNotification : INotification {
+    struct TerrainLoadStartedNotification : INotification
+    {
         std::string path;
 
         std::string_view getName() const override { return "TerrainLoadStarted"; }
     };
 
-    struct TerrainLoadedNotification : INotification {
+    struct TerrainLoadedNotification : INotification
+    {
         services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "TerrainLoaded"; }
     };
 
-    // Returns packed terrain heightfield for VFX particle collision
     struct TerrainHeightfieldResult
     {
         float worldOriginX = 0.0f;
@@ -150,24 +170,49 @@ namespace events::terrain
         int32_t gridCountX = 0;
         int32_t gridCountZ = 0;
         uint32_t verticesPerTile = 33;
-        std::vector<float> heights;  // packed tile-by-tile, row-major (Z outer, X inner)
+        std::vector<float> heights; // packed tile-by-tile, row-major (Z outer, X inner)
         bool valid = false;
     };
 
-    struct GetTerrainHeightfieldQuery : IQuery<TerrainHeightfieldResult> {
+    struct GetTerrainHeightfieldQuery : IQuery<TerrainHeightfieldResult>
+    {
         std::string_view getName() const override { return "GetTerrainHeightfield"; }
     };
 
-    // Returns combined LOD 0 terrain geometry for navmesh baking
     struct TerrainGeometryResult
     {
-        std::vector<float> vertices;   // Flat: x,y,z,x,y,z,...
-        std::vector<int> triangles;    // Index triplets
+        std::vector<float> vertices; // Flat: x,y,z,x,y,z,...
+        std::vector<int> triangles; // Index triplets
         glm::vec3 boundsMin{0.0f};
         glm::vec3 boundsMax{0.0f};
     };
 
-    struct GetTerrainGeometryQuery : IQuery<TerrainGeometryResult> {
+    struct GetTerrainGeometryQuery : IQuery<TerrainGeometryResult>
+    {
         std::string_view getName() const override { return "GetTerrainGeometry"; }
+    };
+
+    struct TerrainTileGeometryInfo
+    {
+        int32_t coordX = 0;
+        int32_t coordZ = 0;
+        glm::vec3 worldOrigin{0.0f};
+        float tileSize = 32.0f;
+        int firstVertexIndex = 0; // Vertex index (not float index)
+        int vertexCount = 0;
+        int firstTriangleIndex = 0; // Triangle index (not int index)
+        int triangleCount = 0;
+    };
+
+    struct TerrainBakeGeometryResult
+    {
+        std::vector<float> vertices; // Flat: x,y,z,x,y,z,...
+        std::vector<int> triangles; // Index triplets
+        std::vector<TerrainTileGeometryInfo> tileInfos;
+    };
+
+    struct GetTerrainBakeGeometryQuery : IQuery<TerrainBakeGeometryResult>
+    {
+        std::string_view getName() const override { return "GetTerrainBakeGeometry"; }
     };
 }

@@ -24,6 +24,7 @@ namespace windows
         Terrain,
         Navmesh,
         PhysAnim,
+        Lightmap,
         Other
     };
 

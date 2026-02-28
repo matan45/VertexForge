@@ -104,6 +104,16 @@ namespace services
                 return isCompiled();
             });
 
+        // === Plugin Native Function Registration ===
+        dispatcher.registerCommandHandler<events::scripting::RegisterNativeScriptFunctionCommand>(
+            [this](const events::scripting::RegisterNativeScriptFunctionCommand& cmd)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->registerPluginNativeFunction(cmd.functionName, cmd.function);
+                }
+            });
+
         // === Mode Change Subscription ===
         dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)

@@ -23,6 +23,7 @@
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
+#include "../../core/Texture.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
@@ -141,6 +142,9 @@ namespace render::gpudriven
 
         std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
         material::CallbackId materialChangeCallbackId{};
+
+        std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
+        std::unordered_set<std::string> registeredLightmapPaths;
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
@@ -299,6 +303,16 @@ namespace render::gpudriven
                                uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
 
+        // Set terrain tile lightmap data from bake results
+        struct TerrainTileLightmapData
+        {
+            int32_t coordX = 0;
+            int32_t coordZ = 0;
+            glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
+            std::string lightmapPath;
+        };
+        void setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data);
+
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
         void setTerrainLODBias(float bias) { terrainLODBias = bias; }
@@ -346,6 +360,8 @@ namespace render::gpudriven
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        void registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        LightmapIndexResolver createLightmapResolver();
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);

@@ -162,7 +162,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
-        weightMapLayout_ = vkDevice.createDescriptorSetLayout(layoutInfo);
+        weightMapLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
@@ -172,14 +172,14 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
-        weightMapPool_ = vkDevice.createDescriptorPool(poolInfo);
+        weightMapPool = vkDevice.createDescriptorPool(poolInfo);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = weightMapPool_;
+        allocInfo.descriptorPool = weightMapPool;
         allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &weightMapLayout_;
+        allocInfo.pSetLayouts = &weightMapLayout;
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
-        weightMapDescriptorSet_ = sets[0];
+        weightMapDescriptorSet = sets[0];
     }
 
     void TerrainMeshShaderPipeline::createTerrainLayerBuffer()
@@ -193,18 +193,18 @@ namespace render::gpudriven
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                              vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, terrainLayerBuffer_, terrainLayerBufferMemory_);
+        core::BufferUtilities::createBuffer(request, terrainLayerBuffer, terrainLayerBufferMemory);
 
-        terrainLayerBufferMapped_ = vkDevice.mapMemory(terrainLayerBufferMemory_, 0, layerBufferSize);
-        std::memset(terrainLayerBufferMapped_, 0, layerBufferSize);
+        terrainLayerBufferMapped = vkDevice.mapMemory(terrainLayerBufferMemory, 0, layerBufferSize);
+        std::memset(terrainLayerBufferMapped, 0, layerBufferSize);
 
         vk::DescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = terrainLayerBuffer_;
+        bufferInfo.buffer = terrainLayerBuffer;
         bufferInfo.offset = 0;
         bufferInfo.range = layerBufferSize;
 
         vk::WriteDescriptorSet write{};
-        write.dstSet = weightMapDescriptorSet_;
+        write.dstSet = weightMapDescriptorSet;
         write.dstBinding = 1;
         write.descriptorCount = 1;
         write.descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -306,16 +306,16 @@ namespace render::gpudriven
             terrainBufferPool = nullptr;
         }
 
-        if (weightMapPool_)
+        if (weightMapPool)
         {
-            vkDevice.destroyDescriptorPool(weightMapPool_);
-            weightMapPool_ = nullptr;
+            vkDevice.destroyDescriptorPool(weightMapPool);
+            weightMapPool = nullptr;
         }
 
-        if (weightMapLayout_)
+        if (weightMapLayout)
         {
-            vkDevice.destroyDescriptorSetLayout(weightMapLayout_);
-            weightMapLayout_ = nullptr;
+            vkDevice.destroyDescriptorSetLayout(weightMapLayout);
+            weightMapLayout = nullptr;
         }
 
         if (emptyDescriptorPool)
@@ -364,20 +364,20 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
-        if (tileDataBufferMapped_)
+        if (tileDataBufferMapped)
         {
             vkDevice.unmapMemory(tileDataBufferMemory);
-            tileDataBufferMapped_ = nullptr;
+            tileDataBufferMapped = nullptr;
         }
         core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
-        if (terrainLayerBufferMapped_)
+        if (terrainLayerBufferMapped)
         {
-            vkDevice.unmapMemory(terrainLayerBufferMemory_);
-            terrainLayerBufferMapped_ = nullptr;
+            vkDevice.unmapMemory(terrainLayerBufferMemory);
+            terrainLayerBufferMapped = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer_, terrainLayerBufferMemory_);
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferMemory);
 
         cleanupDescriptorResources();
 
@@ -398,8 +398,8 @@ namespace render::gpudriven
 
         core::BufferUtilities::createBuffer(request, tileDataBuffer, tileDataBufferMemory);
 
-        tileDataBufferMapped_ = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
-        std::memset(tileDataBufferMapped_, 0, bufferSize);
+        tileDataBufferMapped = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
+        std::memset(tileDataBufferMapped, 0, bufferSize);
 
         loggerInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
                    maxTileCount, bufferSize);
@@ -518,7 +518,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
-            weightMapLayout_,       // Set 1: Weight map SSBO
+            weightMapLayout,       // Set 1: Weight map SSBO
             bindlessTextureLayout,  // Set 2: Bindless textures
             meshletDataLayout,      // Set 3: Meshlet data
             vertexDataLayout,       // Set 4: Vertex data
@@ -587,7 +587,7 @@ namespace render::gpudriven
         currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
-        std::memcpy(tileDataBufferMapped_, tiles.data(), dataSize);
+        std::memcpy(tileDataBufferMapped, tiles.data(), dataSize);
     }
 
     void TerrainMeshShaderPipeline::updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer)
@@ -630,7 +630,7 @@ namespace render::gpudriven
 
     void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer)
     {
-        if (!initialized || !weightMapDescriptorSet_ || !weightMapBuffer) return;
+        if (!initialized || !weightMapDescriptorSet || !weightMapBuffer) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -640,7 +640,7 @@ namespace render::gpudriven
         bufferInfo.range = VK_WHOLE_SIZE;
 
         vk::WriteDescriptorSet write{};
-        write.dstSet = weightMapDescriptorSet_;
+        write.dstSet = weightMapDescriptorSet;
         write.dstBinding = 0;
         write.descriptorCount = 1;
         write.descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -651,11 +651,17 @@ namespace render::gpudriven
 
     void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
     {
-        if (!terrainLayerBufferMapped_ || layers.empty()) return;
+        if (!terrainLayerBufferMapped) return;
 
         constexpr uint32_t maxLayers = 16;
+        if (layers.empty())
+        {
+            std::memset(terrainLayerBufferMapped, 0, maxLayers * sizeof(TerrainLayerGPUData));
+            return;
+        }
+
         uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
-        std::memcpy(terrainLayerBufferMapped_, layers.data(), count * sizeof(TerrainLayerGPUData));
+        std::memcpy(terrainLayerBufferMapped, layers.data(), count * sizeof(TerrainLayerGPUData));
     }
 
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
@@ -679,7 +685,7 @@ namespace render::gpudriven
     {
         const std::array<std::pair<vk::DescriptorSet, const char*>, 12> descriptors = {{
             {iblDescriptorSet, "iblDescriptorSet (set 0)"},
-            {weightMapDescriptorSet_, "weightMapDescriptorSet_ (set 1)"},
+            {weightMapDescriptorSet, "weightMapDescriptorSet (set 1)"},
             {bindlessDescriptorSet, "bindlessDescriptorSet (set 2)"},
             {terrainMeshletDescriptorSet, "terrainMeshletDescriptorSet (set 3)"},
             {terrainVertexDescriptorSet, "terrainVertexDescriptorSet (set 4)"},
@@ -780,15 +786,15 @@ namespace render::gpudriven
         pc.lodBias = lodBias;
         pc.errorThreshold = errorThreshold;
         pc.terrainTextureScale = textureScale;
-        pc.terrainMaxDrawDistSq = terrainMaxDrawDistSq_;
-        pc.brushWorldPos = brushWorldPos_;
-        pc.brushWorldRadius = brushWorldRadius_;
-        pc.brushFalloff = brushFalloff_;
-        pc.brushShape = brushShape_;
+        pc.terrainMaxDrawDistSq = terrainMaxDrawDistSq;
+        pc.brushWorldPos = brushWorldPos;
+        pc.brushWorldRadius = brushWorldRadius;
+        pc.brushFalloff = brushFalloff;
+        pc.brushShape = brushShape;
         pc._pad1 = 0.0f;
         pc._pad2 = 0.0f;
         pc._pad3 = 0.0f;
-        pc.viewProjection = viewProjection_;
+        pc.viewProjection = viewProjection;
         return pc;
     }
 
@@ -809,7 +815,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSet, 12> currentSets = {
             iblDescriptorSet,
-            weightMapDescriptorSet_,
+            weightMapDescriptorSet,
             bindlessDescriptorSet,
             terrainMeshletDescriptorSet,
             terrainVertexDescriptorSet,

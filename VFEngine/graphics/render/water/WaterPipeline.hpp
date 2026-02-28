@@ -15,6 +15,27 @@ namespace render::water
 {
     class WaterMeshBuffer;
 
+    struct WaterPipelineLayoutConfig
+    {
+        vk::DescriptorSetLayout iblLayout;
+        vk::DescriptorSetLayout lightDataLayout;
+        vk::DescriptorSetLayout clusterGridLayout;
+        vk::DescriptorSetLayout cullingOutputLayout;
+        vk::DescriptorSetLayout shadowDataLayout;
+        vk::DescriptorSetLayout shadowTextureLayout;
+        vk::RenderPass renderPass;
+    };
+
+    struct WaterRenderDescriptors
+    {
+        vk::DescriptorSet iblDescSet;
+        vk::DescriptorSet lightDataDescSet;
+        vk::DescriptorSet clusterGridDescSet;
+        vk::DescriptorSet cullingOutputDescSet;
+        vk::DescriptorSet shadowDataDescSet;
+        vk::DescriptorSet shadowTextureDescSet;
+    };
+
     class WaterPipeline
     {
     private:
@@ -26,41 +47,41 @@ namespace render::water
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Set 1: water tile SSBO descriptor
         vk::DescriptorSetLayout waterTileLayout;
         vk::DescriptorPool waterTilePool;
         vk::DescriptorSet waterTileDescriptorSet;
 
-        // Set 2: dudv texture descriptor
         vk::DescriptorSetLayout dudvTextureLayout;
         vk::DescriptorPool dudvTexturePool;
         vk::DescriptorSet dudvTextureDescriptorSet;
 
-        // Procedural dudv texture resources
         vk::Image dudvImage;
         vk::DeviceMemory dudvImageMemory;
         vk::ImageView dudvImageView;
         vk::Sampler dudvSampler;
 
-        // Cached shared layout (Set 0 = IBL/camera)
         vk::DescriptorSetLayout cachedIBLLayout;
+        vk::DescriptorSetLayout cachedLightDataLayout;
+        vk::DescriptorSetLayout cachedClusterGridLayout;
+        vk::DescriptorSetLayout cachedCullingOutputLayout;
+        vk::DescriptorSetLayout cachedShadowDataLayout;
+        vk::DescriptorSetLayout cachedShadowTextureLayout;
 
         bool initialized = false;
         uint32_t lastDescriptorTileCount = 0;
 
     public:
-        WaterPipeline(core::Device& device, core::SwapChain& swapChain);
+        explicit WaterPipeline(core::Device& device, core::SwapChain& swapChain);
         ~WaterPipeline();
 
-        void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
-        void recreate(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void init(const WaterPipelineLayoutConfig& config);
+        void recreate(const WaterPipelineLayoutConfig& config);
         void cleanup();
 
         void updateDescriptors(vk::Buffer tileSSBO, uint32_t tileCount);
 
-        void render(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                    WaterMeshBuffer& meshBuffer,
-                    const WaterPushConstants& pushConstants);
+        void render(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
+                    WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
@@ -69,6 +90,6 @@ namespace render::water
         void createWaterTileDescriptor();
         void createDuDvTexture();
         void createDuDvDescriptor();
-        void createGraphicsPipeline(vk::DescriptorSetLayout iblLayout, vk::RenderPass renderPass);
+        void createGraphicsPipeline(const WaterPipelineLayoutConfig& config);
     };
 }

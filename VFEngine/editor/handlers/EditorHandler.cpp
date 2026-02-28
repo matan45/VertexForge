@@ -27,6 +27,7 @@
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
+#include "impl/LightBakeServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -37,6 +38,8 @@
 #include "events/ProjectEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include "Import.hpp"
+#include "core/PluginManager.hpp"
+#include <filesystem>
 
 namespace handlers
 {
@@ -59,6 +62,29 @@ namespace handlers
 
         editor::SplashScreen::instance().setStatus("Registering services...");
         initializeServices();
+
+        editor::SplashScreen::instance().setStatus("Loading plugins...");
+        pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
+            std::string(plugin::capability::editor),
+            std::string(plugin::capability::audio),
+            std::string(plugin::capability::physics),
+            std::string(plugin::capability::import_),
+            std::string(plugin::capability::scripting)
+        });
+        // Resolve plugins/ relative to the executable (bin/Editor/<Config>/x64/ -> repo root)
+        auto exePath = std::filesystem::current_path();
+        auto pluginsDir = exePath / "plugins";
+        if (!std::filesystem::exists(pluginsDir)) {
+            // When running from VS, working dir is project dir (VFEngine/editor/)
+            pluginsDir = exePath / "../../plugins";
+        }
+        pluginManager->loadAll(pluginsDir);
+        pluginManager->initializeAll();
+
+        // Wire plugin-registered import stages into the import pipeline
+        for (auto& stage : pluginManager->takeAllImportStages()) {
+            controllers::Import::addCustomStage(std::move(stage));
+        }
 
         bootstrap->setFrameCallback([this]()
         {
@@ -106,6 +132,13 @@ namespace handlers
                     audioSceneUpdater->updateListenerFromPrimaryCamera();
                 }
             }
+
+            // Update plugins every frame (regardless of play/edit mode)
+            if (pluginManager)
+            {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                pluginManager->updateAll(dt);
+            }
         });
 
         setupEventSubscriptions();
@@ -121,6 +154,8 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        pluginManager.reset();
+
         cleanupEventSubscriptions();
 
         windowImguiHandler->cleanUp();
@@ -141,6 +176,7 @@ namespace handlers
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
+        lightBakeService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -216,6 +252,10 @@ namespace handlers
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
             renderTexturePlayModeHandler->subscribeToEvents();
         }
+
+        lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
+            bootstrap->getLightBakeProvider()
+        );
     }
 
     void EditorHandler::createMediaServices()
@@ -329,6 +369,7 @@ namespace handlers
         paintBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
+        lightBakeService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

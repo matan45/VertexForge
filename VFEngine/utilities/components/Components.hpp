@@ -23,5 +23,5 @@ namespace components
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
-                                               NavmeshAgentComponent>;
+                                               NavmeshAgentComponent, LightmapComponent>;
 }

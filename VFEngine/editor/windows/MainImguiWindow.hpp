@@ -12,6 +12,7 @@
 #include "TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "NavmeshWindow.hpp"
+#include "LightBakeWindow.hpp"
 #include "SculptToolPanel.hpp"
 #include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
@@ -42,6 +43,7 @@ namespace windows
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
         NavmeshWindow navmeshWindow;
+        LightBakeWindow lightBakeWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         MainMenuBar menuBar;
@@ -49,8 +51,6 @@ namespace windows
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
-        events::SubscriptionToken terrainLoadStartedToken;
-        bool isLoadingTerrain = false;
 
     public:
         explicit MainImguiWindow();
@@ -66,6 +66,5 @@ namespace windows
     private:
         void subscribeToEvents();
         void onSceneCleared();
-        void pollTerrainLoad();
     };
 }

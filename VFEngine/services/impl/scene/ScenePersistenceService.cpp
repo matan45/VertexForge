@@ -178,6 +178,9 @@ namespace services
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
+
         sceneGraph->clearScene();
 
         if (entityStateService)

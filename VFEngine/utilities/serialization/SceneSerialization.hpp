@@ -104,6 +104,9 @@ namespace serialization
         static json serializeSpotLight(const components::SpotLightComponent& light);
         static void deserializeSpotLight(const json& j, components::SpotLightComponent& light);
 
+        static json serializeLightmap(const components::LightmapComponent& lm);
+        static void deserializeLightmap(const json& j, components::LightmapComponent& lm);
+
         static json serializePhysicsSettings(const types::PhysicsSettings& settings);
         static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
 

@@ -24,6 +24,7 @@
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
+#include "core/PluginManager.hpp"
 
 namespace handlers {
 
@@ -34,9 +35,22 @@ namespace handlers {
 
     void RuntimeHandler::init() {
         bootstrap->init();
-        
+
         initializeServices();
-        
+
+        pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
+            std::string(plugin::capability::audio),
+            std::string(plugin::capability::physics),
+            std::string(plugin::capability::scripting)
+        });
+        auto exePath = std::filesystem::current_path();
+        auto pluginsDir = exePath / "plugins";
+        if (!std::filesystem::exists(pluginsDir)) {
+            pluginsDir = exePath / "../../plugins";
+        }
+        pluginManager->loadAll(pluginsDir);
+        pluginManager->initializeAll();
+
         bootstrap->setFrameCallback([this]() {
             if (inputService) {
                 inputService->update();
@@ -63,6 +77,10 @@ namespace handlers {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
+
+            if (pluginManager) {
+                pluginManager->updateAll(deltaTime);
+            }
         });
         
         setupEventSubscriptions();
@@ -73,6 +91,8 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
+        pluginManager.reset();
+
         cleanupEventSubscriptions();
 
         if (physicsPlayModeHandler)
