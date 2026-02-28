@@ -64,6 +64,20 @@ namespace events::controller {
         std::string_view getName() const override { return "SetSprintMultiplier"; }
     };
 
+    struct SetArrivalDistanceCommand : ICommand<> {
+        services::EntityHandle entity;
+        float arrivalDistance;
+
+        std::string_view getName() const override { return "SetArrivalDistance"; }
+    };
+
+    struct SetGroundedCommand : ICommand<> {
+        services::EntityHandle entity;
+        bool isGrounded;
+
+        std::string_view getName() const override { return "SetGrounded"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -97,6 +111,18 @@ namespace events::controller {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetSprintMultiplier"; }
+    };
+
+    struct GetArrivalDistanceQuery : IQuery<float> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetArrivalDistance"; }
+    };
+
+    struct IsGroundedQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "IsGrounded"; }
     };
 
 }

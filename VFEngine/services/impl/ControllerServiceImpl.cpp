@@ -65,6 +65,7 @@ namespace services
                 }
                 auto& controller = registry.get<components::ControllerComponent>(entity);
                 controller.hasMoveToTarget = true;
+                controller.moveToDestinationDirty = true;
                 controller.moveToDestination = cmd.destination;
                 return true;
             });
@@ -81,6 +82,7 @@ namespace services
                 auto& controller = registry.get<components::ControllerComponent>(entity);
                 controller.moveInput = glm::vec3(0.0f);
                 controller.hasMoveToTarget = false;
+                controller.moveToDestinationDirty = false;
                 controller.wantsJump = false;
                 controller.wantsSprint = false;
 
@@ -126,7 +128,7 @@ namespace services
                 }
                 auto& transform = registry.get<components::TransformComponent>(entity);
                 float dist = glm::length(controller.moveToDestination - transform.position);
-                return dist < 0.5f;
+                return dist < controller.arrivalDistance;
             });
 
         dispatcher.registerQueryHandler<::events::controller::GetDistanceToQuery>(
@@ -201,6 +203,54 @@ namespace services
                 }
                 return registry.get<components::ControllerComponent>(entity).sprintMultiplier;
             });
+
+        dispatcher.registerCommandHandler<::events::controller::SetArrivalDistanceCommand>(
+            [](const ::events::controller::SetArrivalDistanceCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).arrivalDistance = cmd.arrivalDistance;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetArrivalDistanceQuery>(
+            [](const ::events::controller::GetArrivalDistanceQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.5f;
+                }
+                return registry.get<components::ControllerComponent>(entity).arrivalDistance;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetGroundedCommand>(
+            [](const ::events::controller::SetGroundedCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).isGrounded = cmd.isGrounded;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::IsGroundedQuery>(
+            [](const ::events::controller::IsGroundedQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return false;
+                }
+                return registry.get<components::ControllerComponent>(entity).isGrounded;
+            });
     }
 
     void ControllerServiceImpl::applyControllerMovement(float deltaTime)
@@ -219,9 +269,10 @@ namespace services
             if (controller.hasMoveToTarget)
             {
                 float dist = glm::length(controller.moveToDestination - transform.position);
-                if (dist < 0.5f)
+                if (dist < controller.arrivalDistance)
                 {
                     controller.hasMoveToTarget = false;
+                    controller.moveToDestinationDirty = false;
                     controller.moveInput = glm::vec3(0.0f);
 
                     if (registry.all_of<components::NavmeshAgentComponent>(entity))
@@ -233,13 +284,26 @@ namespace services
                     continue;
                 }
 
-                // Delegate to navmesh if available
+                // Delegate to navmesh if available (only dispatch when destination changed)
                 if (registry.all_of<components::NavmeshAgentComponent>(entity))
                 {
-                    ::events::navmesh::SetAgentDestinationCommand destCmd;
-                    destCmd.entity = handle;
-                    destCmd.target = controller.moveToDestination;
-                    dispatcher.execute(destCmd);
+                    // Apply sprint to navmesh agent speed
+                    auto& agent = registry.get<components::NavmeshAgentComponent>(entity);
+                    float targetSpeed = controller.moveSpeed;
+                    if (controller.wantsSprint)
+                    {
+                        targetSpeed *= controller.sprintMultiplier;
+                    }
+                    agent.maxSpeed = targetSpeed;
+
+                    if (controller.moveToDestinationDirty)
+                    {
+                        ::events::navmesh::SetAgentDestinationCommand destCmd;
+                        destCmd.entity = handle;
+                        destCmd.target = controller.moveToDestination;
+                        dispatcher.execute(destCmd);
+                        controller.moveToDestinationDirty = false;
+                    }
                     continue;
                 }
 
@@ -273,8 +337,8 @@ namespace services
                 }
             }
 
-            // Apply jump
-            if (controller.wantsJump && controller.jumpForce > 0.0f)
+            // Apply jump (only when grounded)
+            if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
             {
                 if (registry.all_of<components::RigidBodyComponent>(entity))
                 {
@@ -282,9 +346,10 @@ namespace services
                     impulseCmd.entity = handle;
                     impulseCmd.impulse = glm::vec3(0.0f, controller.jumpForce, 0.0f);
                     dispatcher.execute(impulseCmd);
+                    controller.isGrounded = false;
                 }
-                controller.wantsJump = false;
             }
+            controller.wantsJump = false;
 
             // Reset per-frame input (scripts must set it again next frame)
             if (!controller.hasMoveToTarget)

@@ -524,6 +524,7 @@ namespace serialization
         j["moveSpeed"] = controller.moveSpeed;
         j["sprintMultiplier"] = controller.sprintMultiplier;
         j["jumpForce"] = controller.jumpForce;
+        j["arrivalDistance"] = controller.arrivalDistance;
         return j;
     }
 
@@ -540,6 +541,10 @@ namespace serialization
         if (auto it = j.find("jumpForce"); it != j.end() && it->is_number())
         {
             controller.jumpForce = it->get<float>();
+        }
+        if (auto it = j.find("arrivalDistance"); it != j.end() && it->is_number())
+        {
+            controller.arrivalDistance = it->get<float>();
         }
 
         // Reset runtime state

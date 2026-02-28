@@ -169,5 +169,53 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
+
+        // _native_controller_getArrivalDistance(entityId) -> float
+        interpreter->registerNativeFunction("_native_controller_getArrivalDistance",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.5f);
+
+                ::events::controller::GetArrivalDistanceQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        // _native_controller_setArrivalDistance(entityId, distance) -> void
+        interpreter->registerNativeFunction("_native_controller_setArrivalDistance",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetArrivalDistanceCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.arrivalDistance = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_controller_isGrounded(entityId) -> bool
+        interpreter->registerNativeFunction("_native_controller_isGrounded",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(false);
+
+                ::events::controller::IsGroundedQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        // _native_controller_setGrounded(entityId, grounded) -> void
+        interpreter->registerNativeFunction("_native_controller_setGrounded",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetGroundedCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.isGrounded = extractBool(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
     }
 }

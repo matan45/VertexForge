@@ -98,4 +98,28 @@ public class Controller {
     public static function setSprintMultiplier(int entityId, float multiplier): void {
         _native_controller_setSprintMultiplier(entityId, multiplier);
     }
+
+    // Get arrival distance threshold for moveTo
+    public static function getArrivalDistance(int entityId): float {
+        return _native_controller_getArrivalDistance(entityId);
+    }
+
+    // Set arrival distance threshold for moveTo
+    public static function setArrivalDistance(int entityId, float distance): void {
+        _native_controller_setArrivalDistance(entityId, distance);
+    }
+
+    // ============================================
+    // Ground State
+    // ============================================
+
+    // Check if entity is on the ground (must be set by collision scripts)
+    public static function isGrounded(int entityId): bool {
+        return _native_controller_isGrounded(entityId);
+    }
+
+    // Set grounded state (call from collision listener scripts)
+    public static function setGrounded(int entityId, bool grounded): void {
+        _native_controller_setGrounded(entityId, grounded);
+    }
 }

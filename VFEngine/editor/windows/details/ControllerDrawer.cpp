@@ -29,6 +29,7 @@ namespace windows::details
             ImGui::DragFloat("##CtrlMoveSpeed", &controller.moveSpeed, 0.1f, 0.0f, 50.0f, "Move Speed: %.1f");
             ImGui::DragFloat("##CtrlSprintMult", &controller.sprintMultiplier, 0.05f, 1.0f, 5.0f, "Sprint Mult: %.2f");
             ImGui::DragFloat("##CtrlJumpForce", &controller.jumpForce, 0.1f, 0.0f, 50.0f, "Jump Force: %.1f");
+            ImGui::DragFloat("##CtrlArrivalDist", &controller.arrivalDistance, 0.05f, 0.1f, 10.0f, "Arrival Dist: %.2f");
             ImGui::PopItemWidth();
 
             ImGui::Unindent();
