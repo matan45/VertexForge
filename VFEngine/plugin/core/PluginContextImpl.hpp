@@ -41,11 +41,15 @@ namespace plugin {
         // Called by PluginManager during shutdown to clean up all registrations.
         void cleanupAll();
 
+        // Returns and releases ownership of all registered import stages.
+        std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
+
     private:
         std::string pluginName;
         std::unordered_set<std::string> capabilities;
         std::vector<events::SubscriptionToken> managedSubscriptions;
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
+        std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
     };
 
 }

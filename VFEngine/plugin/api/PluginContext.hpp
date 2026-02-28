@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cstdint>
 #include <any>
@@ -24,6 +25,14 @@ namespace pipeline {
 
 namespace plugin {
 
+    namespace capability {
+        constexpr std::string_view editor   = "editor";
+        constexpr std::string_view audio    = "audio";
+        constexpr std::string_view physics  = "physics";
+        constexpr std::string_view import_  = "import";
+        constexpr std::string_view scripting = "scripting";
+    }
+
     class PluginContext
     {
     public:
@@ -39,21 +48,21 @@ namespace plugin {
         virtual events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) = 0;
 
         // === Editor Window Registration ===
-        // Only available when hasCapability("editor") is true.
+        // Only available when hasCapability(capability::editor) is true.
         virtual void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) = 0;
 
         // === Import Pipeline Extension ===
-        // Only available when hasCapability("import") is true.
+        // Only available when hasCapability(capability::import_) is true.
         virtual void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) = 0;
 
         // === Script Native Function Registration ===
         // Register a native function callable from mType scripts.
         // The function signature must be: value::Value(const std::vector<value::Value>&)
-        // Wrap it in std::any before passing. Only available when hasCapability("scripting") is true.
+        // Wrap it in std::any before passing. Only available when hasCapability(capability::scripting) is true.
         virtual void registerScriptFunction(const std::string& name, std::any function) = 0;
 
         // === Capability Queries ===
-        // Check if an engine capability is available. Examples: "editor", "audio", "physics", "import"
+        // Check if an engine capability is available. Use plugin::capability constants.
         virtual bool hasCapability(const std::string& capability) const = 0;
 
         // === ImGui Context ===

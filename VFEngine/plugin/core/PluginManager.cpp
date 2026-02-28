@@ -1,19 +1,18 @@
 #include "PluginManager.hpp"
 #include "../api/PluginVersion.hpp"
+#include "Pipeline.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace plugin {
 
-    PluginManager::PluginManager() = default;
+    PluginManager::PluginManager(std::unordered_set<std::string> capabilities)
+        : capabilities(std::move(capabilities))
+    {
+    }
 
     PluginManager::~PluginManager()
     {
         shutdownAll();
-    }
-
-    void PluginManager::setCapabilities(const std::unordered_set<std::string>& caps)
-    {
-        capabilities = caps;
     }
 
     void PluginManager::loadAll(const std::filesystem::path& pluginDirectory)
@@ -43,7 +42,7 @@ namespace plugin {
             loadPlugin(path);
         }
 
-        vfLogInfo("Loaded {} plugin(s)", registry.getPluginCount());
+        vfLogInfo("Loaded {} plugin(s)", plugins.size());
     }
 
     bool PluginManager::loadPlugin(const std::filesystem::path& dllPath)
@@ -96,13 +95,13 @@ namespace plugin {
         loaded.destroyFunc = destroyFunc;
         loaded.initialized = false;
 
-        registry.addPlugin(std::move(loaded));
+        plugins.push_back(std::move(loaded));
         return true;
     }
 
     void PluginManager::initializeAll()
     {
-        for (auto& plugin : registry.getPlugins()) {
+        for (auto& plugin : plugins) {
             if (plugin.initialized) {
                 continue;
             }
@@ -139,7 +138,7 @@ namespace plugin {
 
     void PluginManager::updateAll(float deltaTime)
     {
-        for (auto& plugin : registry.getPlugins()) {
+        for (auto& plugin : plugins) {
             if (!plugin.initialized || !plugin.instance) {
                 continue;
             }
@@ -156,7 +155,6 @@ namespace plugin {
     void PluginManager::shutdownAll()
     {
         // Shutdown in reverse order
-        auto& plugins = registry.getPlugins();
         for (auto it = plugins.rbegin(); it != plugins.rend(); ++it) {
             auto& plugin = *it;
 
@@ -186,17 +184,31 @@ namespace plugin {
             // DynamicLibrary destructor will call FreeLibrary
         }
 
-        registry.clear();
+        plugins.clear();
     }
 
     const std::vector<LoadedPlugin>& PluginManager::getLoadedPlugins() const
     {
-        return registry.getPlugins();
+        return plugins;
     }
 
     size_t PluginManager::getPluginCount() const
     {
-        return registry.getPluginCount();
+        return plugins.size();
+    }
+
+    std::vector<std::unique_ptr<pipeline::PipelineStage>> PluginManager::takeAllImportStages()
+    {
+        std::vector<std::unique_ptr<pipeline::PipelineStage>> allStages;
+        for (auto& plugin : plugins) {
+            if (plugin.initialized && plugin.context) {
+                auto stages = plugin.context->takeImportStages();
+                for (auto& stage : stages) {
+                    allStages.push_back(std::move(stage));
+                }
+            }
+        }
+        return allStages;
     }
 
     bool PluginManager::validatePluginVersion(DynamicLibrary& lib) const

@@ -64,8 +64,13 @@ namespace handlers
         initializeServices();
 
         editor::SplashScreen::instance().setStatus("Loading plugins...");
-        pluginManager = std::make_unique<plugin::PluginManager>();
-        pluginManager->setCapabilities({"editor", "audio", "physics", "import", "scripting"});
+        pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
+            std::string(plugin::capability::editor),
+            std::string(plugin::capability::audio),
+            std::string(plugin::capability::physics),
+            std::string(plugin::capability::import_),
+            std::string(plugin::capability::scripting)
+        });
         // Resolve plugins/ relative to the executable (bin/Editor/<Config>/x64/ -> repo root)
         auto exePath = std::filesystem::current_path();
         auto pluginsDir = exePath / "plugins";
@@ -75,6 +80,11 @@ namespace handlers
         }
         pluginManager->loadAll(pluginsDir);
         pluginManager->initializeAll();
+
+        // Wire plugin-registered import stages into the import pipeline
+        for (auto& stage : pluginManager->takeAllImportStages()) {
+            controllers::Import::addCustomStage(std::move(stage));
+        }
 
         bootstrap->setFrameCallback([this]()
         {
@@ -145,11 +155,8 @@ namespace handlers
     void EditorHandler::cleanUp()
     {
         // Shutdown plugins first (unregisters windows, unsubscribes events)
-        if (pluginManager)
-        {
-            pluginManager->shutdownAll();
-            pluginManager.reset();
-        }
+        // ~PluginManager calls shutdownAll(), so reset() is sufficient.
+        pluginManager.reset();
 
         cleanupEventSubscriptions();
 

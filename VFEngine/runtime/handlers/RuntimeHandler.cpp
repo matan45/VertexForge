@@ -39,8 +39,11 @@ namespace handlers {
         initializeServices();
 
         // Load and initialize plugins (Runtime has no editor/import capabilities)
-        pluginManager = std::make_unique<plugin::PluginManager>();
-        pluginManager->setCapabilities({"audio", "physics", "scripting"});
+        pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
+            std::string(plugin::capability::audio),
+            std::string(plugin::capability::physics),
+            std::string(plugin::capability::scripting)
+        });
         // Resolve plugins/ relative to the executable
         auto exePath = std::filesystem::current_path();
         auto pluginsDir = exePath / "plugins";
@@ -91,11 +94,8 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
-        // Shutdown plugins first
-        if (pluginManager) {
-            pluginManager->shutdownAll();
-            pluginManager.reset();
-        }
+        // Shutdown plugins first (destructor calls shutdownAll())
+        pluginManager.reset();
 
         cleanupEventSubscriptions();
 

@@ -34,7 +34,7 @@ namespace plugin {
 
     void PluginContextImpl::registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window)
     {
-        if (!hasCapability("editor")) {
+        if (!hasCapability(std::string(capability::editor))) {
             vfLogWarning("[Plugin:{}] Cannot register editor window - editor capability not available", pluginName);
             return;
         }
@@ -45,19 +45,28 @@ namespace plugin {
 
     void PluginContextImpl::registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage)
     {
-        if (!hasCapability("import")) {
+        if (!hasCapability(std::string(capability::import_))) {
             vfLogWarning("[Plugin:{}] Cannot register import stage - import capability not available", pluginName);
             return;
         }
 
-        // Import pipeline stage registration will be wired by PluginManager
-        // For now, log that it was registered
-        vfLogInfo("[Plugin:{}] Import stage registration requested (not yet wired)", pluginName);
+        if (!stage) {
+            vfLogWarning("[Plugin:{}] Cannot register null import stage", pluginName);
+            return;
+        }
+
+        vfLogInfo("[Plugin:{}] Registered import stage: {}", pluginName, stage->getName());
+        registeredImportStages.push_back(std::move(stage));
+    }
+
+    std::vector<std::unique_ptr<pipeline::PipelineStage>> PluginContextImpl::takeImportStages()
+    {
+        return std::move(registeredImportStages);
     }
 
     void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
     {
-        if (!hasCapability("scripting")) {
+        if (!hasCapability(std::string(capability::scripting))) {
             vfLogWarning("[Plugin:{}] Cannot register script function '{}' - scripting capability not available", pluginName, name);
             return;
         }
@@ -82,8 +91,22 @@ namespace plugin {
 
     std::string PluginContextImpl::getPluginDataPath() const
     {
-        auto path = std::filesystem::current_path() / "plugins" / "data" / pluginName;
-        std::filesystem::create_directories(path);
+        // Sanitize pluginName: strip path separators and traversal sequences
+        std::string safeName;
+        safeName.reserve(pluginName.size());
+        for (char c : pluginName) {
+            if (c == '/' || c == '\\' || c == '\0') {
+                safeName += '_';
+            } else {
+                safeName += c;
+            }
+        }
+        // Reject names that are entirely dots (e.g. "..", "...")
+        if (safeName.find_first_not_of('.') == std::string::npos) {
+            safeName = "_plugin_";
+        }
+
+        auto path = std::filesystem::current_path() / "plugins" / "data" / safeName;
         return path.string();
     }
 

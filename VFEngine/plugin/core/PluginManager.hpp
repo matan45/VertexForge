@@ -1,19 +1,34 @@
 #pragma once
-#include "PluginRegistry.hpp"
+#include "../api/IPlugin.hpp"
+#include "DynamicLibrary.hpp"
+#include "PluginContextImpl.hpp"
 #include <filesystem>
 #include <unordered_set>
 #include <string>
+#include <vector>
+#include <memory>
 
 namespace plugin {
+
+    struct LoadedPlugin
+    {
+        std::unique_ptr<DynamicLibrary> library;
+        IPlugin* instance = nullptr;
+        std::unique_ptr<PluginContextImpl> context;
+        std::string dllPath;
+        PluginInfo info;
+        bool initialized = false;
+
+        // Function pointers from the DLL
+        using DestroyFunc = void(*)(IPlugin*);
+        DestroyFunc destroyFunc = nullptr;
+    };
 
     class PluginManager
     {
     public:
-        PluginManager();
+        explicit PluginManager(std::unordered_set<std::string> capabilities);
         ~PluginManager();
-
-        // Set available engine capabilities (e.g., "editor", "audio", "physics", "import")
-        void setCapabilities(const std::unordered_set<std::string>& caps);
 
         // Discover and load all plugin DLLs from the given directory.
         void loadAll(const std::filesystem::path& pluginDirectory);
@@ -34,8 +49,11 @@ namespace plugin {
         const std::vector<LoadedPlugin>& getLoadedPlugins() const;
         size_t getPluginCount() const;
 
+        // Collect and take ownership of all plugin-registered import stages.
+        std::vector<std::unique_ptr<pipeline::PipelineStage>> takeAllImportStages();
+
     private:
-        PluginRegistry registry;
+        std::vector<LoadedPlugin> plugins;
         std::unordered_set<std::string> capabilities;
 
         bool validatePluginVersion(DynamicLibrary& lib) const;
