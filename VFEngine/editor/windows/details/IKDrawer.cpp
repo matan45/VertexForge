@@ -235,9 +235,16 @@ namespace windows::details
             ImGui::Indent();
 
             if (!boneNames.empty())
+            {
                 ImGui::TextDisabled("Skeleton: %zu bones", boneNames.size());
+            }
             else
+            {
                 ImGui::TextDisabled("No skeleton found - using text input");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Refresh"))
+                    refreshBoneNames(handle);
+            }
 
             int chainToRemove = -1;
             for (int i = 0; i < static_cast<int>(ikComp.chains.size()); ++i)
