@@ -23,7 +23,11 @@
 //   }
 //
 //   // Calculate pelvis offset to prevent leg over-extension
-//   float pelvisY = FootIK.calculatePelvisOffset(leftResult, rightResult, currentOffset, deltaTime, 5.0);
+//   float pelvisY = FootIK.calculatePelvisOffset(
+//       leftResult, leftFootAnimatedPos.y,
+//       rightResult, rightFootAnimatedPos.y,
+//       currentOffset, deltaTime, 5.0
+//   );
 
 import * from "../math/Vec3f.mt";
 import * from "../math/Quaternion.mt";
@@ -85,20 +89,22 @@ public class FootIK {
     }
 
     // Calculate pelvis Y-offset to prevent leg over-extension.
-    // Takes both foot results and smoothly interpolates the offset.
+    // leftOriginalY/rightOriginalY: animated foot Y positions before IK.
     // adjustSpeed: how fast the pelvis adjusts (default 5.0)
     public static function calculatePelvisOffset(
         FootIKResult leftFoot,
+        float leftOriginalY,
         FootIKResult rightFoot,
+        float rightOriginalY,
         float currentOffset,
         float deltaTime,
         float adjustSpeed
     ): float {
         return _native_footik_calculatePelvisOffset(
             leftFoot.targetPosition.x, leftFoot.targetPosition.y, leftFoot.targetPosition.z,
-            leftFoot.weight, leftFoot.isGrounded,
+            leftFoot.weight, leftFoot.isGrounded, leftOriginalY,
             rightFoot.targetPosition.x, rightFoot.targetPosition.y, rightFoot.targetPosition.z,
-            rightFoot.weight, rightFoot.isGrounded,
+            rightFoot.weight, rightFoot.isGrounded, rightOriginalY,
             currentOffset, deltaTime, adjustSpeed
         );
     }

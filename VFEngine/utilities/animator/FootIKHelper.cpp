@@ -59,25 +59,30 @@ namespace animator::ik
 
     float FootIKHelper::calculatePelvisOffset(
         const FootIKResult& leftFoot,
+        float leftOriginalY,
         const FootIKResult& rightFoot,
+        float rightOriginalY,
         float currentOffset,
         float deltaTime,
         float adjustSpeed)
     {
-        // Target offset is the lowest foot displacement (most negative Y delta)
         float targetOffset = 0.0f;
 
         if (leftFoot.isGrounded && rightFoot.isGrounded)
         {
-            float leftDelta = leftFoot.targetPosition.y;
-            float rightDelta = rightFoot.targetPosition.y;
-            targetOffset = std::min(leftDelta, rightDelta) -
-                           std::max(leftDelta, rightDelta);
-            targetOffset = std::min(targetOffset, 0.0f);
+            float leftDelta = leftFoot.targetPosition.y - leftOriginalY;
+            float rightDelta = rightFoot.targetPosition.y - rightOriginalY;
+            targetOffset = std::min({leftDelta, rightDelta, 0.0f});
         }
-        else if (!leftFoot.isGrounded && !rightFoot.isGrounded)
+        else if (leftFoot.isGrounded)
         {
-            targetOffset = 0.0f;
+            float leftDelta = leftFoot.targetPosition.y - leftOriginalY;
+            targetOffset = std::min(leftDelta, 0.0f);
+        }
+        else if (rightFoot.isGrounded)
+        {
+            float rightDelta = rightFoot.targetPosition.y - rightOriginalY;
+            targetOffset = std::min(rightDelta, 0.0f);
         }
 
         float t = 1.0f - std::exp(-adjustSpeed * deltaTime);

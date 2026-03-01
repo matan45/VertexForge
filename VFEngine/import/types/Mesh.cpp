@@ -136,6 +136,75 @@ namespace
         }
     }
 
+    // Reorder bones so that every parent index < child index (topological order).
+    // This is required by AnimationEvaluator and IKPostProcessor which iterate
+    // bones in index order and read parent transforms that must already be computed.
+    void ensureParentBeforeChildOrder(types::ExtractedSkeleton& skeleton)
+    {
+        const size_t boneCount = skeleton.bones.size();
+        if (boneCount <= 1)
+            return;
+
+        // Build old-index order via BFS/queue from roots
+        std::vector<uint32_t> order;
+        order.reserve(boneCount);
+
+        // Build children list
+        std::vector<std::vector<uint32_t>> children(boneCount);
+        for (uint32_t i = 0; i < boneCount; ++i)
+        {
+            int32_t parent = skeleton.bones[i].parentIndex;
+            if (parent >= 0 && parent < static_cast<int32_t>(boneCount))
+                children[parent].push_back(i);
+            else
+                order.push_back(i);
+        }
+
+        for (size_t head = 0; head < order.size(); ++head)
+        {
+            for (uint32_t child : children[order[head]])
+                order.push_back(child);
+        }
+
+        if (order.size() != boneCount)
+            return;
+
+        // Check if already in order
+        bool alreadySorted = true;
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            if (order[i] != i) { alreadySorted = false; break; }
+        }
+        if (alreadySorted)
+            return;
+
+        // Build old-to-new index mapping
+        std::vector<int32_t> oldToNew(boneCount, -1);
+        for (uint32_t newIdx = 0; newIdx < boneCount; ++newIdx)
+            oldToNew[order[newIdx]] = static_cast<int32_t>(newIdx);
+
+        // Reorder bones and inverseBindPoses
+        std::vector<resource::SkeletonBone> sortedBones(boneCount);
+        std::vector<glm::mat4> sortedInvBindPoses(boneCount);
+
+        for (uint32_t newIdx = 0; newIdx < boneCount; ++newIdx)
+        {
+            uint32_t oldIdx = order[newIdx];
+            sortedBones[newIdx] = skeleton.bones[oldIdx];
+            sortedInvBindPoses[newIdx] = skeleton.inverseBindPoses[oldIdx];
+
+            int32_t oldParent = sortedBones[newIdx].parentIndex;
+            sortedBones[newIdx].parentIndex = (oldParent >= 0) ? oldToNew[oldParent] : -1;
+        }
+
+        skeleton.bones = std::move(sortedBones);
+        skeleton.inverseBindPoses = std::move(sortedInvBindPoses);
+
+        // Rebuild name-to-index map
+        for (auto& [name, idx] : skeleton.boneNameToIndex)
+            idx = static_cast<uint32_t>(oldToNew[idx]);
+    }
+
     void extractVertices(const aiMesh* assimpMesh, types::LODMeshData& result)
     {
         result.vertices.reserve(assimpMesh->mNumVertices);
@@ -333,6 +402,7 @@ namespace types
             return result;
 
         buildBoneHierarchy(scene, result, boneNamesInOrder);
+        ensureParentBeforeChildOrder(result);
 
         vfLogInfo("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
         return result;

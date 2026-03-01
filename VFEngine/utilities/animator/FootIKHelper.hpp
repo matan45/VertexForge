@@ -40,10 +40,12 @@ namespace animator::ik
             const FootIKConfig& config = {});
 
         // Calculate pelvis Y-offset to prevent leg over-extension.
-        // Takes both foot results and smoothly interpolates the offset.
+        // leftOriginalY/rightOriginalY are the animated foot Y positions before IK.
         static float calculatePelvisOffset(
             const FootIKResult& leftFoot,
+            float leftOriginalY,
             const FootIKResult& rightFoot,
+            float rightOriginalY,
             float currentOffset,
             float deltaTime,
             float adjustSpeed = 5.0f);

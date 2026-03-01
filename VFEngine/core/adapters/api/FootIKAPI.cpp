@@ -78,9 +78,9 @@ namespace core::api
         interpreter->registerNativeFunction("_native_footik_calculatePelvisOffset",
             [](const std::vector<value::Value>& args) -> value::Value
             {
-                if (args.size() < 13)
+                if (args.size() < 15)
                 {
-                    vfLogError("[Script] FootIK.calculatePelvisOffset: expected 13 arguments");
+                    vfLogError("[Script] FootIK.calculatePelvisOffset: expected 15 arguments");
                     return value::Value(0.0f);
                 }
 
@@ -93,21 +93,24 @@ namespace core::api
                     extractFloat(args[2], ctx));
                 leftFoot.weight = extractFloat(args[3], ctx);
                 leftFoot.isGrounded = extractBool(args[4], ctx);
+                float leftOriginalY = extractFloat(args[5], ctx);
 
                 animator::ik::FootIKResult rightFoot;
                 rightFoot.targetPosition = glm::vec3(
-                    extractFloat(args[5], ctx),
                     extractFloat(args[6], ctx),
-                    extractFloat(args[7], ctx));
-                rightFoot.weight = extractFloat(args[8], ctx);
-                rightFoot.isGrounded = extractBool(args[9], ctx);
+                    extractFloat(args[7], ctx),
+                    extractFloat(args[8], ctx));
+                rightFoot.weight = extractFloat(args[9], ctx);
+                rightFoot.isGrounded = extractBool(args[10], ctx);
+                float rightOriginalY = extractFloat(args[11], ctx);
 
-                float currentOffset = extractFloat(args[10], ctx);
-                float deltaTime = extractFloat(args[11], ctx);
-                float adjustSpeed = extractFloat(args[12], ctx);
+                float currentOffset = extractFloat(args[12], ctx);
+                float deltaTime = extractFloat(args[13], ctx);
+                float adjustSpeed = extractFloat(args[14], ctx);
 
                 float result = animator::ik::FootIKHelper::calculatePelvisOffset(
-                    leftFoot, rightFoot, currentOffset, deltaTime, adjustSpeed);
+                    leftFoot, leftOriginalY, rightFoot, rightOriginalY,
+                    currentOffset, deltaTime, adjustSpeed);
 
                 return value::Value(result);
             });

@@ -181,8 +181,8 @@ namespace animation
         // Build set of affected bone indices for quick lookup
         std::unordered_set<int32_t> affectedBones(chainIndices.begin(), chainIndices.end());
 
-        // Find all descendants that need to be updated (bones whose parent is already affected).
-        // Iterating in index order works because parent indices are always < child indices.
+        // Precondition: skeleton bones are in topological order (parent index < child index),
+        // guaranteed by ensureParentBeforeChildOrder() during mesh import.
         for (size_t i = 0; i < boneCount; ++i)
         {
             int32_t idx = static_cast<int32_t>(i);
