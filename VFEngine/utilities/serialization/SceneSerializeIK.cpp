@@ -124,7 +124,7 @@ namespace serialization
 
         for (const auto& chainJ : j["chains"])
         {
-            components::IKChainConfig chain;
+            animator::ik::IKChainConfig chain;
 
             chain.chainName = chainJ.value("chainName", "");
             chain.tipBoneName = chainJ.value("tipBoneName", "");

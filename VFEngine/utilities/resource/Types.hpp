@@ -10,7 +10,7 @@
 #include "../config/Config.hpp"
 #include "../animator/SocketTypes.hpp"
 #include "../animator/AnimationEventTypes.hpp"
-#include "../components/IKComponent.hpp"
+#include "../animator/IKTypes.hpp"
 
 namespace resource
 {
@@ -216,7 +216,7 @@ namespace resource
         glm::mat4 globalInverseTransform{1.0f};
 
         std::vector<animator::SocketDefinition> sockets;
-        std::vector<components::IKChainConfig> ikChains;
+        std::vector<animator::ik::IKChainConfig> ikChains;
 
         bool hasBones() const { return !bones.empty(); }
         size_t boneCount() const { return bones.size(); }

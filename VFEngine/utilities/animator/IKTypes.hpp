@@ -45,6 +45,16 @@ namespace animator::ik
         float tolerance = 0.001f;
     };
 
+    struct IKChainConfig
+    {
+        std::string chainName;
+        std::string tipBoneName;
+        std::vector<std::string> chainBoneNames; // root-to-tip order
+        std::vector<JointConstraint> constraints; // per-bone constraints
+        float weight = 1.0f;
+        bool enabled = true;
+    };
+
     const char* constraintTypeToString(JointConstraintType type);
     JointConstraintType stringToConstraintType(const std::string& str);
 }

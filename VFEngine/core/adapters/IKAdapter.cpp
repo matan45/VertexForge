@@ -1,6 +1,7 @@
 #include "IKAdapter.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "print/Logger.hpp"
 
@@ -26,7 +27,28 @@ namespace core
         if (registry.all_of<components::IKTargetComponent>(*resolved))
             return false;
 
-        registry.emplace<components::IKTargetComponent>(*resolved);
+        auto& ikComp = registry.emplace<components::IKTargetComponent>(*resolved);
+
+        // Auto-load IK chains from the entity's mesh file if available
+        if (registry.all_of<components::MeshComponent>(*resolved))
+        {
+            const auto& meshComp = registry.get<components::MeshComponent>(*resolved);
+            if (!meshComp.meshPath.empty())
+            {
+                auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+                if (stream && stream->hasSkeletonData())
+                {
+                    resource::SkeletonData skeleton;
+                    if (stream->readSkeleton(skeleton) && !skeleton.ikChains.empty())
+                    {
+                        ikComp.chains = skeleton.ikChains;
+                        loggerInfo("[IKAdapter] Auto-loaded {} IK chains from mesh: {}",
+                                   ikComp.chains.size(), meshComp.meshPath);
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
@@ -72,7 +94,7 @@ namespace core
                 return false;
         }
 
-        components::IKChainConfig config;
+        animator::ik::IKChainConfig config;
         config.chainName = chainName;
         config.tipBoneName = tipBoneName;
         config.chainBoneNames = chainBoneNames;

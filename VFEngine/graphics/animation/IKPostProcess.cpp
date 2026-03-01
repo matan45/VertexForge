@@ -12,7 +12,7 @@ namespace animation
     void IKPostProcessor::applyIK(
         std::vector<glm::mat4>& boneMatrices,
         const resource::SkeletonData& skeleton,
-        std::vector<components::IKChainConfig>& chains,
+        std::vector<animator::ik::IKChainConfig>& chains,
         std::vector<components::IKChainRuntimeState>& runtimeStates)
     {
         if (chains.empty() || boneMatrices.empty())
@@ -54,7 +54,7 @@ namespace animation
     }
 
     void IKPostProcessor::initializeChainRuntime(
-        const components::IKChainConfig& config,
+        const animator::ik::IKChainConfig& config,
         const resource::SkeletonData& skeleton,
         components::IKChainRuntimeState& state)
     {
@@ -93,7 +93,7 @@ namespace animation
     void IKPostProcessor::solveChain(
         std::vector<glm::mat4>& boneMatrices,
         const resource::SkeletonData& skeleton,
-        const components::IKChainConfig& config,
+        const animator::ik::IKChainConfig& config,
         const components::IKChainRuntimeState& state)
     {
         const auto& chainIndices = state.resolvedBoneIndices;

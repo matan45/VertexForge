@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IKSolver.hpp"
+#include "animator/IKTypes.hpp"
 #include "components/IKComponent.hpp"
 #include "resource/Types.hpp"
 #include <glm/glm.hpp>
@@ -14,13 +15,13 @@ namespace animation
         static void applyIK(
             std::vector<glm::mat4>& boneMatrices,
             const resource::SkeletonData& skeleton,
-            std::vector<components::IKChainConfig>& chains,
+            std::vector<animator::ik::IKChainConfig>& chains,
             std::vector<components::IKChainRuntimeState>& runtimeStates
         );
 
     private:
         static void initializeChainRuntime(
-            const components::IKChainConfig& config,
+            const animator::ik::IKChainConfig& config,
             const resource::SkeletonData& skeleton,
             components::IKChainRuntimeState& state
         );
@@ -28,7 +29,7 @@ namespace animation
         static void solveChain(
             std::vector<glm::mat4>& boneMatrices,
             const resource::SkeletonData& skeleton,
-            const components::IKChainConfig& config,
+            const animator::ik::IKChainConfig& config,
             const components::IKChainRuntimeState& state
         );
 

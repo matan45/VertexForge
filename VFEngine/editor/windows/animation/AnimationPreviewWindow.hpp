@@ -97,7 +97,7 @@ namespace windows
         void loadSocketsFromMesh();
 
         animation::AnimationIKChainPanel ikChainPanel;
-        std::vector<components::IKChainConfig> ikChainConfigs;
+        std::vector<animator::ik::IKChainConfig> ikChainConfigs;
         bool showIKChainPanel = false;
         bool showIKChainVisualization = true;
         void loadIKChainsFromMesh();

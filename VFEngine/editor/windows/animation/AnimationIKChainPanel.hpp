@@ -1,7 +1,7 @@
 #pragma once
 
 #include "providers/IAnimationPreviewProvider.hpp"
-#include "components/IKComponent.hpp"
+#include "animator/IKTypes.hpp"
 #include "animator/IKTypes.hpp"
 #include <vector>
 #include <string>
@@ -19,7 +19,7 @@ namespace windows::animation
         float saveMessageTimer = 0.0f;
 
     public:
-        bool draw(std::vector<components::IKChainConfig>& chains,
+        bool draw(std::vector<animator::ik::IKChainConfig>& chains,
                   int& selectedChannel,
                   const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                   const std::unordered_map<std::string, size_t>& boneNameToIndex,
@@ -28,16 +28,16 @@ namespace windows::animation
                   const std::string& meshPath = "");
 
     private:
-        void drawChainList(std::vector<components::IKChainConfig>& chains);
-        bool drawChainEditor(components::IKChainConfig& chain,
+        void drawChainList(std::vector<animator::ik::IKChainConfig>& chains);
+        bool drawChainEditor(animator::ik::IKChainConfig& chain,
                              const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                              const std::unordered_map<std::string, size_t>& boneNameToIndex);
-        bool drawNewChainCreation(std::vector<components::IKChainConfig>& chains,
+        bool drawNewChainCreation(std::vector<animator::ik::IKChainConfig>& chains,
                                   const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                   const std::unordered_map<std::string, size_t>& boneNameToIndex,
                                   int selectedChannel);
         void drawConstraintEditor(animator::ik::JointConstraint& constraint, int boneIdx);
-        void drawSaveButton(const std::vector<components::IKChainConfig>& chains,
+        void drawSaveButton(const std::vector<animator::ik::IKChainConfig>& chains,
                             const std::string& meshPath);
 
         std::vector<std::string> walkHierarchyUp(int tipBoneIndex, int length,

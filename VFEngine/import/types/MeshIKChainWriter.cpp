@@ -10,7 +10,7 @@
 namespace types
 {
     bool MeshIKChainWriter::saveIKChainsToMesh(const std::string& meshPath,
-                                                const std::vector<components::IKChainConfig>& chains)
+                                                const std::vector<animator::ik::IKChainConfig>& chains)
     {
         if (!std::filesystem::exists(meshPath))
         {
@@ -80,7 +80,7 @@ namespace types
     }
 
     bool MeshIKChainWriter::writeIKChainFile(const std::string& meshPath, const std::vector<char>& prefixData,
-                                              const std::vector<components::IKChainConfig>& chains)
+                                              const std::vector<animator::ik::IKChainConfig>& chains)
     {
         std::ofstream file(meshPath, std::ios::binary | std::ios::trunc);
         if (!file.is_open())

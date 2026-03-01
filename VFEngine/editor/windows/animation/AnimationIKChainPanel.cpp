@@ -9,7 +9,7 @@
 
 namespace windows::animation
 {
-    bool AnimationIKChainPanel::draw(std::vector<components::IKChainConfig>& chains,
+    bool AnimationIKChainPanel::draw(std::vector<animator::ik::IKChainConfig>& chains,
                                       int& selectedChannel,
                                       const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                       const std::unordered_map<std::string, size_t>& boneNameToIndex,
@@ -70,7 +70,7 @@ namespace windows::animation
         return changed;
     }
 
-    void AnimationIKChainPanel::drawChainList(std::vector<components::IKChainConfig>& chains)
+    void AnimationIKChainPanel::drawChainList(std::vector<animator::ik::IKChainConfig>& chains)
     {
         for (int i = 0; i < static_cast<int>(chains.size()); ++i)
         {
@@ -100,7 +100,7 @@ namespace windows::animation
         }
     }
 
-    bool AnimationIKChainPanel::drawChainEditor(components::IKChainConfig& chain,
+    bool AnimationIKChainPanel::drawChainEditor(animator::ik::IKChainConfig& chain,
                                                   const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                                   const std::unordered_map<std::string, size_t>& boneNameToIndex)
     {
@@ -223,7 +223,7 @@ namespace windows::animation
         return changed;
     }
 
-    bool AnimationIKChainPanel::drawNewChainCreation(std::vector<components::IKChainConfig>& chains,
+    bool AnimationIKChainPanel::drawNewChainCreation(std::vector<animator::ik::IKChainConfig>& chains,
                                                        const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                                        const std::unordered_map<std::string, size_t>& boneNameToIndex,
                                                        int selectedChannel)
@@ -283,7 +283,7 @@ namespace windows::animation
 
             if (addClicked)
             {
-                components::IKChainConfig newChain;
+                animator::ik::IKChainConfig newChain;
                 newChain.chainName = newChainName;
                 newChain.tipBoneName = evaluatedBones[selectedChannel].name;
                 newChain.chainBoneNames = walkHierarchyUp(selectedChannel, chainLength, evaluatedBones);
@@ -351,7 +351,7 @@ namespace windows::animation
         ImGui::PopID();
     }
 
-    void AnimationIKChainPanel::drawSaveButton(const std::vector<components::IKChainConfig>& chains,
+    void AnimationIKChainPanel::drawSaveButton(const std::vector<animator::ik::IKChainConfig>& chains,
                                                 const std::string& meshPath)
     {
         if (saveMessageTimer > 0.0f)

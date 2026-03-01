@@ -10,16 +10,6 @@
 
 namespace components
 {
-    struct IKChainConfig
-    {
-        std::string chainName;
-        std::string tipBoneName;
-        std::vector<std::string> chainBoneNames; // root-to-tip order
-        std::vector<animator::ik::JointConstraint> constraints; // per-bone constraints
-        float weight = 1.0f;
-        bool enabled = true;
-    };
-
     struct IKChainRuntimeState
     {
         // Resolved bone indices (cached from bone names)
@@ -39,7 +29,7 @@ namespace components
 
     struct IKTargetComponent
     {
-        std::vector<IKChainConfig> chains;
+        std::vector<animator::ik::IKChainConfig> chains;
 
         // Transient runtime state (NOT serialized)
         std::vector<IKChainRuntimeState> runtimeStates;
