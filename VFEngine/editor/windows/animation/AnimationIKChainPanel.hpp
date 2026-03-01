@@ -2,7 +2,6 @@
 
 #include "providers/IAnimationPreviewProvider.hpp"
 #include "animator/IKTypes.hpp"
-#include "animator/IKTypes.hpp"
 #include <vector>
 #include <string>
 #include <unordered_map>

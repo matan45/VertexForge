@@ -4,29 +4,10 @@
 
 namespace serialization
 {
-    static std::string constraintTypeToJsonString(animator::ik::JointConstraintType type)
-    {
-        switch (type)
-        {
-        case animator::ik::JointConstraintType::Hinge: return "hinge";
-        case animator::ik::JointConstraintType::Cone: return "cone";
-        case animator::ik::JointConstraintType::BallAndSocket: return "ballAndSocket";
-        default: return "none";
-        }
-    }
-
-    static animator::ik::JointConstraintType jsonStringToConstraintType(const std::string& str)
-    {
-        if (str == "hinge") return animator::ik::JointConstraintType::Hinge;
-        if (str == "cone") return animator::ik::JointConstraintType::Cone;
-        if (str == "ballAndSocket") return animator::ik::JointConstraintType::BallAndSocket;
-        return animator::ik::JointConstraintType::None;
-    }
-
     static json serializeConstraint(const animator::ik::JointConstraint& constraint)
     {
         json j;
-        j["type"] = constraintTypeToJsonString(constraint.type);
+        j["type"] = animator::ik::constraintTypeToString(constraint.type);
 
         switch (constraint.type)
         {
@@ -57,7 +38,7 @@ namespace serialization
         animator::ik::JointConstraint constraint;
 
         if (j.contains("type") && j["type"].is_string())
-            constraint.type = jsonStringToConstraintType(j["type"].get<std::string>());
+            constraint.type = animator::ik::stringToConstraintType(j["type"].get<std::string>());
 
         if (j.contains("hingeAxis") && j["hingeAxis"].is_array() && j["hingeAxis"].size() >= 3)
         {

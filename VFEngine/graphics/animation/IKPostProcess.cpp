@@ -107,9 +107,10 @@ namespace animation
         //   worldTransform = globalInvInverse * skinningMatrix * bindPose
         const glm::mat4 globalInvInverse = glm::inverse(skeleton.globalInverseTransform);
 
-        // Extract world-space positions for chain bones
+        // Extract world-space positions, rotations and scales for chain bones
         std::vector<glm::vec3> chainPositions(chainLen);
         std::vector<glm::quat> chainRotations(chainLen);
+        std::vector<glm::vec3> chainScales(chainLen);
         std::vector<float> boneLengths(chainLen - 1);
 
         for (size_t i = 0; i < chainLen; ++i)
@@ -120,11 +121,10 @@ namespace animation
 
             chainPositions[i] = glm::vec3(worldTransform[3]);
 
-            glm::vec3 scale, translation, skew;
+            glm::vec3 translation, skew;
             glm::vec4 perspective;
-            glm::quat rotation;
-            glm::decompose(worldTransform, scale, rotation, translation, skew, perspective);
-            chainRotations[i] = rotation;
+            glm::decompose(worldTransform, chainScales[i], chainRotations[i],
+                           translation, skew, perspective);
         }
 
         // Compute bone lengths from positions
@@ -160,150 +160,65 @@ namespace animation
         weight = glm::clamp(weight, 0.0f, 1.0f);
 
         // Compute all world transforms from the current skinning matrices
+        // Reuse a scratch buffer to avoid per-frame heap allocation
+        static thread_local std::vector<glm::mat4> worldTransforms;
         const size_t boneCount = skeleton.bones.size();
-        std::vector<glm::mat4> worldTransforms(boneCount);
+        worldTransforms.resize(boneCount);
         for (size_t i = 0; i < boneCount; ++i)
         {
             worldTransforms[i] = globalInvInverse * boneMatrices[i] * skeleton.bindPoses[i];
         }
 
         // Apply solved positions/rotations to the chain bones with blending
+        // Reuse cached rotations and scales from Step 1 to avoid a second decompose
         for (size_t i = 0; i < chainLen; ++i)
         {
             int32_t boneIdx = chainIndices[i];
 
             glm::vec3 originalPos = glm::vec3(worldTransforms[boneIdx][3]);
-            glm::vec3 solvedPos = solverResult.positions[i];
-            glm::vec3 blendedPos = glm::mix(originalPos, solvedPos, weight);
-
-            glm::vec3 scale, translation, skew;
-            glm::vec4 perspective;
-            glm::quat originalRot;
-            glm::decompose(worldTransforms[boneIdx], scale, originalRot, translation, skew, perspective);
-
-            glm::quat solvedRot = solverResult.rotations[i];
-            glm::quat blendedRot = glm::slerp(originalRot, solvedRot, weight);
+            glm::vec3 blendedPos = glm::mix(originalPos, solverResult.positions[i], weight);
+            glm::quat blendedRot = glm::slerp(chainRotations[i], solverResult.rotations[i], weight);
 
             // Reconstruct world transform
             worldTransforms[boneIdx] = glm::translate(glm::mat4(1.0f), blendedPos) *
                                         glm::mat4_cast(blendedRot) *
-                                        glm::scale(glm::mat4(1.0f), scale);
+                                        glm::scale(glm::mat4(1.0f), chainScales[i]);
         }
 
         // Step 5: Recompute children of affected bones
         // Build set of affected bone indices for quick lookup
         std::unordered_set<int32_t> affectedBones(chainIndices.begin(), chainIndices.end());
 
-        // Find all children that need to be updated (bones that have a parent in the chain)
+        // Find all descendants that need to be updated (bones whose parent is already affected).
+        // Iterating in index order works because parent indices are always < child indices.
         for (size_t i = 0; i < boneCount; ++i)
         {
             int32_t idx = static_cast<int32_t>(i);
             if (affectedBones.count(idx))
-                continue; // Already handled
+                continue;
 
-            // Check if any ancestor is in the chain
-            int32_t parent = skeleton.bones[i].parentIndex;
-            bool needsUpdate = false;
-            while (parent >= 0)
+            int32_t parentIdx = skeleton.bones[i].parentIndex;
+            if (parentIdx >= 0 && affectedBones.count(parentIdx))
             {
-                if (affectedBones.count(parent))
-                {
-                    needsUpdate = true;
-                    break;
-                }
-                parent = skeleton.bones[parent].parentIndex;
-            }
-
-            if (needsUpdate)
-            {
-                // Recompute this bone's world transform from its parent
-                // First recover the local transform
-                int32_t parentIdx = skeleton.bones[i].parentIndex;
-                glm::mat4 parentWorldOrig = globalInvInverse * boneMatrices[parentIdx] *
+                // Recover local transform from the original (pre-IK) world transforms
+                glm::mat4 origParentWorld = globalInvInverse * boneMatrices[parentIdx] *
                                              skeleton.bindPoses[parentIdx];
-                glm::mat4 localTransform = glm::inverse(parentWorldOrig) *
-                                            (globalInvInverse * boneMatrices[idx] * skeleton.bindPoses[idx]);
+                glm::mat4 origChildWorld = globalInvInverse * boneMatrices[idx] *
+                                            skeleton.bindPoses[idx];
+                glm::mat4 localTransform = glm::inverse(origParentWorld) * origChildWorld;
 
-                // Apply with updated parent
                 worldTransforms[idx] = worldTransforms[parentIdx] * localTransform;
+                affectedBones.insert(idx);
             }
         }
 
-        // Step 6: Convert back to skinning matrices
-        for (size_t i = 0; i < boneCount; ++i)
+        // Step 6: Convert back to skinning matrices (reuse affectedBones set)
+        for (int32_t idx : affectedBones)
         {
-            int32_t idx = static_cast<int32_t>(i);
-            bool isAffected = affectedBones.count(idx) > 0;
-
-            if (!isAffected)
-            {
-                // Check if it's a child that was recomputed
-                int32_t parent = skeleton.bones[i].parentIndex;
-                while (parent >= 0 && !isAffected)
-                {
-                    if (affectedBones.count(parent))
-                        isAffected = true;
-                    parent = skeleton.bones[parent].parentIndex;
-                }
-            }
-
-            if (isAffected)
-            {
-                boneMatrices[idx] = skeleton.globalInverseTransform *
-                                     worldTransforms[idx] *
-                                     skeleton.inverseBindPoses[idx];
-            }
+            boneMatrices[idx] = skeleton.globalInverseTransform *
+                                 worldTransforms[idx] *
+                                 skeleton.inverseBindPoses[idx];
         }
     }
 
-    std::vector<glm::mat4> IKPostProcessor::skinningToWorld(
-        const std::vector<glm::mat4>& skinningMatrices,
-        const resource::SkeletonData& skeleton)
-    {
-        const glm::mat4 globalInvInverse = glm::inverse(skeleton.globalInverseTransform);
-        const size_t count = skinningMatrices.size();
-
-        std::vector<glm::mat4> worldTransforms(count);
-        for (size_t i = 0; i < count; ++i)
-        {
-            worldTransforms[i] = globalInvInverse * skinningMatrices[i] * skeleton.bindPoses[i];
-        }
-
-        return worldTransforms;
-    }
-
-    void IKPostProcessor::worldToSkinning(
-        const std::vector<glm::mat4>& worldTransforms,
-        const resource::SkeletonData& skeleton,
-        std::vector<glm::mat4>& outSkinningMatrices)
-    {
-        const size_t count = worldTransforms.size();
-        outSkinningMatrices.resize(count);
-
-        for (size_t i = 0; i < count; ++i)
-        {
-            outSkinningMatrices[i] = skeleton.globalInverseTransform *
-                                      worldTransforms[i] *
-                                      skeleton.inverseBindPoses[i];
-        }
-    }
-
-    void IKPostProcessor::recomputeHierarchy(
-        std::vector<glm::mat4>& worldTransforms,
-        const resource::SkeletonData& skeleton,
-        const std::vector<int32_t>& affectedBoneIndices)
-    {
-        std::unordered_set<int32_t> affected(affectedBoneIndices.begin(), affectedBoneIndices.end());
-
-        for (size_t i = 0; i < skeleton.bones.size(); ++i)
-        {
-            int32_t parent = skeleton.bones[i].parentIndex;
-            if (parent >= 0 && affected.count(parent) && !affected.count(static_cast<int32_t>(i)))
-            {
-                glm::mat4 localTransform = glm::inverse(worldTransforms[parent]) * worldTransforms[i];
-                worldTransforms[i] = worldTransforms[parent] * localTransform;
-                affected.insert(static_cast<int32_t>(i));
-            }
-        }
-    }
 }

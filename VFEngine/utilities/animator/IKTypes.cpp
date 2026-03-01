@@ -16,9 +16,10 @@ namespace animator::ik
 
     JointConstraintType stringToConstraintType(const std::string& str)
     {
-        if (str == "Hinge")          return JointConstraintType::Hinge;
-        if (str == "Cone")           return JointConstraintType::Cone;
-        if (str == "BallAndSocket")  return JointConstraintType::BallAndSocket;
+        if (str == "Hinge"          || str == "hinge")          return JointConstraintType::Hinge;
+        if (str == "Cone"           || str == "cone")           return JointConstraintType::Cone;
+        if (str == "BallAndSocket"  || str == "ballAndSocket")  return JointConstraintType::BallAndSocket;
+        if (str == "None"           || str == "none")           return JointConstraintType::None;
         return JointConstraintType::None;
     }
 }

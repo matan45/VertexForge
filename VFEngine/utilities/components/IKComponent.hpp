@@ -21,10 +21,6 @@ namespace components
         std::optional<glm::quat> targetRotation;
         float currentWeight = 0.0f;
         bool isActive = false;
-
-        // Smoothing state
-        glm::vec3 smoothedTargetPosition{0.0f};
-        bool hasSmoothedTarget = false;
     };
 
     struct IKTargetComponent

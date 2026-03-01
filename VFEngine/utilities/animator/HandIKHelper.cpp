@@ -45,10 +45,12 @@ namespace animator::ik
             result.weight = 1.0f;
         }
 
-        // Apply target rotation with blend
+        // Apply target rotation with blend (0 = keep animation, 1 = full target)
         if (targetRotation.has_value() && config.gripRotationBlend > 0.0f)
         {
-            result.targetRotation = *targetRotation;
+            float blend = glm::clamp(config.gripRotationBlend, 0.0f, 1.0f);
+            glm::quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+            result.targetRotation = glm::slerp(identity, *targetRotation, blend);
         }
 
         return result;

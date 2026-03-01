@@ -95,7 +95,7 @@ namespace animation
         const size_t n = positions.size();
         positions[n - 1] = target;
 
-        for (size_t i = n - 2; i < n; --i) // unsigned wrap-around handles i == 0
+        for (ptrdiff_t i = static_cast<ptrdiff_t>(n) - 2; i >= 0; --i)
         {
             glm::vec3 dir = positions[i] - positions[i + 1];
             float len = glm::length(dir);
