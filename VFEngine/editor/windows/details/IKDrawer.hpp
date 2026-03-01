@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+namespace animator::ik { struct JointConstraint; struct IKChainConfig; }
+
 namespace windows::details
 {
     class IKDrawer
@@ -12,13 +14,15 @@ namespace windows::details
 
     private:
         void refreshBoneNames(services::EntityHandle handle);
+        void drawChainEditor(animator::ik::IKChainConfig& chain, bool& isInitialized);
+        void drawAddChainSection(services::EntityHandle handle);
+        static void drawConstraintEditor(animator::ik::JointConstraint& constraint, int boneIdx);
+        static bool drawBoneCombo(const char* label, std::string& boneName,
+                                  const std::vector<std::string>& boneNames);
 
-        // State for adding new chains
         char newChainName[64] = "NewChain";
 
-        // Cached bone names from entity's skeleton
         std::vector<std::string> boneNames;
-        std::vector<int32_t> boneParentIndices;
         services::EntityHandle cachedEntity{};
     };
 }

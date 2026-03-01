@@ -1,6 +1,4 @@
 #include "FootIKHelper.hpp"
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -22,10 +20,8 @@ namespace animator::ik
             return result;
         }
 
-        // Calculate ground position with foot height offset
         glm::vec3 groundTarget = raycastResult.hitPoint + characterUp * config.footHeight;
 
-        // Check if the terrain deviation is within acceptable range
         float heightDifference = std::abs(groundTarget.y - footWorldPosition.y);
         if (heightDifference > config.maxStepHeight)
         {
@@ -42,7 +38,6 @@ namespace animator::ik
         float normalizedDist = heightDifference / config.maxStepHeight;
         result.weight = 1.0f - (normalizedDist * normalizedDist);
 
-        // Calculate foot rotation to align with surface normal
         glm::vec3 up = glm::normalize(characterUp);
         glm::vec3 normal = glm::normalize(raycastResult.hitNormal);
 
@@ -74,7 +69,6 @@ namespace animator::ik
 
         if (leftFoot.isGrounded && rightFoot.isGrounded)
         {
-            // Use the lower foot's displacement to pull pelvis down
             float leftDelta = leftFoot.targetPosition.y;
             float rightDelta = rightFoot.targetPosition.y;
             targetOffset = std::min(leftDelta, rightDelta) -
@@ -86,7 +80,6 @@ namespace animator::ik
             targetOffset = 0.0f;
         }
 
-        // Smoothly interpolate toward target
         float t = 1.0f - std::exp(-adjustSpeed * deltaTime);
         return glm::mix(currentOffset, targetOffset, t);
     }

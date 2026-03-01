@@ -1,8 +1,4 @@
 #include "HandIKHelper.hpp"
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/quaternion.hpp>
-#include <algorithm>
-#include <cmath>
 
 namespace animator::ik
 {
@@ -26,10 +22,8 @@ namespace animator::ik
             return result;
         }
 
-        // Check if target is within reach
         if (reachDistance > config.maxReachDistance)
         {
-            // Clamp to max reach - extend toward target but at max distance
             glm::vec3 direction = shoulderToTarget / reachDistance;
             result.targetPosition = shoulderWorldPosition + direction * config.maxReachDistance;
             result.isReachable = false;
@@ -45,7 +39,6 @@ namespace animator::ik
             result.weight = 1.0f;
         }
 
-        // Apply target rotation with blend (0 = keep animation, 1 = full target)
         if (targetRotation.has_value() && config.gripRotationBlend > 0.0f)
         {
             float blend = glm::clamp(config.gripRotationBlend, 0.0f, 1.0f);
@@ -63,11 +56,9 @@ namespace animator::ik
         const glm::vec3& offHandShoulderWorldPosition,
         const HandIKConfig& config)
     {
-        // Compute off-hand grip position relative to dominant hand
         glm::vec3 worldGripOffset = dominantHandWorldRotation * gripOffset;
         glm::vec3 gripPosition = dominantHandWorldPosition + worldGripOffset;
 
-        // Use the standard hand target calculation with the computed grip point
         return calculateHandTarget(
             gripPosition,
             offHandShoulderWorldPosition,

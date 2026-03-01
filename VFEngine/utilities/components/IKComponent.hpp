@@ -4,7 +4,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
-#include <string>
 #include <optional>
 #include <cstdint>
 
@@ -16,7 +15,6 @@ namespace components
         std::vector<int32_t> resolvedBoneIndices;
         int32_t resolvedTipIndex = -1;
 
-        // Current target (set at runtime by code/script)
         glm::vec3 targetPosition{0.0f};
         std::optional<glm::quat> targetRotation;
         float currentWeight = 0.0f;

@@ -1,5 +1,4 @@
 #include "LookAtIKHelper.hpp"
-#include <algorithm>
 #include <cmath>
 
 namespace animator::ik
@@ -23,11 +22,9 @@ namespace animator::ik
         glm::vec3 dirToTarget = toTarget / distance;
         glm::vec3 forward = glm::normalize(headForwardDirection);
 
-        // Calculate angle between forward and target direction
         float dot = glm::clamp(glm::dot(forward, dirToTarget), -1.0f, 1.0f);
         float angle = std::acos(dot);
 
-        // Dead zone - no IK needed
         if (angle < config.deadZoneAngle)
         {
             if (outWeight) *outWeight = 0.0f;
@@ -43,10 +40,8 @@ namespace animator::ik
 
         if (outWeight) *outWeight = weight;
 
-        // Clamp direction if beyond max angle
         if (angle > config.maxAngle)
         {
-            // Rotate forward toward target by maxAngle
             glm::vec3 axis = glm::cross(forward, dirToTarget);
             float axisLen = glm::length(axis);
             if (axisLen > 0.0001f)

@@ -20,12 +20,10 @@ namespace services
     public:
         explicit IKComponentService(IIKProvider* provider);
 
-        // Component management
         bool addIKComponent(EntityHandle entity);
         bool removeIKComponent(EntityHandle entity);
         bool hasIKComponent(EntityHandle entity) const;
 
-        // Chain management
         bool addChain(EntityHandle entity, const std::string& chainName,
                       const std::string& tipBoneName,
                       const std::vector<std::string>& chainBoneNames);
@@ -36,14 +34,12 @@ namespace services
                                const std::vector<animator::ik::JointConstraint>& constraints,
                                float weight, bool enabled);
 
-        // Runtime target control
         void setTarget(EntityHandle entity, const std::string& chainName,
                        const glm::vec3& position,
                        const std::optional<glm::quat>& rotation);
         void setChainWeight(EntityHandle entity, const std::string& chainName, float weight);
         void setChainEnabled(EntityHandle entity, const std::string& chainName, bool enabled);
 
-        // Queries
         std::vector<std::string> getChainNames(EntityHandle entity) const;
         float getChainWeight(EntityHandle entity, const std::string& chainName) const;
         bool isChainEnabled(EntityHandle entity, const std::string& chainName) const;

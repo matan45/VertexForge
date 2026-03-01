@@ -86,7 +86,7 @@ namespace services
     void IKComponentService::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        // Commands
+
         dispatcher.registerCommandHandler<events::ik::SetIKTargetCommand>(
             [this](const events::ik::SetIKTargetCommand& cmd) {
                 setTarget(cmd.entity, cmd.chainName, cmd.targetPosition, cmd.targetRotation);
@@ -129,7 +129,6 @@ namespace services
                                    cmd.weight, cmd.enabled);
             });
 
-        // Queries
         dispatcher.registerQueryHandler<events::ik::GetIKChainNamesQuery>(
             [this](const events::ik::GetIKChainNamesQuery& q) -> std::vector<std::string> {
                 return getChainNames(q.entity);

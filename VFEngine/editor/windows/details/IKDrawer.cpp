@@ -9,11 +9,10 @@
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>
-#include <algorithm>
 
 namespace windows::details
 {
-    static void drawConstraintEditor(animator::ik::JointConstraint& constraint, int boneIdx)
+    void IKDrawer::drawConstraintEditor(animator::ik::JointConstraint& constraint, int boneIdx)
     {
         ImGui::PushID(boneIdx);
 
@@ -61,8 +60,8 @@ namespace windows::details
         ImGui::PopID();
     }
 
-    static bool drawBoneCombo(const char* label, std::string& boneName,
-                               const std::vector<std::string>& boneNames)
+    bool IKDrawer::drawBoneCombo(const char* label, std::string& boneName,
+                                  const std::vector<std::string>& boneNames)
     {
         if (boneNames.empty())
         {
@@ -103,7 +102,6 @@ namespace windows::details
     void IKDrawer::refreshBoneNames(services::EntityHandle handle)
     {
         boneNames.clear();
-        boneParentIndices.clear();
         cachedEntity = handle;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -124,12 +122,97 @@ namespace windows::details
         if (stream->readSkeleton(skeleton))
         {
             boneNames.reserve(skeleton.bones.size());
-            boneParentIndices.reserve(skeleton.bones.size());
             for (const auto& bone : skeleton.bones)
-            {
                 boneNames.push_back(bone.name);
-                boneParentIndices.push_back(bone.parentIndex);
+        }
+    }
+
+    void IKDrawer::drawChainEditor(animator::ik::IKChainConfig& chain, bool& isInitialized)
+    {
+        char nameBuffer[64];
+        std::strncpy(nameBuffer, chain.chainName.c_str(), sizeof(nameBuffer));
+        nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+        if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer),
+                             ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            chain.chainName = nameBuffer;
+            isInitialized = false;
+        }
+
+        if (drawBoneCombo("Tip Bone", chain.tipBoneName, boneNames))
+            isInitialized = false;
+
+        ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f");
+        ImGui::Checkbox("Enabled", &chain.enabled);
+
+        if (ImGui::TreeNode("Chain Bones"))
+        {
+            int boneToRemove = -1;
+            for (int b = 0; b < static_cast<int>(chain.chainBoneNames.size()); ++b)
+            {
+                ImGui::PushID(b);
+
+                ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 30.0f);
+                if (drawBoneCombo("##BoneName", chain.chainBoneNames[b], boneNames))
+                    isInitialized = false;
+                ImGui::PopItemWidth();
+
+                ImGui::SameLine();
+                if (ImGui::SmallButton("-"))
+                    boneToRemove = b;
+
+                ImGui::PopID();
             }
+
+            if (boneToRemove >= 0)
+            {
+                chain.chainBoneNames.erase(chain.chainBoneNames.begin() + boneToRemove);
+                isInitialized = false;
+            }
+
+            if (ImGui::SmallButton("+ Add Bone"))
+                chain.chainBoneNames.emplace_back("");
+
+            ImGui::TreePop();
+        }
+
+        if (ImGui::TreeNode("Constraints"))
+        {
+            if (chain.constraints.size() != chain.chainBoneNames.size())
+                chain.constraints.resize(chain.chainBoneNames.size());
+
+            for (int b = 0; b < static_cast<int>(chain.constraints.size()); ++b)
+            {
+                std::string label = (b < static_cast<int>(chain.chainBoneNames.size()) &&
+                                     !chain.chainBoneNames[b].empty())
+                                        ? chain.chainBoneNames[b]
+                                        : "Bone " + std::to_string(b);
+
+                if (ImGui::TreeNode(label.c_str()))
+                {
+                    drawConstraintEditor(chain.constraints[b], b);
+                    ImGui::TreePop();
+                }
+            }
+
+            ImGui::TreePop();
+        }
+    }
+
+    void IKDrawer::drawAddChainSection(services::EntityHandle handle)
+    {
+        ImGui::PushItemWidth(100.0f);
+        ImGui::InputText("##NewChainName", newChainName, sizeof(newChainName));
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if (ImGui::Button("Add Chain"))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::ik::AddIKChainCommand cmd;
+            cmd.entity = handle;
+            cmd.chainName = newChainName;
+            cmd.tipBoneName = "";
+            dispatcher.execute(cmd);
         }
     }
 
@@ -141,7 +224,6 @@ namespace windows::details
         if (!registry.valid(entity) || !registry.all_of<components::IKTargetComponent>(entity))
             return false;
 
-        // Refresh bone names if entity changed
         if (handle.id != cachedEntity.id)
             refreshBoneNames(handle);
 
@@ -153,15 +235,10 @@ namespace windows::details
             ImGui::Indent();
 
             if (!boneNames.empty())
-            {
                 ImGui::TextDisabled("Skeleton: %zu bones", boneNames.size());
-            }
             else
-            {
                 ImGui::TextDisabled("No skeleton found - using text input");
-            }
 
-            // Draw existing chains
             int chainToRemove = -1;
             for (int i = 0; i < static_cast<int>(ikComp.chains.size()); ++i)
             {
@@ -171,7 +248,6 @@ namespace windows::details
                 bool chainOpen = ImGui::TreeNodeEx(chain.chainName.c_str(),
                                                    ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
-                // Remove chain button
                 ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
@@ -181,92 +257,13 @@ namespace windows::details
 
                 if (chainOpen)
                 {
-                    // Chain name
-                    char nameBuffer[64];
-                    std::strncpy(nameBuffer, chain.chainName.c_str(), sizeof(nameBuffer));
-                    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-                    if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer),
-                                         ImGuiInputTextFlags_EnterReturnsTrue))
-                    {
-                        chain.chainName = nameBuffer;
-                        ikComp.isInitialized = false;
-                    }
-
-                    // Tip bone dropdown
-                    if (drawBoneCombo("Tip Bone", chain.tipBoneName, boneNames))
-                        ikComp.isInitialized = false;
-
-                    // Weight slider
-                    ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f");
-
-                    // Enabled toggle
-                    ImGui::Checkbox("Enabled", &chain.enabled);
-
-                    // Chain bone names
-                    if (ImGui::TreeNode("Chain Bones"))
-                    {
-                        int boneToRemove = -1;
-                        for (int b = 0; b < static_cast<int>(chain.chainBoneNames.size()); ++b)
-                        {
-                            ImGui::PushID(b);
-
-                            ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 30.0f);
-                            if (drawBoneCombo("##BoneName", chain.chainBoneNames[b], boneNames))
-                                ikComp.isInitialized = false;
-                            ImGui::PopItemWidth();
-
-                            ImGui::SameLine();
-                            if (ImGui::SmallButton("-"))
-                                boneToRemove = b;
-
-                            ImGui::PopID();
-                        }
-
-                        if (boneToRemove >= 0)
-                        {
-                            chain.chainBoneNames.erase(chain.chainBoneNames.begin() + boneToRemove);
-                            ikComp.isInitialized = false;
-                        }
-
-                        if (ImGui::SmallButton("+ Add Bone"))
-                        {
-                            chain.chainBoneNames.emplace_back("");
-                        }
-
-                        ImGui::TreePop();
-                    }
-
-                    // Constraints
-                    if (ImGui::TreeNode("Constraints"))
-                    {
-                        // Ensure constraints vector matches bone count
-                        if (chain.constraints.size() != chain.chainBoneNames.size())
-                            chain.constraints.resize(chain.chainBoneNames.size());
-
-                        for (int b = 0; b < static_cast<int>(chain.constraints.size()); ++b)
-                        {
-                            std::string label = (b < static_cast<int>(chain.chainBoneNames.size()) &&
-                                                 !chain.chainBoneNames[b].empty())
-                                                    ? chain.chainBoneNames[b]
-                                                    : "Bone " + std::to_string(b);
-
-                            if (ImGui::TreeNode(label.c_str()))
-                            {
-                                drawConstraintEditor(chain.constraints[b], b);
-                                ImGui::TreePop();
-                            }
-                        }
-
-                        ImGui::TreePop();
-                    }
-
+                    drawChainEditor(chain, ikComp.isInitialized);
                     ImGui::TreePop();
                 }
 
                 ImGui::PopID();
             }
 
-            // Remove chain if requested
             if (chainToRemove >= 0)
             {
                 auto& dispatcher = events::EventDispatcher::instance();
@@ -278,21 +275,7 @@ namespace windows::details
 
             ImGui::Spacing();
             ImGui::Separator();
-
-            // Add new chain
-            ImGui::PushItemWidth(100.0f);
-            ImGui::InputText("##NewChainName", newChainName, sizeof(newChainName));
-            ImGui::PopItemWidth();
-            ImGui::SameLine();
-            if (ImGui::Button("Add Chain"))
-            {
-                auto& dispatcher = events::EventDispatcher::instance();
-                events::ik::AddIKChainCommand cmd;
-                cmd.entity = handle;
-                cmd.chainName = newChainName;
-                cmd.tipBoneName = "";
-                dispatcher.execute(cmd);
-            }
+            drawAddChainSection(handle);
 
             ImGui::Unindent();
         }

@@ -112,7 +112,6 @@ namespace windows::animation
 
             ImGui::Text("Name: %s", chain.chainName.c_str());
 
-            // Tip bone dropdown
             if (ImGui::BeginCombo("Tip Bone", chain.tipBoneName.c_str()))
             {
                 for (size_t i = 0; i < evaluatedBones.size(); ++i)
@@ -121,7 +120,6 @@ namespace windows::animation
                     if (ImGui::Selectable(evaluatedBones[i].name.c_str(), isSelected))
                     {
                         chain.tipBoneName = evaluatedBones[i].name;
-                        // Rebuild chain from new tip bone
                         chain.chainBoneNames = walkHierarchyUp(
                             static_cast<int>(i),
                             static_cast<int>(chain.chainBoneNames.size()),
@@ -135,22 +133,18 @@ namespace windows::animation
                 ImGui::EndCombo();
             }
 
-            // Weight
             if (ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f"))
                 changed = true;
 
-            // Enabled
             if (ImGui::Checkbox("Enabled", &chain.enabled))
                 changed = true;
 
-            // Chain bones list
             if (ImGui::TreeNode("Chain Bones"))
             {
                 for (int b = 0; b < static_cast<int>(chain.chainBoneNames.size()); ++b)
                 {
                     ImGui::PushID(b);
 
-                    // Bone name dropdown
                     const char* currentBone = chain.chainBoneNames[b].c_str();
                     ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 30.0f);
                     if (ImGui::BeginCombo("##BoneName", currentBone))
@@ -194,7 +188,6 @@ namespace windows::animation
                 ImGui::TreePop();
             }
 
-            // Constraints
             if (ImGui::TreeNode("Constraints"))
             {
                 if (chain.constraints.size() != chain.chainBoneNames.size())
@@ -234,7 +227,6 @@ namespace windows::animation
 
             ImGui::InputText("Name", newChainName, sizeof(newChainName));
 
-            // Show currently selected bone as tip bone
             std::string tipBone = "None";
             if (selectedChannel >= 0 && selectedChannel < static_cast<int>(evaluatedBones.size()))
             {

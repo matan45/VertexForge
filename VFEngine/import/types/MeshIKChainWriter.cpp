@@ -3,8 +3,6 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 
-#include <fstream>
-#include <vector>
 #include <filesystem>
 
 namespace types
@@ -89,16 +87,13 @@ namespace types
             return false;
         }
 
-        // Write everything before IK chain data
         file.write(prefixData.data(), static_cast<std::streamsize>(prefixData.size()));
 
-        // Write IK chain count
         uint32_t chainCount = static_cast<uint32_t>(chains.size());
         resource::endian::writeLE<uint32_t>(file, chainCount);
 
         for (const auto& chain : chains)
         {
-            // Chain name
             uint32_t chainNameLen = static_cast<uint32_t>(chain.chainName.length());
             resource::endian::writeLE<uint32_t>(file, chainNameLen);
             if (chainNameLen > 0)
@@ -106,7 +101,6 @@ namespace types
                 file.write(chain.chainName.data(), chainNameLen);
             }
 
-            // Tip bone name
             uint32_t tipBoneNameLen = static_cast<uint32_t>(chain.tipBoneName.length());
             resource::endian::writeLE<uint32_t>(file, tipBoneNameLen);
             if (tipBoneNameLen > 0)
@@ -114,7 +108,6 @@ namespace types
                 file.write(chain.tipBoneName.data(), tipBoneNameLen);
             }
 
-            // Chain bone names
             uint32_t boneCount = static_cast<uint32_t>(chain.chainBoneNames.size());
             resource::endian::writeLE<uint32_t>(file, boneCount);
             for (const auto& boneName : chain.chainBoneNames)
@@ -127,7 +120,6 @@ namespace types
                 }
             }
 
-            // Constraints
             uint32_t constraintCount = static_cast<uint32_t>(chain.constraints.size());
             resource::endian::writeLE<uint32_t>(file, constraintCount);
             for (const auto& constraint : chain.constraints)
@@ -142,7 +134,6 @@ namespace types
                 resource::endian::writeLE<float>(file, constraint.twistMax);
             }
 
-            // Weight and enabled
             resource::endian::writeLE<float>(file, chain.weight);
             resource::endian::writeLE<uint8_t>(file, chain.enabled ? 1 : 0);
         }

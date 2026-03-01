@@ -4,7 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
-#include <algorithm>
 #include <unordered_set>
 
 namespace animation
@@ -18,7 +17,6 @@ namespace animation
         if (chains.empty() || boneMatrices.empty())
             return;
 
-        // Ensure runtime states match chain count
         if (runtimeStates.size() != chains.size())
             runtimeStates.resize(chains.size());
 
@@ -27,7 +25,6 @@ namespace animation
         {
             auto& state = runtimeStates[i];
 
-            // Initialize chain if needed
             if (state.resolvedTipIndex < 0)
                 initializeChainRuntime(chains[i], skeleton, state);
 
@@ -81,7 +78,6 @@ namespace animation
                           config.tipBoneName, config.chainName);
         }
 
-        // Add tip to chain if not already included
         if (!state.resolvedBoneIndices.empty() &&
             state.resolvedBoneIndices.back() != state.resolvedTipIndex &&
             state.resolvedTipIndex >= 0)
@@ -107,7 +103,6 @@ namespace animation
         //   worldTransform = globalInvInverse * skinningMatrix * bindPose
         const glm::mat4 globalInvInverse = glm::inverse(skeleton.globalInverseTransform);
 
-        // Extract world-space positions, rotations and scales for chain bones
         std::vector<glm::vec3> chainPositions(chainLen);
         std::vector<glm::quat> chainRotations(chainLen);
         std::vector<glm::vec3> chainScales(chainLen);
@@ -127,7 +122,6 @@ namespace animation
                            translation, skew, perspective);
         }
 
-        // Compute bone lengths from positions
         for (size_t i = 0; i < chainLen - 1; ++i)
         {
             boneLengths[i] = glm::length(chainPositions[i + 1] - chainPositions[i]);
@@ -141,7 +135,6 @@ namespace animation
         solverInput.rotations = chainRotations;
         solverInput.boneLengths = boneLengths;
 
-        // Map constraints to chain bones
         solverInput.constraints.resize(chainLen);
         for (size_t i = 0; i < chainLen && i < config.constraints.size(); ++i)
         {
@@ -179,7 +172,6 @@ namespace animation
             glm::vec3 blendedPos = glm::mix(originalPos, solverResult.positions[i], weight);
             glm::quat blendedRot = glm::slerp(chainRotations[i], solverResult.rotations[i], weight);
 
-            // Reconstruct world transform
             worldTransforms[boneIdx] = glm::translate(glm::mat4(1.0f), blendedPos) *
                                         glm::mat4_cast(blendedRot) *
                                         glm::scale(glm::mat4(1.0f), chainScales[i]);

@@ -1,8 +1,6 @@
 #include "IKSolver.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
-#include <algorithm>
 #include <cmath>
 
 namespace animation
@@ -25,7 +23,6 @@ namespace animation
         result.positions = input.positions;
         result.rotations = input.rotations;
 
-        // Compute total chain length to check reachability
         float totalLength = 0.0f;
         for (const auto& len : input.boneLengths)
             totalLength += len;
@@ -45,21 +42,15 @@ namespace animation
         }
         else
         {
-            // FABRIK iterative solve
             for (int iter = 0; iter < params.maxIterations; ++iter)
             {
-                // Check convergence
                 float tipDist = glm::length(result.positions[numJoints - 1] - target.position);
                 if (tipDist < params.tolerance)
                     break;
 
-                // Forward pass: from tip toward root
                 forwardPass(result.positions, input.boneLengths, target.position);
-
-                // Backward pass: from root toward tip
                 backwardPass(result.positions, input.boneLengths, rootPos);
 
-                // Apply constraints after each iteration
                 if (!input.constraints.empty())
                 {
                     applyConstraints(result.positions, result.rotations,
@@ -69,7 +60,6 @@ namespace animation
             }
         }
 
-        // Recompute rotations from solved positions
         for (size_t i = 0; i < numJoints - 1; ++i)
         {
             glm::vec3 originalDir = glm::normalize(input.positions[i + 1] - input.positions[i]);
@@ -79,7 +69,6 @@ namespace animation
             result.rotations[i] = deltaRotation * input.rotations[i];
         }
 
-        // Apply target rotation to tip if provided
         if (target.rotation.has_value() && numJoints > 0)
         {
             result.rotations[numJoints - 1] = target.rotation.value();
@@ -145,7 +134,6 @@ namespace animation
             if (constraint.type == animator::ik::JointConstraintType::None)
                 continue;
 
-            // Compute the current local rotation at this joint
             glm::vec3 parentDir = glm::normalize(positions[i] - positions[i - 1]);
             glm::vec3 childDir = glm::normalize(positions[i + 1] - positions[i]);
 
@@ -156,7 +144,6 @@ namespace animation
 
             glm::quat constrained = applyConstraint(localRotation, parentWorldRot, constraint);
 
-            // If the constraint changed the rotation, reposition the child
             if (constrained != localRotation)
             {
                 glm::vec3 constrainedDir = constrained * parentDir;
@@ -221,15 +208,12 @@ namespace animation
     glm::quat FABRIKSolver::constrainToHinge(const glm::quat& rotation,
                                                const glm::vec3& axis)
     {
-        // Project the rotation onto the hinge axis
-        // Extract the component of rotation around the specified axis
         glm::vec3 normalizedAxis = glm::normalize(axis);
 
-        // Decompose rotation into twist (around axis) and swing (away from axis)
+        // Twist-swing decomposition around the hinge axis
         glm::vec3 rotAxis = glm::vec3(rotation.x, rotation.y, rotation.z);
         float dot = glm::dot(rotAxis, normalizedAxis);
 
-        // Twist quaternion: component along the hinge axis
         glm::quat twist;
         twist.w = rotation.w;
         twist.x = normalizedAxis.x * dot;
@@ -248,7 +232,6 @@ namespace animation
     glm::quat FABRIKSolver::constrainToCone(const glm::quat& rotation,
                                               float maxAngle)
     {
-        // Clamp the rotation angle to maxAngle
         float angle = glm::angle(rotation);
         if (angle <= maxAngle)
             return rotation;
@@ -265,12 +248,11 @@ namespace animation
                                                        float twistMin,
                                                        float twistMax)
     {
-        // Swing-twist decomposition around the forward axis (Z)
+        // Swing-twist decomposition around Z axis
         glm::vec3 twistAxis = glm::vec3(0.0f, 0.0f, 1.0f);
         glm::vec3 rotAxis = glm::vec3(rotation.x, rotation.y, rotation.z);
         float dot = glm::dot(rotAxis, twistAxis);
 
-        // Extract twist component
         glm::quat twist;
         twist.w = rotation.w;
         twist.x = twistAxis.x * dot;
@@ -283,10 +265,8 @@ namespace animation
         else
             twist = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
-        // Extract swing component
         glm::quat swing = rotation * glm::conjugate(twist);
 
-        // Constrain swing (cone limit)
         float swingRot = glm::angle(swing);
         if (swingRot > swingAngle)
         {
@@ -295,11 +275,8 @@ namespace animation
                 swing = glm::angleAxis(swingAngle, glm::normalize(swingAxis));
         }
 
-        // Constrain twist
         float twistRot = glm::angle(twist);
         glm::vec3 twistRotAxis = glm::axis(twist);
-
-        // Determine twist sign
         float twistSign = glm::dot(twistRotAxis, twistAxis) >= 0.0f ? 1.0f : -1.0f;
         float signedTwist = twistSign * twistRot;
 
