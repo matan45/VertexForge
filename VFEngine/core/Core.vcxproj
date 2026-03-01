@@ -132,6 +132,8 @@
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
+    <ClInclude Include="adapters\api\FootIKAPI.hpp" />
+    <ClInclude Include="adapters\api\HandIKAPI.hpp" />
     <ClInclude Include="adapters\api\IKAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
     <ClInclude Include="adapters\api\LightAPI.hpp" />
@@ -215,6 +217,8 @@
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
+    <ClCompile Include="adapters\api\FootIKAPI.cpp" />
+    <ClCompile Include="adapters\api\HandIKAPI.cpp" />
     <ClCompile Include="adapters\api\IKAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />
     <ClCompile Include="adapters\api\LightAPI.cpp" />
