@@ -114,6 +114,7 @@
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
     <ClInclude Include="events\FileOperationsEvents.hpp" />
+    <ClInclude Include="events\IKEvents.hpp" />
     <ClInclude Include="events\InputEvents.hpp" />
     <ClInclude Include="events\LightBakeEvents.hpp" />
     <ClInclude Include="events\LightCullingEvents.hpp" />
@@ -184,6 +185,7 @@
     <ClInclude Include="impl\components\BillboardComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
+    <ClInclude Include="impl\components\IKComponentService.hpp" />
     <ClInclude Include="impl\components\LightComponentService.hpp" />
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
@@ -230,6 +232,7 @@
     <ClInclude Include="providers\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\IAudioProvider.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
+    <ClInclude Include="providers\IIKProvider.hpp" />
     <ClInclude Include="providers\ILightBakeProvider.hpp" />
     <ClInclude Include="providers\IMaterialPreviewProvider.hpp" />
     <ClInclude Include="providers\IMeshPreviewProvider.hpp" />
@@ -284,6 +287,7 @@
     <ClCompile Include="impl\components\BillboardComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
+    <ClCompile Include="impl\components\IKComponentService.cpp" />
     <ClCompile Include="impl\components\LightComponentService.cpp" />
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />

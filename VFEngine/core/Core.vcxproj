@@ -103,6 +103,7 @@
     <ClInclude Include="adapters\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\AudioAdapter.hpp" />
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
+    <ClInclude Include="adapters\IKAdapter.hpp" />
     <ClInclude Include="adapters\LightBakeAdapter.hpp" />
     <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
@@ -131,6 +132,7 @@
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
+    <ClInclude Include="adapters\api\IKAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
     <ClInclude Include="adapters\api\LightAPI.hpp" />
     <ClInclude Include="adapters\api\LogAPI.hpp" />
@@ -183,6 +185,7 @@
     <ClCompile Include="adapters\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\AudioAdapter.cpp" />
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\IKAdapter.cpp" />
     <ClCompile Include="adapters\LightBakeAdapter.cpp" />
     <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
@@ -212,6 +215,7 @@
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
+    <ClCompile Include="adapters\api\IKAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />

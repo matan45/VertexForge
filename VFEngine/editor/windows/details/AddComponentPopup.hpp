@@ -37,6 +37,7 @@ namespace windows::details {
         bool hasNavmeshAgent = false;
         bool hasRenderTexture = false;
         bool hasController = false;
+        bool hasIK = false;
     };
 
     class AddComponentPopup {

@@ -177,6 +177,7 @@
     <ClInclude Include="windows\details\ControllerDrawer.hpp" />
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
+    <ClInclude Include="windows\details\IKDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
@@ -292,6 +293,7 @@
     <ClCompile Include="windows\details\ControllerDrawer.cpp" />
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
+    <ClCompile Include="windows\details\IKDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />

@@ -185,6 +185,7 @@ namespace handlers
         vfxRuntimeService.reset();
         lightBakeService.reset();
         controllerService.reset();
+        ikComponentService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -292,6 +293,11 @@ namespace handlers
         }
 
         controllerService = std::make_shared<services::ControllerServiceImpl>();
+
+        if (auto* ikProvider = bootstrap->getIKProvider())
+        {
+            ikComponentService = std::make_shared<services::IKComponentService>(ikProvider);
+        }
     }
 
     void EditorHandler::createVFXServices()
@@ -381,6 +387,10 @@ namespace handlers
         renderTextureService->registerEventHandlers();
         lightBakeService->registerEventHandlers();
         controllerService->registerEventHandlers();
+        if (ikComponentService)
+        {
+            ikComponentService->registerEventHandlers();
+        }
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

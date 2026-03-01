@@ -127,6 +127,12 @@ namespace serialization
             out["controller"] = SceneSerialization::serializeController(
                 entity.getComponent<components::ControllerComponent>());
         }
+
+        if (entity.hasComponent<components::IKTargetComponent>())
+        {
+            out["ikTarget"] = SceneSerialization::serializeIKTarget(
+                entity.getComponent<components::IKTargetComponent>());
+        }
     }
 
     json PrefabSerialization::serializeEntityTreeComponents(const scene::Entity& entity)
@@ -250,6 +256,12 @@ namespace serialization
         {
             auto& controllerComp = entity.addOrReplaceComponent<components::ControllerComponent>();
             SceneSerialization::deserializeController(componentsJson["controller"], controllerComp);
+        }
+
+        if (componentsJson.contains("ikTarget"))
+        {
+            auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
+            SceneSerialization::deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
         }
     }
 

@@ -17,6 +17,7 @@ namespace services
     class INavmeshProvider;
     class IAnimatorProvider;
     class ISocketProvider;
+    class IIKProvider;
     class ITerrainRenderProvider;
     class ITerrainRaycastProvider;
     class ITerrainBrushComputeProvider;
@@ -57,6 +58,7 @@ namespace core
     class NavmeshAdapter;
     class AnimatorAdapter;
     class SocketAdapter;
+    class IKAdapter;
     class TerrainRenderAdapter;
     class TerrainRaycastAdapter;
     class TerrainBrushComputeAdapter;
@@ -84,6 +86,7 @@ namespace core
         std::unique_ptr<NavmeshAdapter> navmeshAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<SocketAdapter> socketAdapter;
+        std::unique_ptr<IKAdapter> ikAdapter;
         std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
         std::unique_ptr<TerrainRaycastAdapter> terrainRaycastAdapter;
         std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
@@ -131,6 +134,8 @@ namespace core
         services::IAnimatorProvider* getAnimatorProvider();
 
         services::ISocketProvider* getSocketProvider();
+
+        services::IIKProvider* getIKProvider();
 
         // For late binding - allows EditorHandler to connect TerrainService
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();

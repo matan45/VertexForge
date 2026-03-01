@@ -1,4 +1,5 @@
 #include "RuntimeAnimatorSystem.hpp"
+#include "IKPostProcess.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -156,6 +157,30 @@ namespace animation
                         glm::quat rotation = glm::quat(glm::radians(transform.rotation));
                         transform.position += rotation * delta;
                         transform.isDirty = true;
+                    }
+                }
+            }
+
+            // IK post-processing: solve after animation evaluation, before GPU upload
+            if (registry.valid(entity) &&
+                registry.all_of<components::IKTargetComponent>(entity))
+            {
+                auto& ikComp = registry.get<components::IKTargetComponent>(entity);
+                if (!ikComp.chains.empty())
+                {
+                    const resource::SkeletonData* skeleton = nullptr;
+                    if (registry.all_of<components::MeshComponent>(entity))
+                    {
+                        const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                        if (!meshComp.meshPath.empty())
+                            skeleton = loadSkeleton(meshComp.meshPath);
+                    }
+
+                    if (skeleton)
+                    {
+                        auto& matrices = animator->getMutableBoneMatrices();
+                        IKPostProcessor::applyIK(matrices, *skeleton,
+                                                  ikComp.chains, ikComp.runtimeStates);
                     }
                 }
             }

@@ -14,6 +14,7 @@
 #include "../adapters/NavmeshAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/SocketAdapter.hpp"
+#include "../adapters/IKAdapter.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/TerrainBrushComputeAdapter.hpp"
@@ -52,6 +53,7 @@ namespace core
         navmeshAdapter = std::make_unique<NavmeshAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         socketAdapter = std::make_unique<SocketAdapter>();
+        ikAdapter = std::make_unique<IKAdapter>();
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
@@ -132,6 +134,7 @@ namespace core
         navmeshAdapter.reset();
         animatorAdapter.reset();
         socketAdapter.reset();
+        ikAdapter.reset();
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
@@ -208,6 +211,11 @@ namespace core
     services::ISocketProvider* EditorBootstrap::getSocketProvider()
     {
         return socketAdapter.get();
+    }
+
+    services::IIKProvider* EditorBootstrap::getIKProvider()
+    {
+        return ikAdapter.get();
     }
 
     TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()

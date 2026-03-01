@@ -9,6 +9,7 @@
 #include "UIComponents.hpp"
 #include "NavmeshComponents.hpp"
 #include "ControllerComponents.hpp"
+#include "IKComponent.hpp"
 
 namespace components
 {
@@ -24,5 +25,6 @@ namespace components
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
-                                               NavmeshAgentComponent, ControllerComponent, LightmapComponent>;
+                                               NavmeshAgentComponent, ControllerComponent, LightmapComponent,
+                                               IKTargetComponent>;
 }

@@ -234,6 +234,12 @@ namespace serialization
                 entity.getComponent<components::ControllerComponent>());
         }
 
+        if (entity.hasComponent<components::IKTargetComponent>())
+        {
+            componentsJson["ikTarget"] = serializeIKTarget(
+                entity.getComponent<components::IKTargetComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -509,6 +515,12 @@ namespace serialization
         {
             auto& controllerComp = entity.addOrReplaceComponent<components::ControllerComponent>();
             deserializeController(componentsJson["controller"], controllerComp);
+        }
+
+        if (componentsJson.contains("ikTarget"))
+        {
+            auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
+            deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
         }
     }
 

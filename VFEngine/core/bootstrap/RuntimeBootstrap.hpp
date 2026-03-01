@@ -11,6 +11,7 @@ namespace services
     class INavmeshProvider;
     class ISocketProvider;
     class IAnimatorProvider;
+    class IIKProvider;
     class IVFXRuntimeProvider;
     class IPostProcessProvider;
     class IRenderTextureProvider;
@@ -41,6 +42,7 @@ namespace core
     class NavmeshAdapter;
     class SocketAdapter;
     class AnimatorAdapter;
+    class IKAdapter;
     class VFXRuntimeAdapter;
     class PostProcessAdapter;
     class WaterRenderAdapter;
@@ -59,6 +61,7 @@ namespace core
         std::unique_ptr<NavmeshAdapter> navmeshAdapter;
         std::unique_ptr<SocketAdapter> socketAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
+        std::unique_ptr<IKAdapter> ikAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
@@ -93,6 +96,8 @@ namespace core
         services::ISocketProvider* getSocketProvider();
 
         services::IAnimatorProvider* getAnimatorProvider();
+
+        services::IIKProvider* getIKProvider();
 
         services::IVFXRuntimeProvider* getVFXRuntimeProvider();
 

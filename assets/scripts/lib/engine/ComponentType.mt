@@ -33,6 +33,7 @@ public class ComponentType {
     public static final string ANIMATOR = "Animator";
     public static final string VFX = "VFX";
     public static final string PHYSICS_ANIMATION = "PhysicsAnimation";
+    public static final string IK_TARGET = "IKTarget";
 
     // Navigation
     public static final string NAVMESH_AGENT = "NavmeshAgent";
