@@ -11,7 +11,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // ik_setTarget(entityId, chainName, x, y, z)
         interpreter->registerNativeFunction("_native_ik_setTarget",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -38,7 +37,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // ik_setTargetWithRotation(entityId, chainName, x, y, z, qw, qx, qy, qz)
         interpreter->registerNativeFunction("_native_ik_setTargetWithRotation",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -70,7 +68,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // ik_setChainWeight(entityId, chainName, weight)
         interpreter->registerNativeFunction("_native_ik_setChainWeight",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -95,7 +92,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // ik_setChainEnabled(entityId, chainName, enabled)
         interpreter->registerNativeFunction("_native_ik_setChainEnabled",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -120,7 +116,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // ik_getChainWeight(entityId, chainName) -> float
         interpreter->registerNativeFunction("_native_ik_getChainWeight",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -138,7 +133,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // ik_isChainEnabled(entityId, chainName) -> bool
         interpreter->registerNativeFunction("_native_ik_isChainEnabled",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -156,7 +150,6 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
-        // ik_getChainNames(entityId) -> string array
         interpreter->registerNativeFunction("_native_ik_getChainNames",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -179,7 +172,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // ik_hasComponent(entityId) -> bool
         interpreter->registerNativeFunction("_native_ik_hasComponent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {

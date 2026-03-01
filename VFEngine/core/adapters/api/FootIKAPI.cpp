@@ -8,10 +8,6 @@ namespace core::api
 {
     void FootIKAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
-        // footik_calculateFootTarget(footX, footY, footZ, upX, upY, upZ,
-        //     hit, hitPointX, hitPointY, hitPointZ, hitNormalX, hitNormalY, hitNormalZ,
-        //     hitDistance, footHeight, maxStepHeight)
-        // -> float[9]: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isGrounded]
         interpreter->registerNativeFunction("_native_footik_calculateFootTarget",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -52,7 +48,6 @@ namespace core::api
                 auto result = animator::ik::FootIKHelper::calculateFootTarget(
                     footPos, characterUp, raycast, config);
 
-                // Pack result: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isGrounded]
                 auto arr = std::make_shared<value::NativeArray>(9, value::ValueType::FLOAT);
                 arr->set(0, value::Value(result.targetPosition.x));
                 arr->set(1, value::Value(result.targetPosition.y));
@@ -68,7 +63,6 @@ namespace core::api
                 }
                 else
                 {
-                    // Identity quaternion (x, y, z, w)
                     arr->set(3, value::Value(0.0f));
                     arr->set(4, value::Value(0.0f));
                     arr->set(5, value::Value(0.0f));
@@ -81,9 +75,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // footik_calculatePelvisOffset(leftTargetX, leftTargetY, leftTargetZ, leftWeight, leftGrounded,
-        //     rightTargetX, rightTargetY, rightTargetZ, rightWeight, rightGrounded,
-        //     currentOffset, deltaTime, adjustSpeed) -> float
         interpreter->registerNativeFunction("_native_footik_calculatePelvisOffset",
             [](const std::vector<value::Value>& args) -> value::Value
             {

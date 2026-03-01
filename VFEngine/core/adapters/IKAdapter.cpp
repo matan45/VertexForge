@@ -87,7 +87,6 @@ namespace core
 
         auto& ikComp = registry.get<components::IKTargetComponent>(*resolved);
 
-        // Check for duplicate chain name
         for (const auto& chain : ikComp.chains)
         {
             if (chain.chainName == chainName)
@@ -100,7 +99,6 @@ namespace core
         config.chainBoneNames = chainBoneNames;
         ikComp.chains.push_back(std::move(config));
 
-        // Reset initialization so indices get resolved on next update
         ikComp.isInitialized = false;
         ikComp.runtimeStates.clear();
 
@@ -157,8 +155,7 @@ namespace core
                 ikComp.chains[i].weight = weight;
                 ikComp.chains[i].enabled = enabled;
 
-                // Reset resolved indices for this chain
-                if (i < ikComp.runtimeStates.size())
+                        if (i < ikComp.runtimeStates.size())
                 {
                     ikComp.runtimeStates[i].resolvedTipIndex = -1;
                     ikComp.runtimeStates[i].resolvedBoneIndices.clear();
@@ -181,7 +178,6 @@ namespace core
 
         auto& ikComp = registry.get<components::IKTargetComponent>(*resolved);
 
-        // Ensure runtime states match chain count
         if (ikComp.runtimeStates.size() != ikComp.chains.size())
             ikComp.runtimeStates.resize(ikComp.chains.size());
 

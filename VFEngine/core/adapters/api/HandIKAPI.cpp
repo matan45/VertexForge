@@ -8,10 +8,6 @@ namespace core::api
 {
     void HandIKAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
-        // handik_calculateHandTarget(handX, handY, handZ, shoulderX, shoulderY, shoulderZ,
-        //     targetX, targetY, targetZ, hasRotation, rotX, rotY, rotZ, rotW,
-        //     maxReachDistance, gripRotationBlend)
-        // -> float[8]: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isReachable]
         interpreter->registerNativeFunction("_native_handik_calculateHandTarget",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -42,7 +38,6 @@ namespace core::api
                 std::optional<glm::quat> targetRotation;
                 if (hasRotation)
                 {
-                    // mType Quaternion order: x, y, z, w → GLM quat: w, x, y, z
                     targetRotation = glm::quat(
                         extractFloat(args[13], ctx),  // w
                         extractFloat(args[10], ctx),  // x
@@ -57,7 +52,6 @@ namespace core::api
                 auto result = animator::ik::HandIKHelper::calculateHandTarget(
                     handPos, shoulderPos, targetPos, targetRotation, config);
 
-                // Pack result: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isReachable]
                 auto arr = std::make_shared<value::NativeArray>(9, value::ValueType::FLOAT);
                 arr->set(0, value::Value(result.targetPosition.x));
                 arr->set(1, value::Value(result.targetPosition.y));
@@ -85,12 +79,6 @@ namespace core::api
                 return value::Value(arr);
             });
 
-        // handik_calculateTwoHandedGrip(domHandX, domHandY, domHandZ,
-        //     domRotX, domRotY, domRotZ, domRotW,
-        //     gripOffsetX, gripOffsetY, gripOffsetZ,
-        //     offShoulderX, offShoulderY, offShoulderZ,
-        //     maxReachDistance, gripRotationBlend)
-        // -> float[9]: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isReachable]
         interpreter->registerNativeFunction("_native_handik_calculateTwoHandedGrip",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -107,7 +95,6 @@ namespace core::api
                     extractFloat(args[1], ctx),
                     extractFloat(args[2], ctx));
 
-                // mType Quaternion order: x, y, z, w → GLM quat: w, x, y, z
                 glm::quat domHandRot(
                     extractFloat(args[6], ctx),  // w
                     extractFloat(args[3], ctx),  // x
@@ -131,7 +118,6 @@ namespace core::api
                 auto result = animator::ik::HandIKHelper::calculateTwoHandedGrip(
                     domHandPos, domHandRot, gripOffset, offShoulderPos, config);
 
-                // Pack result: [targetX, targetY, targetZ, rotX, rotY, rotZ, rotW, weight, isReachable]
                 auto arr = std::make_shared<value::NativeArray>(9, value::ValueType::FLOAT);
                 arr->set(0, value::Value(result.targetPosition.x));
                 arr->set(1, value::Value(result.targetPosition.y));
