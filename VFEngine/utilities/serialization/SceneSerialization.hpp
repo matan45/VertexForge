@@ -212,6 +212,9 @@ namespace serialization
         static json serializeController(const components::ControllerComponent& controller);
         static void deserializeController(const json& j, components::ControllerComponent& controller);
 
+        static json serializeIKTarget(const components::IKTargetComponent& ikTarget);
+        static void deserializeIKTarget(const json& j, components::IKTargetComponent& ikTarget);
+
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
 

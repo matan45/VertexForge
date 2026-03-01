@@ -38,6 +38,7 @@
 #include "details/NavmeshAgentDrawer.hpp"
 #include "details/ControllerDrawer.hpp"
 #include "details/RenderTextureDrawer.hpp"
+#include "details/IKDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -83,6 +84,7 @@ namespace windows
         details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
+        details::IKDrawer ikDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

@@ -272,6 +272,9 @@ namespace resource
         if (hasSockets && !readSocketDefinitions(outSkeleton))
             return false;
 
+        if (hasIKChains && !readIKChainDefinitions(outSkeleton))
+            return false;
+
         vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
         return true;
     }
@@ -380,6 +383,80 @@ namespace resource
         }
 
         vfLogInfo("MeshStreamHandle: Loaded {} sockets", socketCount);
+        return true;
+    }
+
+    bool MeshStreamHandle::readIKChainDefinitions(SkeletonData& outSkeleton)
+    {
+        uint32_t chainCount = endian::readLE<uint32_t>(file);
+        if (file.fail() || chainCount >= 256)
+        {
+            return true;
+        }
+
+        outSkeleton.ikChains.resize(chainCount);
+        for (uint32_t c = 0; c < chainCount; ++c)
+        {
+            auto& chain = outSkeleton.ikChains[c];
+
+            // Chain name
+            uint32_t nameLen = endian::readLE<uint32_t>(file);
+            if (nameLen > 0 && nameLen < 1024)
+            {
+                chain.chainName.resize(nameLen);
+                file.read(chain.chainName.data(), nameLen);
+            }
+
+            // Tip bone name
+            uint32_t tipLen = endian::readLE<uint32_t>(file);
+            if (tipLen > 0 && tipLen < 1024)
+            {
+                chain.tipBoneName.resize(tipLen);
+                file.read(chain.tipBoneName.data(), tipLen);
+            }
+
+            // Chain bone names
+            uint32_t boneCount = endian::readLE<uint32_t>(file);
+            chain.chainBoneNames.resize(boneCount);
+            for (uint32_t b = 0; b < boneCount; ++b)
+            {
+                uint32_t bLen = endian::readLE<uint32_t>(file);
+                if (bLen > 0 && bLen < 1024)
+                {
+                    chain.chainBoneNames[b].resize(bLen);
+                    file.read(chain.chainBoneNames[b].data(), bLen);
+                }
+            }
+
+            // Constraints
+            uint32_t constraintCount = endian::readLE<uint32_t>(file);
+            chain.constraints.resize(constraintCount);
+            for (uint32_t k = 0; k < constraintCount; ++k)
+            {
+                auto& constraint = chain.constraints[k];
+                constraint.type = static_cast<animator::ik::JointConstraintType>(endian::readLE<uint8_t>(file));
+                constraint.hingeAxis.x = endian::readLE<float>(file);
+                constraint.hingeAxis.y = endian::readLE<float>(file);
+                constraint.hingeAxis.z = endian::readLE<float>(file);
+                constraint.coneAngle = endian::readLE<float>(file);
+                constraint.swingAngle = endian::readLE<float>(file);
+                constraint.twistMin = endian::readLE<float>(file);
+                constraint.twistMax = endian::readLE<float>(file);
+            }
+
+            // Weight and enabled
+            chain.weight = endian::readLE<float>(file);
+            chain.enabled = (endian::readLE<uint8_t>(file) != 0);
+
+            if (file.fail())
+            {
+                vfLogError("MeshStreamHandle: Failed to read IK chain {}", c);
+                outSkeleton.ikChains.clear();
+                return false;
+            }
+        }
+
+        vfLogInfo("MeshStreamHandle: Loaded {} IK chains", chainCount);
         return true;
     }
 }

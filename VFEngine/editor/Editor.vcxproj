@@ -152,6 +152,7 @@
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\ViewPortPicker.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimationIKChainPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationInfoPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
@@ -177,6 +178,7 @@
     <ClInclude Include="windows\details\ControllerDrawer.hpp" />
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
+    <ClInclude Include="windows\details\IKDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
@@ -268,6 +270,7 @@
     <ClCompile Include="windows\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\ViewPortPicker.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimationIKChainPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationInfoPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
@@ -292,6 +295,7 @@
     <ClCompile Include="windows\details\ControllerDrawer.cpp" />
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
+    <ClCompile Include="windows\details\IKDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />

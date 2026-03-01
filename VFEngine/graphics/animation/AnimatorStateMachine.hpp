@@ -64,6 +64,7 @@ namespace animation
         void update(float deltaTime);
 
         const std::vector<glm::mat4>& getBoneMatrices() const { return currentBoneMatrices; }
+        std::vector<glm::mat4>& getMutableBoneMatrices() { return currentBoneMatrices; }
 
         void computeSocketTransforms(const std::vector<animator::SocketDefinition>& sockets,
                                      std::vector<glm::mat4>& outSocketModelTransforms) const;

@@ -14,6 +14,7 @@
 #include "interfaces/IPhysicsAnimationService.hpp"
 #include "interfaces/IRenderTextureService.hpp"
 #include "interfaces/IControllerService.hpp"
+#include "impl/components/IKComponentService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace plugin {
@@ -55,6 +56,7 @@ namespace handlers {
         std::shared_ptr<services::IRenderTextureService> renderTextureService;
         std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
         std::shared_ptr<services::IControllerService> controllerService;
+        std::shared_ptr<services::IKComponentService> ikComponentService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 

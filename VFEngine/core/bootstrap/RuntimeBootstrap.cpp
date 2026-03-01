@@ -8,6 +8,7 @@
 #include "../adapters/NavmeshAdapter.hpp"
 #include "../adapters/SocketAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
+#include "../adapters/IKAdapter.hpp"
 #include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
@@ -36,6 +37,7 @@ namespace core
         navmeshAdapter = std::make_unique<NavmeshAdapter>();
         socketAdapter = std::make_unique<SocketAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
+        ikAdapter = std::make_unique<IKAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
@@ -104,6 +106,7 @@ namespace core
         navmeshAdapter.reset();
         socketAdapter.reset();
         animatorAdapter.reset();
+        ikAdapter.reset();
 
         if (coreInterface)
         {
@@ -144,6 +147,11 @@ namespace core
     services::IAnimatorProvider* RuntimeBootstrap::getAnimatorProvider()
     {
         return animatorAdapter.get();
+    }
+
+    services::IIKProvider* RuntimeBootstrap::getIKProvider()
+    {
+        return ikAdapter.get();
     }
 
     services::IVFXRuntimeProvider* RuntimeBootstrap::getVFXRuntimeProvider()

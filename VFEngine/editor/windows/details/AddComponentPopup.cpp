@@ -5,6 +5,7 @@
 #include "events/ScriptingEvents.hpp"
 #include "events/UIEvents.hpp"
 #include "events/SocketEvents.hpp"
+#include "events/IKEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -51,7 +52,8 @@ namespace windows::details
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
-                           c.hasNavmeshAgent && c.hasRenderTexture && c.hasController;
+                           c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
+                           c.hasIK;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -293,6 +295,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Attach this entity to an animation socket on a parent skeleton");
+            }
+        }
+
+        if (!c.hasIK)
+        {
+            if (ImGui::Selectable("  Inverse Kinematics"))
+            {
+                events::ik::AddIKComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("FABRIK IK solver for bone chain targeting (feet, hands, look-at)");
             }
         }
     }

@@ -74,6 +74,8 @@ namespace resource
         bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
         bool hasSockets = false;        // True if file has socket data after skeleton
         std::streampos socketDataOffset = 0; // File position where socket data starts (after skeleton)
+        bool hasIKChains = false;       // True if file has IK chain data after sockets
+        std::streampos ikChainDataOffset = 0; // File position where IK chain data starts
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -114,6 +116,11 @@ namespace resource
         // Used by MeshSocketWriter to avoid re-parsing the entire file.
         std::streampos getSocketDataOffset();
 
+        // Returns the file offset where IK chain data begins (after sockets).
+        std::streampos getIKChainDataOffset();
+
+        bool hasIKChainData() const { return hasIKChains; }
+
     private:
         bool parseHeader();
 
@@ -126,6 +133,7 @@ namespace resource
         bool readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton);
         bool readBindPoseData(uint32_t boneCount, SkeletonData& outSkeleton);
         bool readSocketDefinitions(SkeletonData& outSkeleton);
+        bool readIKChainDefinitions(SkeletonData& outSkeleton);
     };
 
     class MeshStreamResource

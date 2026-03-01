@@ -112,6 +112,7 @@ namespace handlers {
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         controllerService.reset();
+        ikComponentService.reset();
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
@@ -222,6 +223,11 @@ namespace handlers {
 
         controllerService = std::make_shared<services::ControllerServiceImpl>();
 
+        if (auto* ikProvider = bootstrap->getIKProvider())
+        {
+            ikComponentService = std::make_shared<services::IKComponentService>(ikProvider);
+        }
+
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()
         );
@@ -254,6 +260,10 @@ namespace handlers {
         }
         renderTextureService->registerEventHandlers();
         controllerService->registerEventHandlers();
+        if (ikComponentService)
+        {
+            ikComponentService->registerEventHandlers();
+        }
     }
 
     void RuntimeHandler::setupEventSubscriptions()

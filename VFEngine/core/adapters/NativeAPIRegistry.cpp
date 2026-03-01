@@ -15,6 +15,9 @@
 #include "api/NavmeshAPI.hpp"
 #include "api/RenderTextureAPI.hpp"
 #include "api/ControllerAPI.hpp"
+#include "api/IKAPI.hpp"
+#include "api/FootIKAPI.hpp"
+#include "api/HandIKAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -52,6 +55,9 @@ namespace core
         api::NavmeshAPI::registerAPI(interpreter);
         api::RenderTextureAPI::registerAPI(interpreter);
         api::ControllerAPI::registerAPI(interpreter);
+        api::IKAPI::registerAPI(interpreter);
+        api::FootIKAPI::registerAPI(interpreter);
+        api::HandIKAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

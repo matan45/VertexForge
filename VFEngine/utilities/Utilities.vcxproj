@@ -94,11 +94,16 @@
     <ClInclude Include="animator\AnimationEventTypes.hpp" />
     <ClInclude Include="animator\AnimatorAsset.hpp" />
     <ClInclude Include="animator\AnimatorTypes.hpp" />
+    <ClInclude Include="animator\FootIKHelper.hpp" />
+    <ClInclude Include="animator\HandIKHelper.hpp" />
+    <ClInclude Include="animator\IKTypes.hpp" />
+    <ClInclude Include="animator\LookAtIKHelper.hpp" />
     <ClInclude Include="animator\SocketTypes.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
+    <ClInclude Include="components\IKComponent.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />
     <ClInclude Include="components\NavmeshComponents.hpp" />
@@ -202,6 +207,10 @@
   <ItemGroup>
     <ClCompile Include="animator\AnimatorAsset.cpp" />
     <ClCompile Include="animator\AnimatorTypes.cpp" />
+    <ClCompile Include="animator\FootIKHelper.cpp" />
+    <ClCompile Include="animator\HandIKHelper.cpp" />
+    <ClCompile Include="animator\IKTypes.cpp" />
+    <ClCompile Include="animator\LookAtIKHelper.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="lightbake\BakeSceneMesh.cpp" />
@@ -235,6 +244,7 @@
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerializeCore.cpp" />
     <ClCompile Include="serialization\SceneSerializeDispatch.cpp" />
+    <ClCompile Include="serialization\SceneSerializeIK.cpp" />
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
     <ClCompile Include="serialization\SceneSerializeRender.cpp" />
