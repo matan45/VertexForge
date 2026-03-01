@@ -359,6 +359,56 @@ namespace resource
             hasSockets = false;
         }
 
+        // Try to read IK chain data (appended after sockets)
+        ikChainDataOffset = file.tellg();
+        std::streampos beforeIKChains = ikChainDataOffset;
+        uint32_t ikChainCount = endian::readLE<uint32_t>(file);
+        if (!file.fail() && ikChainCount < 256)
+        {
+            hasIKChains = true;
+            // Skip IK chain data for header parsing
+            for (uint32_t c = 0; c < ikChainCount; ++c)
+            {
+                // Chain name
+                uint32_t nameLen = endian::readLE<uint32_t>(file);
+                if (nameLen > 1024 || file.fail()) { hasIKChains = false; break; }
+                file.seekg(nameLen, std::ios::cur);
+
+                // Tip bone name
+                uint32_t tipLen = endian::readLE<uint32_t>(file);
+                if (tipLen > 1024 || file.fail()) { hasIKChains = false; break; }
+                file.seekg(tipLen, std::ios::cur);
+
+                // Chain bone names
+                uint32_t boneCount = endian::readLE<uint32_t>(file);
+                if (boneCount > 256 || file.fail()) { hasIKChains = false; break; }
+                for (uint32_t b = 0; b < boneCount; ++b)
+                {
+                    uint32_t bLen = endian::readLE<uint32_t>(file);
+                    if (bLen > 1024 || file.fail()) { hasIKChains = false; break; }
+                    file.seekg(bLen, std::ios::cur);
+                }
+                if (!hasIKChains) break;
+
+                // Constraints
+                uint32_t constraintCount = endian::readLE<uint32_t>(file);
+                if (constraintCount > 256 || file.fail()) { hasIKChains = false; break; }
+                // Each constraint: type(1) + hingeAxis(12) + coneAngle(4) + swingAngle(4) + twistMin(4) + twistMax(4) = 29 bytes
+                file.seekg(constraintCount * 29, std::ios::cur);
+
+                // weight(4) + enabled(1)
+                file.seekg(5, std::ios::cur);
+
+                if (file.fail()) { hasIKChains = false; break; }
+            }
+        }
+        else
+        {
+            file.clear();
+            file.seekg(beforeIKChains);
+            hasIKChains = false;
+        }
+
         return true;
     }
 }

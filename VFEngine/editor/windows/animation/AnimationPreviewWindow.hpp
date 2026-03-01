@@ -7,6 +7,7 @@
 #include "AnimationSkeletonPanel.hpp"
 #include "AnimationPhysicsPanel.hpp"
 #include "AnimationSocketPanel.hpp"
+#include "AnimationIKChainPanel.hpp"
 #include "resource/Types.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include "providers/IAnimationPreviewProvider.hpp"
@@ -94,6 +95,12 @@ namespace windows
         std::vector<animator::AnimationEvent> animationEvents;
         std::string lastLoadedMeshPath;  // Track mesh changes to reload sockets
         void loadSocketsFromMesh();
+
+        animation::AnimationIKChainPanel ikChainPanel;
+        std::vector<components::IKChainConfig> ikChainConfigs;
+        bool showIKChainPanel = false;
+        bool showIKChainVisualization = true;
+        void loadIKChainsFromMesh();
 
         void buildMappedBoneNames();
         std::unordered_set<std::string> mappedBoneNames;

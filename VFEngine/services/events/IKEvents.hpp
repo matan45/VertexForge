@@ -105,4 +105,12 @@ namespace events::ik
         ::services::EntityHandle entity;
         std::string_view getName() const override { return "HasIKComponent"; }
     };
+
+    // === Notifications ===
+
+    struct IKChainDataSavedNotification : ::events::INotification
+    {
+        std::string meshPath;
+        std::string_view getName() const override { return "IKChainDataSaved"; }
+    };
 }

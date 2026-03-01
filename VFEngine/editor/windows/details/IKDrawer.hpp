@@ -1,6 +1,7 @@
 #pragma once
 #include "data/EntityHandle.hpp"
 #include <string>
+#include <vector>
 
 namespace windows::details
 {
@@ -10,8 +11,14 @@ namespace windows::details
         bool draw(services::EntityHandle handle);
 
     private:
+        void refreshBoneNames(services::EntityHandle handle);
+
         // State for adding new chains
         char newChainName[64] = "NewChain";
-        char newTipBone[128] = "";
+
+        // Cached bone names from entity's skeleton
+        std::vector<std::string> boneNames;
+        std::vector<int32_t> boneParentIndices;
+        services::EntityHandle cachedEntity{};
     };
 }

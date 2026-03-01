@@ -119,6 +119,7 @@
     <ClInclude Include="types\FontAtlasGenerator.hpp" />
     <ClInclude Include="types\FontSerializer.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
+    <ClInclude Include="types\MeshIKChainWriter.hpp" />
     <ClInclude Include="types\MeshLODGenerator.hpp" />
     <ClInclude Include="types\MeshSerializer.hpp" />
     <ClInclude Include="types\MeshSocketWriter.hpp" />
@@ -141,6 +142,7 @@
     <ClCompile Include="types\FontAtlasGenerator.cpp" />
     <ClCompile Include="types\FontSerializer.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
+    <ClCompile Include="types\MeshIKChainWriter.cpp" />
     <ClCompile Include="types\MeshLODGenerator.cpp" />
     <ClCompile Include="types\MeshSerializer.cpp" />
     <ClCompile Include="types\MeshSocketWriter.cpp" />

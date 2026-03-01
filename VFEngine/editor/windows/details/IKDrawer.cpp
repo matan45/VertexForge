@@ -5,9 +5,11 @@
 #include "../../../services/data/EntityConversion.hpp"
 #include "components/Components.hpp"
 #include "animator/IKTypes.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>
+#include <algorithm>
 
 namespace windows::details
 {
@@ -59,6 +61,78 @@ namespace windows::details
         ImGui::PopID();
     }
 
+    static bool drawBoneCombo(const char* label, std::string& boneName,
+                               const std::vector<std::string>& boneNames)
+    {
+        if (boneNames.empty())
+        {
+            // Fallback to text input if no skeleton available
+            char buffer[128];
+            std::strncpy(buffer, boneName.c_str(), sizeof(buffer));
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText(label, buffer, sizeof(buffer), ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                boneName = buffer;
+                return true;
+            }
+            return false;
+        }
+
+        const char* preview = boneName.empty() ? "Select Bone..." : boneName.c_str();
+        bool changed = false;
+
+        if (ImGui::BeginCombo(label, preview))
+        {
+            for (size_t i = 0; i < boneNames.size(); ++i)
+            {
+                bool isSelected = (boneNames[i] == boneName);
+                if (ImGui::Selectable(boneNames[i].c_str(), isSelected))
+                {
+                    boneName = boneNames[i];
+                    changed = true;
+                }
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        return changed;
+    }
+
+    void IKDrawer::refreshBoneNames(services::EntityHandle handle)
+    {
+        boneNames.clear();
+        boneParentIndices.clear();
+        cachedEntity = handle;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entity = services::internal::fromHandle(handle);
+
+        if (!registry.valid(entity) || !registry.all_of<components::MeshComponent>(entity))
+            return;
+
+        const auto& meshComp = registry.get<components::MeshComponent>(entity);
+        if (meshComp.meshPath.empty())
+            return;
+
+        auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+        if (!stream || !stream->hasSkeletonData())
+            return;
+
+        resource::SkeletonData skeleton;
+        if (stream->readSkeleton(skeleton))
+        {
+            boneNames.reserve(skeleton.bones.size());
+            boneParentIndices.reserve(skeleton.bones.size());
+            for (const auto& bone : skeleton.bones)
+            {
+                boneNames.push_back(bone.name);
+                boneParentIndices.push_back(bone.parentIndex);
+            }
+        }
+    }
+
     bool IKDrawer::draw(services::EntityHandle handle)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -67,12 +141,25 @@ namespace windows::details
         if (!registry.valid(entity) || !registry.all_of<components::IKTargetComponent>(entity))
             return false;
 
+        // Refresh bone names if entity changed
+        if (handle.id != cachedEntity.id)
+            refreshBoneNames(handle);
+
         auto& ikComp = registry.get<components::IKTargetComponent>(entity);
 
         bool open = true;
         if (ImGui::CollapsingHeader("Inverse Kinematics", &open, ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Indent();
+
+            if (!boneNames.empty())
+            {
+                ImGui::TextDisabled("Skeleton: %zu bones", boneNames.size());
+            }
+            else
+            {
+                ImGui::TextDisabled("No skeleton found - using text input");
+            }
 
             // Draw existing chains
             int chainToRemove = -1;
@@ -105,16 +192,9 @@ namespace windows::details
                         ikComp.isInitialized = false;
                     }
 
-                    // Tip bone name
-                    char tipBuffer[128];
-                    std::strncpy(tipBuffer, chain.tipBoneName.c_str(), sizeof(tipBuffer));
-                    tipBuffer[sizeof(tipBuffer) - 1] = '\0';
-                    if (ImGui::InputText("Tip Bone", tipBuffer, sizeof(tipBuffer),
-                                         ImGuiInputTextFlags_EnterReturnsTrue))
-                    {
-                        chain.tipBoneName = tipBuffer;
+                    // Tip bone dropdown
+                    if (drawBoneCombo("Tip Bone", chain.tipBoneName, boneNames))
                         ikComp.isInitialized = false;
-                    }
 
                     // Weight slider
                     ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f");
@@ -129,17 +209,10 @@ namespace windows::details
                         for (int b = 0; b < static_cast<int>(chain.chainBoneNames.size()); ++b)
                         {
                             ImGui::PushID(b);
-                            char boneBuffer[128];
-                            std::strncpy(boneBuffer, chain.chainBoneNames[b].c_str(), sizeof(boneBuffer));
-                            boneBuffer[sizeof(boneBuffer) - 1] = '\0';
 
                             ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 30.0f);
-                            if (ImGui::InputText("##BoneName", boneBuffer, sizeof(boneBuffer),
-                                                 ImGuiInputTextFlags_EnterReturnsTrue))
-                            {
-                                chain.chainBoneNames[b] = boneBuffer;
+                            if (drawBoneCombo("##BoneName", chain.chainBoneNames[b], boneNames))
                                 ikComp.isInitialized = false;
-                            }
                             ImGui::PopItemWidth();
 
                             ImGui::SameLine();

@@ -1,0 +1,46 @@
+#pragma once
+
+#include "providers/IAnimationPreviewProvider.hpp"
+#include "components/IKComponent.hpp"
+#include "animator/IKTypes.hpp"
+#include <vector>
+#include <string>
+#include <unordered_map>
+
+namespace windows::animation
+{
+    class AnimationIKChainPanel
+    {
+    private:
+        int selectedChainIndex = -1;
+        char newChainName[64] = "NewChain";
+        int chainLength = 3;
+        bool saveSuccess = false;
+        float saveMessageTimer = 0.0f;
+
+    public:
+        bool draw(std::vector<components::IKChainConfig>& chains,
+                  int& selectedChannel,
+                  const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                  const std::unordered_map<std::string, size_t>& boneNameToIndex,
+                  const std::unordered_map<int32_t, std::vector<size_t>>& boneChildrenMap,
+                  bool& showIKVisualization,
+                  const std::string& meshPath = "");
+
+    private:
+        void drawChainList(std::vector<components::IKChainConfig>& chains);
+        bool drawChainEditor(components::IKChainConfig& chain,
+                             const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                             const std::unordered_map<std::string, size_t>& boneNameToIndex);
+        bool drawNewChainCreation(std::vector<components::IKChainConfig>& chains,
+                                  const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                                  const std::unordered_map<std::string, size_t>& boneNameToIndex,
+                                  int selectedChannel);
+        void drawConstraintEditor(animator::ik::JointConstraint& constraint, int boneIdx);
+        void drawSaveButton(const std::vector<components::IKChainConfig>& chains,
+                            const std::string& meshPath);
+
+        std::vector<std::string> walkHierarchyUp(int tipBoneIndex, int length,
+                                                  const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
+    };
+}

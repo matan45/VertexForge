@@ -50,10 +50,11 @@ namespace windows
 
         updateAsyncLoading();
 
-        // Load sockets from mesh when mesh path changes
+        // Load sockets and IK chains from mesh when mesh path changes
         if (!panelState.meshPath.empty() && panelState.meshPath != lastLoadedMeshPath)
         {
             loadSocketsFromMesh();
+            loadIKChainsFromMesh();
             lastLoadedMeshPath = panelState.meshPath;
         }
 
@@ -82,6 +83,7 @@ namespace windows
                 ImGui::Spacing();
                 ImGui::Checkbox("Physics Panel", &showPhysicsPanel);
                 ImGui::Checkbox("Socket Panel", &showSocketPanel);
+                ImGui::Checkbox("IK Chain Panel", &showIKChainPanel);
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -130,7 +132,7 @@ namespace windows
 
                 ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), false);
 
-                int activePanels = (showPhysicsPanel ? 1 : 0) + (showSocketPanel ? 1 : 0);
+                int activePanels = (showPhysicsPanel ? 1 : 0) + (showSocketPanel ? 1 : 0) + (showIKChainPanel ? 1 : 0);
                 float skeletonHeight = activePanels > 0
                     ? contentSize.y * (activePanels > 1 ? 0.33f : 0.4f)
                     : contentSize.y;
@@ -163,12 +165,29 @@ namespace windows
 
                 if (showSocketPanel)
                 {
-                    ImGui::BeginChild("SocketPanel", ImVec2(rightPanelWidth, 0), true);
+                    float socketHeight = showIKChainPanel ? contentSize.y * 0.33f : 0;
+                    ImGui::BeginChild("SocketPanel", ImVec2(rightPanelWidth, socketHeight), true);
                     if (panelState.animationLoaded)
                     {
                         socketPanel.draw(socketDefinitions, selectedChannel, evaluatedBones,
                                          boneNameToIndex, showSocketVisualization,
                                          panelState.meshPath);
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Loading...");
+                    }
+                    ImGui::EndChild();
+                }
+
+                if (showIKChainPanel)
+                {
+                    ImGui::BeginChild("IKChainPanel", ImVec2(rightPanelWidth, 0), true);
+                    if (panelState.animationLoaded)
+                    {
+                        ikChainPanel.draw(ikChainConfigs, selectedChannel, evaluatedBones,
+                                          boneNameToIndex, boneChildrenMap, showIKChainVisualization,
+                                          panelState.meshPath);
                     }
                     else
                     {
@@ -389,6 +408,27 @@ namespace windows
             if (!socketDefinitions.empty())
             {
                 vfLogInfo("Loaded {} sockets from mesh: {}", socketDefinitions.size(), panelState.meshPath);
+            }
+        }
+    }
+
+    void AnimationPreviewWindow::loadIKChainsFromMesh()
+    {
+        ikChainConfigs.clear();
+
+        auto stream = resource::MeshStreamResource::openStream(panelState.meshPath);
+        if (!stream || !stream->hasSkeletonData())
+        {
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (stream->readSkeleton(skeleton))
+        {
+            ikChainConfigs = skeleton.ikChains;
+            if (!ikChainConfigs.empty())
+            {
+                vfLogInfo("Loaded {} IK chains from mesh: {}", ikChainConfigs.size(), panelState.meshPath);
             }
         }
     }

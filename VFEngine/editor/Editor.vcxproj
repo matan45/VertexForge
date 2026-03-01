@@ -152,6 +152,7 @@
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\ViewPortPicker.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimationIKChainPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationInfoPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
@@ -269,6 +270,7 @@
     <ClCompile Include="windows\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\ViewPortPicker.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimationIKChainPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationInfoPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
