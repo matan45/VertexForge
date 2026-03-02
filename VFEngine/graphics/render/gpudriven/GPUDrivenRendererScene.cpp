@@ -42,8 +42,8 @@ namespace render::gpudriven
         LightmapIndexResolver lightmapResolver = createLightmapResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
-            auto it = pbrCache.find(materialPath);
-            if (it != pbrCache.end())
+            auto it = materials.pbrCache.find(materialPath);
+            if (it != materials.pbrCache.end())
             {
                 if (it->second.blendMode == material::BlendMode::Translucent)
                     return SHADER_GROUP_TRANSPARENT;
@@ -66,27 +66,27 @@ namespace render::gpudriven
             .time = time,
             .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
             .hiZMipLevels = hiZMipLevels,
-            .frustumCullingEnabled = frustumCullingEnabled,
-            .occlusionCullingEnabled = occlusionCullingEnabled,
-            .lodSelectionEnabled = lodSelectionEnabled,
-            .distanceCullingEnabled = distanceCullingEnabled,
-            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
-            .shadowDistanceMultiplier = shadowDistanceMultiplier,
-            .globalLodBias = globalLodBias,
+            .frustumCullingEnabled = culling.frustumCullingEnabled,
+            .occlusionCullingEnabled = culling.occlusionCullingEnabled,
+            .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .distanceCullingEnabled = culling.distanceCullingEnabled,
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
+            .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
         };
         cameraBuffer->update(cameraParams);
 
-        cachedCameraView = view;
-        cachedCameraProjection = projection;
-        cachedCameraPosition = cameraPosition;
-        cachedCameraNear = nearPlane;
-        cachedCameraFar = farPlane;
-        cachedTime = time;
+        cachedCamera.view = view;
+        cachedCamera.projection = projection;
+        cachedCamera.position = cameraPosition;
+        cachedCamera.nearPlane = nearPlane;
+        cachedCamera.farPlane = farPlane;
+        cachedCamera.time = time;
 
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setViewProjection(projection * view);
+            terrain.pipeline->setViewProjection(projection * view);
         }
 
         updateClusterGrid(projection, nearPlane, farPlane);
@@ -111,22 +111,22 @@ namespace render::gpudriven
             .time = 0.0f,
             .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
             .hiZMipLevels = hiZMipLevels,
-            .frustumCullingEnabled = frustumCullingEnabled,
+            .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
-            .lodSelectionEnabled = lodSelectionEnabled,
-            .distanceCullingEnabled = distanceCullingEnabled,
-            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
-            .shadowDistanceMultiplier = shadowDistanceMultiplier,
-            .globalLodBias = globalLodBias,
+            .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .distanceCullingEnabled = culling.distanceCullingEnabled,
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
+            .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
             .screenWidth = params.screenWidth,
             .screenHeight = params.screenHeight
         };
         cameraBuffer->update(cameraParams);
 
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setViewProjection(params.projection * params.view);
+            terrain.pipeline->setViewProjection(params.projection * params.view);
         }
     }
 
@@ -138,28 +138,28 @@ namespace render::gpudriven
         }
 
         CameraUpdateParams cameraParams{
-            .view = cachedCameraView,
-            .projection = cachedCameraProjection,
-            .cameraPosition = cachedCameraPosition,
-            .nearPlane = cachedCameraNear,
-            .farPlane = cachedCameraFar,
-            .time = cachedTime,
+            .view = cachedCamera.view,
+            .projection = cachedCamera.projection,
+            .cameraPosition = cachedCamera.position,
+            .nearPlane = cachedCamera.nearPlane,
+            .farPlane = cachedCamera.farPlane,
+            .time = cachedCamera.time,
             .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
             .hiZMipLevels = hiZMipLevels,
-            .frustumCullingEnabled = frustumCullingEnabled,
-            .occlusionCullingEnabled = occlusionCullingEnabled,
-            .lodSelectionEnabled = lodSelectionEnabled,
-            .distanceCullingEnabled = distanceCullingEnabled,
-            .categoryDistances = {categoryDistances[0], categoryDistances[1], categoryDistances[2], categoryDistances[3], categoryDistances[4]},
-            .shadowDistanceMultiplier = shadowDistanceMultiplier,
-            .globalLodBias = globalLodBias,
+            .frustumCullingEnabled = culling.frustumCullingEnabled,
+            .occlusionCullingEnabled = culling.occlusionCullingEnabled,
+            .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .distanceCullingEnabled = culling.distanceCullingEnabled,
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
+            .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
         };
         cameraBuffer->update(cameraParams);
 
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setViewProjection(cachedCameraProjection * cachedCameraView);
+            terrain.pipeline->setViewProjection(cachedCamera.projection * cachedCamera.view);
         }
     }
 
@@ -181,7 +181,7 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
     {
-        if (!materialTextureCache || !bindlessTextures)
+        if (!materials.textureCache || !bindlessTextures)
         {
             return;
         }
@@ -217,7 +217,7 @@ namespace render::gpudriven
                 continue;
             }
 
-            if (registeredLightmapPaths.contains(meshRender.lightmapPath))
+            if (materials.registeredLightmapPaths.contains(meshRender.lightmapPath))
             {
                 continue;
             }
@@ -226,7 +226,7 @@ namespace render::gpudriven
             if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
             {
                 loggerWarning("GPUDrivenRenderer: Failed to load lightmap: {}", meshRender.lightmapPath);
-                registeredLightmapPaths.insert(meshRender.lightmapPath);
+                materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
                 continue;
             }
 
@@ -255,10 +255,10 @@ namespace render::gpudriven
             if (view && sampler)
             {
                 bindlessTextures->registerTexture(meshRender.lightmapPath, view, sampler);
-                lightmapTextureCache[meshRender.lightmapPath] = std::move(texture);
+                materials.lightmapTextureCache[meshRender.lightmapPath] = std::move(texture);
             }
 
-            registeredLightmapPaths.insert(meshRender.lightmapPath);
+            materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
         }
     }
 
@@ -293,10 +293,10 @@ namespace render::gpudriven
                 return INVALID_TEXTURE_INDEX;
             }
 
-            auto it = pbrCache.find(materialPath);
-            if (it == pbrCache.end())
+            auto it = materials.pbrCache.find(materialPath);
+            if (it == materials.pbrCache.end())
             {
-                it = pbrCache.emplace(materialPath,
+                it = materials.pbrCache.emplace(materialPath,
                                       mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
             }
 
@@ -515,11 +515,11 @@ namespace render::gpudriven
                 lightCullingPipeline->getDescriptorSet());
         }
 
-        if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
-            terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
+        if (terrain.renderingEnabled && terrain.pipeline && terrain.meshBuffer &&
+            terrain.meshBuffer->isInitialized() && terrain.pipeline->getCurrentTileCount() > 0)
         {
-            terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
-            terrainPipeline->updateWeightMapDescriptor(terrainMeshBuffer->getWeightMapBuffer());
+            terrain.pipeline->updateTerrainBufferDescriptors(*terrain.meshBuffer);
+            terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer());
         }
 
         if (shadowSystem && shadowSystem->isInitialized() && cameraBuffer)
@@ -531,12 +531,12 @@ namespace render::gpudriven
 
     bool GPUDrivenRenderer::registerMaterialTextures(const std::string& materialPath)
     {
-        if (!initialized || !bindlessTextures || !materialTextureCache)
+        if (!initialized || !bindlessTextures || !materials.textureCache)
         {
             return false;
         }
 
-        if (registeredMaterialPaths.contains(materialPath))
+        if (materials.registeredPaths.contains(materialPath))
         {
             return true;
         }
@@ -559,7 +559,7 @@ namespace render::gpudriven
                               instanceData->parentMaterialPath);
                 return false;
             }
-            loadedMaterials[instanceData->parentMaterialPath] = parentMatData;
+            materials.loaded[instanceData->parentMaterialPath] = parentMatData;
 
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
         }
@@ -571,7 +571,7 @@ namespace render::gpudriven
                 loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
                 return false;
             }
-            loadedMaterials[materialPath] = matData;
+            materials.loaded[materialPath] = matData;
 
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
         }
@@ -582,13 +582,13 @@ namespace render::gpudriven
         {
             if (texPath.empty()) return;
 
-            if (!materialTextureCache->loadTexture(texPath))
+            if (!materials.textureCache->loadTexture(texPath))
             {
                 return;
             }
 
-            vk::ImageView view = materialTextureCache->getViewForPath(texPath);
-            vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
+            vk::ImageView view = materials.textureCache->getViewForPath(texPath);
+            vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
 
             if (view && sampler)
             {
@@ -608,7 +608,7 @@ namespace render::gpudriven
 
         if (registered)
         {
-            registeredMaterialPaths.insert(materialPath);
+            materials.registeredPaths.insert(materialPath);
         }
 
         return registered;

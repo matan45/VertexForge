@@ -73,6 +73,85 @@ namespace render::gpudriven
     class GPUDrivenRenderer
     {
     private:
+        struct TerrainState
+        {
+            std::unique_ptr<TerrainMeshBuffer> meshBuffer;
+            std::unique_ptr<TerrainMeshShaderPipeline> pipeline;
+            std::unique_ptr<TerrainGPUAdapter> adapter;
+            std::unique_ptr<TerrainStreamManager> streamManager;
+            std::vector<TerrainTileGPUData> tileData;
+            bool renderingEnabled = true;
+            float lodBias = 1.0f;
+            float errorThreshold = 2.0f;
+            float textureScale = 0.1f;
+            uint32_t shadowLOD = 2;
+            std::string currentMaterialPath;
+            std::vector<TerrainLayerGPUData> layerData;
+            bool layerDataDirty = false;
+            float updateUs = 0.0f;
+            float streamingUs = 0.0f;
+            float buildTileDataUs = 0.0f;
+            float uploadTileDataUs = 0.0f;
+            TerrainStreamManager::TileDataLoader pendingTileDataLoader;
+            TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor;
+        };
+
+        struct WaterState
+        {
+            std::unique_ptr<render::water::WaterPipeline> pipeline;
+            std::unique_ptr<render::water::WaterMeshBuffer> meshBuffer;
+            std::vector<render::water::WaterTileGPUData> tileData;
+            render::water::WaterPushConstants cachedPushConstants{};
+            bool renderingEnabled = true;
+        };
+
+        struct LightCullingState
+        {
+            std::unordered_set<uint32_t> visibleLightIds;
+            bool useBVH = false;
+            bool useOcclusion = false;
+            std::unordered_set<uint32_t> prevFrameOccludedLights;
+            bool hasPrevFrameOcclusionData = false;
+            uint32_t totalSceneLights = 0;
+            uint32_t lightsAfterBVHCull = 0;
+            uint32_t lightsAfterHiZCull = 0;
+        };
+
+        struct MaterialState
+        {
+            mesh::MaterialTextureCache* textureCache = nullptr;
+            std::unordered_set<std::string> registeredPaths;
+            std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loaded;
+            std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
+            material::CallbackId changeCallbackId{};
+            std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
+            std::unordered_set<std::string> registeredLightmapPaths;
+        };
+
+        struct CullingConfig
+        {
+            bool frustumCullingEnabled = true;
+            bool lodSelectionEnabled = true;
+            bool occlusionCullingEnabled = true;
+            bool distanceCullingEnabled = false;
+            float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
+            float shadowDistanceMultiplier = 0.5f;
+            float globalLodBias = 0.0f;
+            bool meshletFrustumCullingEnabled = true;
+            bool meshletBackfaceCullingEnabled = true;
+            uint32_t currentViewMode = 0;
+        };
+
+        struct CachedCamera
+        {
+            glm::mat4 view{1.0f};
+            glm::mat4 projection{1.0f};
+            glm::vec3 position{0.0f};
+            float nearPlane = 0.1f;
+            float farPlane = 1000.0f;
+            float time = 0.0f;
+        };
+
         core::Device& device;
         core::SwapChain& swapChain;
 
@@ -94,78 +173,25 @@ namespace render::gpudriven
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
-        std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
-        std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
-        std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
-        std::unique_ptr<TerrainStreamManager> terrainStreamManager;
-        std::vector<TerrainTileGPUData> terrainTileData;
-        bool terrainRenderingEnabled = true;
-        float terrainLODBias = 1.0f;
-        float terrainErrorThreshold = 2.0f;
-        float terrainTextureScale = 0.1f;
-        uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
-
-        std::unique_ptr<render::water::WaterPipeline> waterPipeline;
-        std::unique_ptr<render::water::WaterMeshBuffer> waterMeshBuffer;
-        std::vector<render::water::WaterTileGPUData> waterTileData;
-        render::water::WaterPushConstants cachedWaterPushConstants{};
-        bool waterRenderingEnabled = true;
+        std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
+        bool meshStreamingEnabled = true;
 
         bool initialized = false;
         bool enabled = false;
-        bool frustumCullingEnabled = true;
-        bool lodSelectionEnabled = true;
-        bool occlusionCullingEnabled = true;
-        bool distanceCullingEnabled = false;
-        float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
-        float shadowDistanceMultiplier = 0.5f;
-        float globalLodBias = 0.0f;
-
-        bool meshletFrustumCullingEnabled = true;
-        bool meshletBackfaceCullingEnabled = true;
         bool meshShaderSupported = false;
-        uint32_t currentViewMode = 0;
-
         uint32_t hiZMipLevels = 0;
-
         GPUDrivenStats stats{};
 
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::RenderPass cachedRenderPass;
         vk::RenderPass cachedWBOITRenderPass;
 
-        mesh::MaterialTextureCache* materialTextureCache = nullptr;
-
-        std::unordered_set<std::string> registeredMaterialPaths;
-
-        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loadedMaterials;
-
-        std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
-        material::CallbackId materialChangeCallbackId{};
-
-        std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
-        std::unordered_set<std::string> registeredLightmapPaths;
-
-        std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
-        bool meshStreamingEnabled = true;
-
-        std::unordered_set<uint32_t> visibleLightIds;
-        bool useBVHLightCulling = false;
-        bool useLightOcclusionCulling = false;
-
-        std::unordered_set<uint32_t> prevFrameOccludedLights;
-        bool hasPrevFrameOcclusionData = false;
-
-        uint32_t totalSceneLights = 0;
-        uint32_t lightsAfterBVHCull = 0;
-        uint32_t lightsAfterHiZCull = 0;
-
-        glm::mat4 cachedCameraView{1.0f};
-        glm::mat4 cachedCameraProjection{1.0f};
-        glm::vec3 cachedCameraPosition{0.0f};
-        float cachedCameraNear = 0.1f;
-        float cachedCameraFar = 1000.0f;
-        float cachedTime = 0.0f;
+        TerrainState terrain;
+        WaterState water;
+        LightCullingState lightCulling;
+        MaterialState materials;
+        CullingConfig culling;
+        CachedCamera cachedCamera;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -194,10 +220,9 @@ namespace render::gpudriven
 
         void restoreMainCamera();
 
-        // Cached main camera accessors (for restoring mesh pipeline UBO after RTT)
-        const glm::mat4& getCachedCameraView() const { return cachedCameraView; }
-        const glm::mat4& getCachedCameraProjection() const { return cachedCameraProjection; }
-        const glm::vec3& getCachedCameraPosition() const { return cachedCameraPosition; }
+        const glm::mat4& getCachedCameraView() const { return cachedCamera.view; }
+        const glm::mat4& getCachedCameraProjection() const { return cachedCamera.projection; }
+        const glm::vec3& getCachedCameraPosition() const { return cachedCamera.position; }
 
         void dispatchCompute(vk::CommandBuffer cmd);
 
@@ -217,32 +242,32 @@ namespace render::gpudriven
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
 
-        void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
-        bool isFrustumCullingEnabled() const { return frustumCullingEnabled; }
+        void setFrustumCullingEnabled(bool enabled) { culling.frustumCullingEnabled = enabled; }
+        bool isFrustumCullingEnabled() const { return culling.frustumCullingEnabled; }
 
-        void setLODSelectionEnabled(bool enabled) { lodSelectionEnabled = enabled; }
-        bool isLODSelectionEnabled() const { return lodSelectionEnabled; }
+        void setLODSelectionEnabled(bool enabled) { culling.lodSelectionEnabled = enabled; }
+        bool isLODSelectionEnabled() const { return culling.lodSelectionEnabled; }
 
-        void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
-        bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+        void setOcclusionCullingEnabled(bool enabled) { culling.occlusionCullingEnabled = enabled; }
+        bool isOcclusionCullingEnabled() const { return culling.occlusionCullingEnabled; }
 
-        void setMeshletFrustumCullingEnabled(bool enabled) { meshletFrustumCullingEnabled = enabled; }
-        bool isMeshletFrustumCullingEnabled() const { return meshletFrustumCullingEnabled; }
-        void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
-        bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
+        void setMeshletFrustumCullingEnabled(bool enabled) { culling.meshletFrustumCullingEnabled = enabled; }
+        bool isMeshletFrustumCullingEnabled() const { return culling.meshletFrustumCullingEnabled; }
+        void setMeshletBackfaceCullingEnabled(bool enabled) { culling.meshletBackfaceCullingEnabled = enabled; }
+        bool isMeshletBackfaceCullingEnabled() const { return culling.meshletBackfaceCullingEnabled; }
 
-        void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
-        bool isDistanceCullingEnabled() const { return distanceCullingEnabled; }
-        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) categoryDistances[category] = distance; }
-        void setShadowDistanceMultiplier(float mult) { shadowDistanceMultiplier = mult; }
-        void setGlobalLodBias(float bias) { globalLodBias = bias; }
-        float getGlobalLodBias() const { return globalLodBias; }
+        void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
+        bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) culling.categoryDistances[category] = distance; }
+        void setShadowDistanceMultiplier(float mult) { culling.shadowDistanceMultiplier = mult; }
+        void setGlobalLodBias(float bias) { culling.globalLodBias = bias; }
+        float getGlobalLodBias() const { return culling.globalLodBias; }
 
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 
-        void setViewMode(uint32_t mode) { currentViewMode = mode; }
-        uint32_t getViewMode() const { return currentViewMode; }
+        void setViewMode(uint32_t mode) { culling.currentViewMode = mode; }
+        uint32_t getViewMode() const { return culling.currentViewMode; }
 
         void updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels);
 
@@ -252,7 +277,7 @@ namespace render::gpudriven
 
         MeshletCullingStats getMeshletCullingStats();
 
-        void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
+        void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materials.textureCache = cache; }
 
         uint32_t getHiZMipLevels() const { return hiZMipLevels; }
 
@@ -279,10 +304,10 @@ namespace render::gpudriven
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
-        bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
+        bool isBVHLightCullingEnabled() const { return lightCulling.useBVH; }
 
         void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
-        bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
+        bool isLightOcclusionCullingEnabled() const { return lightCulling.useOcclusion; }
 
         uint32_t getTotalSceneLights() const;
         uint32_t getLightsAfterBVHCull() const;
@@ -303,7 +328,6 @@ namespace render::gpudriven
                                uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
 
-        // Set terrain tile lightmap data from bake results
         struct TerrainTileLightmapData
         {
             int32_t coordX = 0;
@@ -312,14 +336,14 @@ namespace render::gpudriven
             std::string lightmapPath;
         };
         void setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data);
-        void invalidateTerrainLayerData() { terrainLayerDataDirty_ = true; }
+        void invalidateTerrainLayerData() { terrain.layerDataDirty = true; }
 
-        void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
-        bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
-        void setTerrainLODBias(float bias) { terrainLODBias = bias; }
-        void setTerrainErrorThreshold(float threshold) { terrainErrorThreshold = threshold; }
-        void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
-        void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
+        void setTerrainRenderingEnabled(bool enabled) { terrain.renderingEnabled = enabled; }
+        bool isTerrainRenderingEnabled() const { return terrain.renderingEnabled; }
+        void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
+        void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
+        void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
+        void setTerrainShadowLOD(uint32_t lod) { terrain.shadowLOD = std::min(lod, 3u); }
 
         void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
                          const ::water::WaterGlobalSettings& settings,
@@ -327,35 +351,22 @@ namespace render::gpudriven
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
 
-        void setWaterRenderingEnabled(bool enabled) { waterRenderingEnabled = enabled; }
-        bool isWaterRenderingEnabled() const { return waterRenderingEnabled; }
+        void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
+        bool isWaterRenderingEnabled() const { return water.renderingEnabled; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
 
-        float getTerrainUpdateUs() const { return terrainUpdateUs_; }
-        float getTerrainStreamingUs() const { return terrainStreamingUs_; }
-        float getTerrainBuildTileDataUs() const { return terrainBuildTileDataUs_; }
-        float getTerrainUploadTileDataUs() const { return terrainUploadTileDataUs_; }
+        float getTerrainUpdateUs() const { return terrain.updateUs; }
+        float getTerrainStreamingUs() const { return terrain.streamingUs; }
+        float getTerrainBuildTileDataUs() const { return terrain.buildTileDataUs; }
+        float getTerrainUploadTileDataUs() const { return terrain.uploadTileDataUs; }
         const TerrainStreamingStats* getTerrainStreamingStats() const;
         TerrainCullingStats getTerrainCullingStats();
 
     private:
-        std::string currentTerrainMaterialPath_;
-        std::vector<TerrainLayerGPUData> terrainLayerData_;
-        bool terrainLayerDataDirty_ = false;
-
-        float terrainUpdateUs_ = 0.0f;
-        float terrainStreamingUs_ = 0.0f;
-        float terrainBuildTileDataUs_ = 0.0f;
-        float terrainUploadTileDataUs_ = 0.0f;
-
-        // Pending callbacks (stored until terrainStreamManager is created)
-        TerrainStreamManager::TileDataLoader pendingTileDataLoader_;
-        TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor_;
-
         bool registerMaterialTextures(const std::string& materialPath);
         void registerTerrainLayerTextures(const std::string& materialPath);
 
