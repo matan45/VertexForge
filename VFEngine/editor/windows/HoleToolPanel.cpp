@@ -93,12 +93,14 @@ namespace windows
         }
 
         const char* shapeLabels[] = {"Circle"};
+        ImGui::BeginDisabled(true);
         if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 1))
         {
             events::holeBrush::SetHoleBrushShapeCommand cmd;
             cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
             dispatcher.execute(cmd);
         }
+        ImGui::EndDisabled();
 
         ImGui::Spacing();
         ImGui::Separator();

@@ -490,7 +490,6 @@ namespace windows
 
         if (!holeActive || !ImGui::IsWindowHovered())
         {
-            holeDragging = false;
             return;
         }
 
@@ -506,13 +505,7 @@ namespace windows
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.erase = shiftHeld;
                 dispatcher.execute(applyCmd);
-
-                holeDragging = true;
             }
-        }
-        else
-        {
-            holeDragging = false;
         }
     }
 }

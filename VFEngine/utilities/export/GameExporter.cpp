@@ -229,12 +229,13 @@ namespace gameExport
 
 	bool GameExporter::copyPlugins(const ExportConfig& config, ExportResult& result)
 	{
-		// Check for plugins directory next to the executable
-		fs::path exePath = fs::current_path();
-		fs::path pluginsDir = exePath / "plugins";
+		// Locate plugins using the same heuristic as Editor/Runtime plugin loading.
+		// This runs inside the Editor process, so current_path() matches where plugins were loaded from.
+		fs::path cwd = fs::current_path();
+		fs::path pluginsDir = cwd / "plugins";
 		if (!fs::exists(pluginsDir))
 		{
-			pluginsDir = exePath / "../../plugins";
+			pluginsDir = cwd / "../../plugins";
 		}
 
 		if (fs::exists(pluginsDir) && fs::is_directory(pluginsDir))

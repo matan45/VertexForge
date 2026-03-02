@@ -20,11 +20,11 @@ namespace windows
 	private:
 		std::atomic<bool> showWindow{false};
 		std::atomic<float> currentProgress{0.0f};
-		std::string currentStep;
-		mutable std::mutex stepMutex;
-
-		// Result state
 		std::atomic<bool> exportFinished{false};
+
+		// Protected by dataMutex — written from background thread, read from draw()
+		mutable std::mutex dataMutex;
+		std::string currentStep;
 		bool exportSuccess = false;
 		std::string exportError;
 		std::vector<std::string> exportWarnings;

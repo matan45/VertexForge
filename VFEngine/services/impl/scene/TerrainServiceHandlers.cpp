@@ -37,7 +37,6 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
-
     }
 
     void TerrainService::registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher)

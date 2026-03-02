@@ -31,7 +31,6 @@ namespace windows
 
         bool sculptDragging = false;
         bool paintDragging = false;
-        bool holeDragging = false;
 
     public:
         explicit ViewPort();

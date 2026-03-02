@@ -14,40 +14,40 @@ namespace windows
 
 		startToken = dispatcher.subscribe<events::gameExport::ExportStartedNotification>(
 			[this](const events::gameExport::ExportStartedNotification&) {
-				showWindow.store(true);
+				{
+					std::lock_guard<std::mutex> lock(dataMutex);
+					currentStep = "Starting export...";
+					exportSuccess = false;
+					exportError.clear();
+					exportWarnings.clear();
+					exportOutputPath.clear();
+				}
 				currentProgress.store(0.0f);
 				exportFinished.store(false);
-				exportSuccess = false;
-				exportError.clear();
-				exportWarnings.clear();
-				exportOutputPath.clear();
-				{
-					std::lock_guard<std::mutex> lock(stepMutex);
-					currentStep = "Starting export...";
-				}
+				showWindow.store(true);
 			});
 
 		progressToken = dispatcher.subscribe<events::gameExport::ExportProgressNotification>(
 			[this](const events::gameExport::ExportProgressNotification& notif) {
 				currentProgress.store(notif.progress);
 				{
-					std::lock_guard<std::mutex> lock(stepMutex);
+					std::lock_guard<std::mutex> lock(dataMutex);
 					currentStep = notif.currentStep;
 				}
 			});
 
 		completeToken = dispatcher.subscribe<events::gameExport::ExportCompletedNotification>(
 			[this](const events::gameExport::ExportCompletedNotification& notif) {
+				{
+					std::lock_guard<std::mutex> lock(dataMutex);
+					currentStep = notif.success ? "Export complete!" : "Export failed";
+					exportSuccess = notif.success;
+					exportError = notif.errorMessage;
+					exportWarnings = notif.warnings;
+					exportOutputPath = notif.outputPath;
+				}
 				currentProgress.store(1.0f);
 				exportFinished.store(true);
-				exportSuccess = notif.success;
-				exportError = notif.errorMessage;
-				exportWarnings = notif.warnings;
-				exportOutputPath = notif.outputPath;
-				{
-					std::lock_guard<std::mutex> lock(stepMutex);
-					currentStep = notif.success ? "Export complete!" : "Export failed";
-				}
 			});
 	}
 
@@ -67,17 +67,29 @@ namespace windows
 		float progress = currentProgress.load();
 		bool finished = exportFinished.load();
 
+		// Snapshot all shared state under a single lock
+		std::string step;
+		bool success = false;
+		std::string error;
+		std::vector<std::string> warnings;
+		std::string outputPath;
+		{
+			std::lock_guard<std::mutex> lock(dataMutex);
+			step = currentStep;
+			if (finished)
+			{
+				success = exportSuccess;
+				error = exportError;
+				warnings = exportWarnings;
+				outputPath = exportOutputPath;
+			}
+		}
+
 		ImGui::SetNextWindowSize(ImVec2(450, 250), ImGuiCond_Always);
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
 		if (ImGui::Begin("Exporting Game...", &windowOpen, flags))
 		{
-			// Current step
-			std::string step;
-			{
-				std::lock_guard<std::mutex> lock(stepMutex);
-				step = currentStep;
-			}
 			ImGui::Text("Status: %s", step.c_str());
 			ImGui::Spacing();
 
@@ -90,15 +102,15 @@ namespace windows
 				ImGui::Separator();
 				ImGui::Spacing();
 
-				if (exportSuccess)
+				if (success)
 				{
 					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Export successful!");
 					ImGui::Spacing();
 
-					if (!exportWarnings.empty())
+					if (!warnings.empty())
 					{
 						ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Warnings:");
-						for (const auto& warning : exportWarnings)
+						for (const auto& warning : warnings)
 						{
 							ImGui::BulletText("%s", warning.c_str());
 						}
@@ -108,7 +120,7 @@ namespace windows
 #ifdef _WIN32
 					if (ImGui::Button("Open Output Folder", ImVec2(-1.0f, 0.0f)))
 					{
-						ShellExecuteA(nullptr, "explore", exportOutputPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+						ShellExecuteA(nullptr, "explore", outputPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 					}
 #endif
 				}
@@ -116,7 +128,7 @@ namespace windows
 				{
 					ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Export failed!");
 					ImGui::Spacing();
-					ImGui::TextWrapped("%s", exportError.c_str());
+					ImGui::TextWrapped("%s", error.c_str());
 				}
 
 				ImGui::Spacing();
