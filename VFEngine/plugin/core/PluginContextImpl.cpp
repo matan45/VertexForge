@@ -1,11 +1,13 @@
 #include "PluginContextImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ScriptingEvents.hpp"
+#include "events/RenderHookEvents.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "Pipeline.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <filesystem>
+#include <algorithm>
 
 namespace plugin {
 
@@ -79,6 +81,40 @@ namespace plugin {
         vfLogInfo("[Plugin:{}] Registered native script function: {}", pluginName, name);
     }
 
+    plugin::RenderHookHandle PluginContextImpl::registerRenderPassHook(
+        plugin::RenderPassHookPoint hookPoint,
+        plugin::RenderHookCallback callback)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot register render hook - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::renderhook::RegisterRenderPassHookCommand cmd;
+        cmd.hookPoint = hookPoint;
+        cmd.callback = std::move(callback);
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            registeredRenderHooks.push_back(handle);
+            vfLogInfo("[Plugin:{}] Registered render pass hook at point {}", pluginName, static_cast<uint32_t>(hookPoint));
+        }
+
+        return handle;
+    }
+
+    void PluginContextImpl::unregisterRenderPassHook(plugin::RenderHookHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::renderhook::UnregisterRenderPassHookCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(registeredRenderHooks,
+            [&](const plugin::RenderHookHandle& h) { return h.id == handle.id; });
+    }
+
     bool PluginContextImpl::hasCapability(const std::string& capability) const
     {
         return capabilities.contains(capability);
@@ -134,6 +170,17 @@ namespace plugin {
             }
         }
         managedSubscriptions.clear();
+
+        for (const auto& handle : registeredRenderHooks) {
+            events::renderhook::UnregisterRenderPassHookCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+                // Handler may already be unregistered during shutdown
+            }
+        }
+        registeredRenderHooks.clear();
 
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);

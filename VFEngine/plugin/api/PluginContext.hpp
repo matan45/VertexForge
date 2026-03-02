@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 #include <any>
+#include <utility>
+#include "../../services/data/RenderHookTypes.hpp"
 
 struct ImGuiContext;
 
@@ -27,6 +29,7 @@ namespace plugin {
         constexpr std::string_view physics  = "physics";
         constexpr std::string_view import_  = "import";
         constexpr std::string_view scripting = "scripting";
+        constexpr std::string_view graphics = "graphics";
     }
 
     class PluginContext
@@ -56,6 +59,16 @@ namespace plugin {
         // The function signature must be: value::Value(const std::vector<value::Value>&)
         // Wrap it in std::any before passing. Only available when hasCapability(capability::scripting) is true.
         virtual void registerScriptFunction(const std::string& name, std::any function) = 0;
+
+        // === Graphics Render Hooks ===
+        // Only available when hasCapability(capability::graphics) is true.
+        // Register a callback at a specific render pass injection point.
+        virtual RenderHookHandle registerRenderPassHook(
+            RenderPassHookPoint hookPoint,
+            RenderHookCallback callback) = 0;
+
+        // Unregister a previously registered render hook. Also cleaned up automatically on unload.
+        virtual void unregisterRenderPassHook(RenderHookHandle handle) = 0;
 
         // === Capability Queries ===
         // Check if an engine capability is available. Use plugin::capability constants.

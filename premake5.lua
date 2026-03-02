@@ -354,6 +354,7 @@ project "Plugin"
       "dependencies/glm",
       "dependencies/entt/single_include",
       "dependencies/imgui",
+      vulkanLibPath.."/Include",            -- For vk::CommandBuffer in RenderHookTypes
       "VFEngine/utilities",
       "VFEngine/services",
       "VFEngine/import/pipeline",          -- For PipelineStage base class

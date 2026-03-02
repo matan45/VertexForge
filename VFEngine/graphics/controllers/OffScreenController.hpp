@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "../../services/providers/IOffScreenProvider.hpp"
+#include "../../services/data/RenderHookTypes.hpp"
 #include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
@@ -205,6 +206,10 @@ namespace controllers
             const terrain::BrushGPUParams& params);
 
         render::RenderPassHandler* getRenderPassHandler() const;
+
+        plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
+                                                     plugin::RenderHookCallback callback);
+        void unregisterRenderHook(plugin::RenderHookHandle handle);
 
         void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();

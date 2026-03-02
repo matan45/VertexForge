@@ -97,6 +97,9 @@
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="data\FileOperationsTypes.hpp" />
+    <ClInclude Include="data\PluginGraphicsTypes.hpp" />
+    <ClInclude Include="data\RenderHookContext.hpp" />
+    <ClInclude Include="data\RenderHookTypes.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="data\TerrainData.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />
@@ -132,6 +135,7 @@
     <ClInclude Include="events\PreviewEvents.hpp" />
     <ClInclude Include="events\ProjectEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
+    <ClInclude Include="events\RenderHookEvents.hpp" />
     <ClInclude Include="events\RenderTextureEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
@@ -174,6 +178,7 @@
     <ClInclude Include="impl\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\ProjectServiceImpl.hpp" />
+    <ClInclude Include="impl\RenderHookServiceImpl.hpp" />
     <ClInclude Include="impl\RenderTexturePlayModeHandler.hpp" />
     <ClInclude Include="impl\RenderTextureServiceImpl.hpp" />
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
@@ -225,6 +230,7 @@
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
     <ClInclude Include="interfaces\IPreviewService.hpp" />
     <ClInclude Include="interfaces\IProjectService.hpp" />
+    <ClInclude Include="interfaces\IRenderHookService.hpp" />
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\IRenderTextureService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
@@ -248,6 +254,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPostProcessProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
+    <ClInclude Include="providers\IRenderHookProvider.hpp" />
     <ClInclude Include="providers\IRenderTextureProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
     <ClInclude Include="providers\ISocketProvider.hpp" />
@@ -280,6 +287,7 @@
     <ClCompile Include="impl\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\ProjectServiceImpl.cpp" />
+    <ClCompile Include="impl\RenderHookServiceImpl.cpp" />
     <ClCompile Include="impl\RenderTexturePlayModeHandler.cpp" />
     <ClCompile Include="impl\RenderTextureServiceImpl.cpp" />
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />

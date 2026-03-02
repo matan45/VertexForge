@@ -1,5 +1,6 @@
 #include "RenderPassHandler.hpp"
 #include "../core/SwapChain.hpp"
+#include "../core/Device.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "DebugRenderer.hpp"
@@ -21,6 +22,7 @@
 #include "../../services/providers/IWaterRenderProvider.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
+#include "print/EditorLogger.hpp"
 
 namespace
 {
@@ -47,6 +49,9 @@ namespace render
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
         drawSceneMeshes(commandBuffer, imageIndex);
+
+        executeRenderHooks(plugin::RenderPassHookPoint::PostScene, commandBuffer, imageIndex);
+
         drawOverlays(commandBuffer, imageIndex);
         executeOcclusionPasses(commandBuffer);
 
@@ -56,8 +61,15 @@ namespace render
             volumetricFogComposite->execute(commandBuffer, imageIndex);
         }
 
+        executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
+
         executePostProcess(commandBuffer, imageIndex);
+
+        executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, commandBuffer, imageIndex);
+
         drawUIOverlays(commandBuffer, imageIndex);
+
+        executeRenderHooks(plugin::RenderPassHookPoint::Overlay, commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::updateGPUDrivenSceneData() const
@@ -419,6 +431,63 @@ namespace render
         if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
         {
             uiTextPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+    }
+
+    plugin::RenderHookHandle RenderPassHandler::registerRenderHook(
+        plugin::RenderPassHookPoint hookPoint,
+        plugin::RenderHookCallback callback)
+    {
+        plugin::RenderHookHandle handle;
+        handle.id = nextRenderHookId++;
+
+        RegisteredRenderHook hook;
+        hook.handle = handle;
+        hook.hookPoint = hookPoint;
+        hook.callback = std::move(callback);
+        renderHooks.push_back(std::move(hook));
+
+        return handle;
+    }
+
+    void RenderPassHandler::unregisterRenderHook(plugin::RenderHookHandle handle)
+    {
+        std::erase_if(renderHooks,
+            [&](const RegisteredRenderHook& h) { return h.handle.id == handle.id; });
+    }
+
+    void RenderPassHandler::executeRenderHooks(
+        plugin::RenderPassHookPoint hookPoint,
+        const vk::CommandBuffer& commandBuffer,
+        uint32_t imageIndex) const
+    {
+        for (const auto& hook : renderHooks)
+        {
+            if (hook.hookPoint != hookPoint) continue;
+
+            plugin::RenderHookContext ctx{};
+            ctx.commandBuffer    = commandBuffer;
+            ctx.imageIndex       = imageIndex;
+            auto extent = swapChain.getSwapchainExtent();
+            ctx.viewportWidth    = extent.width;
+            ctx.viewportHeight   = extent.height;
+            ctx.renderPass       = meshPipelineInitialized ? meshPipeline->getRenderPass() : vk::RenderPass{};
+            ctx.device           = device.getLogicalDevice();
+            ctx.viewMatrix       = currentView;
+            ctx.projectionMatrix = currentProjection;
+            ctx.cameraPosition   = currentCameraPosition;
+            ctx.nearPlane        = currentNearPlane;
+            ctx.farPlane         = currentFarPlane;
+            ctx.time             = currentTime;
+
+            try
+            {
+                hook.callback(ctx);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Plugin render hook error: {}", e.what());
+            }
         }
     }
 }

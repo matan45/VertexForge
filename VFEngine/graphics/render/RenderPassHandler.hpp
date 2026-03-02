@@ -4,6 +4,8 @@
 #include "material/MaterialManager.hpp"
 #include "math/Frustum.hpp"
 #include "terrain/TerrainHitResult.hpp"
+#include "../../services/data/RenderHookTypes.hpp"
+#include "../../services/data/RenderHookContext.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -154,6 +156,14 @@ namespace render
         float brushOverlayFalloff_ = 0.0f;
         float brushOverlayShape_ = 0.0f;
 
+        struct RegisteredRenderHook {
+            plugin::RenderHookHandle handle;
+            plugin::RenderPassHookPoint hookPoint;
+            plugin::RenderHookCallback callback;
+        };
+        std::vector<RegisteredRenderHook> renderHooks;
+        uint64_t nextRenderHookId = 1;
+
         // Additional frustums for RTT cameras — merged with main when loading terrain/water tiles.
         // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
         mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
@@ -300,6 +310,10 @@ namespace render
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
 
+        plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
+                                                     plugin::RenderHookCallback callback);
+        void unregisterRenderHook(plugin::RenderHookHandle handle);
+
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
         void resetVolumetricFogComposite();
         volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
@@ -332,5 +346,9 @@ namespace render
         void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;
         void drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+
+        void executeRenderHooks(plugin::RenderPassHookPoint hookPoint,
+                                const vk::CommandBuffer& commandBuffer,
+                                uint32_t imageIndex) const;
     };
 }

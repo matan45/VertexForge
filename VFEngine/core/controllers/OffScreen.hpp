@@ -11,6 +11,7 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "data/RenderHookTypes.hpp"
 
 namespace render
 {
@@ -150,6 +151,10 @@ namespace controllers
             const terrain::BrushGPUParams& params);
 
         render::RenderPassHandler* getRenderPassHandler() const;
+
+        plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
+                                                     plugin::RenderHookCallback callback);
+        void unregisterRenderHook(plugin::RenderHookHandle handle);
 
         void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();

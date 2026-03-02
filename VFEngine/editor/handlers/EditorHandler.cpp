@@ -31,6 +31,7 @@
 #include "impl/RenderTexturePlayModeHandler.hpp"
 #include "impl/LightBakeServiceImpl.hpp"
 #include "impl/ControllerServiceImpl.hpp"
+#include "impl/RenderHookServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -76,7 +77,8 @@ namespace handlers
             std::string(plugin::capability::audio),
             std::string(plugin::capability::physics),
             std::string(plugin::capability::import_),
-            std::string(plugin::capability::scripting)
+            std::string(plugin::capability::scripting),
+            std::string(plugin::capability::graphics)
         });
         // Resolve plugins/ relative to the executable (bin/Editor/<Config>/x64/ -> repo root)
         auto exePath = std::filesystem::current_path();
@@ -193,6 +195,7 @@ namespace handlers
         lightBakeService.reset();
         controllerService.reset();
         ikComponentService.reset();
+        renderHookService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -274,6 +277,10 @@ namespace handlers
 
         lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
             bootstrap->getLightBakeProvider()
+        );
+
+        renderHookService = std::make_shared<services::RenderHookServiceImpl>(
+            bootstrap->getRenderHookProvider()
         );
     }
 
@@ -406,6 +413,7 @@ namespace handlers
             ikComponentService->registerEventHandlers();
         }
         exportHandler->registerEventHandlers();
+        renderHookService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

@@ -407,6 +407,24 @@ namespace controllers
         return offScreen ? offScreen->getRenderPassHandler() : nullptr;
     }
 
+    plugin::RenderHookHandle OffScreenController::registerRenderHook(
+        plugin::RenderPassHookPoint hookPoint,
+        plugin::RenderHookCallback callback)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!handler) return {};
+        return handler->registerRenderHook(hookPoint, std::move(callback));
+    }
+
+    void OffScreenController::unregisterRenderHook(plugin::RenderHookHandle handle)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (handler)
+        {
+            handler->unregisterRenderHook(handle);
+        }
+    }
+
     void OffScreenController::addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
     {
         auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;

@@ -24,7 +24,8 @@ namespace plugin {
         std::vector<events::SubscriptionToken> managedSubscriptions;
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
-        
+        std::vector<plugin::RenderHookHandle> registeredRenderHooks;
+
     public:
         explicit PluginContextImpl(const std::string& pluginName,
                           const std::unordered_set<std::string>& capabilities);
@@ -35,6 +36,10 @@ namespace plugin {
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
         void registerScriptFunction(const std::string& name, std::any function) override;
+        plugin::RenderHookHandle registerRenderPassHook(
+            plugin::RenderPassHookPoint hookPoint,
+            plugin::RenderHookCallback callback) override;
+        void unregisterRenderPassHook(plugin::RenderHookHandle handle) override;
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;
         std::string getPluginDataPath() const override;
