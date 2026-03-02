@@ -259,6 +259,7 @@ namespace terrain
         uint32_t vertCount = getLODVertexCount(lodLevel);
         uint32_t quadCount = vertCount - 1;
         uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t baseQuadCount = baseVertexCount - 1;
 
         indices.clear();
         indices.reserve(static_cast<size_t>(quadCount) * quadCount * 6);
@@ -267,18 +268,19 @@ namespace terrain
         {
             for (uint32_t x = 0; x < quadCount; ++x)
             {
-                // Check if any base-resolution vertex in this quad's span is a hole
+                // Check if any base-resolution quad in this LOD quad's span is a hole
                 if (!holeMask.empty())
                 {
                     uint32_t baseX = x * skipFactor;
                     uint32_t baseZ = z * skipFactor;
                     bool hasHole = false;
 
-                    for (uint32_t bz = baseZ; bz <= baseZ + skipFactor && bz < baseVertexCount; ++bz)
+                    // Each LOD quad covers skipFactor x skipFactor base quads
+                    for (uint32_t bz = baseZ; bz < baseZ + skipFactor && bz < baseQuadCount; ++bz)
                     {
-                        for (uint32_t bx = baseX; bx <= baseX + skipFactor && bx < baseVertexCount; ++bx)
+                        for (uint32_t bx = baseX; bx < baseX + skipFactor && bx < baseQuadCount; ++bx)
                         {
-                            if (holeMask[static_cast<size_t>(bz) * baseVertexCount + bx])
+                            if (holeMask[static_cast<size_t>(bz) * baseQuadCount + bx])
                             {
                                 hasHole = true;
                                 break;
@@ -465,12 +467,45 @@ namespace terrain
             edgeVerts.push_back(ev);
         }
 
-        // Helper to check if an edge vertex maps to a hole in the base-resolution holeMask
-        auto isEdgeVertexHole = [&](uint32_t edgeIdx) -> bool
+        // Helper to check if the quad adjacent to an edge segment is a hole (per-quad holeMask)
+        uint32_t baseQuadCount = (baseVertexCount > 0) ? baseVertexCount - 1 : 0;
+        auto isEdgeSegmentHole = [&](uint32_t segmentIdx) -> bool
         {
-            if (holeMask.empty()) return false;
-            const auto& ev = edgeVerts[edgeIdx];
-            return holeMask[static_cast<size_t>(ev.baseZ) * baseVertexCount + ev.baseX] != 0;
+            if (holeMask.empty() || baseQuadCount == 0) return false;
+            // Determine which base-resolution quad is adjacent to this edge segment
+            uint32_t quadX = 0, quadZ = 0;
+            uint32_t baseSegIdx = segmentIdx * skipFactor;
+            switch (edge)
+            {
+            case TileEdge::North: // z = max edge, adjacent quad row = baseQuadCount-1
+                quadX = std::min(baseSegIdx, baseQuadCount - 1);
+                quadZ = baseQuadCount - 1;
+                break;
+            case TileEdge::South: // z = 0 edge, adjacent quad row = 0
+                quadX = std::min(baseSegIdx, baseQuadCount - 1);
+                quadZ = 0;
+                break;
+            case TileEdge::East: // x = max edge, adjacent quad col = baseQuadCount-1
+                quadX = baseQuadCount - 1;
+                quadZ = std::min(baseSegIdx, baseQuadCount - 1);
+                break;
+            case TileEdge::West: // x = 0 edge, adjacent quad col = 0
+                quadX = 0;
+                quadZ = std::min(baseSegIdx, baseQuadCount - 1);
+                break;
+            }
+            // Check all base quads covered by this LOD segment
+            for (uint32_t k = 0; k < skipFactor; ++k)
+            {
+                uint32_t qx = quadX, qz = quadZ;
+                if (edge == TileEdge::North || edge == TileEdge::South)
+                    qx = std::min(baseSegIdx + k, baseQuadCount - 1);
+                else
+                    qz = std::min(baseSegIdx + k, baseQuadCount - 1);
+                if (holeMask[static_cast<size_t>(qz) * baseQuadCount + qx])
+                    return true;
+            }
+            return false;
         };
 
         // Create skirt vertices (lowered versions of edge vertices)
@@ -486,8 +521,8 @@ namespace terrain
         // Create skirt triangles connecting edge vertices to skirt vertices
         for (size_t i = 0; i < edgeVerts.size() - 1; ++i)
         {
-            // Skip skirt quad if either endpoint is a hole
-            if (isEdgeVertexHole(static_cast<uint32_t>(i)) || isEdgeVertexHole(static_cast<uint32_t>(i + 1)))
+            // Skip skirt quad if the adjacent terrain quad is a hole
+            if (isEdgeSegmentHole(static_cast<uint32_t>(i)))
                 continue;
 
             uint32_t topCurrent = edgeVerts[i].idx;

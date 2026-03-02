@@ -17,6 +17,29 @@
 
 namespace
 {
+    // Helper: check if a vertex touches any hole quad in the per-quad holeMask
+    bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz)
+    {
+        if (!tile.hasHoleMask()) return false;
+        uint32_t qc = tile.config.getVertexCount() - 1;
+        // Check up to 4 adjacent quads: (vx-1,vz-1), (vx,vz-1), (vx-1,vz), (vx,vz)
+        for (int dz = -1; dz <= 0; ++dz)
+        {
+            for (int dx = -1; dx <= 0; ++dx)
+            {
+                int qx = static_cast<int>(vx) + dx;
+                int qz = static_cast<int>(vz) + dz;
+                if (qx >= 0 && qx < static_cast<int>(qc) &&
+                    qz >= 0 && qz < static_cast<int>(qc))
+                {
+                    if (tile.holeMask[static_cast<size_t>(qz) * qc + qx])
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void generateTileColliderWireframe(
         const terrain::TerrainTile& tile,
         components::TerrainColliderDebugData& out)
@@ -43,22 +66,27 @@ namespace
             }
         }
 
-        uint32_t lineCount = vertexCount * (vertexCount - 1) * 2;
         out.lineIndices.clear();
-        out.lineIndices.reserve(lineCount * 2);
 
+        // Skip line segments where both endpoints touch hole quads
+        // Horizontal lines (along X)
         for (uint32_t z = 0; z < vertexCount; ++z)
         {
             for (uint32_t x = 0; x < vertexCount - 1; ++x)
             {
+                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x + 1, z))
+                    continue;
                 out.lineIndices.push_back(z * vertexCount + x);
                 out.lineIndices.push_back(z * vertexCount + x + 1);
             }
         }
+        // Vertical lines (along Z)
         for (uint32_t x = 0; x < vertexCount; ++x)
         {
             for (uint32_t z = 0; z < vertexCount - 1; ++z)
             {
+                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x, z + 1))
+                    continue;
                 out.lineIndices.push_back(z * vertexCount + x);
                 out.lineIndices.push_back((z + 1) * vertexCount + x);
             }
@@ -240,7 +268,8 @@ namespace services
             if (tile && tile->hasHeightData())
             {
                 // If tile has holes, create temp height array with FLT_MAX for hole vertices
-                // so Jolt's HeightFieldShape excludes those triangles from collision
+                // so Jolt's HeightFieldShape excludes those triangles from collision.
+                // holeMask is per-quad; set a vertex to FLT_MAX if ANY adjacent quad is a hole.
                 std::vector<float> physicsHeights;
                 const float* heightSamples = tile->heightData.data();
 
@@ -254,11 +283,33 @@ namespace services
 
                     if (hasAnyHole)
                     {
+                        uint32_t vc = tile->config.getVertexCount();
+                        uint32_t qc = vc - 1;
                         physicsHeights = tile->heightData;
-                        for (size_t i = 0; i < physicsHeights.size(); ++i)
+
+                        for (uint32_t vz = 0; vz < vc; ++vz)
                         {
-                            if (tile->holeMask[i])
-                                physicsHeights[i] = FLT_MAX;
+                            for (uint32_t vx = 0; vx < vc; ++vx)
+                            {
+                                // Check up to 4 adjacent quads: (vx-1,vz-1), (vx,vz-1), (vx-1,vz), (vx,vz)
+                                bool adjacentHole = false;
+                                for (int dz = -1; dz <= 0 && !adjacentHole; ++dz)
+                                {
+                                    for (int dx = -1; dx <= 0 && !adjacentHole; ++dx)
+                                    {
+                                        int qx = static_cast<int>(vx) + dx;
+                                        int qz = static_cast<int>(vz) + dz;
+                                        if (qx >= 0 && qx < static_cast<int>(qc) &&
+                                            qz >= 0 && qz < static_cast<int>(qc))
+                                        {
+                                            if (tile->holeMask[static_cast<size_t>(qz) * qc + qx])
+                                                adjacentHole = true;
+                                        }
+                                    }
+                                }
+                                if (adjacentHole)
+                                    physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
+                            }
                         }
                         heightSamples = physicsHeights.data();
                     }

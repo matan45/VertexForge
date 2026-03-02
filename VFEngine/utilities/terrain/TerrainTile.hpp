@@ -83,7 +83,7 @@ namespace terrain
 
         std::vector<float> heightData;
 
-        std::vector<uint8_t> holeMask; // Per-vertex hole mask, same size/layout as heightData (0=solid, 1=hole)
+        std::vector<uint8_t> holeMask; // Per-quad hole mask, size = quadCount*quadCount where quadCount = vertexCount-1 (0=solid, 1=hole)
         bool topologyDirty = false;    // Forces full meshlet rebuild (bypasses fast path)
 
         TileWeightMapData weightMap;

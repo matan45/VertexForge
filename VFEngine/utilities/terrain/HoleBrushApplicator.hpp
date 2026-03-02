@@ -16,13 +16,13 @@ namespace terrain
             glm::vec2 tileWorldOrigin;   // World XZ origin of this tile
             float brushRadius;
             float vertexSpacing;
-            uint32_t verticesPerSide;
+            uint32_t quadsPerSide;       // vertexCount - 1
             BrushFalloff falloff;
             BrushShape shape;
             bool erase;                  // false = create holes, true = fill holes
         };
 
-        // Apply hole brush to a single tile's holeMask. Returns true if any vertices were modified.
+        // Apply hole brush to a single tile's per-quad holeMask. Returns true if any quads were modified.
         static bool apply(std::vector<uint8_t>& holeMask, const ApplyParams& params);
 
     private:

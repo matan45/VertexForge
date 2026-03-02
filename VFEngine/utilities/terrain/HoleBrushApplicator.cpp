@@ -11,15 +11,18 @@ namespace terrain
 
         bool modified = false;
 
-        for (uint32_t z = 0; z < params.verticesPerSide; ++z)
+        // Iterate per-quad: check center of each quad against brush
+        for (uint32_t z = 0; z < params.quadsPerSide; ++z)
         {
-            for (uint32_t x = 0; x < params.verticesPerSide; ++x)
+            for (uint32_t x = 0; x < params.quadsPerSide; ++x)
             {
-                glm::vec2 vertexWorldPos = params.tileWorldOrigin
-                    + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * params.vertexSpacing;
+                // Quad center is offset by half a vertex spacing from each corner vertex
+                glm::vec2 quadCenter = params.tileWorldOrigin
+                    + glm::vec2(static_cast<float>(x) + 0.5f, static_cast<float>(z) + 0.5f)
+                    * params.vertexSpacing;
 
                 float dist = computeNormalizedDistance(
-                    vertexWorldPos, params.brushCenter, params.brushRadius, params.shape);
+                    quadCenter, params.brushCenter, params.brushRadius, params.shape);
 
                 if (dist >= 1.0f)
                     continue;
@@ -30,7 +33,7 @@ namespace terrain
                 if (falloffValue < 0.5f)
                     continue;
 
-                size_t idx = static_cast<size_t>(z) * params.verticesPerSide + x;
+                size_t idx = static_cast<size_t>(z) * params.quadsPerSide + x;
                 uint8_t newValue = params.erase ? 0 : 1;
 
                 if (holeMask[idx] != newValue)

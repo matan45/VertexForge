@@ -321,7 +321,7 @@ namespace services
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
             applyParams.brushRadius = brushParams.radius;
             applyParams.vertexSpacing = tile->config.getVertexSpacing();
-            applyParams.verticesPerSide = tile->config.getVertexCount();
+            applyParams.quadsPerSide = tile->config.getVertexCount() - 1;
             applyParams.falloff = brushParams.falloff;
             applyParams.shape = brushParams.shape;
             applyParams.erase = erase;
@@ -366,10 +366,11 @@ namespace services
         const auto& allTiles = grid->getAllTiles();
         if (!allTiles.empty())
             vertexCount = allTiles[0]->config.getVertexCount();
-        if (vertexCount == 0)
+        if (vertexCount < 2)
             return;
 
-        uint32_t lastIdx = vertexCount - 1;
+        uint32_t quadCount = vertexCount - 1;
+        uint32_t lastQuad = quadCount - 1;
 
         for (const auto& coord : modifiedTiles)
         {
@@ -377,7 +378,7 @@ namespace services
             if (!tile || !tile->hasHoleMask())
                 continue;
 
-            // Sync +X neighbor (tile's column lastIdx == neighbor's column 0)
+            // Sync +X neighbor: tile's last quad column == neighbor's first quad column
             terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
             if (neighborPX)
             {
@@ -385,9 +386,9 @@ namespace services
                     neighborPX->initializeHoleMask();
 
                 bool changed = false;
-                for (uint32_t z = 0; z < vertexCount; ++z)
+                for (uint32_t z = 0; z < quadCount; ++z)
                 {
-                    bool holeVal = tile->isHole(lastIdx, z);
+                    bool holeVal = tile->isHole(lastQuad, z);
                     if (neighborPX->isHole(0, z) != holeVal)
                     {
                         neighborPX->setHole(0, z, holeVal);
@@ -402,7 +403,7 @@ namespace services
                 }
             }
 
-            // Sync -X neighbor (tile's column 0 == neighbor's column lastIdx)
+            // Sync -X neighbor: tile's first quad column == neighbor's last quad column
             terrain::TerrainTile* neighborNX = grid->getTile({coord.x - 1, coord.z});
             if (neighborNX)
             {
@@ -410,12 +411,12 @@ namespace services
                     neighborNX->initializeHoleMask();
 
                 bool changed = false;
-                for (uint32_t z = 0; z < vertexCount; ++z)
+                for (uint32_t z = 0; z < quadCount; ++z)
                 {
                     bool holeVal = tile->isHole(0, z);
-                    if (neighborNX->isHole(lastIdx, z) != holeVal)
+                    if (neighborNX->isHole(lastQuad, z) != holeVal)
                     {
-                        neighborNX->setHole(lastIdx, z, holeVal);
+                        neighborNX->setHole(lastQuad, z, holeVal);
                         changed = true;
                     }
                 }
@@ -427,7 +428,7 @@ namespace services
                 }
             }
 
-            // Sync +Z neighbor (tile's row lastIdx == neighbor's row 0)
+            // Sync +Z neighbor: tile's last quad row == neighbor's first quad row
             terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
             if (neighborPZ)
             {
@@ -435,9 +436,9 @@ namespace services
                     neighborPZ->initializeHoleMask();
 
                 bool changed = false;
-                for (uint32_t x = 0; x < vertexCount; ++x)
+                for (uint32_t x = 0; x < quadCount; ++x)
                 {
-                    bool holeVal = tile->isHole(x, lastIdx);
+                    bool holeVal = tile->isHole(x, lastQuad);
                     if (neighborPZ->isHole(x, 0) != holeVal)
                     {
                         neighborPZ->setHole(x, 0, holeVal);
@@ -452,7 +453,7 @@ namespace services
                 }
             }
 
-            // Sync -Z neighbor (tile's row 0 == neighbor's row lastIdx)
+            // Sync -Z neighbor: tile's first quad row == neighbor's last quad row
             terrain::TerrainTile* neighborNZ = grid->getTile({coord.x, coord.z - 1});
             if (neighborNZ)
             {
@@ -460,12 +461,12 @@ namespace services
                     neighborNZ->initializeHoleMask();
 
                 bool changed = false;
-                for (uint32_t x = 0; x < vertexCount; ++x)
+                for (uint32_t x = 0; x < quadCount; ++x)
                 {
                     bool holeVal = tile->isHole(x, 0);
-                    if (neighborNZ->isHole(x, lastIdx) != holeVal)
+                    if (neighborNZ->isHole(x, lastQuad) != holeVal)
                     {
-                        neighborNZ->setHole(x, lastIdx, holeVal);
+                        neighborNZ->setHole(x, lastQuad, holeVal);
                         changed = true;
                     }
                 }
