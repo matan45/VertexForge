@@ -111,8 +111,13 @@ namespace render::gpudriven
 
             gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTexturePath);
             gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTexturePath);
+            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTexturePath);
 
             gpuLayer.tilingScale = layer.tilingScale;
+            gpuLayer.roughness = layer.roughness;
+            gpuLayer.metallic = layer.metallic;
+            gpuLayer.ao = layer.ao;
+            gpuLayer.emissionStrength = layer.emissionStrength;
         }
 
         if (terrainPipeline)

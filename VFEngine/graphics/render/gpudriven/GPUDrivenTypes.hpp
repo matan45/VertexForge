@@ -123,9 +123,13 @@ namespace render::gpudriven
         uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
         uint32_t normalTextureIndex;   // Bindless index (0 = default)
         float tilingScale;
-        uint32_t padding;
+        uint32_t ormTextureIndex;      // Bindless index (0 = no ORM texture)
+        float roughness;               // Scalar fallback when no ORM
+        float metallic;                // Scalar fallback when no ORM
+        float ao;                      // Scalar fallback when no ORM
+        float emissionStrength;        // Emission intensity
     };
-    static_assert(sizeof(TerrainLayerGPUData) == 16);
+    static_assert(sizeof(TerrainLayerGPUData) == 32);
 
     struct alignas(16) TerrainCullingStats
     {

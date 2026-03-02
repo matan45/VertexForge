@@ -97,7 +97,6 @@
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="data\FileOperationsTypes.hpp" />
-    <ClInclude Include="data\HoleBrushUndoCommand.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="data\TerrainData.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />

@@ -116,12 +116,16 @@ struct TerrainTileGPUData {
     uvec4 lightmapData;         // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
 };
 
-// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (16 bytes)
+// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (32 bytes)
 struct TerrainLayerGPUData {
     uint albedoTextureIndex;    // Bindless index (0 = default white)
     uint normalTextureIndex;    // Bindless index (0 = default)
     float tilingScale;
-    uint padding;
+    uint ormTextureIndex;       // Bindless index (0 = no ORM texture)
+    float roughness;            // Scalar fallback when no ORM
+    float metallic;             // Scalar fallback when no ORM
+    float ao;                   // Scalar fallback when no ORM
+    float emissionStrength;     // Emission intensity
 };
 
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {

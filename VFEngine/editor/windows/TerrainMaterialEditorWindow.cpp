@@ -343,6 +343,66 @@ namespace windows
                     }
                 }
 
+                {
+                    ImGui::Text("ORM:");
+                    ImGui::SameLine();
+                    std::string displayPath = layer.ormTexturePath.empty() ? "(None)" :
+                        std::filesystem::path(layer.ormTexturePath).filename().string();
+                    ImGui::TextDisabled("%s", displayPath.c_str());
+
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Browse##orm"))
+                    {
+                        nfd::FileDialog fileDialog;
+                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                            {L"VF Image", L"*.vfImage"}
+                        };
+                        std::string selectedPath = fileDialog.openFileDialog(filters);
+                        if (!selectedPath.empty())
+                        {
+                            selectedPath.erase(
+                                std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
+                                selectedPath.end());
+                            layer.ormTexturePath = selectedPath;
+                            onChanged();
+                        }
+                    }
+                    if (!layer.ormTexturePath.empty())
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X##orm"))
+                        {
+                            layer.ormTexturePath.clear();
+                            onChanged();
+                        }
+                    }
+                }
+
+                if (layer.ormTexturePath.empty())
+                {
+                    if (ImGui::DragFloat("Roughness", &layer.roughness, 0.01f, 0.0f, 1.0f))
+                    {
+                        onChanged();
+                    }
+                    if (ImGui::DragFloat("Metallic", &layer.metallic, 0.01f, 0.0f, 1.0f))
+                    {
+                        onChanged();
+                    }
+                    if (ImGui::DragFloat("AO", &layer.ao, 0.01f, 0.0f, 1.0f))
+                    {
+                        onChanged();
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("PBR from ORM texture (R=AO, G=Rough, B=Metal)");
+                }
+
+                if (ImGui::DragFloat("Emission", &layer.emissionStrength, 0.01f, 0.0f, 10.0f))
+                {
+                    onChanged();
+                }
+
                 if (ImGui::DragFloat("Tiling", &layer.tilingScale, 0.01f, 0.01f, 100.0f))
                 {
                     onChanged();
