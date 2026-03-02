@@ -159,19 +159,19 @@ namespace render::gpudriven
             return;
         }
 
-        if (!materialChangeCallbackId)
+        if (!materials.changeCallbackId)
         {
-            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+            materials.changeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
-                    pbrCache.erase(materialPath);
-                    registeredMaterialPaths.erase(materialPath);
+                    materials.pbrCache.erase(materialPath);
+                    materials.registeredPaths.erase(materialPath);
 
                     if (!material::isInstanceFile(materialPath))
                     {
-                        std::erase_if(pbrCache, [](const auto& pair) {
+                        std::erase_if(materials.pbrCache, [](const auto& pair) {
                             return material::isInstanceFile(pair.first);
                         });
-                        std::erase_if(registeredMaterialPaths, [](const std::string& path) {
+                        std::erase_if(materials.registeredPaths, [](const std::string& path) {
                             return material::isInstanceFile(path);
                         });
                     }
@@ -212,25 +212,25 @@ namespace render::gpudriven
             return;
         }
 
-        if (materialChangeCallbackId)
+        if (materials.changeCallbackId)
         {
-            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
-            materialChangeCallbackId = {};
+            material::MaterialManager::instance().unregisterChangeCallback(materials.changeCallbackId);
+            materials.changeCallbackId = {};
         }
 
-        pbrCache.clear();
-        registeredMaterialPaths.clear();
-        lightmapTextureCache.clear();
-        registeredLightmapPaths.clear();
+        materials.pbrCache.clear();
+        materials.registeredPaths.clear();
+        materials.lightmapTextureCache.clear();
+        materials.registeredLightmapPaths.clear();
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
         if (volumetricPipeline) volumetricPipeline->cleanup();
-        if (waterPipeline) waterPipeline->cleanup();
-        if (waterMeshBuffer) waterMeshBuffer->cleanup();
-        if (terrainPipeline) terrainPipeline->cleanup();
-        if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
+        if (water.pipeline) water.pipeline->cleanup();
+        if (water.meshBuffer) water.meshBuffer->cleanup();
+        if (terrain.pipeline) terrain.pipeline->cleanup();
+        if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->cleanup();
         if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->cleanup();
@@ -249,12 +249,12 @@ namespace render::gpudriven
 
         volumetricPipeline.reset();
         meshStreamManager.reset();
-        terrainStreamManager.reset();
-        terrainAdapter.reset();
-        terrainPipeline.reset();
-        terrainMeshBuffer.reset();
-        waterPipeline.reset();
-        waterMeshBuffer.reset();
+        terrain.streamManager.reset();
+        terrain.adapter.reset();
+        terrain.pipeline.reset();
+        terrain.meshBuffer.reset();
+        water.pipeline.reset();
+        water.meshBuffer.reset();
         lightOcclusionCulling.reset();
         wboitMeshShaderPipeline.reset();
         transparentMeshShaderPipeline.reset();
@@ -354,9 +354,9 @@ namespace render::gpudriven
                 wboitMeshShaderPipeline->recreate(pipelineInfo);
             }
 
-            if (terrainPipeline)
+            if (terrain.pipeline)
             {
-                terrainPipeline->recreate(cachedIBLLayout,
+                terrain.pipeline->recreate(cachedIBLLayout,
                                           bindlessTextures->getDescriptorSetLayout(),
                                           meshShaderPipeline->getMeshletDataLayout(),
                                           meshShaderPipeline->getVertexDataLayout(),
@@ -368,9 +368,9 @@ namespace render::gpudriven
                                           cachedRenderPass);
             }
 
-            if (waterPipeline)
+            if (water.pipeline)
             {
-                waterPipeline->recreate({
+                water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
                     clusterGridManager->getDescriptorSetLayout(),

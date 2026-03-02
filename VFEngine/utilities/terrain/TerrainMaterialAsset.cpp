@@ -129,7 +129,12 @@ namespace terrain
                             layer.name = layerJson.value("name", "Layer " + std::to_string(i));
                             layer.albedoTexturePath = layerJson.value("albedoTexturePath", "");
                             layer.normalTexturePath = layerJson.value("normalTexturePath", "");
+                            layer.ormTexturePath = layerJson.value("ormTexturePath", "");
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
+                            layer.roughness = layerJson.value("roughness", 0.9f);
+                            layer.metallic = layerJson.value("metallic", 0.0f);
+                            layer.ao = layerJson.value("ao", 1.0f);
+                            layer.emissionStrength = layerJson.value("emissionStrength", 0.0f);
                             layer.blendMode = stringToLayerBlendMode(layerJson.value("blendMode", "Linear"));
                             layer.enabled = layerJson.value("enabled", true);
 
@@ -188,7 +193,12 @@ namespace terrain
             layerJson["name"] = layer.name;
             layerJson["albedoTexturePath"] = layer.albedoTexturePath;
             layerJson["normalTexturePath"] = layer.normalTexturePath;
+            layerJson["ormTexturePath"] = layer.ormTexturePath;
             layerJson["tilingScale"] = layer.tilingScale;
+            layerJson["roughness"] = layer.roughness;
+            layerJson["metallic"] = layer.metallic;
+            layerJson["ao"] = layer.ao;
+            layerJson["emissionStrength"] = layer.emissionStrength;
             layerJson["blendMode"] = blendModeToString(layer.blendMode);
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);

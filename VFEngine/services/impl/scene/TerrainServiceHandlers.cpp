@@ -8,6 +8,7 @@
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/BrushEvents.hpp"
 #include "../../events/PaintBrushEvents.hpp"
+#include "../../events/HoleBrushEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -113,6 +114,12 @@ namespace services
             [this](const events::paintBrush::ApplyPaintBrushCommand& cmd)
             {
                 applyPaintBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::holeBrush::ApplyHoleBrushCommand>(
+            [this](const events::holeBrush::ApplyHoleBrushCommand& cmd)
+            {
+                applyHoleBrush(cmd.worldPosition, cmd.erase);
             });
     }
 

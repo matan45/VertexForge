@@ -53,6 +53,16 @@ namespace terrain
                     }
                 }
 
+                if (entry->holeMaskDataOffset != 0)
+                {
+                    std::vector<uint8_t> holeMask;
+                    if (TerrainSerializer::readTileHoleMask(filePath, *entry, holeMask))
+                    {
+                        tile.holeMask = std::move(holeMask);
+                        tile.topologyDirty = true;
+                    }
+                }
+
                 size_t newUsage = estimateTileRAMUsage(tile);
                 currentRAMUsage += (newUsage - oldUsage);
                 return true;
@@ -106,6 +116,16 @@ namespace terrain
             }
         }
 
+        if (entry->holeMaskDataOffset != 0)
+        {
+            std::vector<uint8_t> holeMask;
+            if (TerrainSerializer::readTileHoleMask(filePath, *entry, holeMask))
+            {
+                tile.holeMask = std::move(holeMask);
+                tile.topologyDirty = true;
+            }
+        }
+
         size_t newUsage = estimateTileRAMUsage(tile);
         currentRAMUsage += (newUsage - oldUsage);
         return true;
@@ -129,6 +149,7 @@ namespace terrain
         }
 
         std::vector<float>().swap(tile.heightData);
+        std::vector<uint8_t>().swap(tile.holeMask);
         tile.weightMap = TileWeightMapData{};
 
         size_t newUsage = estimateTileRAMUsage(tile);
@@ -185,6 +206,7 @@ namespace terrain
     {
         size_t usage = 0;
         usage += tile.heightData.capacity() * sizeof(float);
+        usage += tile.holeMask.capacity() * sizeof(uint8_t);
 
         for (const auto& lod : tile.lodLevels)
         {

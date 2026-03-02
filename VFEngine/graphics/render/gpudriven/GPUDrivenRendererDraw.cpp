@@ -65,9 +65,9 @@ namespace render::gpudriven
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
 
-                pushConstants.viewMode = currentViewMode;
-                if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
-                if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+                pushConstants.viewMode = culling.currentViewMode;
+                if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+                if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
                 pushConstants.screenWidth = dispatchWidth;
                 pushConstants.screenHeight = dispatchHeight;
 
@@ -154,9 +154,9 @@ namespace render::gpudriven
             MeshShaderPushConstants pushConstants{};
             pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_TRANSPARENT) * commandsPerSection;
 
-            pushConstants.viewMode = currentViewMode;
-            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
-            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.viewMode = culling.currentViewMode;
+            if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 
@@ -242,9 +242,9 @@ namespace render::gpudriven
             MeshShaderPushConstants pushConstants{};
             pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_TRANSPARENT) * commandsPerSection;
 
-            pushConstants.viewMode = currentViewMode;
-            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
-            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.viewMode = culling.currentViewMode;
+            if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 
@@ -330,9 +330,9 @@ namespace render::gpudriven
             MeshShaderPushConstants pushConstants{};
             pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, SHADER_GROUP_BLEND) * commandsPerSection;
 
-            pushConstants.viewMode = currentViewMode;
-            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
-            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.viewMode = culling.currentViewMode;
+            if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 

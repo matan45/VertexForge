@@ -2,6 +2,7 @@
 #include "../../services/impl/scene/TerrainService.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/LightBakeEvents.hpp"
+#include "../../services/events/TerrainEvents.hpp"
 
 namespace core
 {
@@ -29,6 +30,13 @@ namespace core
                 terrainLightmapDirty.store(true);
             });
         lightmapClearedToken = std::make_unique<events::SubscriptionToken>(clearToken);
+
+        auto matToken = dispatcher.subscribe<::events::terrain::TerrainMaterialCompiledNotification>(
+            [this](const ::events::terrain::TerrainMaterialCompiledNotification&)
+            {
+                terrainMaterialDirty.store(true);
+            });
+        materialCompiledToken = std::make_unique<events::SubscriptionToken>(matToken);
     }
 
     TerrainRenderAdapter::~TerrainRenderAdapter()
@@ -40,6 +48,8 @@ namespace core
             dispatcher.unsubscribe(*lightmapLoadedToken);
         if (lightmapClearedToken && lightmapClearedToken->isValid())
             dispatcher.unsubscribe(*lightmapClearedToken);
+        if (materialCompiledToken && materialCompiledToken->isValid())
+            dispatcher.unsubscribe(*materialCompiledToken);
     }
 
     std::vector<terrain::TerrainTile*> TerrainRenderAdapter::getVisibleTiles(
@@ -122,5 +132,15 @@ namespace core
     bool TerrainRenderAdapter::consumeTerrainLightmapDirty()
     {
         return terrainLightmapDirty.exchange(false);
+    }
+
+    void TerrainRenderAdapter::markTerrainMaterialDirty()
+    {
+        terrainMaterialDirty.store(true);
+    }
+
+    bool TerrainRenderAdapter::consumeTerrainMaterialDirty()
+    {
+        return terrainMaterialDirty.exchange(false);
     }
 }

@@ -6,6 +6,8 @@
 #include "../events/BrushEvents.hpp"
 #include "../events/PaintModeEvents.hpp"
 #include "../events/PaintBrushEvents.hpp"
+#include "../events/HoleModeEvents.hpp"
+#include "../events/HoleBrushEvents.hpp"
 
 namespace services
 {
@@ -37,6 +39,16 @@ namespace services
         {
             dispatcher.unsubscribe(paintBrushParamsToken);
         }
+
+        if (holeModeToken.isValid())
+        {
+            dispatcher.unsubscribe(holeModeToken);
+        }
+
+        if (holeBrushParamsToken.isValid())
+        {
+            dispatcher.unsubscribe(holeBrushParamsToken);
+        }
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()
@@ -46,7 +58,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive) || !provider)
                 {
                     return;
                 }
@@ -144,6 +156,45 @@ namespace services
             [this](const events::paintBrush::PaintBrushParamsChangedNotification& n)
             {
                 if (paintModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        static_cast<float>(n.params.shape));
+                }
+            });
+
+        holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
+            [this](const events::hole::HoleModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    holeModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::holeBrush::GetHoleBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff),
+                            static_cast<float>(brushParams.shape));
+                    }
+                }
+                else
+                {
+                    holeModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
+                }
+            });
+
+        holeBrushParamsToken = dispatcher.subscribe<events::holeBrush::HoleBrushParamsChangedNotification>(
+            [this](const events::holeBrush::HoleBrushParamsChangedNotification& n)
+            {
+                if (holeModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

@@ -16,25 +16,25 @@ namespace render::gpudriven
     void GPUDrivenRenderer::initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                                     vk::RenderPass renderPass)
     {
-        terrainMeshBuffer = std::make_unique<TerrainMeshBuffer>(device);
-        terrainMeshBuffer->init();
+        terrain.meshBuffer = std::make_unique<TerrainMeshBuffer>(device);
+        terrain.meshBuffer->init();
 
-        terrainAdapter = std::make_unique<TerrainGPUAdapter>(*terrainMeshBuffer);
-        terrainStreamManager = std::make_unique<TerrainStreamManager>(*terrainMeshBuffer, *terrainAdapter);
+        terrain.adapter = std::make_unique<TerrainGPUAdapter>(*terrain.meshBuffer);
+        terrain.streamManager = std::make_unique<TerrainStreamManager>(*terrain.meshBuffer, *terrain.adapter);
 
-        if (pendingTileDataLoader_)
+        if (terrain.pendingTileDataLoader)
         {
-            terrainStreamManager->setTileDataLoader(std::move(pendingTileDataLoader_));
-            pendingTileDataLoader_ = nullptr;
+            terrain.streamManager->setTileDataLoader(std::move(terrain.pendingTileDataLoader));
+            terrain.pendingTileDataLoader = nullptr;
         }
-        if (pendingTileRAMEvictor_)
+        if (terrain.pendingTileRAMEvictor)
         {
-            terrainStreamManager->setTileRAMEvictor(std::move(pendingTileRAMEvictor_));
-            pendingTileRAMEvictor_ = nullptr;
+            terrain.streamManager->setTileRAMEvictor(std::move(terrain.pendingTileRAMEvictor));
+            terrain.pendingTileRAMEvictor = nullptr;
         }
 
-        terrainPipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
-        terrainPipeline->init(
+        terrain.pipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
+        terrain.pipeline->init(
             iblDescriptorSetLayout,
             bindlessTextures->getDescriptorSetLayout(),
             meshShaderPipeline->getMeshletDataLayout(),
@@ -49,37 +49,42 @@ namespace render::gpudriven
         loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
 
         shadowSystem->initTerrainShadowPass(
-            terrainPipeline->getTerrainDataLayout(),
-            terrainPipeline->getCachedMeshletLayout(),
-            terrainPipeline->getCachedVertexLayout()
+            terrain.pipeline->getTerrainDataLayout(),
+            terrain.pipeline->getCachedMeshletLayout(),
+            terrain.pipeline->getCachedVertexLayout()
         );
         loggerInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
     }
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
     {
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setFrustumCullingEnabled(enabled);
+            terrain.pipeline->setFrustumCullingEnabled(enabled);
         }
     }
 
     void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
     {
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setMeshletCullingEnabled(enabled);
+            terrain.pipeline->setMeshletCullingEnabled(enabled);
         }
     }
 
     void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
     {
-        if (materialPath.empty() || materialPath == currentTerrainMaterialPath_)
+        if (materialPath.empty())
         {
             return;
         }
 
-        if (!bindlessTextures || !materialTextureCache)
+        if (materialPath == terrain.currentMaterialPath && !terrain.layerDataDirty)
+        {
+            return;
+        }
+
+        if (!bindlessTextures || !materials.textureCache)
         {
             return;
         }
@@ -90,37 +95,43 @@ namespace render::gpudriven
             return;
         }
 
-        terrainLayerData_.clear();
-        terrainLayerData_.resize(materialData->activeLayerCount);
+        terrain.layerData.clear();
+        terrain.layerData.resize(materialData->activeLayerCount);
 
         for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
         {
             const auto& layer = materialData->layers[i];
-            TerrainLayerGPUData& gpuLayer = terrainLayerData_[i];
+            TerrainLayerGPUData& gpuLayer = terrain.layerData[i];
             gpuLayer = {};
 
             auto tryRegisterLayerTex = [&](const std::string& texPath) -> uint32_t
             {
                 if (texPath.empty()) return 0;
-                if (!materialTextureCache->loadTexture(texPath)) return 0;
-                vk::ImageView view = materialTextureCache->getViewForPath(texPath);
-                vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
+                if (!materials.textureCache->loadTexture(texPath)) return 0;
+                vk::ImageView view = materials.textureCache->getViewForPath(texPath);
+                vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
                 if (!view || !sampler) return 0;
                 return bindlessTextures->registerTexture(texPath, view, sampler);
             };
 
             gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTexturePath);
             gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTexturePath);
+            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTexturePath);
 
             gpuLayer.tilingScale = layer.tilingScale;
+            gpuLayer.roughness = layer.roughness;
+            gpuLayer.metallic = layer.metallic;
+            gpuLayer.ao = layer.ao;
+            gpuLayer.emissionStrength = layer.emissionStrength;
         }
 
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->updateTerrainLayerInfo(terrainLayerData_);
+            terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
         }
 
-        currentTerrainMaterialPath_ = materialPath;
+        terrain.currentMaterialPath = materialPath;
+        terrain.layerDataDirty = false;
         loggerInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
                    materialData->activeLayerCount, materialPath);
     }
@@ -131,7 +142,7 @@ namespace render::gpudriven
     {
         auto frameStart = std::chrono::high_resolution_clock::now();
 
-        if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
+        if (!initialized || !terrain.renderingEnabled || !terrain.adapter || !terrain.pipeline)
         {
             return;
         }
@@ -140,18 +151,36 @@ namespace render::gpudriven
         {
             registerTerrainLayerTextures(terrainMaterialPath);
         }
+        else if (terrain.layerData.empty())
+        {
+            TerrainLayerGPUData defaultLayer{};
+            defaultLayer.albedoTextureIndex = 0;
+            defaultLayer.normalTextureIndex = 0;
+            defaultLayer.ormTextureIndex = 0;
+            defaultLayer.tilingScale = 1.0f;
+            defaultLayer.roughness = 0.8f;
+            defaultLayer.metallic = 0.0f;
+            defaultLayer.ao = 1.0f;
+            defaultLayer.emissionStrength = 0.0f;
+            terrain.layerData.push_back(defaultLayer);
+
+            if (terrain.pipeline)
+            {
+                terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
+            }
+        }
 
         if (visibleTiles.empty())
         {
-            terrainTileData.clear();
+            terrain.tileData.clear();
             return;
         }
 
         auto streamStart = std::chrono::high_resolution_clock::now();
 
-        if (terrainStreamManager)
+        if (terrain.streamManager)
         {
-            terrainStreamManager->update(visibleTiles, cameraPosition);
+            terrain.streamManager->update(visibleTiles, cameraPosition);
         }
         else
         {
@@ -163,59 +192,59 @@ namespace render::gpudriven
                 }
 
                 TerrainTileKey key{tile->coord.x, tile->coord.z};
-                if (!terrainAdapter->hasTile(key))
+                if (!terrain.adapter->hasTile(key))
                 {
-                    terrainAdapter->uploadTile(*tile);
+                    terrain.adapter->uploadTile(*tile);
                 }
             }
         }
 
         auto streamEnd = std::chrono::high_resolution_clock::now();
-        terrainStreamingUs_ = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
+        terrain.streamingUs = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        terrainAdapter->markGPUTileDataDirty();
+        terrain.adapter->markGPUTileDataDirty();
 
         auto buildStart = std::chrono::high_resolution_clock::now();
-        const auto& newTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+        const auto& newTileData = terrain.adapter->buildGPUTileData(visibleTiles);
         auto buildEnd = std::chrono::high_resolution_clock::now();
-        terrainBuildTileDataUs_ = std::chrono::duration<float, std::micro>(buildEnd - buildStart).count();
+        terrain.buildTileDataUs = std::chrono::duration<float, std::micro>(buildEnd - buildStart).count();
 
         auto uploadStart = std::chrono::high_resolution_clock::now();
 
         if (!newTileData.empty())
         {
-            terrainTileData = newTileData;
-            terrainPipeline->updateTileData(terrainTileData);
+            terrain.tileData = newTileData;
+            terrain.pipeline->updateTileData(terrain.tileData);
         }
         else
         {
-            terrainTileData.clear();
+            terrain.tileData.clear();
         }
 
         auto uploadEnd = std::chrono::high_resolution_clock::now();
-        terrainUploadTileDataUs_ = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
+        terrain.uploadTileDataUs = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
 
-        terrainUpdateUs_ = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
+        terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 
     void GPUDrivenRenderer::setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data)
     {
-        if (!terrainAdapter)
+        if (!terrain.adapter)
         {
             return;
         }
 
-        terrainAdapter->clearTileLightmapData();
+        terrain.adapter->clearTileLightmapData();
 
         for (const auto& entry : data)
         {
             // Register lightmap texture in bindless if not already done
             if (!entry.lightmapPath.empty() &&
-                registeredLightmapPaths.find(entry.lightmapPath) == registeredLightmapPaths.end())
+                materials.registeredLightmapPaths.find(entry.lightmapPath) == materials.registeredLightmapPaths.end())
             {
                 // The lightmap texture should already be loaded by registerSceneLightmapTextures
                 // for mesh objects. If not, we need to load it here too.
-                if (lightmapTextureCache.find(entry.lightmapPath) == lightmapTextureCache.end())
+                if (materials.lightmapTextureCache.find(entry.lightmapPath) == materials.lightmapTextureCache.end())
                 {
                     auto lmData = lightbake::LightmapAtlas::load(entry.lightmapPath);
                     if (lmData.width > 0 && lmData.height > 0 && !lmData.texels.empty())
@@ -244,9 +273,9 @@ namespace render::gpudriven
                         {
                             bindlessTextures->registerTexture(
                                 entry.lightmapPath, view, sampler);
-                            registeredLightmapPaths.insert(entry.lightmapPath);
+                            materials.registeredLightmapPaths.insert(entry.lightmapPath);
                         }
-                        lightmapTextureCache[entry.lightmapPath] = std::move(texture);
+                        materials.lightmapTextureCache[entry.lightmapPath] = std::move(texture);
                     }
                 }
             }
@@ -266,51 +295,51 @@ namespace render::gpudriven
                     glm::packHalf2x16(glm::vec2(entry.scaleOffset.z, entry.scaleOffset.w)),
                     0
                 );
-                terrainAdapter->setTileLightmapData(entry.coordX, entry.coordZ, lmData);
+                terrain.adapter->setTileLightmapData(entry.coordX, entry.coordZ, lmData);
             }
         }
     }
 
     void GPUDrivenRenderer::clearTerrainData()
     {
-        if (terrainStreamManager)
+        if (terrain.streamManager)
         {
-            terrainStreamManager->clear();
+            terrain.streamManager->clear();
         }
-        else if (terrainAdapter)
+        else if (terrain.adapter)
         {
-            terrainAdapter->clear();
+            terrain.adapter->clear();
         }
-        terrainTileData.clear();
-        currentTerrainMaterialPath_.clear();
-        terrainLayerData_.clear();
+        terrain.tileData.clear();
+        terrain.currentMaterialPath.clear();
+        terrain.layerData.clear();
 
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->updateTileData({});
-            terrainPipeline->updateTerrainLayerInfo({});
+            terrain.pipeline->updateTileData({});
+            terrain.pipeline->updateTerrainLayerInfo({});
         }
 
-        if (terrainMeshBuffer)
+        if (terrain.meshBuffer)
         {
-            terrainMeshBuffer->clear();
+            terrain.meshBuffer->clear();
         }
     }
 
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                               uint32_t screenWidth, uint32_t screenHeight)
     {
-        if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
+        if (!initialized || !terrain.renderingEnabled || !terrain.pipeline || !meshShaderPipeline)
         {
             return;
         }
 
-        if (terrainTileData.empty())
+        if (terrain.tileData.empty())
         {
             return;
         }
 
-        terrainPipeline->updateSharedDescriptors(
+        terrain.pipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),
             lightBufferManager->getDescriptorSet(),
@@ -334,74 +363,74 @@ namespace render::gpudriven
         }
 
         float terrainDistSq = 0.0f;
-        if (distanceCullingEnabled)
+        if (culling.distanceCullingEnabled)
         {
-            float d = categoryDistances[ObjectCategory::Terrain];
+            float d = culling.categoryDistances[ObjectCategory::Terrain];
             terrainDistSq = d * d;
         }
-        terrainPipeline->setTerrainMaxDrawDistSq(terrainDistSq);
+        terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
 
-        uint32_t viewMode = currentViewMode;
-        if (meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;
-        if (meshletBackfaceCullingEnabled) viewMode |= TERRAIN_CULL_BACKFACE_BIT;
+        uint32_t viewMode = culling.currentViewMode;
+        if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;
+        if (culling.meshletBackfaceCullingEnabled) viewMode |= TERRAIN_CULL_BACKFACE_BIT;
 
-        terrainPipeline->dispatch(
+        terrain.pipeline->dispatch(
             cmd,
             viewMode,
             dispatchWidth,
             dispatchHeight,
-            terrainLODBias,
-            terrainErrorThreshold,
-            terrainTextureScale
+            terrain.lodBias,
+            terrain.errorThreshold,
+            terrain.textureScale
         );
     }
 
     void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
     {
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            terrainPipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
+            terrain.pipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
         }
     }
 
     void GPUDrivenRenderer::setTileDataLoader(TerrainStreamManager::TileDataLoader loader)
     {
-        if (terrainStreamManager)
+        if (terrain.streamManager)
         {
-            terrainStreamManager->setTileDataLoader(std::move(loader));
+            terrain.streamManager->setTileDataLoader(std::move(loader));
         }
         else
         {
-            pendingTileDataLoader_ = std::move(loader);
+            terrain.pendingTileDataLoader = std::move(loader);
         }
     }
 
     void GPUDrivenRenderer::setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor)
     {
-        if (terrainStreamManager)
+        if (terrain.streamManager)
         {
-            terrainStreamManager->setTileRAMEvictor(std::move(evictor));
+            terrain.streamManager->setTileRAMEvictor(std::move(evictor));
         }
         else
         {
-            pendingTileRAMEvictor_ = std::move(evictor);
+            terrain.pendingTileRAMEvictor = std::move(evictor);
         }
     }
 
     const TerrainStreamingStats* GPUDrivenRenderer::getTerrainStreamingStats() const
     {
-        if (terrainStreamManager)
+        if (terrain.streamManager)
         {
-            return &terrainStreamManager->getStats();
+            return &terrain.streamManager->getStats();
         }
         return nullptr;
     }
 
     TerrainCullingStats GPUDrivenRenderer::getTerrainCullingStats()
     {
-        if (terrainPipeline)
+        if (terrain.pipeline)
         {
-            return terrainPipeline->readStats();
+            return terrain.pipeline->readStats();
         }
         return {};
     }

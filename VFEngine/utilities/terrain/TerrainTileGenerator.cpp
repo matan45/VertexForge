@@ -30,7 +30,6 @@ namespace terrain
         if (progress)
             progress(0.0f, "Sampling heights");
 
-        // If we have a height sampler, use it to populate height data
         if (heightSampler)
         {
             uint32_t vertexCount = config.getVertexCount();
@@ -75,8 +74,9 @@ namespace terrain
         TileLODData& lodData = tile.getLODData(lodLevel);
         lodData.clear();
 
+        uint32_t baseVertexCount = config.getVertexCount();
         generateVertices(lodData.vertices, tile, lodLevel);
-        generateIndices(lodData.indices, lodLevel);
+        generateIndices(lodData.indices, lodLevel, tile.holeMask, baseVertexCount);
 
         // Calculate normals: face-weighted for interior, analytical for boundary
         uint32_t vertCount = getLODVertexCount(lodLevel);
@@ -92,13 +92,12 @@ namespace terrain
         if (config.skirtDepth > 0.0f)
         {
             uint32_t mainIndexCount = static_cast<uint32_t>(lodData.indices.size());
-            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
+            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth, tile.holeMask, baseVertexCount);
             appendSkirtMeshlets(lodData, mainIndexCount);
         }
 
         calculateBounds(lodData);
 
-        // Extract edge vertices for stitching
         extractEdgeVertices(tile, lodLevel);
 
         tile.clearLODDirty(lodLevel);
@@ -124,9 +123,9 @@ namespace terrain
 
         lodData.clear();
 
-        // Regenerate geometry with updated heights
+        uint32_t baseVertexCount = config.getVertexCount();
         generateVertices(lodData.vertices, tile, lodLevel);
-        generateIndices(lodData.indices, lodLevel);
+        generateIndices(lodData.indices, lodLevel, tile.holeMask, baseVertexCount);
 
         uint32_t vertCount = getLODVertexCount(lodLevel);
         calculateNormals(lodData.vertices, lodData.indices, vertCount);
@@ -134,7 +133,7 @@ namespace terrain
 
         if (config.skirtDepth > 0.0f)
         {
-            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
+            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth, tile.holeMask, baseVertexCount);
         }
 
         calculateBounds(lodData);
@@ -163,14 +162,14 @@ namespace terrain
 
         TileLODData& lodData = tile.getLODData(lodLevel);
 
-        if (lodData.hasMeshlets())
+        if (lodData.hasMeshlets() && !tile.topologyDirty)
         {
             // Fast path: meshlet topology unchanged, only heights changed
             generateLODGeometryFast(tile, lodLevel, getTile);
         }
         else
         {
-            // Full path: first generation or topology change
+            // Full path: first generation or topology change (holeMask modified)
             generateLODGeometry(tile, lodLevel, getTile);
         }
 
@@ -192,7 +191,6 @@ namespace terrain
             generateLODGeometry(tile, lod, getTile);
         }
 
-        // Compute geometric error metrics for each LOD level
         if (progress)
             progress(0.85f, "Computing error metrics");
 
@@ -250,10 +248,14 @@ namespace terrain
 
     void TerrainTileGenerator::generateIndices(
         std::vector<uint32_t>& indices,
-        uint32_t lodLevel) const
+        uint32_t lodLevel,
+        const std::vector<uint8_t>& holeMask,
+        uint32_t baseVertexCount) const
     {
         uint32_t vertCount = getLODVertexCount(lodLevel);
         uint32_t quadCount = vertCount - 1;
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t baseQuadCount = baseVertexCount - 1;
 
         indices.clear();
         indices.reserve(static_cast<size_t>(quadCount) * quadCount * 6);
@@ -262,6 +264,30 @@ namespace terrain
         {
             for (uint32_t x = 0; x < quadCount; ++x)
             {
+                // Check if any base-resolution quad in this LOD quad's span is a hole
+                if (!holeMask.empty())
+                {
+                    uint32_t baseX = x * skipFactor;
+                    uint32_t baseZ = z * skipFactor;
+                    bool hasHole = false;
+
+                    // Each LOD quad covers skipFactor x skipFactor base quads
+                    for (uint32_t bz = baseZ; bz < baseZ + skipFactor && bz < baseQuadCount; ++bz)
+                    {
+                        for (uint32_t bx = baseX; bx < baseX + skipFactor && bx < baseQuadCount; ++bx)
+                        {
+                            if (holeMask[static_cast<size_t>(bz) * baseQuadCount + bx])
+                            {
+                                hasHole = true;
+                                break;
+                            }
+                        }
+                        if (hasHole) break;
+                    }
+
+                    if (hasHole) continue; // Skip both triangles for this quad
+                }
+
                 uint32_t topLeft = z * vertCount + x;
                 uint32_t topRight = topLeft + 1;
                 uint32_t bottomLeft = (z + 1) * vertCount + x;
@@ -351,7 +377,6 @@ namespace terrain
 
         lodData.aabb = math::AABB(minPos, maxPos);
 
-        // Calculate bounding sphere (use AABB center and max distance)
         glm::vec3 center = lodData.aabb.getCenter();
         float maxDistSq = 0.0f;
 
@@ -369,14 +394,16 @@ namespace terrain
         std::vector<resource::Vertex>& vertices,
         std::vector<uint32_t>& indices,
         uint32_t lodLevel,
-        float skirtDepth) const
+        float skirtDepth,
+        const std::vector<uint8_t>& holeMask,
+        uint32_t baseVertexCount) const
     {
         std::vector<resource::Vertex> mainVertices = vertices;
 
-        addSkirtEdge(vertices, indices, mainVertices, TileEdge::North, lodLevel, skirtDepth);
-        addSkirtEdge(vertices, indices, mainVertices, TileEdge::East, lodLevel, skirtDepth);
-        addSkirtEdge(vertices, indices, mainVertices, TileEdge::South, lodLevel, skirtDepth);
-        addSkirtEdge(vertices, indices, mainVertices, TileEdge::West, lodLevel, skirtDepth);
+        addSkirtEdge(vertices, indices, mainVertices, TileEdge::North, lodLevel, skirtDepth, holeMask, baseVertexCount);
+        addSkirtEdge(vertices, indices, mainVertices, TileEdge::East, lodLevel, skirtDepth, holeMask, baseVertexCount);
+        addSkirtEdge(vertices, indices, mainVertices, TileEdge::South, lodLevel, skirtDepth, holeMask, baseVertexCount);
+        addSkirtEdge(vertices, indices, mainVertices, TileEdge::West, lodLevel, skirtDepth, holeMask, baseVertexCount);
     }
 
     void TerrainTileGenerator::addSkirtEdge(
@@ -385,50 +412,115 @@ namespace terrain
         const std::vector<resource::Vertex>& mainVertices,
         TileEdge edge,
         uint32_t lodLevel,
-        float skirtDepth) const
+        float skirtDepth,
+        const std::vector<uint8_t>& holeMask,
+        uint32_t baseVertexCount) const
     {
         uint32_t vertCount = getLODVertexCount(lodLevel);
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
 
-        // Determine which vertices form this edge
-        std::vector<uint32_t> edgeIndices;
-        edgeIndices.reserve(vertCount);
+        // Determine which vertices form this edge and their base-resolution coordinates
+        struct EdgeVertex
+        {
+            uint32_t idx;     // Index into LOD vertex array
+            uint32_t baseX;   // Base-resolution x coordinate
+            uint32_t baseZ;   // Base-resolution z coordinate
+        };
+
+        std::vector<EdgeVertex> edgeVerts;
+        edgeVerts.reserve(vertCount);
 
         for (uint32_t i = 0; i < vertCount; ++i)
         {
-            uint32_t idx = 0;
+            EdgeVertex ev{};
             switch (edge)
             {
             case TileEdge::North: // Top edge (z = vertCount-1)
-                idx = (vertCount - 1) * vertCount + i;
+                ev.idx = (vertCount - 1) * vertCount + i;
+                ev.baseX = i * skipFactor;
+                ev.baseZ = (vertCount - 1) * skipFactor;
                 break;
             case TileEdge::South: // Bottom edge (z = 0)
-                idx = i;
+                ev.idx = i;
+                ev.baseX = i * skipFactor;
+                ev.baseZ = 0;
                 break;
             case TileEdge::East: // Right edge (x = vertCount-1)
-                idx = i * vertCount + (vertCount - 1);
+                ev.idx = i * vertCount + (vertCount - 1);
+                ev.baseX = (vertCount - 1) * skipFactor;
+                ev.baseZ = i * skipFactor;
                 break;
             case TileEdge::West: // Left edge (x = 0)
-                idx = i * vertCount;
+                ev.idx = i * vertCount;
+                ev.baseX = 0;
+                ev.baseZ = i * skipFactor;
                 break;
             }
-            edgeIndices.push_back(idx);
+            ev.baseX = std::min(ev.baseX, baseVertexCount - 1);
+            ev.baseZ = std::min(ev.baseZ, baseVertexCount - 1);
+            edgeVerts.push_back(ev);
         }
+
+        // Helper to check if the quad adjacent to an edge segment is a hole (per-quad holeMask)
+        uint32_t baseQuadCount = (baseVertexCount > 0) ? baseVertexCount - 1 : 0;
+        auto isEdgeSegmentHole = [&](uint32_t segmentIdx) -> bool
+        {
+            if (holeMask.empty() || baseQuadCount == 0) return false;
+            // Determine which base-resolution quad is adjacent to this edge segment
+            uint32_t quadX = 0, quadZ = 0;
+            uint32_t baseSegIdx = segmentIdx * skipFactor;
+            switch (edge)
+            {
+            case TileEdge::North: // z = max edge, adjacent quad row = baseQuadCount-1
+                quadX = std::min(baseSegIdx, baseQuadCount - 1);
+                quadZ = baseQuadCount - 1;
+                break;
+            case TileEdge::South: // z = 0 edge, adjacent quad row = 0
+                quadX = std::min(baseSegIdx, baseQuadCount - 1);
+                quadZ = 0;
+                break;
+            case TileEdge::East: // x = max edge, adjacent quad col = baseQuadCount-1
+                quadX = baseQuadCount - 1;
+                quadZ = std::min(baseSegIdx, baseQuadCount - 1);
+                break;
+            case TileEdge::West: // x = 0 edge, adjacent quad col = 0
+                quadX = 0;
+                quadZ = std::min(baseSegIdx, baseQuadCount - 1);
+                break;
+            }
+            // Check all base quads covered by this LOD segment
+            for (uint32_t k = 0; k < skipFactor; ++k)
+            {
+                uint32_t qx = quadX, qz = quadZ;
+                if (edge == TileEdge::North || edge == TileEdge::South)
+                    qx = std::min(baseSegIdx + k, baseQuadCount - 1);
+                else
+                    qz = std::min(baseSegIdx + k, baseQuadCount - 1);
+                if (holeMask[static_cast<size_t>(qz) * baseQuadCount + qx])
+                    return true;
+            }
+            return false;
+        };
 
         // Create skirt vertices (lowered versions of edge vertices)
         uint32_t skirtStartIndex = static_cast<uint32_t>(vertices.size());
 
-        for (uint32_t idx : edgeIndices)
+        for (const auto& ev : edgeVerts)
         {
-            resource::Vertex skirtVertex = mainVertices[idx];
+            resource::Vertex skirtVertex = mainVertices[ev.idx];
             skirtVertex.position.y -= skirtDepth;
             vertices.push_back(skirtVertex);
         }
 
         // Create skirt triangles connecting edge vertices to skirt vertices
-        for (size_t i = 0; i < edgeIndices.size() - 1; ++i)
+        for (size_t i = 0; i < edgeVerts.size() - 1; ++i)
         {
-            uint32_t topCurrent = edgeIndices[i];
-            uint32_t topNext = edgeIndices[i + 1];
+            // Skip skirt quad if the adjacent terrain quad is a hole
+            if (isEdgeSegmentHole(static_cast<uint32_t>(i)))
+                continue;
+
+            uint32_t topCurrent = edgeVerts[i].idx;
+            uint32_t topNext = edgeVerts[i + 1].idx;
             uint32_t bottomCurrent = skirtStartIndex + static_cast<uint32_t>(i);
             uint32_t bottomNext = skirtStartIndex + static_cast<uint32_t>(i) + 1;
 
@@ -468,7 +560,6 @@ namespace terrain
         glm::vec3 tileCenter = tile.worldBounds.getCenter();
         float distance = glm::length(cameraPosition - tileCenter);
 
-        // Find appropriate LOD level based on distance thresholds
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             if (distance < config.lodDistances[lod])

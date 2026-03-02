@@ -15,7 +15,7 @@ namespace terrain
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 1;
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 0;
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 1;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
 
@@ -25,6 +25,7 @@ namespace terrain
         HAS_WEIGHT_MAPS   = 1 << 0,
         HAS_PHYSICS_DATA  = 1 << 1,
         HAS_MESHLET_CACHE = 1 << 2,
+        HAS_HOLE_MASK     = 1 << 3,
     };
 
     inline TerrainFormatFlags operator|(TerrainFormatFlags a, TerrainFormatFlags b)
@@ -80,12 +81,14 @@ namespace terrain
         uint32_t heightDataSize = 0;
         uint64_t weightDataOffset = 0;
         uint64_t meshletDataOffset = 0;
+        uint64_t holeMaskDataOffset = 0;
     };
 
     struct TileLoadResult
     {
         TileCoord coord;
         std::vector<float> heightData;
+        std::vector<uint8_t> holeMask;
         TileWeightMapData weightMap;
         bool success = false;
 
@@ -129,6 +132,11 @@ namespace terrain
             std::string_view path,
             const TileIndexEntry& entry,
             std::array<TileLODData, TERRAIN_LOD_COUNT>& outLODData);
+
+        static bool readTileHoleMask(
+            std::string_view path,
+            const TileIndexEntry& entry,
+            std::vector<uint8_t>& outHoleMask);
 
     private:
         static bool writeHeader(std::ofstream& file, const TerrainFileHeader& header);

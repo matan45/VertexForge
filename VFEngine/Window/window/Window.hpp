@@ -52,7 +52,7 @@ namespace window {
 
 		GLFWwindow* getWindowPtr() const { return window; }
 
-	private:
+		void setTitle(const std::string& title);
 		void setWindowIcon(std::string_view iconPath);
 	};
 }

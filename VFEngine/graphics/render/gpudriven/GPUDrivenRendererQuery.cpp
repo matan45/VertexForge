@@ -107,15 +107,15 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
     {
-        visibleLightIds.clear();
-        visibleLightIds.insert(visibleLights.begin(), visibleLights.end());
-        useBVHLightCulling = true;
+        lightCulling.visibleLightIds.clear();
+        lightCulling.visibleLightIds.insert(visibleLights.begin(), visibleLights.end());
+        lightCulling.useBVH = true;
     }
 
     void GPUDrivenRenderer::clearVisibleLights()
     {
-        visibleLightIds.clear();
-        useBVHLightCulling = false;
+        lightCulling.visibleLightIds.clear();
+        lightCulling.useBVH = false;
     }
 
     void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
@@ -136,14 +136,14 @@ namespace render::gpudriven
 
         lightOcclusionCulling = std::make_unique<occlusion::LightOcclusionCulling>(device, swapChain);
         lightOcclusionCulling->init(hiZBuffer);
-        useLightOcclusionCulling = true;
+        lightCulling.useOcclusion = true;
 
         loggerInfo("GPUDrivenRenderer: Light occlusion culling initialized");
     }
 
     void GPUDrivenRenderer::readBackLightOcclusionResults()
     {
-        if (!useLightOcclusionCulling || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
+        if (!lightCulling.useOcclusion || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
         {
             return;
         }
@@ -152,25 +152,25 @@ namespace render::gpudriven
 
         const auto& visibleLights = lightOcclusionCulling->getVisibleLightIds();
 
-        prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
-        hasPrevFrameOcclusionData = true;
+        lightCulling.prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
+        lightCulling.hasPrevFrameOcclusionData = true;
 
-        lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
+        lightCulling.lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
     }
 
     uint32_t GPUDrivenRenderer::getTotalSceneLights() const
     {
-        return totalSceneLights;
+        return lightCulling.totalSceneLights;
     }
 
     uint32_t GPUDrivenRenderer::getLightsAfterBVHCull() const
     {
-        return lightsAfterBVHCull;
+        return lightCulling.lightsAfterBVHCull;
     }
 
     uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
     {
-        return lightsAfterHiZCull;
+        return lightCulling.lightsAfterHiZCull;
     }
 
     void GPUDrivenRenderer::initVolumetricFog(::postprocess::VolumetricQuality quality)

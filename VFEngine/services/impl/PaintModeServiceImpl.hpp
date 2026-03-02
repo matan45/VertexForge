@@ -14,6 +14,7 @@ namespace services
         ::events::SubscriptionToken entityDeletedToken;
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken sculptModeToken;
+        ::events::SubscriptionToken holeModeToken;
 
     public:
         PaintModeServiceImpl() = default;

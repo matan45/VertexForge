@@ -13,6 +13,8 @@ namespace services
         ::events::SubscriptionToken editorModeToken;
         ::events::SubscriptionToken entityDeletedToken;
         ::events::SubscriptionToken sceneClearedToken;
+        ::events::SubscriptionToken paintModeToken;
+        ::events::SubscriptionToken holeModeToken;
 
     public:
         SculptModeServiceImpl() = default;

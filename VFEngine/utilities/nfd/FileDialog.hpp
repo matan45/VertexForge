@@ -14,6 +14,7 @@ namespace nfd {
 		std::vector<std::string> multiSelectFileDialog(const std::vector<std::pair<std::wstring, std::wstring>>& fileTypes) const;
 		std::string saveFileDialog(const std::vector<std::pair<std::wstring, std::wstring>>& fileTypes,
 			const std::wstring& defaultExtension = L"") const;
+		std::string selectFolderDialog() const;
 	};
 
 }

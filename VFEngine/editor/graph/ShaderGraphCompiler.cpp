@@ -26,6 +26,20 @@ namespace editor::graph {
         code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", layerIndex);
         code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
             "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", layerIndex);
+        // ORM texture sampling (conditional - no fetch when not bound)
+        code += std::format("    uint ormIdx_{0} = terrainLayers[{0}].ormTextureIndex;\n", layerIndex);
+        code += std::format("    float layerAO, layerRoughness, layerMetallic;\n");
+        code += std::format("    if (ormIdx_{0} > 0u) {{\n", layerIndex);
+        code += std::format("        vec3 ormSample = texture(bindlessTextures[nonuniformEXT(ormIdx_{0})], layerUV).rgb;\n", layerIndex);
+        code += "        layerAO = ormSample.r;\n";
+        code += "        layerRoughness = ormSample.g;\n";
+        code += "        layerMetallic = ormSample.b;\n";
+        code += std::format("    }} else {{\n");
+        code += std::format("        layerAO = terrainLayers[{0}].ao;\n", layerIndex);
+        code += std::format("        layerRoughness = terrainLayers[{0}].roughness;\n", layerIndex);
+        code += std::format("        layerMetallic = terrainLayers[{0}].metallic;\n", layerIndex);
+        code += "    }\n";
+        code += std::format("    float layerEmission = terrainLayers[{0}].emissionStrength;\n", layerIndex);
         return code;
     }
 
@@ -58,6 +72,10 @@ namespace editor::graph {
         code += "// Terrain Layer Stack - blending " + std::to_string(layerCount) + " layer(s)\n";
         code += "vec3 ls_Albedo = vec3(0.0);\n";
         code += "vec3 ls_Normal = vec3(0.0);\n";
+        code += "float ls_Roughness = 0.0;\n";
+        code += "float ls_Metallic = 0.0;\n";
+        code += "float ls_AO = 0.0;\n";
+        code += "float ls_Emission = 0.0;\n";
         code += "float ls_TotalW = 0.0;\n";
 
         for (const auto& layer : baseLayers) {
@@ -70,6 +88,10 @@ namespace editor::graph {
             code += generateLayerSampling(layer.index, layer.name);
             code += "    ls_Albedo += layerAlbedo * w;\n";
             code += "    ls_Normal += layerNormal * w;\n";
+            code += "    ls_Roughness += layerRoughness * w;\n";
+            code += "    ls_Metallic += layerMetallic * w;\n";
+            code += "    ls_AO += layerAO * w;\n";
+            code += "    ls_Emission += layerEmission * w;\n";
             code += "    ls_TotalW += w;\n";
             code += "}\n";
         }
@@ -77,6 +99,10 @@ namespace editor::graph {
         code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
         code += "ls_Albedo *= ls_InvW;\n";
         code += "ls_Normal = normalize(ls_Normal);\n";
+        code += "ls_Roughness *= ls_InvW;\n";
+        code += "ls_Metallic *= ls_InvW;\n";
+        code += "ls_AO *= ls_InvW;\n";
+        code += "ls_Emission *= ls_InvW;\n";
 
         for (const auto& layer : overlayLayers) {
             if (!layer.enabled) {
@@ -94,15 +120,21 @@ namespace editor::graph {
             code += "        step(ovBase, vec3(0.5)));\n";
             code += "    ls_Albedo = mix(ls_Albedo, ovResult, w);\n";
             code += "    ls_Normal = normalize(mix(ls_Normal, layerNormal, w));\n";
+            code += "    ls_Roughness = mix(ls_Roughness, layerRoughness, w);\n";
+            code += "    ls_Metallic = mix(ls_Metallic, layerMetallic, w);\n";
+            code += "    ls_AO = mix(ls_AO, layerAO, w);\n";
+            code += "    ls_Emission = mix(ls_Emission, layerEmission, w);\n";
             code += "}\n";
         }
 
         code += "// Terrain material properties\n";
         code += "vec3 mat_albedo = ls_Albedo;\n";
         code += "vec3 mat_normalTS = ls_Normal;\n";
-        code += "float mat_metallic = 0.0;\n";
-        code += "float mat_roughness = 0.9;\n";
-        code += "float mat_ao = 1.0;\n";
+        code += "float mat_metallic = ls_Metallic;\n";
+        code += "float mat_roughness = ls_Roughness;\n";
+        code += "float mat_ao = ls_AO;\n";
+        code += "#define MAT_EMISSION_DEFINED\n";
+        code += "vec3 mat_emission = mat_albedo * ls_Emission;\n";
 
         result.materialSnippet = code;
         result.success = true;

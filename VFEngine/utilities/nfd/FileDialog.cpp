@@ -204,6 +204,65 @@ namespace nfd {
 		return filePaths;
 	}
 
+	std::string FileDialog::selectFolderDialog() const
+	{
+		IFileOpenDialog* pFileOpen = nullptr;
+
+		HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_IFileOpenDialog, std::bit_cast<void**>(&pFileOpen));
+		if (FAILED(hr))
+		{
+			vfLogError("Failed to create Folder Dialog");
+			return {};
+		}
+
+		DWORD dwFlags;
+		hr = pFileOpen->GetOptions(&dwFlags);
+		if (SUCCEEDED(hr))
+		{
+			hr = pFileOpen->SetOptions(dwFlags | FOS_PICKFOLDERS);
+		}
+		if (FAILED(hr))
+		{
+			pFileOpen->Release();
+			vfLogError("Failed to set folder picker mode");
+			return {};
+		}
+
+		hr = pFileOpen->Show(nullptr);
+		if (FAILED(hr))
+		{
+			pFileOpen->Release();
+			return {};
+		}
+
+		IShellItem* pItem = nullptr;
+		hr = pFileOpen->GetResult(&pItem);
+		if (FAILED(hr))
+		{
+			pFileOpen->Release();
+			vfLogError("Failed to retrieve folder result");
+			return {};
+		}
+
+		PWSTR pszFolderPath = nullptr;
+		hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFolderPath);
+		if (FAILED(hr))
+		{
+			pItem->Release();
+			pFileOpen->Release();
+			vfLogError("Failed to get folder path");
+			return {};
+		}
+
+		std::string folderPath = StringUtil::WideStringToString(pszFolderPath);
+
+		CoTaskMemFree(pszFolderPath);
+		pItem->Release();
+		pFileOpen->Release();
+
+		return folderPath;
+	}
+
 	std::string FileDialog::saveFileDialog(const std::vector<std::pair<std::wstring, std::wstring>>& fileTypes,
 		const std::wstring& defaultExtension) const
 	{

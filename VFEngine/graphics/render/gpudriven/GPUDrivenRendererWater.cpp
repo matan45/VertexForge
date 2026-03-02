@@ -10,8 +10,8 @@ namespace render::gpudriven
     void GPUDrivenRenderer::initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                                   vk::RenderPass renderPass)
     {
-        waterMeshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
-        waterMeshBuffer->init(
+        water.meshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
+        water.meshBuffer->init(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
@@ -19,8 +19,8 @@ namespace render::gpudriven
             render::water::WATER_DEFAULT_SUBDIVISIONS
         );
 
-        waterPipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
-        waterPipeline->init({
+        water.pipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
+        water.pipeline->init({
             iblDescriptorSetLayout,
             lightBufferManager->getDescriptorSetLayout(),
             clusterGridManager->getDescriptorSetLayout(),
@@ -37,46 +37,46 @@ namespace render::gpudriven
                                           const ::water::WaterGlobalSettings& settings,
                                           const ::water::WaterTileConfig& tileConfig)
     {
-        if (!initialized || !waterRenderingEnabled || !waterPipeline)
+        if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
         if (visibleTiles.empty())
         {
-            waterTileData.clear();
+            water.tileData.clear();
             return;
         }
 
-        waterTileData.resize(visibleTiles.size());
+        water.tileData.resize(visibleTiles.size());
         for (size_t i = 0; i < visibleTiles.size(); ++i)
         {
             const auto* tile = visibleTiles[i];
-            auto& gpuTile = waterTileData[i];
+            auto& gpuTile = water.tileData[i];
             gpuTile.worldOriginAndSize = glm::vec4(tile->worldOrigin, tileConfig.worldTileSize);
             gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, 0.0f, 0.0f);
         }
 
-        waterMeshBuffer->updateTileData(waterTileData);
+        water.meshBuffer->updateTileData(water.tileData);
 
-        waterPipeline->updateDescriptors(
-            waterMeshBuffer->getTileSSBO(),
-            static_cast<uint32_t>(waterTileData.size())
+        water.pipeline->updateDescriptors(
+            water.meshBuffer->getTileSSBO(),
+            static_cast<uint32_t>(water.tileData.size())
         );
 
-        cachedWaterPushConstants.shallowColor = settings.shallowColor;
-        cachedWaterPushConstants.deepColor = settings.deepColor;
-        cachedWaterPushConstants.waveSpeed = settings.waveSpeed;
-        cachedWaterPushConstants.waveAmplitude = settings.waveAmplitude;
-        cachedWaterPushConstants.waveFrequency = settings.waveFrequency;
-        cachedWaterPushConstants.maxVisibleDepth = settings.maxVisibleDepth;
-        cachedWaterPushConstants.fresnelPower = settings.fresnelPower;
-        cachedWaterPushConstants.dudvTiling = settings.dudvTiling;
-        cachedWaterPushConstants.dudvStrength = settings.dudvStrength;
-        cachedWaterPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
+        water.cachedPushConstants.shallowColor = settings.shallowColor;
+        water.cachedPushConstants.deepColor = settings.deepColor;
+        water.cachedPushConstants.waveSpeed = settings.waveSpeed;
+        water.cachedPushConstants.waveAmplitude = settings.waveAmplitude;
+        water.cachedPushConstants.waveFrequency = settings.waveFrequency;
+        water.cachedPushConstants.maxVisibleDepth = settings.maxVisibleDepth;
+        water.cachedPushConstants.fresnelPower = settings.fresnelPower;
+        water.cachedPushConstants.dudvTiling = settings.dudvTiling;
+        water.cachedPushConstants.dudvStrength = settings.dudvStrength;
+        water.cachedPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
     }
 
     void GPUDrivenRenderer::renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
-        if (!initialized || !waterRenderingEnabled || !waterPipeline || waterTileData.empty())
+        if (!initialized || !water.renderingEnabled || !water.pipeline || water.tileData.empty())
             return;
 
         render::water::WaterRenderDescriptors waterDescriptors{
@@ -87,11 +87,11 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
         };
-        waterPipeline->render(cmd, waterDescriptors, *waterMeshBuffer, cachedWaterPushConstants);
+        water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
     }
 
     void GPUDrivenRenderer::clearWaterData()
     {
-        waterTileData.clear();
+        water.tileData.clear();
     }
 }

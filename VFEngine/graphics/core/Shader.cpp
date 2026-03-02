@@ -2,6 +2,7 @@
 #include "Device.hpp"
 #include "print/Logger.hpp"
 #include "print/EditorLogger.hpp"
+#include "resource/PathResolver.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -88,10 +89,11 @@ namespace core {
 
 	void Shader::readShader(std::string_view path)
 	{
-		auto futureShaders = resource::ResourceManager::loadShaderAsync(path);
-		std::string shaderName = std::filesystem::path(path).stem().string();
+		std::string resolvedPath = resource::PathResolver::resolveEnginePath(std::string(path));
+		auto futureShaders = resource::ResourceManager::loadShaderAsync(resolvedPath);
+		std::string shaderName = std::filesystem::path(resolvedPath).stem().string();
 
-		currentShaderBasePath = std::filesystem::path(path).parent_path();
+		currentShaderBasePath = std::filesystem::path(resolvedPath).parent_path();
 		if (currentShaderBasePath.empty()) {
 			currentShaderBasePath = ".";
 		}

@@ -25,6 +25,11 @@ namespace terrain
     class TerrainTile;
 }
 
+namespace components
+{
+    struct TerrainColliderDebugData;
+}
+
 namespace services
 {
     class TerrainService : public ITerrainService
@@ -79,6 +84,7 @@ namespace services
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+        void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
@@ -117,7 +123,13 @@ namespace services
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
+        void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         uint16_t getOverlayMask() const;
+        static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
+        static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
+        static void generateTileColliderWireframe(const terrain::TerrainTile& tile,
+                                                  components::TerrainColliderDebugData& out);
+
     };
 }

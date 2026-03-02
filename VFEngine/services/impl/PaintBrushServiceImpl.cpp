@@ -94,18 +94,7 @@ namespace services
         paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
             [this](const events::paint::PaintModeChangedNotification& n)
             {
-                if (n.isActive)
-                {
-                    paintModeActive = true;
-                }
-                else
-                {
-                    paintModeActive = false;
-                    currentParams = terrain::PaintBrushParams{};
-                    currentBrushType = terrain::PaintBrushType::PaintLayer;
-                    publishParamsChanged();
-                    publishTypeChanged();
-                }
+                paintModeActive = n.isActive;
             });
     }
 

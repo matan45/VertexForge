@@ -24,11 +24,14 @@
 #include "impl/BrushServiceImpl.hpp"
 #include "impl/PaintModeServiceImpl.hpp"
 #include "impl/PaintBrushServiceImpl.hpp"
+#include "impl/HoleModeServiceImpl.hpp"
+#include "impl/HoleBrushServiceImpl.hpp"
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
 #include "impl/LightBakeServiceImpl.hpp"
 #include "impl/ControllerServiceImpl.hpp"
+#include "impl/RenderHookServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -39,7 +42,9 @@
 #include "events/ProjectEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include "Import.hpp"
+#include "ExportHandler.hpp"
 #include "core/PluginManager.hpp"
+#include "resource/PathResolver.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -55,6 +60,8 @@ namespace handlers
 
     void EditorHandler::init()
     {
+        resource::PathResolver::initialize();
+
         editor::SplashScreen::instance().setStatus("Initializing graphics...");
         bootstrap->init();
 
@@ -70,7 +77,8 @@ namespace handlers
             std::string(plugin::capability::audio),
             std::string(plugin::capability::physics),
             std::string(plugin::capability::import_),
-            std::string(plugin::capability::scripting)
+            std::string(plugin::capability::scripting),
+            std::string(plugin::capability::graphics)
         });
         // Resolve plugins/ relative to the executable (bin/Editor/<Config>/x64/ -> repo root)
         auto exePath = std::filesystem::current_path();
@@ -162,6 +170,7 @@ namespace handlers
     void EditorHandler::cleanUp()
     {
         pluginManager.reset();
+        exportHandler.reset();
 
         cleanupEventSubscriptions();
 
@@ -186,10 +195,13 @@ namespace handlers
         lightBakeService.reset();
         controllerService.reset();
         ikComponentService.reset();
+        renderHookService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
+        holeBrushService.reset();
+        holeModeService.reset();
         paintBrushService.reset();
         paintModeService.reset();
         brushService.reset();
@@ -225,6 +237,7 @@ namespace handlers
         createVFXServices();
         createTerrainServices();
         createWaterServices();
+        exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
 
@@ -264,6 +277,10 @@ namespace handlers
 
         lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
             bootstrap->getLightBakeProvider()
+        );
+
+        renderHookService = std::make_shared<services::RenderHookServiceImpl>(
+            bootstrap->getRenderHookProvider()
         );
     }
 
@@ -333,6 +350,8 @@ namespace handlers
         brushService = std::make_shared<services::BrushServiceImpl>();
         paintModeService = std::make_shared<services::PaintModeServiceImpl>();
         paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
+        holeModeService = std::make_shared<services::HoleModeServiceImpl>();
+        holeBrushService = std::make_shared<services::HoleBrushServiceImpl>();
         terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
             bootstrap->getTerrainRaycastProvider());
     }
@@ -383,6 +402,8 @@ namespace handlers
         brushService->registerEventHandlers();
         paintModeService->registerEventHandlers();
         paintBrushService->registerEventHandlers();
+        holeModeService->registerEventHandlers();
+        holeBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
         lightBakeService->registerEventHandlers();
@@ -391,9 +412,11 @@ namespace handlers
         {
             ikComponentService->registerEventHandlers();
         }
+        exportHandler->registerEventHandlers();
+        renderHookService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
-        atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
+        atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");
         events::EventDispatcher::instance().execute(atlasCmd);
     }
 

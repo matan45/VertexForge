@@ -69,6 +69,10 @@ namespace terrain
                 }
             }
 
+            // Clear topologyDirty after all LODs have been regenerated
+            if (tile->dirtyLODMask == 0)
+                tile->topologyDirty = false;
+
             tile->edgeSyncDirty = false;
         }
 
@@ -92,6 +96,10 @@ namespace terrain
                     anyRegenerated = true;
                 }
             }
+
+            // Clear topologyDirty after all LODs have been regenerated
+            if (anyRegenerated && tile->dirtyLODMask == 0)
+                tile->topologyDirty = false;
 
             if (anyRegenerated)
                 ++tileRegenCount;
@@ -257,6 +265,12 @@ namespace terrain
 
             auto tile = std::make_unique<TerrainTile>(loaded.coord, config);
             tile->initializeFromHeights(loaded.heightData);
+
+            // Restore holeMask if present in serialized data
+            if (!loaded.holeMask.empty())
+            {
+                tile->holeMask = loaded.holeMask;
+            }
 
             if (loaded.weightMap.isInitialized())
             {

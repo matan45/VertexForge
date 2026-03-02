@@ -13,10 +13,32 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <cfloat>
 
-namespace
+namespace services
 {
-    void generateTileColliderWireframe(
+    bool TerrainService::isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz)
+    {
+        if (!tile.hasHoleMask()) return false;
+        uint32_t qc = tile.config.getVertexCount() - 1;
+        for (int dz = -1; dz <= 0; ++dz)
+        {
+            for (int dx = -1; dx <= 0; ++dx)
+            {
+                int qx = static_cast<int>(vx) + dx;
+                int qz = static_cast<int>(vz) + dz;
+                if (qx >= 0 && qx < static_cast<int>(qc) &&
+                    qz >= 0 && qz < static_cast<int>(qc))
+                {
+                    if (tile.holeMask[static_cast<size_t>(qz) * qc + qx])
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void TerrainService::generateTileColliderWireframe(
         const terrain::TerrainTile& tile,
         components::TerrainColliderDebugData& out)
     {
@@ -42,22 +64,25 @@ namespace
             }
         }
 
-        uint32_t lineCount = vertexCount * (vertexCount - 1) * 2;
         out.lineIndices.clear();
-        out.lineIndices.reserve(lineCount * 2);
 
         for (uint32_t z = 0; z < vertexCount; ++z)
         {
             for (uint32_t x = 0; x < vertexCount - 1; ++x)
             {
+                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x + 1, z))
+                    continue;
                 out.lineIndices.push_back(z * vertexCount + x);
                 out.lineIndices.push_back(z * vertexCount + x + 1);
             }
         }
+
         for (uint32_t x = 0; x < vertexCount; ++x)
         {
             for (uint32_t z = 0; z < vertexCount - 1; ++z)
             {
+                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x, z + 1))
+                    continue;
                 out.lineIndices.push_back(z * vertexCount + x);
                 out.lineIndices.push_back((z + 1) * vertexCount + x);
             }
@@ -65,10 +90,32 @@ namespace
 
         out.version++;
     }
-}
 
-namespace services
-{
+    bool TerrainService::applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights)
+    {
+        if (!tile.hasHoleMask()) return false;
+
+        bool hasAnyHole = false;
+        for (uint8_t h : tile.holeMask)
+        {
+            if (h) { hasAnyHole = true; break; }
+        }
+        if (!hasAnyHole) return false;
+
+        uint32_t vc = tile.config.getVertexCount();
+        physicsHeights = tile.heightData;
+
+        for (uint32_t vz = 0; vz < vc; ++vz)
+        {
+            for (uint32_t vx = 0; vx < vc; ++vx)
+            {
+                if (isVertexAdjacentToHole(tile, vx, vz))
+                    physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
+            }
+        }
+        return true;
+    }
+
     bool TerrainService::addTerrainCollider(EntityHandle terrainEntity)
     {
         if (!physicsProvider || !terrainEntity.isValid())
@@ -100,6 +147,9 @@ namespace services
         std::vector<TerrainTileColliderInfo> tileInfos;
         tileInfos.reserve(allTiles.size());
 
+        // Temp storage for hole-adjusted height arrays (must outlive addTerrainCollider call)
+        std::vector<std::vector<float>> holeAdjustedHeights;
+
         for (auto* tile : allTiles)
         {
             if (!tile)
@@ -114,10 +164,20 @@ namespace services
             if (!tile->hasHeightData())
                 continue;
 
+            const float* heightSamples = tile->heightData.data();
+
+            // Apply FLT_MAX for hole vertices so Jolt excludes hole triangles
+            {
+                holeAdjustedHeights.emplace_back();
+                auto& physicsHeights = holeAdjustedHeights.back();
+                if (applyHoleMaskToHeights(*tile, physicsHeights))
+                    heightSamples = physicsHeights.data();
+            }
+
             TerrainTileColliderInfo info;
             info.tileX = tile->coord.x;
             info.tileZ = tile->coord.z;
-            info.heightSamples = tile->heightData.data();
+            info.heightSamples = heightSamples;
             info.sampleCount = tile->config.getVertexCount();
             info.worldOrigin = tile->worldOrigin;
             info.vertexSpacing = tile->config.getVertexSpacing();
@@ -238,10 +298,16 @@ namespace services
             auto* tile = grid->getTile(coord);
             if (tile && tile->hasHeightData())
             {
+                std::vector<float> physicsHeights;
+                const float* heightSamples = tile->heightData.data();
+
+                if (applyHoleMaskToHeights(*tile, physicsHeights))
+                    heightSamples = physicsHeights.data();
+
                 TerrainTileColliderInfo info;
                 info.tileX = coord.x;
                 info.tileZ = coord.z;
-                info.heightSamples = tile->heightData.data();
+                info.heightSamples = heightSamples;
                 info.sampleCount = tile->config.getVertexCount();
                 info.worldOrigin = tile->worldOrigin;
                 info.vertexSpacing = tile->config.getVertexSpacing();

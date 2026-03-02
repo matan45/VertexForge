@@ -6,14 +6,17 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/HoleBrushApplicator.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/BrushEvents.hpp"
 #include "../../events/PaintBrushEvents.hpp"
-#include "../../events/PaintModeEvents.hpp"
+#include "../../events/HoleBrushEvents.hpp"
 #include "../../events/SculptModeEvents.hpp"
+#include "../../events/PaintModeEvents.hpp"
+#include "../../events/HoleModeEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -215,6 +218,217 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
+    }
+
+    void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase)
+    {
+        if (saveInProgress.load(std::memory_order_acquire))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::hole::GetHoleTargetEntityQuery{});
+        if (!targetEntity.has_value())
+            return;
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        auto brushParams = dispatcher.query(events::holeBrush::GetHoleBrushParamsQuery{});
+
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        std::vector<terrain::TileCoord> modifiedTiles;
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+                continue;
+
+            if (fileCache && !tile->hasHeightData())
+            {
+                if (!fileCache->ensureHeightsLoaded(*tile))
+                    continue;
+            }
+
+            if (!tile->hasHoleMask())
+                tile->initializeHoleMask();
+
+            if (fileCache)
+                fileCache->markDirty(coord);
+
+            terrain::HoleBrushApplicator::ApplyParams applyParams;
+            applyParams.brushCenter = brushCenter;
+            applyParams.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            applyParams.brushRadius = brushParams.radius;
+            applyParams.vertexSpacing = tile->config.getVertexSpacing();
+            applyParams.quadsPerSide = tile->config.getVertexCount() - 1;
+            applyParams.falloff = brushParams.falloff;
+            applyParams.shape = brushParams.shape;
+            applyParams.erase = erase;
+
+            if (terrain::HoleBrushApplicator::apply(tile->holeMask, applyParams))
+            {
+                tile->topologyDirty = true;
+                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                modifiedTiles.push_back(coord);
+            }
+        }
+
+        if (!modifiedTiles.empty())
+        {
+            syncHoleBoundaries(grid, modifiedTiles);
+            rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
+
+            events::holeBrush::HoleBrushAppliedNotification notification;
+            notification.position = worldPosition;
+            dispatcher.publish(notification);
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(*targetEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
+    }
+
+    void TerrainService::syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles)
+    {
+        uint32_t vertexCount = 0;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+            vertexCount = allTiles[0]->config.getVertexCount();
+        if (vertexCount < 2)
+            return;
+
+        uint32_t quadCount = vertexCount - 1;
+        uint32_t lastQuad = quadCount - 1;
+
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile || !tile->hasHoleMask())
+                continue;
+
+            // Sync +X neighbor: tile's last quad column == neighbor's first quad column
+            terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
+            if (neighborPX)
+            {
+                if (!neighborPX->hasHoleMask())
+                    neighborPX->initializeHoleMask();
+
+                bool changed = false;
+                for (uint32_t z = 0; z < quadCount; ++z)
+                {
+                    bool holeVal = tile->isHole(lastQuad, z);
+                    if (neighborPX->isHole(0, z) != holeVal)
+                    {
+                        neighborPX->setHole(0, z, holeVal);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    neighborPX->topologyDirty = true;
+                    neighborPX->isDirty = true;
+                    neighborPX->setAllLODsDirty();
+                }
+            }
+
+            // Sync -X neighbor: tile's first quad column == neighbor's last quad column
+            terrain::TerrainTile* neighborNX = grid->getTile({coord.x - 1, coord.z});
+            if (neighborNX)
+            {
+                if (!neighborNX->hasHoleMask())
+                    neighborNX->initializeHoleMask();
+
+                bool changed = false;
+                for (uint32_t z = 0; z < quadCount; ++z)
+                {
+                    bool holeVal = tile->isHole(0, z);
+                    if (neighborNX->isHole(lastQuad, z) != holeVal)
+                    {
+                        neighborNX->setHole(lastQuad, z, holeVal);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    neighborNX->topologyDirty = true;
+                    neighborNX->isDirty = true;
+                    neighborNX->setAllLODsDirty();
+                }
+            }
+
+            // Sync +Z neighbor: tile's last quad row == neighbor's first quad row
+            terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
+            if (neighborPZ)
+            {
+                if (!neighborPZ->hasHoleMask())
+                    neighborPZ->initializeHoleMask();
+
+                bool changed = false;
+                for (uint32_t x = 0; x < quadCount; ++x)
+                {
+                    bool holeVal = tile->isHole(x, lastQuad);
+                    if (neighborPZ->isHole(x, 0) != holeVal)
+                    {
+                        neighborPZ->setHole(x, 0, holeVal);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    neighborPZ->topologyDirty = true;
+                    neighborPZ->isDirty = true;
+                    neighborPZ->setAllLODsDirty();
+                }
+            }
+
+            // Sync -Z neighbor: tile's first quad row == neighbor's last quad row
+            terrain::TerrainTile* neighborNZ = grid->getTile({coord.x, coord.z - 1});
+            if (neighborNZ)
+            {
+                if (!neighborNZ->hasHoleMask())
+                    neighborNZ->initializeHoleMask();
+
+                bool changed = false;
+                for (uint32_t x = 0; x < quadCount; ++x)
+                {
+                    bool holeVal = tile->isHole(x, 0);
+                    if (neighborNZ->isHole(x, lastQuad) != holeVal)
+                    {
+                        neighborNZ->setHole(x, lastQuad, holeVal);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    neighborNZ->topologyDirty = true;
+                    neighborNZ->isDirty = true;
+                    neighborNZ->setAllLODsDirty();
+                }
             }
         }
     }

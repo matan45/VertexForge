@@ -1,6 +1,8 @@
 #include "SculptModeServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/SculptModeEvents.hpp"
+#include "../events/PaintModeEvents.hpp"
+#include "../events/HoleModeEvents.hpp"
 #include "../events/EditorModeEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../events/TerrainEvents.hpp"
@@ -22,6 +24,14 @@ namespace services
         if (sceneClearedToken.isValid())
         {
             dispatcher.unsubscribe(sceneClearedToken);
+        }
+        if (paintModeToken.isValid())
+        {
+            dispatcher.unsubscribe(paintModeToken);
+        }
+        if (holeModeToken.isValid())
+        {
+            dispatcher.unsubscribe(holeModeToken);
         }
     }
 
@@ -79,6 +89,26 @@ namespace services
             [this](const events::scene::SceneClearedNotification&)
             {
                 if (sculptActive)
+                {
+                    deactivate();
+                }
+            });
+
+        // Auto-deactivate when paint mode activates
+        paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
+            [this](const events::paint::PaintModeChangedNotification& n)
+            {
+                if (n.isActive && sculptActive)
+                {
+                    deactivate();
+                }
+            });
+
+        // Auto-deactivate when hole mode activates
+        holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
+            [this](const events::hole::HoleModeChangedNotification& n)
+            {
+                if (n.isActive && sculptActive)
                 {
                     deactivate();
                 }

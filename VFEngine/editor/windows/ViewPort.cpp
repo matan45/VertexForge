@@ -8,6 +8,8 @@
 #include "events/BrushEvents.hpp"
 #include "events/PaintModeEvents.hpp"
 #include "events/PaintBrushEvents.hpp"
+#include "events/HoleModeEvents.hpp"
+#include "events/HoleBrushEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "events/TerrainEvents.hpp"
 #include "time/Timer.hpp"
@@ -65,9 +67,10 @@ namespace windows
                 dispatcher.execute(offsetCmd);
             }
 
-            // Update sculpt/paint cursor UV BEFORE render so raycast uses current mouse position
+            // Update sculpt/paint/hole cursor UV BEFORE render so raycast uses current mouse position
             updateSculptCursorUV(vp, vs);
             updatePaintCursorUV(vp, vs);
+            updateHoleCursorUV(vp, vs);
 
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
@@ -89,6 +92,7 @@ namespace windows
             handleEntityPicking(isPlayMode, vp, vs);
             handleSculptBrush();
             handlePaintBrush();
+            handleHoleBrush();
         }
         ImGui::End();
     }
@@ -255,6 +259,7 @@ namespace windows
         auto& sculptDispatcher = events::EventDispatcher::instance();
         if (sculptDispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;
         if (sculptDispatcher.query(events::paint::IsPaintModeActiveQuery{})) return;
+        if (sculptDispatcher.query(events::hole::IsHoleModeActiveQuery{})) return;
 
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
@@ -331,9 +336,9 @@ namespace windows
 
         if (!sculptActive || !ImGui::IsWindowHovered())
         {
-            // Only clear cursor if paint mode is also not active
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            if (!paintActive)
+            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+            if (!paintActive && !holeActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -393,9 +398,9 @@ namespace windows
 
         if (!paintActive || !ImGui::IsWindowHovered())
         {
-            // Only clear cursor if sculpt mode is also not active
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            if (!sculptActive)
+            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+            if (!sculptActive && !holeActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -445,6 +450,59 @@ namespace windows
         else
         {
             paintDragging = false;
+        }
+    }
+
+    void ViewPort::updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+
+        if (!holeActive || !ImGui::IsWindowHovered())
+        {
+            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+            if (!sculptActive && !paintActive)
+            {
+                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            }
+            return;
+        }
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handleHoleBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+
+        if (!holeActive || !ImGui::IsWindowHovered())
+        {
+            return;
+        }
+
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        bool shiftHeld = ImGui::GetIO().KeyShift;
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::holeBrush::ApplyHoleBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.erase = shiftHeld;
+                dispatcher.execute(applyCmd);
+            }
         }
     }
 }

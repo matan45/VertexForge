@@ -115,6 +115,7 @@
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
     <ClInclude Include="graph\nodes\TerrainNodes.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
+    <ClInclude Include="handlers\ExportHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
     <ClInclude Include="windows\AudioConfigWindow.hpp" />
@@ -123,8 +124,10 @@
     <ClInclude Include="windows\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
+    <ClInclude Include="windows\ExportProgressWindow.hpp" />
     <ClInclude Include="windows\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\FontPreviewWindow.hpp" />
+    <ClInclude Include="windows\HoleToolPanel.hpp" />
     <ClInclude Include="windows\IBLWindow.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportModalDialog.hpp" />
@@ -231,6 +234,7 @@
     <ClCompile Include="graph\VFXGraphEditorEvents.cpp" />
     <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
+    <ClCompile Include="handlers\ExportHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
@@ -240,8 +244,10 @@
     <ClCompile Include="windows\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
+    <ClCompile Include="windows\ExportProgressWindow.cpp" />
     <ClCompile Include="windows\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\FontPreviewWindow.cpp" />
+    <ClCompile Include="windows\HoleToolPanel.cpp" />
     <ClCompile Include="windows\IBLWindow.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportModalDialog.cpp" />

@@ -484,6 +484,9 @@ void main() {
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
 #include "../material/terrain_material_generated.glsl"
+#ifndef MAT_EMISSION_DEFINED
+    vec3 mat_emission = vec3(0.0);
+#endif
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;
     float roughness = mat_roughness;
@@ -501,7 +504,8 @@ void main() {
 
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    // Match mesh shader default iblSpecular (0.5) to avoid over-bright terrain reflections
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * 0.5;
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
@@ -581,7 +585,7 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
-    vec3 color = ambient + directLighting + lightmapContribution;
+    vec3 color = ambient + directLighting + lightmapContribution + mat_emission;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));

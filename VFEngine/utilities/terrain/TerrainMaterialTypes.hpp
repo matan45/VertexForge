@@ -5,7 +5,7 @@
 
 namespace terrain
 {
-    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.2";
+    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.3";
     constexpr int MAX_TERRAIN_LAYERS = 16;
 
     enum class TerrainLayerBlendMode : uint8_t
@@ -35,7 +35,12 @@ namespace terrain
         std::string name;
         std::string albedoTexturePath;
         std::string normalTexturePath;
+        std::string ormTexturePath;        // Optional: R=AO, G=Roughness, B=Metallic
         float tilingScale = 1.0f;
+        float roughness = 0.9f;            // Scalar fallback when no ORM
+        float metallic = 0.0f;             // Scalar fallback when no ORM
+        float ao = 1.0f;                   // Scalar fallback when no ORM
+        float emissionStrength = 0.0f;     // Emission intensity (0 = none)
         TerrainLayerBlendMode blendMode = TerrainLayerBlendMode::Linear;
         bool enabled = true;
     };

@@ -16,17 +16,17 @@ namespace render::gpudriven
         outHasFilter = false;
         outLights.clear();
 
-        if (useBVHLightCulling && !visibleLightIds.empty())
+        if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
         {
-            outLights = visibleLightIds;
+            outLights = lightCulling.visibleLightIds;
             outHasFilter = true;
         }
 
-        if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
+        if (lightCulling.useOcclusion && lightCulling.hasPrevFrameOcclusionData && !lightCulling.prevFrameOccludedLights.empty())
         {
             if (outHasFilter)
             {
-                for (uint32_t occludedId : prevFrameOccludedLights)
+                for (uint32_t occludedId : lightCulling.prevFrameOccludedLights)
                     outLights.erase(occludedId);
             }
             else
@@ -36,14 +36,14 @@ namespace render::gpudriven
                 for (auto entity : pointView)
                 {
                     uint32_t entityId = static_cast<uint32_t>(entity);
-                    if (!prevFrameOccludedLights.contains(entityId))
+                    if (!lightCulling.prevFrameOccludedLights.contains(entityId))
                         outLights.insert(entityId);
                 }
                 auto spotView = registry.view<components::SpotLightComponent>();
                 for (auto entity : spotView)
                 {
                     uint32_t entityId = static_cast<uint32_t>(entity);
-                    if (!prevFrameOccludedLights.contains(entityId))
+                    if (!lightCulling.prevFrameOccludedLights.contains(entityId))
                         outLights.insert(entityId);
                 }
                 outHasFilter = true;
@@ -53,7 +53,7 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::buildAndDispatchLightOcclusion(vk::CommandBuffer cmd)
     {
-        if (!useLightOcclusionCulling || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
+        if (!lightCulling.useOcclusion || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
         {
             return;
         }
@@ -65,7 +65,7 @@ namespace render::gpudriven
         for (auto entity : pointView)
         {
             uint32_t entityId = static_cast<uint32_t>(entity);
-            if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty() && !lightCulling.visibleLightIds.contains(entityId))
                 continue;
 
             const auto& light = pointView.get<components::PointLightComponent>(entity);
@@ -85,7 +85,7 @@ namespace render::gpudriven
         for (auto entity : spotView)
         {
             uint32_t entityId = static_cast<uint32_t>(entity);
-            if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty() && !lightCulling.visibleLightIds.contains(entityId))
                 continue;
 
             const auto& light = spotView.get<components::SpotLightComponent>(entity);
@@ -145,20 +145,20 @@ namespace render::gpudriven
         shadow::TerrainShadowPassParams terrainShadowParams{};
         shadow::TerrainShadowPassParams* terrainShadowParamsPtr = nullptr;
 
-        if (hasTerrainTiles && terrainPipeline && terrainMeshBuffer &&
-            terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
+        if (hasTerrainTiles && terrain.pipeline && terrain.meshBuffer &&
+            terrain.meshBuffer->isInitialized() && terrain.pipeline->getCurrentTileCount() > 0)
         {
-            vk::DescriptorSet terrainDataSet = terrainPipeline->getTerrainDataDescriptorSet();
-            vk::DescriptorSet terrainMeshletSet = terrainPipeline->getTerrainMeshletDescriptorSet();
-            vk::DescriptorSet terrainVertexSet = terrainPipeline->getTerrainVertexDescriptorSet();
+            vk::DescriptorSet terrainDataSet = terrain.pipeline->getTerrainDataDescriptorSet();
+            vk::DescriptorSet terrainMeshletSet = terrain.pipeline->getTerrainMeshletDescriptorSet();
+            vk::DescriptorSet terrainVertexSet = terrain.pipeline->getTerrainVertexDescriptorSet();
 
             if (terrainDataSet && terrainMeshletSet && terrainVertexSet)
             {
                 terrainShadowParams.terrainDataDescSet = terrainDataSet;
                 terrainShadowParams.terrainMeshletDescSet = terrainMeshletSet;
                 terrainShadowParams.terrainVertexDescSet = terrainVertexSet;
-                terrainShadowParams.tileCount = terrainPipeline->getCurrentTileCount();
-                terrainShadowParams.shadowLOD = terrainShadowLOD;
+                terrainShadowParams.tileCount = terrain.pipeline->getCurrentTileCount();
+                terrainShadowParams.shadowLOD = terrain.shadowLOD;
                 terrainShadowParamsPtr = &terrainShadowParams;
             }
         }
@@ -175,7 +175,7 @@ namespace render::gpudriven
 
         if (mergedBuffer) mergedBuffer->flushPendingTransfers();
         if (meshletBuffer) meshletBuffer->flushPendingTransfers();
-        if (terrainMeshBuffer) terrainMeshBuffer->flushPendingTransfers();
+        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
 
         batchManager->resetAllBatches(cmd);
 
@@ -188,18 +188,18 @@ namespace render::gpudriven
             auto& registry = scene::EntityRegistry::getRegistry();
             uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
             uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
-            totalSceneLights = pointCount + spotCount;
+            lightCulling.totalSceneLights = pointCount + spotCount;
 
-            if (useBVHLightCulling && !visibleLightIds.empty())
+            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
             {
-                lightsAfterBVHCull = std::min(static_cast<uint32_t>(visibleLightIds.size()), totalSceneLights);
+                lightCulling.lightsAfterBVHCull = std::min(static_cast<uint32_t>(lightCulling.visibleLightIds.size()), lightCulling.totalSceneLights);
             }
             else
             {
-                lightsAfterBVHCull = totalSceneLights;
+                lightCulling.lightsAfterBVHCull = lightCulling.totalSceneLights;
             }
 
-            lightsAfterHiZCull = lightsAfterBVHCull;
+            lightCulling.lightsAfterHiZCull = lightCulling.lightsAfterBVHCull;
         }
 
         if (shadowSystem && shadowSystem->isInitialized())
@@ -210,22 +210,22 @@ namespace render::gpudriven
 
             if (hasShadowFilter && !shadowVisibleLights.empty())
             {
-                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
-                                          cachedCameraNear, cachedCameraFar,
+                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
+                                          cachedCamera.nearPlane, cachedCamera.farPlane,
                                           &shadowVisibleLights);
             }
             else
             {
-                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
-                                          cachedCameraNear, cachedCameraFar);
+                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
+                                          cachedCamera.nearPlane, cachedCamera.farPlane);
             }
         }
 
         if (lightBufferManager)
         {
-            if (useBVHLightCulling && !visibleLightIds.empty())
+            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
             {
-                lightBufferManager->updateFromScene(visibleLightIds);
+                lightBufferManager->updateFromScene(lightCulling.visibleLightIds);
             }
             else
             {
@@ -235,8 +235,8 @@ namespace render::gpudriven
         }
 
         bool hasMeshObjects = stats.totalObjects > 0;
-        bool hasTerrainTiles = terrainRenderingEnabled && terrainPipeline &&
-                               terrainPipeline->getCurrentTileCount() > 0;
+        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
+                               terrain.pipeline->getCurrentTileCount() > 0;
 
         if (!hasMeshObjects && !hasTerrainTiles)
         {
@@ -298,7 +298,7 @@ namespace render::gpudriven
             glm::mat4 invViewProj = glm::inverse(viewProj);
             volumetricPipeline->update(viewProj, invViewProj,
                                        glm::vec3(camData.cameraPosition),
-                                       cachedCameraNear, cachedCameraFar,
+                                       cachedCamera.nearPlane, cachedCamera.farPlane,
                                        cachedVolumetricSettings);
             volumetricPipeline->dispatch(cmd,
                                          clusterGridManager->getDescriptorSet(),

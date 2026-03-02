@@ -22,11 +22,14 @@
 #include "interfaces/IBrushService.hpp"
 #include "interfaces/IPaintModeService.hpp"
 #include "interfaces/IPaintBrushService.hpp"
+#include "interfaces/IHoleModeService.hpp"
+#include "interfaces/IHoleBrushService.hpp"
 #include "interfaces/ITerrainRaycastService.hpp"
 #include "interfaces/IPhysicsAnimationService.hpp"
 #include "interfaces/IRenderTextureService.hpp"
 #include "interfaces/ILightBakeService.hpp"
 #include "interfaces/IControllerService.hpp"
+#include "interfaces/IRenderHookService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "events/EventTypes.hpp"
 
@@ -47,6 +50,10 @@ namespace services {
 	class VFXPlayModeHandler;
 	class VFXRuntimeServiceImpl;
 	class RenderTexturePlayModeHandler;
+}
+
+namespace handlers {
+	class ExportHandler;
 }
 
 namespace handlers {
@@ -76,7 +83,9 @@ namespace handlers {
 		std::shared_ptr<services::IBrushService> brushService;
 		std::shared_ptr<services::IPaintModeService> paintModeService;
 		std::shared_ptr<services::IPaintBrushService> paintBrushService;
-	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
+		std::shared_ptr<services::IHoleModeService> holeModeService;
+		std::shared_ptr<services::IHoleBrushService> holeBrushService;
+		std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
@@ -88,6 +97,9 @@ namespace handlers {
 		std::shared_ptr<services::ILightBakeService> lightBakeService;
 		std::shared_ptr<services::IControllerService> controllerService;
 		std::shared_ptr<services::IKComponentService> ikComponentService;
+		std::shared_ptr<services::IRenderHookService> renderHookService;
+
+		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
 		std::unique_ptr<plugin::PluginManager> pluginManager;
 

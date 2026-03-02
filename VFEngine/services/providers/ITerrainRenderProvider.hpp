@@ -52,5 +52,8 @@ namespace services
 
         virtual std::vector<TerrainTileLightmapInfo> getTerrainLightmapData() const = 0;
         virtual bool consumeTerrainLightmapDirty() = 0;
+
+        virtual void markTerrainMaterialDirty() = 0;
+        virtual bool consumeTerrainMaterialDirty() = 0;
     };
 }

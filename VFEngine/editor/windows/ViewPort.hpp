@@ -50,5 +50,7 @@ namespace windows
         void handleSculptBrush();
         void updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handlePaintBrush();
+        void updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleHoleBrush();
     };
 }
