@@ -101,6 +101,7 @@ namespace terrain
             outIndex[i].heightDataSize = readLE<uint32_t>(file);
             outIndex[i].weightDataOffset = readLE<uint64_t>(file);
             outIndex[i].meshletDataOffset = readLE<uint64_t>(file);
+            outIndex[i].holeMaskDataOffset = readLE<uint64_t>(file);
         }
         return file.good();
     }
@@ -321,6 +322,23 @@ namespace terrain
                     }
                 }
 
+                if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_HOLE_MASK)
+                    && entry.holeMaskDataOffset != 0)
+                {
+                    file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
+                    uint32_t totalVertices = readLE<uint32_t>(file);
+                    uint32_t packedSize = (totalVertices + 7) / 8;
+                    std::vector<uint8_t> packed(packedSize);
+                    file.read(reinterpret_cast<char*>(packed.data()),
+                              static_cast<std::streamsize>(packedSize));
+
+                    result.holeMask.resize(totalVertices, 0);
+                    for (uint32_t j = 0; j < totalVertices; ++j)
+                    {
+                        result.holeMask[j] = (packed[j / 8] >> (j % 8)) & 1;
+                    }
+                }
+
                 if (!file.good())
                 {
                     vfLogError("TerrainSerializer: Read error at tile ({}, {})", entry.coordX, entry.coordZ);
@@ -470,6 +488,56 @@ namespace terrain
         catch (const std::exception& e)
         {
             vfLogError("TerrainSerializer: Failed to read LOD data for tile ({}, {}): {}",
+                       entry.coordX, entry.coordZ, e.what());
+            return false;
+        }
+    }
+
+    bool TerrainSerializer::readTileHoleMask(
+        std::string_view path,
+        const TileIndexEntry& entry,
+        std::vector<uint8_t>& outHoleMask)
+    {
+        if (entry.holeMaskDataOffset == 0)
+        {
+            outHoleMask.clear();
+            return true;
+        }
+
+        try
+        {
+            std::ifstream file(fs::path(path), std::ios::binary);
+            if (!file.is_open())
+            {
+                vfLogError("TerrainSerializer: Failed to open file: {}", path);
+                return false;
+            }
+
+            file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
+            uint32_t totalVertices = readLE<uint32_t>(file);
+            uint32_t packedSize = (totalVertices + 7) / 8;
+            std::vector<uint8_t> packed(packedSize);
+            file.read(reinterpret_cast<char*>(packed.data()),
+                      static_cast<std::streamsize>(packedSize));
+
+            outHoleMask.resize(totalVertices, 0);
+            for (uint32_t i = 0; i < totalVertices; ++i)
+            {
+                outHoleMask[i] = (packed[i / 8] >> (i % 8)) & 1;
+            }
+
+            if (!file.good())
+            {
+                vfLogError("TerrainSerializer: Read error for tile ({}, {}) hole mask",
+                           entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("TerrainSerializer: Failed to read hole mask for tile ({}, {}): {}",
                        entry.coordX, entry.coordZ, e.what());
             return false;
         }

@@ -83,6 +83,9 @@ namespace terrain
 
         std::vector<float> heightData;
 
+        std::vector<uint8_t> holeMask; // Per-vertex hole mask, same size/layout as heightData (0=solid, 1=hole)
+        bool topologyDirty = false;    // Forces full meshlet rebuild (bypasses fast path)
+
         TileWeightMapData weightMap;
         bool weightMapDirty = false;
         bool weightMapGPUDirty = false;
@@ -122,6 +125,11 @@ namespace terrain
         [[nodiscard]] bool hasHeightData() const { return !heightData.empty(); }
         [[nodiscard]] bool hasLODData(uint32_t lod) const { return lod < TERRAIN_LOD_COUNT && !lodLevels[lod].isEmpty(); }
         [[nodiscard]] bool hasAnyLODData() const;
+
+        [[nodiscard]] bool hasHoleMask() const { return !holeMask.empty(); }
+        [[nodiscard]] bool isHole(uint32_t x, uint32_t z) const;
+        void setHole(uint32_t x, uint32_t z, bool isHoleValue);
+        void initializeHoleMask();
 
         [[nodiscard]] TileLODData& getCurrentLODData();
         [[nodiscard]] const TileLODData& getCurrentLODData() const;

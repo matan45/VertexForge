@@ -15,6 +15,7 @@
 #include "LightBakeWindow.hpp"
 #include "SculptToolPanel.hpp"
 #include "PaintToolPanel.hpp"
+#include "HoleToolPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/TerrainEvents.hpp"
@@ -46,6 +47,7 @@ namespace windows
         LightBakeWindow lightBakeWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
+        HoleToolPanel holeToolPanel;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

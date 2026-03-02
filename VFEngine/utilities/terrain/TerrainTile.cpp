@@ -19,6 +19,8 @@ namespace terrain
         heightData.resize(totalVertices);
         std::fill(heightData.begin(), heightData.end(), height);
 
+        initializeHoleMask();
+
         isDirty = true;
         updateWorldBounds();
     }
@@ -35,6 +37,7 @@ namespace terrain
         }
 
         heightData = heights;
+        initializeHoleMask();
         isDirty = true;
         updateWorldBounds();
     }
@@ -207,5 +210,27 @@ namespace terrain
         weightMap.initializeDefault(config.getVertexCount(), layerCount);
         weightMapDirty = true;
         weightMapGPUDirty = true;
+    }
+
+    void TerrainTile::initializeHoleMask()
+    {
+        uint32_t vertexCount = config.getVertexCount();
+        size_t totalVertices = static_cast<size_t>(vertexCount) * vertexCount;
+        holeMask.assign(totalVertices, 0);
+        topologyDirty = false;
+    }
+
+    bool TerrainTile::isHole(uint32_t x, uint32_t z) const
+    {
+        if (holeMask.empty() || !isValidHeightIndex(x, z))
+            return false;
+        return holeMask[getHeightIndex(x, z)] != 0;
+    }
+
+    void TerrainTile::setHole(uint32_t x, uint32_t z, bool isHoleValue)
+    {
+        if (holeMask.empty() || !isValidHeightIndex(x, z))
+            return;
+        holeMask[getHeightIndex(x, z)] = isHoleValue ? 1 : 0;
     }
 }

@@ -13,6 +13,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <cfloat>
 
 namespace
 {
@@ -238,10 +239,35 @@ namespace services
             auto* tile = grid->getTile(coord);
             if (tile && tile->hasHeightData())
             {
+                // If tile has holes, create temp height array with FLT_MAX for hole vertices
+                // so Jolt's HeightFieldShape excludes those triangles from collision
+                std::vector<float> physicsHeights;
+                const float* heightSamples = tile->heightData.data();
+
+                if (tile->hasHoleMask())
+                {
+                    bool hasAnyHole = false;
+                    for (uint8_t h : tile->holeMask)
+                    {
+                        if (h) { hasAnyHole = true; break; }
+                    }
+
+                    if (hasAnyHole)
+                    {
+                        physicsHeights = tile->heightData;
+                        for (size_t i = 0; i < physicsHeights.size(); ++i)
+                        {
+                            if (tile->holeMask[i])
+                                physicsHeights[i] = FLT_MAX;
+                        }
+                        heightSamples = physicsHeights.data();
+                    }
+                }
+
                 TerrainTileColliderInfo info;
                 info.tileX = coord.x;
                 info.tileZ = coord.z;
-                info.heightSamples = tile->heightData.data();
+                info.heightSamples = heightSamples;
                 info.sampleCount = tile->config.getVertexCount();
                 info.worldOrigin = tile->worldOrigin;
                 info.vertexSpacing = tile->config.getVertexSpacing();

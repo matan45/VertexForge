@@ -24,6 +24,8 @@
 #include "impl/BrushServiceImpl.hpp"
 #include "impl/PaintModeServiceImpl.hpp"
 #include "impl/PaintBrushServiceImpl.hpp"
+#include "impl/HoleModeServiceImpl.hpp"
+#include "impl/HoleBrushServiceImpl.hpp"
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
@@ -190,6 +192,8 @@ namespace handlers
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
+        holeBrushService.reset();
+        holeModeService.reset();
         paintBrushService.reset();
         paintModeService.reset();
         brushService.reset();
@@ -329,10 +333,17 @@ namespace handlers
             terrainServiceImpl->setPhysicsProvider(physicsProvider);
         }
 
+        if (undoRedoService)
+        {
+            terrainServiceImpl->setUndoRedoService(undoRedoService.get());
+        }
+
         sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
         brushService = std::make_shared<services::BrushServiceImpl>();
         paintModeService = std::make_shared<services::PaintModeServiceImpl>();
         paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
+        holeModeService = std::make_shared<services::HoleModeServiceImpl>();
+        holeBrushService = std::make_shared<services::HoleBrushServiceImpl>();
         terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
             bootstrap->getTerrainRaycastProvider());
     }
@@ -383,6 +394,8 @@ namespace handlers
         brushService->registerEventHandlers();
         paintModeService->registerEventHandlers();
         paintBrushService->registerEventHandlers();
+        holeModeService->registerEventHandlers();
+        holeBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
         lightBakeService->registerEventHandlers();

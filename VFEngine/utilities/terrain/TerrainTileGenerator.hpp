@@ -57,7 +57,9 @@ namespace terrain
             std::vector<resource::Vertex>& vertices,
             std::vector<uint32_t>& indices,
             uint32_t lodLevel,
-            float skirtDepth
+            float skirtDepth,
+            const std::vector<uint8_t>& holeMask,
+            uint32_t baseVertexCount
         ) const;
 
         void extractEdgeVertices(TerrainTile& tile, uint32_t lodLevel) const;
@@ -77,7 +79,9 @@ namespace terrain
 
         void generateIndices(
             std::vector<uint32_t>& indices,
-            uint32_t lodLevel
+            uint32_t lodLevel,
+            const std::vector<uint8_t>& holeMask,
+            uint32_t baseVertexCount
         ) const;
 
         void calculateNormals(
@@ -94,7 +98,9 @@ namespace terrain
             const std::vector<resource::Vertex>& mainVertices,
             TileEdge edge,
             uint32_t lodLevel,
-            float skirtDepth
+            float skirtDepth,
+            const std::vector<uint8_t>& holeMask,
+            uint32_t baseVertexCount
         ) const;
 
         [[nodiscard]] bool isEdgeVertex(uint32_t x, uint32_t z, uint32_t vertCount) const;

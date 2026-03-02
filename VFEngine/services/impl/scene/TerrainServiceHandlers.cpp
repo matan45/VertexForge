@@ -8,6 +8,8 @@
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/BrushEvents.hpp"
 #include "../../events/PaintBrushEvents.hpp"
+#include "../../events/HoleBrushEvents.hpp"
+#include "../../events/HoleModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -36,6 +38,27 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
+
+        auto holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
+            [this](const events::hole::HoleModeChangedNotification& n)
+            {
+                if (!n.isActive && holeBrushDragActive)
+                {
+                    // Find the grid for the undo entity
+                    auto gridIt = terrainGrids.find(holeBrushUndoEntityId);
+                    if (gridIt != terrainGrids.end())
+                    {
+                        finalizeHoleBrushUndo(gridIt->second.get());
+                    }
+                    else
+                    {
+                        holeBrushDragActive = false;
+                        holeBrushBeforeSnapshots.clear();
+                        holeBrushAfterMasks.clear();
+                    }
+                }
+            });
+        holeModeSubscription = std::make_unique<events::SubscriptionToken>(holeModeToken);
     }
 
     void TerrainService::registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -113,6 +136,12 @@ namespace services
             [this](const events::paintBrush::ApplyPaintBrushCommand& cmd)
             {
                 applyPaintBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::holeBrush::ApplyHoleBrushCommand>(
+            [this](const events::holeBrush::ApplyHoleBrushCommand& cmd)
+            {
+                applyHoleBrush(cmd.worldPosition, cmd.erase, cmd.isFirstApplication);
             });
     }
 

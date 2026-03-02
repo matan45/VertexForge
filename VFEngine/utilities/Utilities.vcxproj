@@ -165,6 +165,8 @@
     <ClInclude Include="terrain\BrushSampler.hpp" />
     <ClInclude Include="terrain\BrushTypes.hpp" />
     <ClInclude Include="terrain\HeightmapLoader.hpp" />
+    <ClInclude Include="terrain\HoleBrushApplicator.hpp" />
+    <ClInclude Include="terrain\HoleBrushTypes.hpp" />
     <ClInclude Include="terrain\PaintBrushTypes.hpp" />
     <ClInclude Include="terrain\TerrainFileCache.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
@@ -257,6 +259,7 @@
     <ClCompile Include="string\StringUtil.cpp" />
     <ClCompile Include="terrain\BrushSampler.cpp" />
     <ClCompile Include="terrain\HeightmapLoader.cpp" />
+    <ClCompile Include="terrain\HoleBrushApplicator.cpp" />
     <ClCompile Include="terrain\TerrainEdgeStitching.cpp" />
     <ClCompile Include="terrain\TerrainFileCache.cpp" />
     <ClCompile Include="terrain\TerrainGrid.cpp" />

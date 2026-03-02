@@ -14,7 +14,8 @@ namespace windows
         Scale = 3,
         Translate = 4,
         Sculpt = 5,
-        Paint = 6
+        Paint = 6,
+        Hole = 7
     };
 
     class ViewPortOverlay

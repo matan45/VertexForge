@@ -4,6 +4,7 @@
 #include "events/EditorModeEvents.hpp"
 #include "events/SculptModeEvents.hpp"
 #include "events/PaintModeEvents.hpp"
+#include "events/HoleModeEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/TerrainEvents.hpp"
 #include <imgui.h>
@@ -78,8 +79,9 @@ namespace windows
 
                 bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+                bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
 
-                ImGui::BeginDisabled(isSculptMode || isPaintMode);
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -158,6 +160,37 @@ namespace windows
                 {
                     events::paint::SetPaintModeActiveCommand cmd;
                     cmd.active = !isPaintMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Hole mode toggle - enabled when terrain is selected or already in hole mode
+                bool canHole = isHoleMode;
+                if (!canHole)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery3;
+                        terrainQuery3.entity = *selectedEntity;
+                        canHole = dispatcher.query(terrainQuery3);
+
+                        if (!canHole)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery3;
+                            tileQuery3.entity = *selectedEntity;
+                            canHole = dispatcher.query(tileQuery3);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canHole);
+                if (iconButton(ViewportIcon::Hole, isHoleMode, isHoleMode ? "Exit Hole Mode" : "Enter Hole Mode"))
+                {
+                    events::hole::SetHoleModeActiveCommand cmd;
+                    cmd.active = !isHoleMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

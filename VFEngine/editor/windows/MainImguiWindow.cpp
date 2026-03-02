@@ -89,6 +89,7 @@ namespace windows
             lightBakeWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
+            holeToolPanel.draw();
         }
         ImGui::End();
     }

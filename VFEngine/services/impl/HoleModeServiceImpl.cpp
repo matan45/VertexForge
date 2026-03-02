@@ -1,15 +1,15 @@
-#include "SculptModeServiceImpl.hpp"
+#include "HoleModeServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/HoleModeEvents.hpp"
 #include "../events/SculptModeEvents.hpp"
 #include "../events/PaintModeEvents.hpp"
-#include "../events/HoleModeEvents.hpp"
 #include "../events/EditorModeEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../events/TerrainEvents.hpp"
 
 namespace services
 {
-    SculptModeServiceImpl::~SculptModeServiceImpl()
+    HoleModeServiceImpl::~HoleModeServiceImpl()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -25,22 +25,22 @@ namespace services
         {
             dispatcher.unsubscribe(sceneClearedToken);
         }
+        if (sculptModeToken.isValid())
+        {
+            dispatcher.unsubscribe(sculptModeToken);
+        }
         if (paintModeToken.isValid())
         {
             dispatcher.unsubscribe(paintModeToken);
         }
-        if (holeModeToken.isValid())
-        {
-            dispatcher.unsubscribe(holeModeToken);
-        }
     }
 
-    void SculptModeServiceImpl::registerEventHandlers()
+    void HoleModeServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        dispatcher.registerCommandHandler<events::sculpt::SetSculptModeActiveCommand>(
-            [this](const events::sculpt::SetSculptModeActiveCommand& cmd)
+        dispatcher.registerCommandHandler<events::hole::SetHoleModeActiveCommand>(
+            [this](const events::hole::SetHoleModeActiveCommand& cmd)
             {
                 if (cmd.active)
                 {
@@ -52,14 +52,14 @@ namespace services
                 }
             });
 
-        dispatcher.registerQueryHandler<events::sculpt::IsSculptModeActiveQuery>(
-            [this](const events::sculpt::IsSculptModeActiveQuery&)
+        dispatcher.registerQueryHandler<events::hole::IsHoleModeActiveQuery>(
+            [this](const events::hole::IsHoleModeActiveQuery&)
             {
                 return isActive();
             });
 
-        dispatcher.registerQueryHandler<events::sculpt::GetSculptTargetEntityQuery>(
-            [this](const events::sculpt::GetSculptTargetEntityQuery&)
+        dispatcher.registerQueryHandler<events::hole::GetHoleTargetEntityQuery>(
+            [this](const events::hole::GetHoleTargetEntityQuery&)
             {
                 return getTargetEntity();
             });
@@ -68,7 +68,7 @@ namespace services
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {
-                if (n.currentMode == EditorMode::Play && sculptActive)
+                if (n.currentMode == EditorMode::Play && holeActive)
                 {
                     deactivate();
                 }
@@ -88,7 +88,17 @@ namespace services
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
-                if (sculptActive)
+                if (holeActive)
+                {
+                    deactivate();
+                }
+            });
+
+        // Auto-deactivate when sculpt mode activates
+        sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
+            [this](const events::sculpt::SculptModeChangedNotification& n)
+            {
+                if (n.isActive && holeActive)
                 {
                     deactivate();
                 }
@@ -98,31 +108,35 @@ namespace services
         paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
             [this](const events::paint::PaintModeChangedNotification& n)
             {
-                if (n.isActive && sculptActive)
-                {
-                    deactivate();
-                }
-            });
-
-        // Auto-deactivate when hole mode activates
-        holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
-            [this](const events::hole::HoleModeChangedNotification& n)
-            {
-                if (n.isActive && sculptActive)
+                if (n.isActive && holeActive)
                 {
                     deactivate();
                 }
             });
     }
 
-    bool SculptModeServiceImpl::activate()
+    bool HoleModeServiceImpl::activate()
     {
-        if (sculptActive)
+        if (holeActive)
         {
             return true;
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Deactivate sculpt mode if active
+        {
+            events::sculpt::SetSculptModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+
+        // Deactivate paint mode if active
+        {
+            events::paint::SetPaintModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
 
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value())
@@ -168,14 +182,14 @@ namespace services
         }
 
         targetTerrain = terrainEntity;
-        sculptActive = true;
+        holeActive = true;
 
         // Force-select the terrain parent entity
         events::scene::SelectEntityCommand selectCmd;
         selectCmd.entity = terrainEntity;
         dispatcher.execute(selectCmd);
 
-        events::sculpt::SculptModeChangedNotification notification;
+        events::hole::HoleModeChangedNotification notification;
         notification.isActive = true;
         notification.terrainEntity = terrainEntity;
         dispatcher.publish(notification);
@@ -183,28 +197,28 @@ namespace services
         return true;
     }
 
-    void SculptModeServiceImpl::deactivate()
+    void HoleModeServiceImpl::deactivate()
     {
-        if (!sculptActive)
+        if (!holeActive)
         {
             return;
         }
 
-        sculptActive = false;
+        holeActive = false;
         targetTerrain.reset();
 
-        events::sculpt::SculptModeChangedNotification notification;
+        events::hole::HoleModeChangedNotification notification;
         notification.isActive = false;
         notification.terrainEntity = std::nullopt;
         events::EventDispatcher::instance().publish(notification);
     }
 
-    bool SculptModeServiceImpl::isActive() const
+    bool HoleModeServiceImpl::isActive() const
     {
-        return sculptActive;
+        return holeActive;
     }
 
-    std::optional<EntityHandle> SculptModeServiceImpl::getTargetEntity() const
+    std::optional<EntityHandle> HoleModeServiceImpl::getTargetEntity() const
     {
         return targetTerrain;
     }

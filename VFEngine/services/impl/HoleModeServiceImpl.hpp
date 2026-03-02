@@ -1,24 +1,24 @@
 #pragma once
-#include "../interfaces/IPaintModeService.hpp"
+#include "../interfaces/IHoleModeService.hpp"
 #include "../events/EventTypes.hpp"
 
 namespace services
 {
-    class PaintModeServiceImpl : public IPaintModeService
+    class HoleModeServiceImpl : public IHoleModeService
     {
     private:
-        bool paintActive = false;
+        bool holeActive = false;
         std::optional<EntityHandle> targetTerrain;
 
         ::events::SubscriptionToken editorModeToken;
         ::events::SubscriptionToken entityDeletedToken;
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken sculptModeToken;
-        ::events::SubscriptionToken holeModeToken;
+        ::events::SubscriptionToken paintModeToken;
 
     public:
-        PaintModeServiceImpl() = default;
-        ~PaintModeServiceImpl() override;
+        HoleModeServiceImpl() = default;
+        ~HoleModeServiceImpl() override;
 
         void registerEventHandlers() override;
 

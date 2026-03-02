@@ -7,8 +7,10 @@
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/IPhysicsProvider.hpp"
+#include "../../interfaces/IUndoRedoService.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
+#include "../../data/HoleBrushUndoCommand.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <memory>
@@ -36,12 +38,14 @@ namespace services
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
+        std::unique_ptr<::events::SubscriptionToken> holeModeSubscription;
 
         float flattenTargetHeight = 0.0f;
         bool flattenTargetCaptured = false;
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
+        IUndoRedoService* undoRedoService = nullptr;
         std::atomic<bool> saveInProgress{false};
 
         bool distanceCullingEnabled_ = false;
@@ -79,9 +83,11 @@ namespace services
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+        void applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        void setUndoRedoService(IUndoRedoService* service) { undoRedoService = service; }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
         void removeTerrainCollider(EntityHandle terrainEntity);
@@ -117,7 +123,18 @@ namespace services
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
+        void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         uint16_t getOverlayMask() const;
+
+        // Hole brush undo tracking
+        std::vector<HoleMaskSnapshot> holeBrushBeforeSnapshots;
+        std::unordered_map<uint64_t, std::vector<uint8_t>> holeBrushAfterMasks; // key: tileCoord hash
+        uint64_t holeBrushUndoEntityId = 0;
+        bool holeBrushDragActive = false;
+
+        void captureHoleMaskBefore(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& tiles);
+        void finalizeHoleBrushUndo(terrain::TerrainGrid* grid);
+        void restoreHoleMasks(const std::vector<HoleMaskSnapshot>& snapshots);
     };
 }

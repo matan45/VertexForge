@@ -34,7 +34,8 @@ ICON_FILES = {
     3: "scale",           # mesh
     4: "translate",       # material
     5: "sculpt",              # folder
-    6: "paint"               # scene
+    6: "paint",               # scene
+    7: "hole"               # scene
 }
 
 def find_icon_file(base_name):

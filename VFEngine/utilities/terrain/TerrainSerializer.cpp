@@ -62,6 +62,7 @@ namespace terrain
             writeLE(file, entry.heightDataSize);
             writeLE(file, entry.weightDataOffset);
             writeLE(file, entry.meshletDataOffset);
+            writeLE(file, entry.holeMaskDataOffset);
         }
         return file.good();
     }
@@ -107,6 +108,26 @@ namespace terrain
         {
             if (!writeTileMeshletData(file, tile, outEntry))
                 return false;
+        }
+
+        outEntry.holeMaskDataOffset = 0;
+        if (hasFlag(flags, TerrainFormatFlags::HAS_HOLE_MASK) && tile.hasHoleMask())
+        {
+            outEntry.holeMaskDataOffset = static_cast<uint64_t>(file.tellp());
+
+            // Bit-pack the hole mask: ceil(totalVertices / 8) bytes
+            size_t totalVertices = tile.holeMask.size();
+            uint32_t packedSize = static_cast<uint32_t>((totalVertices + 7) / 8);
+            writeLE(file, static_cast<uint32_t>(totalVertices));
+
+            std::vector<uint8_t> packed(packedSize, 0);
+            for (size_t i = 0; i < totalVertices; ++i)
+            {
+                if (tile.holeMask[i])
+                    packed[i / 8] |= (1 << (i % 8));
+            }
+            file.write(reinterpret_cast<const char*>(packed.data()),
+                       static_cast<std::streamsize>(packed.size()));
         }
 
         return file.good();
@@ -307,6 +328,23 @@ namespace terrain
         {
             flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
         }
+        for (const auto* tile : allTiles)
+        {
+            if (tile->hasHoleMask())
+            {
+                // Check if any holes actually exist
+                bool hasAnyHole = false;
+                for (uint8_t h : tile->holeMask)
+                {
+                    if (h) { hasAnyHole = true; break; }
+                }
+                if (hasAnyHole)
+                {
+                    flags = flags | TerrainFormatFlags::HAS_HOLE_MASK;
+                    break;
+                }
+            }
+        }
 
         TerrainFileHeader header;
         header.flags = flags;
@@ -346,7 +384,7 @@ namespace terrain
             }
 
             auto indexTablePos = file.tellp();
-            constexpr size_t INDEX_ENTRY_SIZE = 36; // 4+4+8+4+8+8
+            constexpr size_t INDEX_ENTRY_SIZE = 44; // 4+4+8+4+8+8+8
             std::vector<char> placeholder(header.tileCount * INDEX_ENTRY_SIZE, 0);
             file.write(placeholder.data(), static_cast<std::streamsize>(placeholder.size()));
 

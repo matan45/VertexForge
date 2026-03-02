@@ -31,6 +31,7 @@ namespace windows
 
         bool sculptDragging = false;
         bool paintDragging = false;
+        bool holeDragging = false;
 
     public:
         explicit ViewPort();
@@ -50,5 +51,7 @@ namespace windows
         void handleSculptBrush();
         void updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handlePaintBrush();
+        void updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleHoleBrush();
     };
 }
