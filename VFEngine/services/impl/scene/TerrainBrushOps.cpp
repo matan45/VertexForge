@@ -239,19 +239,6 @@ namespace services
 
         terrain::TerrainGrid* grid = gridIt->second.get();
 
-        // If starting a new drag, finalize previous undo command and capture new "before" state
-        if (isFirstApplication)
-        {
-            if (holeBrushDragActive)
-            {
-                finalizeHoleBrushUndo(grid);
-            }
-            holeBrushDragActive = true;
-            holeBrushUndoEntityId = targetEntity->id;
-            holeBrushBeforeSnapshots.clear();
-            holeBrushAfterMasks.clear();
-        }
-
         auto brushParams = dispatcher.query(events::holeBrush::GetHoleBrushParamsQuery{});
 
         float worldTileSize = 32.0f;
@@ -267,33 +254,6 @@ namespace services
 
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
-
-        // Capture "before" snapshots for tiles not yet tracked in this drag
-        if (isFirstApplication)
-        {
-            captureHoleMaskBefore(grid, affectedTiles);
-        }
-        else
-        {
-            // Capture any newly affected tiles
-            for (const auto& coord : affectedTiles)
-            {
-                uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(coord.x)) << 32)
-                              | static_cast<uint64_t>(static_cast<uint32_t>(coord.z));
-                if (holeBrushAfterMasks.find(key) == holeBrushAfterMasks.end())
-                {
-                    terrain::TerrainTile* tile = grid->getTile(coord);
-                    if (tile)
-                    {
-                        HoleMaskSnapshot snap;
-                        snap.coord = coord;
-                        snap.holeMask = tile->hasHoleMask() ? tile->holeMask
-                                                            : std::vector<uint8_t>();
-                        holeBrushBeforeSnapshots.push_back(std::move(snap));
-                    }
-                }
-            }
-        }
 
         std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
@@ -332,11 +292,6 @@ namespace services
                 tile->isDirty = true;
                 tile->setAllLODsDirty();
                 modifiedTiles.push_back(coord);
-
-                // Track "after" state
-                uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(coord.x)) << 32)
-                              | static_cast<uint64_t>(static_cast<uint32_t>(coord.z));
-                holeBrushAfterMasks[key] = tile->holeMask;
             }
         }
 
@@ -476,105 +431,6 @@ namespace services
                     neighborNZ->isDirty = true;
                     neighborNZ->setAllLODsDirty();
                 }
-            }
-        }
-    }
-
-    void TerrainService::captureHoleMaskBefore(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& tiles)
-    {
-        for (const auto& coord : tiles)
-        {
-            terrain::TerrainTile* tile = grid->getTile(coord);
-            if (!tile)
-                continue;
-
-            HoleMaskSnapshot snap;
-            snap.coord = coord;
-            snap.holeMask = tile->hasHoleMask() ? tile->holeMask : std::vector<uint8_t>();
-            holeBrushBeforeSnapshots.push_back(std::move(snap));
-        }
-    }
-
-    void TerrainService::finalizeHoleBrushUndo(terrain::TerrainGrid* grid)
-    {
-        if (!holeBrushDragActive || holeBrushAfterMasks.empty())
-        {
-            holeBrushDragActive = false;
-            holeBrushBeforeSnapshots.clear();
-            holeBrushAfterMasks.clear();
-            return;
-        }
-
-        // Build after snapshots from tracked masks
-        std::vector<HoleMaskSnapshot> afterSnapshots;
-        for (const auto& snap : holeBrushBeforeSnapshots)
-        {
-            uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(snap.coord.x)) << 32)
-                          | static_cast<uint64_t>(static_cast<uint32_t>(snap.coord.z));
-            auto it = holeBrushAfterMasks.find(key);
-            if (it != holeBrushAfterMasks.end())
-            {
-                HoleMaskSnapshot afterSnap;
-                afterSnap.coord = snap.coord;
-                afterSnap.holeMask = it->second;
-                afterSnapshots.push_back(std::move(afterSnap));
-            }
-            else
-            {
-                // Tile was in before but not modified — get current state from grid
-                terrain::TerrainTile* tile = grid->getTile(snap.coord);
-                if (tile)
-                {
-                    HoleMaskSnapshot afterSnap;
-                    afterSnap.coord = snap.coord;
-                    afterSnap.holeMask = tile->hasHoleMask() ? tile->holeMask : std::vector<uint8_t>();
-                    afterSnapshots.push_back(std::move(afterSnap));
-                }
-            }
-        }
-
-        auto undoCmd = std::make_unique<HoleBrushUndoCommand>(
-            holeBrushUndoEntityId,
-            std::move(holeBrushBeforeSnapshots),
-            std::move(afterSnapshots),
-            [this](const std::vector<HoleMaskSnapshot>& snapshots)
-            {
-                restoreHoleMasks(snapshots);
-            });
-
-        if (undoRedoService)
-        {
-            undoRedoService->pushCommand(std::move(undoCmd));
-        }
-
-        holeBrushDragActive = false;
-        holeBrushBeforeSnapshots.clear();
-        holeBrushAfterMasks.clear();
-    }
-
-    void TerrainService::restoreHoleMasks(const std::vector<HoleMaskSnapshot>& snapshots)
-    {
-        for (const auto& snap : snapshots)
-        {
-            // Find the grid that contains this tile
-            for (auto& [entityId, grid] : terrainGrids)
-            {
-                terrain::TerrainTile* tile = grid->getTile(snap.coord);
-                if (!tile)
-                    continue;
-
-                if (snap.holeMask.empty())
-                {
-                    tile->holeMask.clear();
-                }
-                else
-                {
-                    tile->holeMask = snap.holeMask;
-                }
-                tile->topologyDirty = true;
-                tile->isDirty = true;
-                tile->setAllLODsDirty();
-                break;
             }
         }
     }

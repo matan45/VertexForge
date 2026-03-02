@@ -129,6 +129,9 @@ namespace services
         std::vector<TerrainTileColliderInfo> tileInfos;
         tileInfos.reserve(allTiles.size());
 
+        // Temp storage for hole-adjusted height arrays (must outlive addTerrainCollider call)
+        std::vector<std::vector<float>> holeAdjustedHeights;
+
         for (auto* tile : allTiles)
         {
             if (!tile)
@@ -143,10 +146,55 @@ namespace services
             if (!tile->hasHeightData())
                 continue;
 
+            const float* heightSamples = tile->heightData.data();
+
+            // Apply FLT_MAX for hole vertices so Jolt excludes hole triangles
+            if (tile->hasHoleMask())
+            {
+                bool hasAnyHole = false;
+                for (uint8_t h : tile->holeMask)
+                {
+                    if (h) { hasAnyHole = true; break; }
+                }
+
+                if (hasAnyHole)
+                {
+                    uint32_t vc = tile->config.getVertexCount();
+                    uint32_t qc = vc - 1;
+                    holeAdjustedHeights.emplace_back(tile->heightData);
+                    auto& physicsHeights = holeAdjustedHeights.back();
+
+                    for (uint32_t vz = 0; vz < vc; ++vz)
+                    {
+                        for (uint32_t vx = 0; vx < vc; ++vx)
+                        {
+                            bool adjacentHole = false;
+                            for (int dz = -1; dz <= 0 && !adjacentHole; ++dz)
+                            {
+                                for (int dx = -1; dx <= 0 && !adjacentHole; ++dx)
+                                {
+                                    int qx = static_cast<int>(vx) + dx;
+                                    int qz = static_cast<int>(vz) + dz;
+                                    if (qx >= 0 && qx < static_cast<int>(qc) &&
+                                        qz >= 0 && qz < static_cast<int>(qc))
+                                    {
+                                        if (tile->holeMask[static_cast<size_t>(qz) * qc + qx])
+                                            adjacentHole = true;
+                                    }
+                                }
+                            }
+                            if (adjacentHole)
+                                physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
+                        }
+                    }
+                    heightSamples = physicsHeights.data();
+                }
+            }
+
             TerrainTileColliderInfo info;
             info.tileX = tile->coord.x;
             info.tileZ = tile->coord.z;
-            info.heightSamples = tile->heightData.data();
+            info.heightSamples = heightSamples;
             info.sampleCount = tile->config.getVertexCount();
             info.worldOrigin = tile->worldOrigin;
             info.vertexSpacing = tile->config.getVertexSpacing();
