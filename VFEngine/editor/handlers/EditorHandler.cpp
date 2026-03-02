@@ -333,11 +333,6 @@ namespace handlers
             terrainServiceImpl->setPhysicsProvider(physicsProvider);
         }
 
-        if (undoRedoService)
-        {
-            terrainServiceImpl->setUndoRedoService(undoRedoService.get());
-        }
-
         sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
         brushService = std::make_shared<services::BrushServiceImpl>();
         paintModeService = std::make_shared<services::PaintModeServiceImpl>();

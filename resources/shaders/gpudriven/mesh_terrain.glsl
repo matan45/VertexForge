@@ -504,6 +504,7 @@ void main() {
 
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    // Match mesh shader default iblSpecular (0.5) to avoid over-bright terrain reflections
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * 0.5;
 
     vec3 ambient = (kD * diffuse + specular) * ao;

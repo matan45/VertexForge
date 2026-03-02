@@ -34,7 +34,7 @@ namespace core
         auto matToken = dispatcher.subscribe<::events::terrain::TerrainMaterialCompiledNotification>(
             [this](const ::events::terrain::TerrainMaterialCompiledNotification&)
             {
-                terrainMaterialDirty_.store(true);
+                terrainMaterialDirty.store(true);
             });
         materialCompiledToken = std::make_unique<events::SubscriptionToken>(matToken);
     }
@@ -136,11 +136,11 @@ namespace core
 
     void TerrainRenderAdapter::markTerrainMaterialDirty()
     {
-        terrainMaterialDirty_.store(true);
+        terrainMaterialDirty.store(true);
     }
 
     bool TerrainRenderAdapter::consumeTerrainMaterialDirty()
     {
-        return terrainMaterialDirty_.exchange(false);
+        return terrainMaterialDirty.exchange(false);
     }
 }

@@ -2,9 +2,10 @@
 #include "../data/EntityHandle.hpp"
 #include <optional>
 
-namespace services {
-
-    class IHoleModeService {
+namespace services
+{
+    class IHoleModeService
+    {
     public:
         virtual ~IHoleModeService() = default;
 
@@ -16,5 +17,4 @@ namespace services {
 
         virtual std::optional<EntityHandle> getTargetEntity() const = 0;
     };
-
 }

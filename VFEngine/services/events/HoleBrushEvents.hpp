@@ -42,7 +42,6 @@ namespace events::holeBrush
     {
         glm::vec3 worldPosition{0.0f};
         bool erase = false;
-        bool isFirstApplication = false;
 
         std::string_view getName() const override { return "ApplyHoleBrush"; }
     };

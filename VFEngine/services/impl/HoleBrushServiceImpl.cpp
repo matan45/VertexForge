@@ -64,16 +64,7 @@ namespace services
         holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
             [this](const events::hole::HoleModeChangedNotification& n)
             {
-                if (n.isActive)
-                {
-                    holeModeActive = true;
-                }
-                else
-                {
-                    holeModeActive = false;
-                    currentParams = terrain::HoleBrushParams{};
-                    publishParamsChanged();
-                }
+                holeModeActive = n.isActive;
             });
     }
 

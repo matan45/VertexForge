@@ -120,7 +120,7 @@ namespace services
         dispatcher.registerCommandHandler<events::holeBrush::ApplyHoleBrushCommand>(
             [this](const events::holeBrush::ApplyHoleBrushCommand& cmd)
             {
-                applyHoleBrush(cmd.worldPosition, cmd.erase, cmd.isFirstApplication);
+                applyHoleBrush(cmd.worldPosition, cmd.erase);
             });
     }
 

@@ -27,7 +27,7 @@ namespace terrain
 
     private:
         static float computeNormalizedDistance(
-            const glm::vec2& vertexWorldPos,
+            const glm::vec2& sampleWorldPos,
             const glm::vec2& brushCenter,
             float brushRadius,
             BrushShape shape);

@@ -21,7 +21,7 @@ namespace core
     private:
         services::TerrainService* terrainService = nullptr;
         std::atomic<bool> terrainLightmapDirty{false};
-        std::atomic<bool> terrainMaterialDirty_{false};
+        std::atomic<bool> terrainMaterialDirty{false};
         std::unique_ptr<events::SubscriptionToken> bakeCompleteToken;
         std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken;
         std::unique_ptr<events::SubscriptionToken> lightmapClearedToken;

@@ -82,18 +82,7 @@ namespace services
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
-                if (n.isActive)
-                {
-                    sculptModeActive = true;
-                }
-                else
-                {
-                    sculptModeActive = false;
-                    currentParams = terrain::BrushParams{};
-                    currentBrushType = terrain::BrushType::Raise;
-                    publishParamsChanged();
-                    publishTypeChanged();
-                }
+                sculptModeActive = n.isActive;
             });
     }
 

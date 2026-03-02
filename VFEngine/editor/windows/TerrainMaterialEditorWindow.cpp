@@ -104,6 +104,8 @@ namespace windows
     {
         isDirty = true;
         materialData->needsRecompile = true;
+        // Compile is intentionally manual (Save/Compile button) — auto-compile on every
+        // slider change triggered excessive GPU re-uploads via TerrainMaterialCompiledNotification.
     }
 
     void TerrainMaterialEditorWindow::draw()

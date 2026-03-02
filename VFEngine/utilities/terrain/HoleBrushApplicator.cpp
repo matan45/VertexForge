@@ -48,12 +48,12 @@ namespace terrain
     }
 
     float HoleBrushApplicator::computeNormalizedDistance(
-        const glm::vec2& vertexWorldPos,
+        const glm::vec2& sampleWorldPos,
         const glm::vec2& brushCenter,
         float brushRadius,
         BrushShape shape)
     {
-        glm::vec2 delta = vertexWorldPos - brushCenter;
+        glm::vec2 delta = sampleWorldPos - brushCenter;
 
         if (shape == BrushShape::Circle)
         {

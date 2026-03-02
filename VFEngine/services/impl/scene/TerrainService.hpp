@@ -7,7 +7,6 @@
 #include "math/Frustum.hpp"
 #include "../../providers/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/IPhysicsProvider.hpp"
-#include "../../interfaces/IUndoRedoService.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>
@@ -43,7 +42,6 @@ namespace services
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
-        IUndoRedoService* undoRedoService = nullptr;
         std::atomic<bool> saveInProgress{false};
 
         bool distanceCullingEnabled_ = false;
@@ -81,11 +79,10 @@ namespace services
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
-        void applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication);
+        void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
-        void setUndoRedoService(IUndoRedoService* service) { undoRedoService = service; }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
         void removeTerrainCollider(EntityHandle terrainEntity);
@@ -124,6 +121,7 @@ namespace services
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         uint16_t getOverlayMask() const;
+        static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
 
     };
 }

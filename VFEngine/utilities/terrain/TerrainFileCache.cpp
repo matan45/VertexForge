@@ -59,6 +59,7 @@ namespace terrain
                     if (TerrainSerializer::readTileHoleMask(filePath, *entry, holeMask))
                     {
                         tile.holeMask = std::move(holeMask);
+                        tile.topologyDirty = true;
                     }
                 }
 

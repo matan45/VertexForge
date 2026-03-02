@@ -40,6 +40,7 @@ namespace
         return false;
     }
 
+
     void generateTileColliderWireframe(
         const terrain::TerrainTile& tile,
         components::TerrainColliderDebugData& out)
@@ -98,6 +99,31 @@ namespace
 
 namespace services
 {
+    bool TerrainService::applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights)
+    {
+        if (!tile.hasHoleMask()) return false;
+
+        bool hasAnyHole = false;
+        for (uint8_t h : tile.holeMask)
+        {
+            if (h) { hasAnyHole = true; break; }
+        }
+        if (!hasAnyHole) return false;
+
+        uint32_t vc = tile.config.getVertexCount();
+        physicsHeights = tile.heightData;
+
+        for (uint32_t vz = 0; vz < vc; ++vz)
+        {
+            for (uint32_t vx = 0; vx < vc; ++vx)
+            {
+                if (isVertexAdjacentToHole(tile, vx, vz))
+                    physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
+            }
+        }
+        return true;
+    }
+
     bool TerrainService::addTerrainCollider(EntityHandle terrainEntity)
     {
         if (!physicsProvider || !terrainEntity.isValid())
@@ -149,46 +175,11 @@ namespace services
             const float* heightSamples = tile->heightData.data();
 
             // Apply FLT_MAX for hole vertices so Jolt excludes hole triangles
-            if (tile->hasHoleMask())
             {
-                bool hasAnyHole = false;
-                for (uint8_t h : tile->holeMask)
-                {
-                    if (h) { hasAnyHole = true; break; }
-                }
-
-                if (hasAnyHole)
-                {
-                    uint32_t vc = tile->config.getVertexCount();
-                    uint32_t qc = vc - 1;
-                    holeAdjustedHeights.emplace_back(tile->heightData);
-                    auto& physicsHeights = holeAdjustedHeights.back();
-
-                    for (uint32_t vz = 0; vz < vc; ++vz)
-                    {
-                        for (uint32_t vx = 0; vx < vc; ++vx)
-                        {
-                            bool adjacentHole = false;
-                            for (int dz = -1; dz <= 0 && !adjacentHole; ++dz)
-                            {
-                                for (int dx = -1; dx <= 0 && !adjacentHole; ++dx)
-                                {
-                                    int qx = static_cast<int>(vx) + dx;
-                                    int qz = static_cast<int>(vz) + dz;
-                                    if (qx >= 0 && qx < static_cast<int>(qc) &&
-                                        qz >= 0 && qz < static_cast<int>(qc))
-                                    {
-                                        if (tile->holeMask[static_cast<size_t>(qz) * qc + qx])
-                                            adjacentHole = true;
-                                    }
-                                }
-                            }
-                            if (adjacentHole)
-                                physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
-                        }
-                    }
+                holeAdjustedHeights.emplace_back();
+                auto& physicsHeights = holeAdjustedHeights.back();
+                if (applyHoleMaskToHeights(*tile, physicsHeights))
                     heightSamples = physicsHeights.data();
-                }
             }
 
             TerrainTileColliderInfo info;
@@ -315,53 +306,11 @@ namespace services
             auto* tile = grid->getTile(coord);
             if (tile && tile->hasHeightData())
             {
-                // If tile has holes, create temp height array with FLT_MAX for hole vertices
-                // so Jolt's HeightFieldShape excludes those triangles from collision.
-                // holeMask is per-quad; set a vertex to FLT_MAX if ANY adjacent quad is a hole.
                 std::vector<float> physicsHeights;
                 const float* heightSamples = tile->heightData.data();
 
-                if (tile->hasHoleMask())
-                {
-                    bool hasAnyHole = false;
-                    for (uint8_t h : tile->holeMask)
-                    {
-                        if (h) { hasAnyHole = true; break; }
-                    }
-
-                    if (hasAnyHole)
-                    {
-                        uint32_t vc = tile->config.getVertexCount();
-                        uint32_t qc = vc - 1;
-                        physicsHeights = tile->heightData;
-
-                        for (uint32_t vz = 0; vz < vc; ++vz)
-                        {
-                            for (uint32_t vx = 0; vx < vc; ++vx)
-                            {
-                                // Check up to 4 adjacent quads: (vx-1,vz-1), (vx,vz-1), (vx-1,vz), (vx,vz)
-                                bool adjacentHole = false;
-                                for (int dz = -1; dz <= 0 && !adjacentHole; ++dz)
-                                {
-                                    for (int dx = -1; dx <= 0 && !adjacentHole; ++dx)
-                                    {
-                                        int qx = static_cast<int>(vx) + dx;
-                                        int qz = static_cast<int>(vz) + dz;
-                                        if (qx >= 0 && qx < static_cast<int>(qc) &&
-                                            qz >= 0 && qz < static_cast<int>(qc))
-                                        {
-                                            if (tile->holeMask[static_cast<size_t>(qz) * qc + qx])
-                                                adjacentHole = true;
-                                        }
-                                    }
-                                }
-                                if (adjacentHole)
-                                    physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
-                            }
-                        }
-                        heightSamples = physicsHeights.data();
-                    }
-                }
+                if (applyHoleMaskToHeights(*tile, physicsHeights))
+                    heightSamples = physicsHeights.data();
 
                 TerrainTileColliderInfo info;
                 info.tileX = coord.x;

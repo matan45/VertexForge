@@ -505,7 +505,6 @@ namespace windows
                 events::holeBrush::ApplyHoleBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.erase = shiftHeld;
-                applyCmd.isFirstApplication = !holeDragging;
                 dispatcher.execute(applyCmd);
 
                 holeDragging = true;

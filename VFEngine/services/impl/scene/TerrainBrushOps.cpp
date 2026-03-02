@@ -222,7 +222,7 @@ namespace services
         }
     }
 
-    void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication)
+    void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase)
     {
         if (saveInProgress.load(std::memory_order_acquire))
             return;
@@ -299,13 +299,11 @@ namespace services
         {
             syncHoleBoundaries(grid, modifiedTiles);
             rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
-        }
 
-        events::holeBrush::HoleBrushAppliedNotification notification;
-        notification.position = worldPosition;
-        dispatcher.publish(notification);
+            events::holeBrush::HoleBrushAppliedNotification notification;
+            notification.position = worldPosition;
+            dispatcher.publish(notification);
 
-        {
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(*targetEntity);
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))

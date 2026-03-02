@@ -80,7 +80,7 @@ namespace handlers {
 		std::shared_ptr<services::IPaintBrushService> paintBrushService;
 		std::shared_ptr<services::IHoleModeService> holeModeService;
 		std::shared_ptr<services::IHoleBrushService> holeBrushService;
-	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
+		std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
