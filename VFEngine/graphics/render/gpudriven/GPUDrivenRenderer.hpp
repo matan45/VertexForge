@@ -312,6 +312,7 @@ namespace render::gpudriven
             std::string lightmapPath;
         };
         void setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data);
+        void invalidateTerrainLayerData() { terrainLayerDataDirty_ = true; }
 
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
@@ -344,6 +345,7 @@ namespace render::gpudriven
     private:
         std::string currentTerrainMaterialPath_;
         std::vector<TerrainLayerGPUData> terrainLayerData_;
+        bool terrainLayerDataDirty_ = false;
 
         float terrainUpdateUs_ = 0.0f;
         float terrainStreamingUs_ = 0.0f;

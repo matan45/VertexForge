@@ -21,9 +21,11 @@ namespace core
     private:
         services::TerrainService* terrainService = nullptr;
         std::atomic<bool> terrainLightmapDirty{false};
+        std::atomic<bool> terrainMaterialDirty_{false};
         std::unique_ptr<events::SubscriptionToken> bakeCompleteToken;
         std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken;
         std::unique_ptr<events::SubscriptionToken> lightmapClearedToken;
+        std::unique_ptr<events::SubscriptionToken> materialCompiledToken;
 
     public:
         explicit TerrainRenderAdapter();
@@ -51,5 +53,8 @@ namespace core
 
         std::vector<services::TerrainTileLightmapInfo> getTerrainLightmapData() const override;
         bool consumeTerrainLightmapDirty() override;
+
+        void markTerrainMaterialDirty() override;
+        bool consumeTerrainMaterialDirty() override;
     };
 }

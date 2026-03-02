@@ -92,6 +92,11 @@ namespace render
                 gpuDrivenRenderer->setTerrainLightmapData(lmData);
             }
 
+            if (terrainRenderProvider->consumeTerrainMaterialDirty())
+            {
+                gpuDrivenRenderer->invalidateTerrainLayerData();
+            }
+
             auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
 
             // Merge terrain tiles visible to additional cameras (RTT) so they are

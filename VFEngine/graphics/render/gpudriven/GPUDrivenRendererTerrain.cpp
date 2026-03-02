@@ -74,7 +74,12 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
     {
-        if (materialPath.empty() || materialPath == currentTerrainMaterialPath_)
+        if (materialPath.empty())
+        {
+            return;
+        }
+
+        if (materialPath == currentTerrainMaterialPath_ && !terrainLayerDataDirty_)
         {
             return;
         }
@@ -126,6 +131,7 @@ namespace render::gpudriven
         }
 
         currentTerrainMaterialPath_ = materialPath;
+        terrainLayerDataDirty_ = false;
         loggerInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
                    materialData->activeLayerCount, materialPath);
     }

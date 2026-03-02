@@ -2,6 +2,8 @@
 #include "../graph/ShaderGraphCompiler.hpp"
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <resource/ResourceManager.hpp>
+#include "events/EventDispatcher.hpp"
+#include "events/TerrainEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -86,6 +88,9 @@ namespace windows
             {
                 vfLogError("Failed to write terrain material shader file");
             }
+
+            events::EventDispatcher::instance().publish(
+                events::terrain::TerrainMaterialCompiledNotification{});
         }
         else
         {
@@ -99,7 +104,6 @@ namespace windows
     {
         isDirty = true;
         materialData->needsRecompile = true;
-        autoCompileCountdown = AUTO_COMPILE_DELAY_FRAMES;
     }
 
     void TerrainMaterialEditorWindow::draw()

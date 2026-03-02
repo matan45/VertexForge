@@ -215,4 +215,9 @@ namespace events::terrain
     {
         std::string_view getName() const override { return "GetTerrainBakeGeometry"; }
     };
+
+    struct TerrainMaterialCompiledNotification : INotification
+    {
+        std::string_view getName() const override { return "TerrainMaterialCompiled"; }
+    };
 }
