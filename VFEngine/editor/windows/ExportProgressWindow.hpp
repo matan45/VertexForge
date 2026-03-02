@@ -11,18 +11,11 @@ namespace windows
 {
 	class ExportProgressWindow : public controllers::imguiHandler::ImguiWindow
 	{
-	public:
-		ExportProgressWindow();
-		~ExportProgressWindow() override;
-
-		void draw() override;
-
 	private:
 		std::atomic<bool> showWindow{false};
 		std::atomic<float> currentProgress{0.0f};
 		std::atomic<bool> exportFinished{false};
 
-		// Protected by dataMutex — written from background thread, read from draw()
 		mutable std::mutex dataMutex;
 		std::string currentStep;
 		bool exportSuccess = false;
@@ -33,5 +26,12 @@ namespace windows
 		events::SubscriptionToken startToken;
 		events::SubscriptionToken progressToken;
 		events::SubscriptionToken completeToken;
+		
+	public:
+		ExportProgressWindow();
+		~ExportProgressWindow() override;
+
+		void draw() override;
+		
 	};
 }

@@ -8,6 +8,9 @@ namespace handlers
 {
 	class ExportHandler
 	{
+	private:
+		std::unique_ptr<std::jthread> exportThread;
+		std::atomic<bool> exporting{false};
 	public:
 		ExportHandler() = default;
 		~ExportHandler();
@@ -18,8 +21,5 @@ namespace handlers
 	private:
 		bool handleExportCommand(const events::gameExport::ExportGameCommand& cmd);
 		bool handleCanExportQuery(const events::gameExport::CanExportQuery& query);
-
-		std::unique_ptr<std::jthread> exportThread;
-		std::atomic<bool> exporting{false};
 	};
 }

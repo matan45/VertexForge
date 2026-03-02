@@ -47,7 +47,6 @@ namespace handlers
 
 		auto& dispatcher = events::EventDispatcher::instance();
 
-		// Get current project config
 		auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
 		if (!projectOpt || !projectOpt->isValid())
 		{
@@ -57,7 +56,6 @@ namespace handlers
 
 		auto projectPathOpt = dispatcher.query(events::project::GetProjectPathQuery{});
 
-		// Build export config
 		gameExport::ExportConfig config;
 		config.gameName = projectOpt->projectName;
 		config.gameVersion = projectOpt->version;
@@ -71,20 +69,17 @@ namespace handlers
 			config.projectFile = *projectPathOpt;
 		}
 
-		// Publish start notification
 		events::gameExport::ExportStartedNotification startNotif;
 		startNotif.outputDirectory = cmd.outputDirectory;
 		dispatcher.publish(startNotif);
 
 		exporting.store(true);
 
-		// Wait for previous thread if any
 		if (exportThread && exportThread->joinable())
 		{
 			exportThread->join();
 		}
 
-		// Run export in background thread
 		exportThread = std::make_unique<std::jthread>([this, config]() {
 			auto& disp = events::EventDispatcher::instance();
 
@@ -125,14 +120,12 @@ namespace handlers
 
 		auto& dispatcher = events::EventDispatcher::instance();
 
-		// Check project is loaded
 		bool isLoaded = dispatcher.query(events::project::IsProjectLoadedQuery{});
 		if (!isLoaded) return false;
 
 		auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
 		if (!projectOpt || !projectOpt->isValid()) return false;
 
-		// Check working directory exists
 		if (!std::filesystem::exists(projectOpt->workingDirectory)) return false;
 
 		return true;

@@ -336,7 +336,6 @@ namespace windows
 
         if (!sculptActive || !ImGui::IsWindowHovered())
         {
-            // Only clear cursor if paint/hole mode is also not active
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
             bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
             if (!paintActive && !holeActive)
@@ -399,7 +398,6 @@ namespace windows
 
         if (!paintActive || !ImGui::IsWindowHovered())
         {
-            // Only clear cursor if sculpt/hole mode is also not active
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
             if (!sculptActive && !holeActive)
@@ -462,7 +460,6 @@ namespace windows
 
         if (!holeActive || !ImGui::IsWindowHovered())
         {
-            // Only clear cursor if sculpt/paint mode is also not active
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
             if (!sculptActive && !paintActive)

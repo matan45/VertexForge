@@ -18,9 +18,6 @@ namespace windows
         bool showCompileError = false;
         std::string compileErrorMessage;
 
-        int autoCompileCountdown = 0;
-        static constexpr int AUTO_COMPILE_DELAY_FRAMES = 10;
-
     public:
         explicit TerrainMaterialEditorWindow(const std::string& materialPath);
         ~TerrainMaterialEditorWindow() override = default;

@@ -104,8 +104,6 @@ namespace windows
     {
         isDirty = true;
         materialData->needsRecompile = true;
-        // Compile is intentionally manual (Save/Compile button) — auto-compile on every
-        // slider change triggered excessive GPU re-uploads via TerrainMaterialCompiledNotification.
     }
 
     void TerrainMaterialEditorWindow::draw()
@@ -115,16 +113,6 @@ namespace windows
         if (!materialData)
         {
             loadMaterial();
-        }
-
-        // Debounced auto-compile
-        if (autoCompileCountdown > 0)
-        {
-            autoCompileCountdown--;
-            if (autoCompileCountdown == 0 && materialData && materialData->needsRecompile)
-            {
-                compileMaterial();
-            }
         }
 
         ImGui::SetNextWindowSize(ImVec2(600, 700), ImGuiCond_FirstUseEver);
@@ -264,7 +252,6 @@ namespace windows
                     }
                 }
 
-                // Blend mode (not shown for layer 0 - it's the base)
                 if (i > 0)
                 {
                     const char* blendModes[] = {"Linear", "Overlay"};

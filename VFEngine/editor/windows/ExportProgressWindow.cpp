@@ -67,7 +67,6 @@ namespace windows
 		float progress = currentProgress.load();
 		bool finished = exportFinished.load();
 
-		// Snapshot all shared state under a single lock
 		std::string step;
 		bool success = false;
 		std::string error;
@@ -93,7 +92,6 @@ namespace windows
 			ImGui::Text("Status: %s", step.c_str());
 			ImGui::Spacing();
 
-			// Progress bar
 			ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
 			ImGui::Spacing();
 

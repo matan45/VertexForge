@@ -35,7 +35,6 @@ namespace windows
                 visible = n.isActive;
                 if (n.isActive)
                 {
-                    // Sync with current state
                     auto& d = events::EventDispatcher::instance();
                     auto params = d.query(events::holeBrush::GetHoleBrushParamsQuery{});
                     brushRadius = params.radius;
@@ -109,7 +108,6 @@ namespace windows
 
         ImGui::End();
 
-        // If user closed the panel, deactivate hole mode
         if (!visible)
         {
             events::hole::SetHoleModeActiveCommand cmd;
