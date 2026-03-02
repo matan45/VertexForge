@@ -91,6 +91,17 @@ namespace gameExport
 			return false;
 		}
 
+		// Warn if scripts exist but haven't been compiled
+		fs::path scriptsDir = config.workingDirectory / "scripts";
+		if (fs::exists(scriptsDir))
+		{
+			fs::path compiledLib = scriptsDir / "compiled" / "scripts.mtcLib";
+			if (!fs::exists(compiledLib))
+			{
+				result.warnings.push_back("Scripts found but not compiled. Build scripts before exporting (Scripts > Build Scripts).");
+			}
+		}
+
 		return true;
 	}
 
@@ -212,7 +223,7 @@ namespace gameExport
 	bool GameExporter::copyAssets(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path assetsDst = config.outputDirectory / "Assets";
-		copyDirectoryRecursive(config.workingDirectory, assetsDst, result);
+		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result);
 		return true;
 	}
 
@@ -407,6 +418,38 @@ namespace gameExport
 		if (ec)
 		{
 			result.warnings.push_back("Warning while copying " + src.string() + ": " + ec.message());
+		}
+	}
+
+	void GameExporter::copyDirectoryFilteredRecursive(const fs::path& src, const fs::path& dst, ExportResult& result) const
+	{
+		std::error_code ec;
+		fs::create_directories(dst, ec);
+
+		for (const auto& entry : fs::recursive_directory_iterator(src, ec))
+		{
+			fs::path relativePath = fs::relative(entry.path(), src, ec);
+			fs::path destPath = dst / relativePath;
+
+			if (entry.is_directory())
+			{
+				fs::create_directories(destPath, ec);
+				continue;
+			}
+
+			// Skip .mt source files (keep .mtcLib compiled bytecode)
+			auto ext = entry.path().extension().string();
+			if (ext == ".mt")
+			{
+				continue;
+			}
+
+			fs::copy_file(entry.path(), destPath, fs::copy_options::overwrite_existing, ec);
+			if (ec)
+			{
+				result.warnings.push_back("Warning while copying " + entry.path().string() + ": " + ec.message());
+				ec.clear();
+			}
 		}
 	}
 }
