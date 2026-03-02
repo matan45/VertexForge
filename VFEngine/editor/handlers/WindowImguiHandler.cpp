@@ -8,6 +8,7 @@
 #include "../windows/contentbrowser/ContentBrowser.hpp"
 #include "../windows/FolderStructureWindow.hpp"
 #include "../windows/ImportProgressWindow.hpp"
+#include "../windows/ExportProgressWindow.hpp"
 #include "../windows/NavmeshWindow.hpp"
 
 namespace handlers
@@ -30,6 +31,7 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::EntityDetailsPanel>());
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ImportProgressWindow>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ExportProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::NavmeshWindow>());
     }
 

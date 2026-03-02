@@ -41,7 +41,9 @@
 #include "events/ProjectEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include "Import.hpp"
+#include "ExportHandler.hpp"
 #include "core/PluginManager.hpp"
+#include "resource/PathResolver.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -57,6 +59,8 @@ namespace handlers
 
     void EditorHandler::init()
     {
+        resource::PathResolver::initialize();
+
         editor::SplashScreen::instance().setStatus("Initializing graphics...");
         bootstrap->init();
 
@@ -164,6 +168,7 @@ namespace handlers
     void EditorHandler::cleanUp()
     {
         pluginManager.reset();
+        exportHandler.reset();
 
         cleanupEventSubscriptions();
 
@@ -229,6 +234,7 @@ namespace handlers
         createVFXServices();
         createTerrainServices();
         createWaterServices();
+        exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
 
@@ -399,9 +405,10 @@ namespace handlers
         {
             ikComponentService->registerEventHandlers();
         }
+        exportHandler->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
-        atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
+        atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");
         events::EventDispatcher::instance().execute(atlasCmd);
     }
 

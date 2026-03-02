@@ -114,6 +114,9 @@
     <ClInclude Include="components\WaterComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\ProjectConfig.hpp" />
+    <ClInclude Include="export\ExeIconEmbedder.hpp" />
+    <ClInclude Include="export\ExportConfig.hpp" />
+    <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="lightbake\BakeSceneMesh.hpp" />
     <ClInclude Include="lightbake\LightBaker.hpp" />
@@ -146,6 +149,7 @@
     <ClInclude Include="resource\FontResource.hpp" />
     <ClInclude Include="resource\MeshStreamHandle.hpp" />
     <ClInclude Include="resource\MeshletTypes.hpp" />
+    <ClInclude Include="resource\PathResolver.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
@@ -214,6 +218,8 @@
     <ClCompile Include="animator\IKTypes.cpp" />
     <ClCompile Include="animator\LookAtIKHelper.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
+    <ClCompile Include="export\ExeIconEmbedder.cpp" />
+    <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="lightbake\BakeSceneMesh.cpp" />
     <ClCompile Include="lightbake\LightBaker.cpp" />
@@ -233,6 +239,7 @@
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\MeshStreamHandleParse.cpp" />
     <ClCompile Include="resource\MeshStreamHandleRead.cpp" />
+    <ClCompile Include="resource\PathResolver.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />

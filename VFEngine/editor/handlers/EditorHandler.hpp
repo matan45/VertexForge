@@ -52,6 +52,10 @@ namespace services {
 }
 
 namespace handlers {
+	class ExportHandler;
+}
+
+namespace handlers {
 
 	class EditorHandler
 	{
@@ -92,6 +96,8 @@ namespace handlers {
 		std::shared_ptr<services::ILightBakeService> lightBakeService;
 		std::shared_ptr<services::IControllerService> controllerService;
 		std::shared_ptr<services::IKComponentService> ikComponentService;
+
+		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
 		std::unique_ptr<plugin::PluginManager> pluginManager;
 

@@ -1,5 +1,6 @@
 #include "Window.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/PathResolver.hpp"
 #include "print/Logger.hpp"
 
 
@@ -25,7 +26,7 @@ namespace window {
 		glfwSetWindowIconifyCallback(window, windowIconifyCallback);
 		glfwSetWindowFocusCallback(window, windowFocusCallback);
 
-		setWindowIcon("../../resources/editor/window-icon.vfImage");
+		setWindowIcon(resource::PathResolver::resolveEnginePath("../../resources/editor/window-icon.vfImage"));
 	}
 
 	void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -79,6 +80,12 @@ namespace window {
 	bool Window::shouldClose() const
 	{
 		return glfwWindowShouldClose(window);
+	}
+
+	void Window::setTitle(const std::string& title) {
+		if (window) {
+			glfwSetWindowTitle(window, title.c_str());
+		}
 	}
 
 	void Window::setWindowIcon(std::string_view iconPath) {

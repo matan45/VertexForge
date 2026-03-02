@@ -20,6 +20,7 @@
 #include "events/EditorModeEvents.hpp"
 #include "events/ScriptingEvents.hpp"
 #include "events/SculptModeEvents.hpp"
+#include "events/ExportEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -80,7 +81,32 @@ namespace windows
                     events::EventDispatcher::instance().execute(cmd);
                 }
             }
-            else if (ImGui::MenuItem("Exit"))
+            ImGui::Separator();
+
+            {
+                bool canExport = events::EventDispatcher::instance().query(events::gameExport::CanExportQuery{});
+                ImGui::BeginDisabled(!canExport);
+                if (ImGui::MenuItem("Export Game..."))
+                {
+                    std::string outputDir = fileDialog.selectFolderDialog();
+                    if (!outputDir.empty())
+                    {
+                        events::gameExport::ExportGameCommand cmd;
+                        cmd.outputDirectory = outputDir;
+                        events::EventDispatcher::instance().execute(cmd);
+                    }
+                }
+                ImGui::EndDisabled();
+
+                if (!canExport && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip("Load a project before exporting");
+                }
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Exit"))
             {
                 events::application::CloseCommand cmd;
                 events::EventDispatcher::instance().execute(cmd);

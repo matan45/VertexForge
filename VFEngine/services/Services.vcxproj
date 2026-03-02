@@ -113,6 +113,7 @@
     <ClInclude Include="events\EditorModeEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
+    <ClInclude Include="events\ExportEvents.hpp" />
     <ClInclude Include="events\FileOperationsEvents.hpp" />
     <ClInclude Include="events\HoleBrushEvents.hpp" />
     <ClInclude Include="events\HoleModeEvents.hpp" />

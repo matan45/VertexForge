@@ -1,5 +1,6 @@
 #include "../handlers/RuntimeHandler.hpp"
 #include <iostream>
+#include <filesystem>
 
 int main(int argc, char* argv[])
 {
@@ -9,12 +10,29 @@ int main(int argc, char* argv[])
     {
         runtime.init();
 
-        // Load project file
+        std::string projectPath;
         if (argc > 1)
         {
-            if (!runtime.loadProject(argv[1]))
+            projectPath = argv[1];
+        }
+        else
+        {
+            // Auto-discover .vfproj next to the executable
+            for (const auto& entry : std::filesystem::directory_iterator("."))
             {
-                std::cerr << "Failed to load project: " << argv[1] << std::endl;
+                if (entry.path().extension() == ".vfproj")
+                {
+                    projectPath = entry.path().string();
+                    break;
+                }
+            }
+        }
+
+        if (!projectPath.empty())
+        {
+            if (!runtime.loadProject(projectPath))
+            {
+                std::cerr << "Failed to load project: " << projectPath << std::endl;
             }
         }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <functional>
+#include <string>
 
 namespace services
 {
@@ -111,6 +112,9 @@ namespace core
         // === Other Accessors ===
 
         window::Window* getWindow();
+
+        void setWindowTitle(const std::string& title);
+        void setWindowIcon(const std::string& iconPath);
 
         std::shared_ptr<scene::SceneGraphSystem> getSceneGraphSystem();
 

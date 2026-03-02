@@ -23,6 +23,7 @@
 #include "events/ProjectEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include "resource/PathResolver.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
@@ -35,6 +36,8 @@ namespace handlers {
     RuntimeHandler::~RuntimeHandler() = default;
 
     void RuntimeHandler::init() {
+        resource::PathResolver::initialize();
+
         bootstrap->init();
 
         initializeServices();
@@ -146,6 +149,19 @@ namespace handlers {
             vfLogError("Failed to get project configuration");
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
+        }
+
+        // Set window title and icon from project config
+        bootstrap->setWindowTitle(projectOpt->projectName);
+
+        if (!projectOpt->exeIconPath.empty())
+        {
+            std::filesystem::path iconPath =
+                std::filesystem::path(projectOpt->workingDirectory) / projectOpt->exeIconPath;
+            if (std::filesystem::exists(iconPath))
+            {
+                bootstrap->setWindowIcon(iconPath.string());
+            }
         }
 
         std::filesystem::path scenePath =
