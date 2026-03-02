@@ -15,14 +15,12 @@
 #include "print/EditorLogger.hpp"
 #include <cfloat>
 
-namespace
+namespace services
 {
-    // Helper: check if a vertex touches any hole quad in the per-quad holeMask
-    bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz)
+    bool TerrainService::isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz)
     {
         if (!tile.hasHoleMask()) return false;
         uint32_t qc = tile.config.getVertexCount() - 1;
-        // Check up to 4 adjacent quads: (vx-1,vz-1), (vx,vz-1), (vx-1,vz), (vx,vz)
         for (int dz = -1; dz <= 0; ++dz)
         {
             for (int dx = -1; dx <= 0; ++dx)
@@ -40,8 +38,7 @@ namespace
         return false;
     }
 
-
-    void generateTileColliderWireframe(
+    void TerrainService::generateTileColliderWireframe(
         const terrain::TerrainTile& tile,
         components::TerrainColliderDebugData& out)
     {
@@ -69,8 +66,6 @@ namespace
 
         out.lineIndices.clear();
 
-        // Skip line segments where both endpoints touch hole quads
-        // Horizontal lines (along X)
         for (uint32_t z = 0; z < vertexCount; ++z)
         {
             for (uint32_t x = 0; x < vertexCount - 1; ++x)
@@ -81,7 +76,7 @@ namespace
                 out.lineIndices.push_back(z * vertexCount + x + 1);
             }
         }
-        // Vertical lines (along Z)
+
         for (uint32_t x = 0; x < vertexCount; ++x)
         {
             for (uint32_t z = 0; z < vertexCount - 1; ++z)
@@ -95,10 +90,7 @@ namespace
 
         out.version++;
     }
-}
 
-namespace services
-{
     bool TerrainService::applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights)
     {
         if (!tile.hasHoleMask()) return false;

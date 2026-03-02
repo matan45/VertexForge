@@ -4,29 +4,16 @@
 #ifdef _WIN32
 #include <Windows.h>
 #include <fstream>
-#include <vector>
 #endif
 
 namespace gameExport
 {
-	bool ExeIconEmbedder::embedIcon(const std::filesystem::path& exePath,
-									const std::filesystem::path& iconPath,
-									std::string& errorOut)
+	bool ExeIconEmbedder::readIcoFile(const std::filesystem::path& iconPath,
+									  std::vector<uint8_t>& icoData,
+									  uint16_t& imageCount,
+									  std::string& errorOut)
 	{
 #ifdef _WIN32
-		if (!std::filesystem::exists(iconPath))
-		{
-			errorOut = "Icon file not found: " + iconPath.string();
-			return false;
-		}
-
-		if (!std::filesystem::exists(exePath))
-		{
-			errorOut = "Executable not found: " + exePath.string();
-			return false;
-		}
-
-		// Read .ico file
 		std::ifstream icoFile(iconPath, std::ios::binary | std::ios::ate);
 		if (!icoFile.is_open())
 		{
@@ -36,7 +23,7 @@ namespace gameExport
 
 		auto fileSize = icoFile.tellg();
 		icoFile.seekg(0);
-		std::vector<uint8_t> icoData(static_cast<size_t>(fileSize));
+		icoData.resize(static_cast<size_t>(fileSize));
 		icoFile.read(reinterpret_cast<char*>(icoData.data()), fileSize);
 		icoFile.close();
 
@@ -49,7 +36,7 @@ namespace gameExport
 		// Validate ICO header
 		uint16_t reserved = icoData[0] | (icoData[1] << 8);
 		uint16_t type = icoData[2] | (icoData[3] << 8);
-		uint16_t imageCount = icoData[4] | (icoData[5] << 8);
+		imageCount = icoData[4] | (icoData[5] << 8);
 
 		if (reserved != 0 || type != 1 || imageCount == 0)
 		{
@@ -57,6 +44,19 @@ namespace gameExport
 			return false;
 		}
 
+		return true;
+#else
+		errorOut = "Icon embedding is only supported on Windows";
+		return false;
+#endif
+	}
+
+	bool ExeIconEmbedder::writeIconResources(const std::filesystem::path& exePath,
+											  const std::vector<uint8_t>& icoData,
+											  uint16_t imageCount,
+											  std::string& errorOut)
+	{
+#ifdef _WIN32
 		HANDLE hUpdate = BeginUpdateResourceW(exePath.wstring().c_str(), FALSE);
 		if (!hUpdate)
 		{
@@ -118,7 +118,7 @@ namespace gameExport
 			// Write individual icon image as RT_ICON resource
 			if (!UpdateResourceW(hUpdate, RT_ICON, MAKEINTRESOURCEW(iconId),
 								 MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-								 icoData.data() + imageOffset, imageSize))
+								 const_cast<uint8_t*>(icoData.data()) + imageOffset, imageSize))
 			{
 				EndUpdateResourceW(hUpdate, TRUE);
 				errorOut = "Failed to update RT_ICON resource";
@@ -141,6 +141,38 @@ namespace gameExport
 			errorOut = "Failed to finalize resource update";
 			return false;
 		}
+
+		return true;
+#else
+		errorOut = "Icon embedding is only supported on Windows";
+		return false;
+#endif
+	}
+
+	bool ExeIconEmbedder::embedIcon(const std::filesystem::path& exePath,
+									const std::filesystem::path& iconPath,
+									std::string& errorOut)
+	{
+#ifdef _WIN32
+		if (!std::filesystem::exists(iconPath))
+		{
+			errorOut = "Icon file not found: " + iconPath.string();
+			return false;
+		}
+
+		if (!std::filesystem::exists(exePath))
+		{
+			errorOut = "Executable not found: " + exePath.string();
+			return false;
+		}
+
+		std::vector<uint8_t> icoData;
+		uint16_t imageCount = 0;
+		if (!readIcoFile(iconPath, icoData, imageCount, errorOut))
+			return false;
+
+		if (!writeIconResources(exePath, icoData, imageCount, errorOut))
+			return false;
 
 		vfLogInfo("Icon embedded successfully into {}", exePath.string());
 		return true;

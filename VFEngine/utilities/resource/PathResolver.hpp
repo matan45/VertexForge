@@ -6,6 +6,9 @@ namespace resource
 {
 	class PathResolver
 	{
+	private:
+		static inline bool exportedBuild = false;
+		static inline bool initialized = false;
 	public:
 		static void initialize();
 
@@ -16,8 +19,6 @@ namespace resource
 
 		static bool isExportedMode() { return exportedBuild; }
 
-	private:
-		static inline bool exportedBuild = false;
-		static inline bool initialized = false;
+	
 	};
 }

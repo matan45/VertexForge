@@ -91,7 +91,6 @@ namespace gameExport
 			return false;
 		}
 
-		// Warn if scripts exist but haven't been compiled
 		fs::path scriptsDir = config.workingDirectory / "scripts";
 		if (fs::exists(scriptsDir))
 		{
@@ -146,7 +145,6 @@ namespace gameExport
 	{
 		fs::path runtimeDir = findRuntimeExe().parent_path();
 
-		// Copy OpenAL32.dll from runtime build output
 		fs::path openAlDll = runtimeDir / "OpenAL32.dll";
 		if (fs::exists(openAlDll))
 		{
@@ -163,7 +161,6 @@ namespace gameExport
 			result.warnings.push_back("OpenAL32.dll not found in runtime build output");
 		}
 
-		// Copy shaderc_shared.dll from Vulkan SDK
 		{
 			char* vulkanSdkBuf = nullptr;
 			size_t vulkanSdkLen = 0;
@@ -278,7 +275,6 @@ namespace gameExport
 
 		fs::path icoPath = config.iconPath;
 
-		// If it's a relative path, resolve relative to the working directory
 		if (icoPath.is_relative())
 		{
 			icoPath = config.workingDirectory / icoPath;
@@ -330,7 +326,6 @@ namespace gameExport
 			return false;
 		}
 
-		// Check startup scene exists in exported assets
 		fs::path scenePath = assetsDir / config.startupScene;
 		if (!fs::exists(scenePath))
 		{

@@ -25,6 +25,11 @@ namespace terrain
     class TerrainTile;
 }
 
+namespace components
+{
+    struct TerrainColliderDebugData;
+}
+
 namespace services
 {
     class TerrainService : public ITerrainService
@@ -122,6 +127,9 @@ namespace services
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         uint16_t getOverlayMask() const;
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
+        static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
+        static void generateTileColliderWireframe(const terrain::TerrainTile& tile,
+                                                  components::TerrainColliderDebugData& out);
 
     };
 }

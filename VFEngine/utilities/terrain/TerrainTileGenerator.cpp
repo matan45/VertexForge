@@ -30,7 +30,6 @@ namespace terrain
         if (progress)
             progress(0.0f, "Sampling heights");
 
-        // If we have a height sampler, use it to populate height data
         if (heightSampler)
         {
             uint32_t vertexCount = config.getVertexCount();
@@ -99,7 +98,6 @@ namespace terrain
 
         calculateBounds(lodData);
 
-        // Extract edge vertices for stitching
         extractEdgeVertices(tile, lodLevel);
 
         tile.clearLODDirty(lodLevel);
@@ -125,7 +123,6 @@ namespace terrain
 
         lodData.clear();
 
-        // Regenerate geometry with updated heights
         uint32_t baseVertexCount = config.getVertexCount();
         generateVertices(lodData.vertices, tile, lodLevel);
         generateIndices(lodData.indices, lodLevel, tile.holeMask, baseVertexCount);
@@ -194,7 +191,6 @@ namespace terrain
             generateLODGeometry(tile, lod, getTile);
         }
 
-        // Compute geometric error metrics for each LOD level
         if (progress)
             progress(0.85f, "Computing error metrics");
 
@@ -381,7 +377,6 @@ namespace terrain
 
         lodData.aabb = math::AABB(minPos, maxPos);
 
-        // Calculate bounding sphere (use AABB center and max distance)
         glm::vec3 center = lodData.aabb.getCenter();
         float maxDistSq = 0.0f;
 
@@ -461,7 +456,6 @@ namespace terrain
                 ev.baseZ = i * skipFactor;
                 break;
             }
-            // Clamp to valid base-resolution range
             ev.baseX = std::min(ev.baseX, baseVertexCount - 1);
             ev.baseZ = std::min(ev.baseZ, baseVertexCount - 1);
             edgeVerts.push_back(ev);
@@ -566,7 +560,6 @@ namespace terrain
         glm::vec3 tileCenter = tile.worldBounds.getCenter();
         float distance = glm::length(cameraPosition - tileCenter);
 
-        // Find appropriate LOD level based on distance thresholds
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             if (distance < config.lodDistances[lod])
