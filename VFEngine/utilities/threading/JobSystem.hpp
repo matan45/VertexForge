@@ -30,7 +30,7 @@ namespace threading {
 			auto future = promise->get_future();
 
 			submitTask(
-				[callable = std::forward<F>(callable), promise]() {
+				[callable = std::forward<F>(callable), promise]() mutable {
 					try {
 						if constexpr (std::is_void_v<ReturnType>) {
 							callable();

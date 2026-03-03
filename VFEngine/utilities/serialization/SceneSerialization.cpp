@@ -240,7 +240,7 @@ namespace serialization
                 for (auto& child : children)
                 {
                     futures.push_back(threading::JobSystem::instance().submit(
-                        [this, child]() mutable -> json
+                        [child]() mutable -> json
                         {
                             return serializeEntity(child);
                         }, threading::JobPriority::NORMAL
@@ -316,7 +316,7 @@ namespace serialization
                 for (auto& child : children)
                 {
                     futures.push_back(threading::JobSystem::instance().submit(
-                        [this, child]() mutable -> json
+                        [child]() mutable -> json
                         {
                             return serializeEntity(child);
                         }, threading::JobPriority::NORMAL
