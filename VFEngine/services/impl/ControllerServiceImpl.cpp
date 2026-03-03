@@ -26,7 +26,6 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Movement input commands
         dispatcher.registerCommandHandler<::events::controller::SetMoveInputCommand>(
             [](const ::events::controller::SetMoveInputCommand& cmd)
             {
@@ -95,7 +94,6 @@ namespace services
                 controller.wantsJump = false;
                 controller.wantsSprint = false;
 
-                // Stop navmesh agent if present
                 if (registry.all_of<components::NavmeshAgentComponent>(entity))
                 {
                     ::events::navmesh::StopAgentCommand stopCmd;
@@ -116,7 +114,6 @@ namespace services
                 registry.get<components::ControllerComponent>(entity).moveSpeed = cmd.moveSpeed;
             });
 
-        // Queries
         dispatcher.registerQueryHandler<::events::controller::HasReachedDestinationQuery>(
             [](const ::events::controller::HasReachedDestinationQuery& query)
             {
@@ -261,7 +258,6 @@ namespace services
                 return registry.get<components::ControllerComponent>(entity).isGrounded;
             });
 
-        // Locomotion settings commands
         dispatcher.registerCommandHandler<::events::controller::SetAccelerationCommand>(
             [](const ::events::controller::SetAccelerationCommand& cmd)
             {
@@ -322,7 +318,6 @@ namespace services
                 registry.get<components::ControllerComponent>(entity).walkSpeedThreshold = cmd.walkSpeedThreshold;
             });
 
-        // Locomotion state queries
         dispatcher.registerCommandHandler<::events::controller::SetLocomotionStateCommand>(
             [](const ::events::controller::SetLocomotionStateCommand& cmd)
             {
@@ -444,7 +439,6 @@ namespace services
             auto& transform = view.get<components::TransformComponent>(entity);
             auto handle = internal::toHandle(entity);
 
-            // Handle MoveTo (navmesh pathfinding or direct)
             if (controller.hasMoveToTarget)
             {
                 float dist = glm::length(controller.moveToDestination - transform.position);
@@ -463,7 +457,6 @@ namespace services
                     continue;
                 }
 
-                // Delegate to navmesh if available (only dispatch when destination changed)
                 if (registry.all_of<components::NavmeshAgentComponent>(entity))
                 {
                     auto& agent = registry.get<components::NavmeshAgentComponent>(entity);
@@ -485,12 +478,10 @@ namespace services
                     continue;
                 }
 
-                // Otherwise compute direction for direct movement
                 glm::vec3 dir = glm::normalize(controller.moveToDestination - transform.position);
                 controller.moveInput = dir;
             }
 
-            // Route to character controller or rigid body path
             if (controller.characterControllerActive && physicsProvider)
             {
                 updateCharacterControllerEntity(entity, deltaTime);
@@ -500,13 +491,9 @@ namespace services
                 updateRigidBodyEntity(entity, deltaTime);
             }
 
-            // Derive locomotion state from physics results
             deriveLocomotionState(controller);
-
-            // Sync locomotion state to animator parameters
             syncLocomotionToAnimator(entity, controller);
 
-            // Reset per-frame input (scripts must set it again next frame)
             controller.wantsJump = false;
             if (!controller.hasMoveToTarget)
             {
@@ -523,14 +510,12 @@ namespace services
         auto& transform = registry.get<components::TransformComponent>(entity);
         auto handle = internal::toHandle(entity);
 
-        // Compute target speed
         float targetSpeed = controller.moveSpeed;
         if (controller.wantsSprint)
         {
             targetSpeed *= controller.sprintMultiplier;
         }
 
-        // Compute desired horizontal velocity from input
         glm::vec3 desiredHorizontal{0.0f};
         if (glm::length2(controller.moveInput) > 0.001f)
         {
@@ -538,19 +523,16 @@ namespace services
             desiredHorizontal = normalizedInput * targetSpeed;
         }
 
-        // Apply acceleration/deceleration smoothing on XZ plane
         glm::vec3 currentHorizontal{controller.currentVelocity.x, 0.0f, controller.currentVelocity.z};
         glm::vec3 velocityDiff = desiredHorizontal - currentHorizontal;
         float diffLen = glm::length(velocityDiff);
 
         if (diffLen > 0.001f)
         {
-            // Determine if accelerating or decelerating
             float rate = glm::length2(desiredHorizontal) >= glm::length2(currentHorizontal)
                 ? controller.acceleration
                 : controller.deceleration;
 
-            // Apply air control factor when airborne
             if (!controller.isGrounded)
             {
                 rate *= controller.airControlFactor;
@@ -567,14 +549,10 @@ namespace services
             }
         }
 
-        // Build full velocity: smoothed horizontal + vertical (gravity + jump)
         float verticalVel = controller.currentVelocity.y;
-
-        // Apply gravity
         auto gravity = physicsProvider->getGravity();
         verticalVel += gravity.y * deltaTime;
 
-        // Apply jump if grounded
         if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
         {
             verticalVel = controller.jumpForce;
@@ -582,10 +560,8 @@ namespace services
 
         glm::vec3 fullVelocity{currentHorizontal.x, verticalVel, currentHorizontal.z};
 
-        // Update character controller through physics
         auto result = physicsProvider->updateCharacterController(handle, fullVelocity, deltaTime);
 
-        // Write back results
         transform.position = result.position;
         transform.isDirty = true;
 
@@ -603,7 +579,6 @@ namespace services
         auto handle = internal::toHandle(entity);
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Apply movement from moveInput
         if (glm::length(controller.moveInput) > 0.001f)
         {
             float speed = controller.moveSpeed;
@@ -636,7 +611,6 @@ namespace services
             controller.currentSpeed = 0.0f;
         }
 
-        // Apply jump (only when grounded)
         if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
         {
             if (registry.all_of<components::RigidBodyComponent>(entity))

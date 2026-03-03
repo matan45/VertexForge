@@ -341,39 +341,11 @@ namespace windows::animation
         if (!state)
             return;
 
-        // Motion source selector
-        const char* motionTypes[] = {"Single Clip", "1D Blend Tree", "2D Blend Tree"};
-        int currentType = 0;
-        if (state->blendTree.has_value())
-        {
-            currentType = state->blendTree->type == animator::BlendTreeType::BlendTree1D ? 1 : 2;
-        }
-
-        if (ImGui::Combo("Motion Type", &currentType, motionTypes, IM_ARRAYSIZE(motionTypes)))
-        {
-            if (currentType == 0)
-            {
-                state->blendTree.reset();
-            }
-            else
-            {
-                if (!state->blendTree.has_value())
-                {
-                    state->blendTree = animator::BlendTreeData{};
-                }
-                state->blendTree->type = (currentType == 1)
-                    ? animator::BlendTreeType::BlendTree1D
-                    : animator::BlendTreeType::BlendTree2D;
-            }
-            isDirty = true;
-        }
-
-        if (!state->blendTree.has_value())
+        if (!drawMotionTypeCombo(state, isDirty))
             return;
 
         auto& bt = state->blendTree.value();
 
-        // Parameter selection
         auto drawParamCombo = [&](const char* label, std::string& paramName)
         {
             if (ImGui::BeginCombo(label, paramName.empty() ? "(none)" : paramName.c_str()))
@@ -410,54 +382,11 @@ namespace windows::animation
         for (size_t i = 0; i < bt.entries.size(); ++i)
         {
             ImGui::PushID(static_cast<int>(i));
-            auto& entry = bt.entries[i];
-
-            // Animation file
-            if (!entry.animationPath.empty())
-            {
-                fs::path animPath(entry.animationPath);
-                ImGui::Text("%s", animPath.filename().string().c_str());
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.3f, 1.0f), "(no animation)");
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Browse"))
-            {
-                nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog(
-                    {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
-                if (!path.empty())
-                {
-                    entry.animationPath = path;
-                    isDirty = true;
-                }
-            }
-
-            if (bt.type == animator::BlendTreeType::BlendTree1D)
-            {
-                if (ImGui::DragFloat("Threshold", &entry.threshold, 0.01f))
-                {
-                    isDirty = true;
-                }
-            }
-            else
-            {
-                float pos[2] = {entry.position.x, entry.position.y};
-                if (ImGui::DragFloat2("Position", pos, 0.01f))
-                {
-                    entry.position.x = pos[0];
-                    entry.position.y = pos[1];
-                    isDirty = true;
-                }
-            }
+            drawBlendTreeEntry(bt.entries[i], bt.type, isDirty);
 
             ImGui::SameLine();
             if (ImGui::SmallButton("X"))
-            {
                 entryToRemove = static_cast<int>(i);
-            }
 
             ImGui::Separator();
             ImGui::PopID();
@@ -475,6 +404,80 @@ namespace windows::animation
             entry.threshold = bt.entries.empty() ? 0.0f : bt.entries.back().threshold + 1.0f;
             bt.entries.push_back(std::move(entry));
             isDirty = true;
+        }
+    }
+
+    bool AnimatorPropertiesPanel::drawMotionTypeCombo(animator::AnimatorState* state, bool& isDirty)
+    {
+        const char* motionTypes[] = {"Single Clip", "1D Blend Tree", "2D Blend Tree"};
+        int currentType = 0;
+        if (state->blendTree.has_value())
+        {
+            currentType = state->blendTree->type == animator::BlendTreeType::BlendTree1D ? 1 : 2;
+        }
+
+        if (ImGui::Combo("Motion Type", &currentType, motionTypes, IM_ARRAYSIZE(motionTypes)))
+        {
+            if (currentType == 0)
+            {
+                state->blendTree.reset();
+            }
+            else
+            {
+                if (!state->blendTree.has_value())
+                    state->blendTree = animator::BlendTreeData{};
+
+                state->blendTree->type = (currentType == 1)
+                    ? animator::BlendTreeType::BlendTree1D
+                    : animator::BlendTreeType::BlendTree2D;
+            }
+            isDirty = true;
+        }
+
+        return state->blendTree.has_value();
+    }
+
+    void AnimatorPropertiesPanel::drawBlendTreeEntry(animator::BlendTreeEntry& entry,
+                                                       animator::BlendTreeType type,
+                                                       bool& isDirty)
+    {
+        if (!entry.animationPath.empty())
+        {
+            fs::path animPath(entry.animationPath);
+            ImGui::Text("%s", animPath.filename().string().c_str());
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.3f, 1.0f), "(no animation)");
+        }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Browse"))
+        {
+            nfd::FileDialog fileDialog;
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
+            if (!path.empty())
+            {
+                entry.animationPath = path;
+                isDirty = true;
+            }
+        }
+
+        if (type == animator::BlendTreeType::BlendTree1D)
+        {
+            if (ImGui::DragFloat("Threshold", &entry.threshold, 0.01f))
+                isDirty = true;
+        }
+        else
+        {
+            float pos[2] = {entry.position.x, entry.position.y};
+            if (ImGui::DragFloat2("Position", pos, 0.01f))
+            {
+                entry.position.x = pos[0];
+                entry.position.y = pos[1];
+                isDirty = true;
+            }
         }
     }
 

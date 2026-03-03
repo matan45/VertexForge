@@ -115,19 +115,17 @@ namespace core::physics
         std::unique_ptr<PhysicsContactListener> contactListener;
 
         std::unordered_map<uint64_t, JPH::BodyID> entityToBody;
-        std::unordered_map<uint32_t, uint64_t> bodyToEntity; // BodyID index to entity
+        std::unordered_map<uint32_t, uint64_t> bodyToEntity;
 
         using TileCoordKey = uint64_t;
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
 
-        // Ragdoll data
         std::unordered_map<uint64_t, RagdollInstanceData> entityRagdolls;
         std::unordered_map<uint64_t, std::vector<JPH::BodyID>> entityBoneBodies;
-        std::unordered_map<uint32_t, int> bodyToBoneIndex; // BodyID index to bone index
+        std::unordered_map<uint32_t, int> bodyToBoneIndex;
         uint32_t nextCollisionGroupId = 1;
 
-        // Character virtual instances
         std::unordered_map<uint64_t, JPH::Ref<JPH::CharacterVirtual>> entityCharacters;
         std::unordered_map<uint64_t, uint8_t> entityCharacterLayers;
 
@@ -196,38 +194,26 @@ namespace core::physics
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);
 
-        // Ragdoll management
         bool createRagdoll(uint64_t entityId, const RagdollBuildResult& buildResult);
         void destroyRagdoll(uint64_t entityId);
         bool hasRagdoll(uint64_t entityId) const;
         void activateRagdoll(uint64_t entityId);
         void deactivateRagdoll(uint64_t entityId);
         bool getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const;
-        void setRagdollPose(uint64_t entityId, const JPH::SkeletonPose& pose);
-        void driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& target, float deltaTime);
         void applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse);
         void applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse);
-        const SkeletonConversionResult* getRagdollSkeletonConversion(uint64_t entityId) const;
-
-        // Kinematic bone bodies
         bool createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,
                                         const glm::vec3& entityPosition = glm::vec3(0.0f));
         void destroyKinematicBoneBodies(uint64_t entityId);
-        bool hasKinematicBoneBodies(uint64_t entityId) const;
         void updateKinematicBonePoses(uint64_t entityId,
                                        const std::vector<glm::mat4>& boneWorldTransforms,
                                        const std::vector<int>& physicsToAnimBoneIndex,
                                        float deltaTime);
 
-        // Mode transitions
         void transitionToRagdoll(uint64_t entityId, const JPH::SkeletonPose& currentPose);
         void transitionToKinematic(uint64_t entityId, const RagdollBuildResult& buildResult,
                                     const glm::vec3& entityPosition);
 
-        // Bone body lookup
-        int getBoneIndexForBody(JPH::BodyID bodyId) const;
-
-        // Character controller management
         bool addCharacter(uint64_t entityId, const CharacterCreateInfo& info);
         void removeCharacter(uint64_t entityId);
         bool hasCharacter(uint64_t entityId) const;
@@ -237,7 +223,6 @@ namespace core::physics
         glm::vec3 getCharacterPosition(uint64_t entityId) const;
         glm::vec3 getCharacterLinearVelocity(uint64_t entityId) const;
         void setCharacterPosition(uint64_t entityId, const glm::vec3& position);
-        void setCharacterLinearVelocity(uint64_t entityId, const glm::vec3& velocity);
 
     };
 }

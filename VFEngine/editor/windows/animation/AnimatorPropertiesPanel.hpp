@@ -35,5 +35,9 @@ namespace windows::animation
         void drawBlendTreeEditor(animator::AnimatorState* state,
                                   animator::AnimatorData* animatorData,
                                   bool& isDirty);
+        bool drawMotionTypeCombo(animator::AnimatorState* state, bool& isDirty);
+        void drawBlendTreeEntry(animator::BlendTreeEntry& entry,
+                                 animator::BlendTreeType type,
+                                 bool& isDirty);
     };
 }

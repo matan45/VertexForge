@@ -277,6 +277,50 @@ namespace animation
         }
     }
 
+    std::vector<glm::mat4> AnimatorStateMachine::evaluateStatePose(
+        uint32_t stateId, float time, AnimationEvaluator& evaluator, glm::vec3* outRootPos) const
+    {
+        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+
+        if (animState && hasBlendTree(stateId))
+        {
+            if (outRootPos)
+                return evaluateBlendTreePose(*animState, time, *outRootPos);
+            return evaluateBlendTreePose(*animState, time);
+        }
+
+        auto it = loadedAnimations.find(stateId);
+        if (it == loadedAnimations.end() || !it->second)
+            return {};
+
+        evaluator.loadAnimation(*it->second, *skeletonData);
+        float timeInTicks = evaluator.secondsToTicks(time);
+
+        if (outRootPos)
+            return evaluator.evaluatePose(timeInTicks, *outRootPos);
+        return evaluator.evaluatePose(timeInTicks);
+    }
+
+    void AnimatorStateMachine::updateRootMotionDelta(const glm::vec3& currentRootPosition)
+    {
+        if (rootMotionFirstFrame)
+        {
+            rootMotionDelta = glm::vec3(0.0f);
+            rootMotionFirstFrame = false;
+        }
+        else if (state.currentLoopCount != rootMotionLastLoopCount)
+        {
+            rootMotionDelta = glm::vec3(0.0f);
+        }
+        else
+        {
+            rootMotionDelta = currentRootPosition - previousRootPosition;
+        }
+
+        previousRootPosition = currentRootPosition;
+        rootMotionLastLoopCount = state.currentLoopCount;
+    }
+
     void AnimatorStateMachine::evaluateCurrentPose()
     {
         if (!animatorData || !skeletonData)
@@ -288,75 +332,26 @@ namespace animation
         }
 
         glm::vec3 currentRootPosition{0.0f};
-
-        bool currHasBlendTree = hasBlendTree(state.currentStateId);
-        bool prevHasBlendTree = hasBlendTree(state.previousStateId);
+        glm::vec3* rootPtr = rootMotionEnabled ? &currentRootPosition : nullptr;
 
         if (state.isBlending)
         {
-            const animator::AnimatorState* currState = getCurrentAnimatorState();
-            const animator::AnimatorState* prevState = getPreviousAnimatorState();
-
-            std::vector<glm::mat4> prevPose;
-            std::vector<glm::mat4> currPose;
             glm::vec3 prevRoot{0.0f}, currRoot{0.0f};
-            bool prevValid = false, currValid = false;
+            glm::vec3* prevRootPtr = rootMotionEnabled ? &prevRoot : nullptr;
+            glm::vec3* currRootPtr = rootMotionEnabled ? &currRoot : nullptr;
 
-            // Evaluate previous state pose
-            if (prevState && prevHasBlendTree)
-            {
-                if (rootMotionEnabled)
-                    prevPose = evaluateBlendTreePose(*prevState, state.previousStateTime, prevRoot);
-                else
-                    prevPose = evaluateBlendTreePose(*prevState, state.previousStateTime);
-                prevValid = !prevPose.empty();
-            }
-            else
-            {
-                auto itPrev = loadedAnimations.find(state.previousStateId);
-                if (itPrev != loadedAnimations.end() && itPrev->second)
-                {
-                    previousEvaluator.loadAnimation(*itPrev->second, *skeletonData);
-                    float prevTimeInTicks = previousEvaluator.secondsToTicks(state.previousStateTime);
-                    if (rootMotionEnabled)
-                        prevPose = previousEvaluator.evaluatePose(prevTimeInTicks, prevRoot);
-                    else
-                        prevPose = previousEvaluator.evaluatePose(prevTimeInTicks);
-                    prevValid = !prevPose.empty();
-                }
-            }
+            auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
+                                               previousEvaluator, prevRootPtr);
+            auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
+                                               currentEvaluator, currRootPtr);
 
-            // Evaluate current state pose
-            if (currState && currHasBlendTree)
-            {
-                if (rootMotionEnabled)
-                    currPose = evaluateBlendTreePose(*currState, state.stateTime, currRoot);
-                else
-                    currPose = evaluateBlendTreePose(*currState, state.stateTime);
-                currValid = !currPose.empty();
-            }
-            else
-            {
-                auto itCurr = loadedAnimations.find(state.currentStateId);
-                if (itCurr != loadedAnimations.end() && itCurr->second)
-                {
-                    currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
-                    float currTimeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-                    if (rootMotionEnabled)
-                        currPose = currentEvaluator.evaluatePose(currTimeInTicks, currRoot);
-                    else
-                        currPose = currentEvaluator.evaluatePose(currTimeInTicks);
-                    currValid = !currPose.empty();
-                }
-            }
-
-            if (prevValid && currValid)
+            if (!prevPose.empty() && !currPose.empty())
             {
                 currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
                 if (rootMotionEnabled)
                     currentRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
             }
-            else if (currValid)
+            else if (!currPose.empty())
             {
                 currentBoneMatrices = currPose;
                 if (rootMotionEnabled)
@@ -365,54 +360,21 @@ namespace animation
         }
         else
         {
-            const animator::AnimatorState* currState = getCurrentAnimatorState();
-
-            if (currState && currHasBlendTree)
+            auto pose = evaluateStatePose(state.currentStateId, state.stateTime,
+                                           currentEvaluator, rootPtr);
+            if (!pose.empty())
             {
-                if (rootMotionEnabled)
-                    currentBoneMatrices = evaluateBlendTreePose(*currState, state.stateTime, currentRootPosition);
-                else
-                    currentBoneMatrices = evaluateBlendTreePose(*currState, state.stateTime);
+                currentBoneMatrices = std::move(pose);
             }
             else
             {
-                auto it = loadedAnimations.find(state.currentStateId);
-                if (it != loadedAnimations.end() && it->second)
-                {
-                    currentEvaluator.loadAnimation(*it->second, *skeletonData);
-                    float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-                    if (rootMotionEnabled)
-                        currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks, currentRootPosition);
-                    else
-                        currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
-                }
-                else
-                {
-                    vfLogWarning("[AnimatorStateMachine] Animation not found for state {} (loaded={})",
-                                 state.currentStateId, it != loadedAnimations.end());
-                }
+                vfLogWarning("[AnimatorStateMachine] Animation not found for state {}",
+                             state.currentStateId);
             }
         }
 
         if (rootMotionEnabled)
-        {
-            if (rootMotionFirstFrame)
-            {
-                rootMotionDelta = glm::vec3(0.0f);
-                rootMotionFirstFrame = false;
-            }
-            else if (state.currentLoopCount != rootMotionLastLoopCount)
-            {
-                rootMotionDelta = glm::vec3(0.0f);
-            }
-            else
-            {
-                rootMotionDelta = currentRootPosition - previousRootPosition;
-            }
-
-            previousRootPosition = currentRootPosition;
-            rootMotionLastLoopCount = state.currentLoopCount;
-        }
+            updateRootMotionDelta(currentRootPosition);
     }
 
     bool AnimatorStateMachine::loadAnimationForState(uint32_t stateId)
@@ -429,7 +391,6 @@ namespace animation
             return false;
         }
 
-        // If this state has a blend tree, preload all blend tree animations
         if (animState->blendTree.has_value())
         {
             loadBlendTreeAnimations(*animState);
@@ -463,7 +424,6 @@ namespace animation
         {
             if (!entry.animationPath.empty())
             {
-                // Preload via callback (caches internally in ResourceManager)
                 animationLoadCallback(entry.animationPath);
             }
         }
@@ -471,9 +431,6 @@ namespace animation
 
     float AnimatorStateMachine::getAnimationDuration(uint32_t stateId) const
     {
-        // For blend tree states, use the first valid clip's duration as a reference.
-        // If clips have different durations, transition exit-time calculations
-        // will be approximate (based on this single duration, not a weighted blend).
         if (animatorData)
         {
             const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);

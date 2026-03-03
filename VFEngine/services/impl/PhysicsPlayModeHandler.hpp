@@ -21,6 +21,9 @@ namespace services
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
         bool physicsActive = false;
 
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsAnimationEntities;
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activeCharacterControllers;
+        std::unordered_map<EntityHandle, glm::vec3, EntityHandle::Hash> rootMotionLastSyncPos;
     public:
         explicit PhysicsPlayModeHandler(IPhysicsProvider* physicsProvider);
         ~PhysicsPlayModeHandler();
@@ -36,10 +39,7 @@ namespace services
         void update(float deltaTime);
 
     private:
-        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsAnimationEntities;
-        std::unordered_set<EntityHandle, EntityHandle::Hash> activeCharacterControllers;
-        std::unordered_map<EntityHandle, glm::vec3, EntityHandle::Hash> rootMotionLastSyncPos;
-
+        
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
         void enterPlayMode();
         void exitPlayMode();

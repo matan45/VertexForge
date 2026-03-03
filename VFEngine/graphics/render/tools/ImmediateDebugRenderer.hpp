@@ -39,7 +39,6 @@ namespace render::mesh
         void cleanUp();
         void cleanUpShader();
 
-        // Upload new draw data for this frame. Rebuilds the GPU buffer.
         void updateDrawList(ImmediateDebugDrawList drawList);
 
         void render(const vk::CommandBuffer& commandBuffer,

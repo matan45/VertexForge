@@ -16,7 +16,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // _native_rtt_requestRender(entityId) -> void
         interpreter->registerNativeFunction("_native_rtt_requestRender",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -53,7 +52,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_setEnabled(entityId, enabled) -> void
         interpreter->registerNativeFunction("_native_rtt_setEnabled",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -97,7 +95,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_isEnabled(entityId) -> bool
         interpreter->registerNativeFunction("_native_rtt_isEnabled",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -125,10 +122,6 @@ namespace core::api
                 return value::Value(rttComp.enabled);
             });
 
-        // _native_rtt_create(entityId, width, height, updateMode) -> void
-        // Creates a render texture for an entity that already has a RenderTextureComponent.
-        // The component's textureId is populated by the play-mode handler, but this allows
-        // scripts to create one explicitly at runtime.
         interpreter->registerNativeFunction("_native_rtt_create",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -169,7 +162,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_destroy(entityId) -> void
         interpreter->registerNativeFunction("_native_rtt_destroy",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -197,7 +189,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_resize(entityId, width, height) -> void
         interpreter->registerNativeFunction("_native_rtt_resize",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -231,8 +222,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_setCamera(rttEntityId, cameraEntityId) -> void
-        // Reads view/projection from the camera entity and pipes to the RTT.
         interpreter->registerNativeFunction("_native_rtt_setCamera",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -276,7 +265,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_setPriority(entityId, priority) -> void
         interpreter->registerNativeFunction("_native_rtt_setPriority",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -298,7 +286,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_setUpdateMode(entityId, mode) -> void
         interpreter->registerNativeFunction("_native_rtt_setUpdateMode",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -320,7 +307,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // _native_rtt_getWidth(entityId) -> int
         interpreter->registerNativeFunction("_native_rtt_getWidth",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -334,7 +320,6 @@ namespace core::api
                 return value::Value(static_cast<int64_t>(rttComp.width));
             });
 
-        // _native_rtt_getHeight(entityId) -> int
         interpreter->registerNativeFunction("_native_rtt_getHeight",
             [](const std::vector<value::Value>& args) -> value::Value
             {

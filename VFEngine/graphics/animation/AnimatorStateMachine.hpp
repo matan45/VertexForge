@@ -110,6 +110,10 @@ namespace animation
         void startTransition(const animator::AnimatorTransition& transition);
         void updateBlending(float deltaTime);
         void evaluateCurrentPose();
+        std::vector<glm::mat4> evaluateStatePose(uint32_t stateId, float time,
+                                                   AnimationEvaluator& evaluator,
+                                                   glm::vec3* outRootPos) const;
+        void updateRootMotionDelta(const glm::vec3& currentRootPosition);
         bool loadAnimationForState(uint32_t stateId);
         void loadBlendTreeAnimations(const animator::AnimatorState& state);
         float getAnimationDuration(uint32_t stateId) const;

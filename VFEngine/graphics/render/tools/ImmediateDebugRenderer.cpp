@@ -50,19 +50,16 @@ namespace render::mesh
 
     void ImmediateDebugRenderer::createPipeline(vk::RenderPass renderPass)
     {
-        // Vertex layout: vec3 position + vec4 color
         vk::VertexInputBindingDescription binding{};
         binding.binding = 0;
         binding.stride = sizeof(DebugLineVertex);
         binding.inputRate = vk::VertexInputRate::eVertex;
 
         std::array<vk::VertexInputAttributeDescription, 2> attributes{};
-        // Position
         attributes[0].binding = 0;
         attributes[0].location = 0;
         attributes[0].format = vk::Format::eR32G32B32Sfloat;
         attributes[0].offset = offsetof(DebugLineVertex, position);
-        // Color
         attributes[1].binding = 0;
         attributes[1].location = 1;
         attributes[1].format = vk::Format::eR32G32B32A32Sfloat;

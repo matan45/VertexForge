@@ -554,16 +554,11 @@ namespace core::physics
         return it != terrainBodies.end() && !it->second.empty();
     }
 
-    // ============================================
-    // Character Controller (CharacterVirtual)
-    // ============================================
-
     bool PhysicsWorld::addCharacter(uint64_t entityId, const CharacterCreateInfo& info)
     {
         if (!initialized || !physicsSystem) return false;
         if (entityCharacters.count(entityId)) return false;
 
-        // Build shape based on collider type
         JPH::RefConst<JPH::Shape> characterShape;
         switch (info.shape)
         {
@@ -632,15 +627,12 @@ namespace core::physics
 
         auto* character = it->second.GetPtr();
 
-        // Set the desired velocity (gravity is applied by caller)
         character->SetLinearVelocity(toJolt(desiredVelocity));
 
-        // Configure ExtendedUpdate settings for stair stepping and floor sticking
         JPH::CharacterVirtual::ExtendedUpdateSettings updateSettings;
         updateSettings.mStickToFloorStepDown = JPH::Vec3(0.0f, -0.5f, 0.0f);
         updateSettings.mWalkStairsStepUp = JPH::Vec3(0.0f, 0.4f, 0.0f);
 
-        // Filter collisions based on the character's assigned collision layer
         auto layerIt = entityCharacterLayers.find(entityId);
         JPH::ObjectLayer charLayer = static_cast<JPH::ObjectLayer>(
             layerIt != entityCharacterLayers.end() ? layerIt->second : Layers::DYNAMIC);
@@ -660,7 +652,6 @@ namespace core::physics
             *tempAllocator
         );
 
-        // Read back results
         result.position = toGlmR(character->GetPosition());
         result.linearVelocity = toGlm(character->GetLinearVelocity());
         result.groundNormal = toGlm(character->GetGroundNormal());
@@ -698,13 +689,6 @@ namespace core::physics
         auto it = entityCharacters.find(entityId);
         if (it == entityCharacters.end()) return;
         it->second->SetPosition(toJoltR(position));
-    }
-
-    void PhysicsWorld::setCharacterLinearVelocity(uint64_t entityId, const glm::vec3& velocity)
-    {
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end()) return;
-        it->second->SetLinearVelocity(toJolt(velocity));
     }
 
 }

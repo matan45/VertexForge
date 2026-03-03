@@ -76,7 +76,6 @@ namespace events::controller
         std::string_view getName() const override { return "SetGrounded"; }
     };
 
-
     struct HasReachedDestinationQuery : IQuery<bool>
     {
         services::EntityHandle entity;
@@ -120,7 +119,6 @@ namespace events::controller
         std::string_view getName() const override { return "IsGrounded"; }
     };
 
-    // Locomotion settings commands
     struct SetAccelerationCommand : ICommand<>
     {
         services::EntityHandle entity;

@@ -16,7 +16,6 @@ namespace services
     {
         void applyScaleToCollider(ColliderData& colData, const glm::vec3& scale)
         {
-            // Use absolute scale to handle negative scaling
             glm::vec3 absScale = glm::abs(scale);
 
             switch (colData.shape)
@@ -32,7 +31,6 @@ namespace services
             }
             case ColliderData::Shape::Capsule:
             {
-                // Capsule is vertical: radius scales by horizontal, height by vertical
                 float horizontalScale = glm::max(absScale.x, absScale.z);
                 colData.size.x *= horizontalScale;
                 colData.height *= absScale.y;
@@ -96,7 +94,6 @@ namespace services
                     return fmt::format("Entity '{}': TriangleMesh collider has no mesh path specified",
                         entityName);
                 }
-                // Triangle meshes must be static - they cannot be dynamic in physics engines
                 if (rigidBody.type == components::RigidBodyType::Dynamic)
                 {
                     return fmt::format("Entity '{}': TriangleMesh collider cannot be used with Dynamic rigid body (use Static or Kinematic)",
@@ -267,7 +264,6 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
-        // Also add entities with ColliderComponent but no RigidBodyComponent as static bodies
         auto colliderOnlyView = registry.view<components::ColliderComponent, components::TransformComponent>(
             entt::exclude<components::RigidBodyComponent>);
 
@@ -406,7 +402,6 @@ namespace services
             if (!registry.valid(entity))
                 continue;
 
-            // Standalone colliders (no RigidBody) are static — nothing to sync
             if (!registry.all_of<components::RigidBodyComponent>(entity))
                 continue;
 
@@ -439,7 +434,6 @@ namespace services
         auto it = rootMotionLastSyncPos.find(handle);
         if (it != rootMotionLastSyncPos.end())
         {
-            // Physics delta = how physics moved the body (gravity, collisions)
             glm::vec3 physicsDelta = physPos - it->second;
             transform.position += physicsDelta;
         }
@@ -608,7 +602,6 @@ namespace services
             {
                 activeCharacterControllers.insert(handle);
 
-                // Reset runtime state
                 controller.isGrounded = false;
                 controller.currentVelocity = glm::vec3(0.0f);
                 controller.currentSpeed = 0.0f;
