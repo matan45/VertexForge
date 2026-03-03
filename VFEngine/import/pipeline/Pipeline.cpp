@@ -28,7 +28,6 @@ namespace pipeline
                 }, threading::JobPriority::NORMAL));
             fileIndex++;
         }
-
         return futures;
     }
 

@@ -41,7 +41,10 @@ namespace threading {
 			threadCount = (hw > 3) ? (hw - 2) : 2;
 		}
 
-		pImpl->scheduler.Initialize(threadCount);
+		enki::TaskSchedulerConfig config;
+		config.numTaskThreadsToCreate = threadCount;
+		config.numExternalTaskThreads = 8;
+		pImpl->scheduler.Initialize(config);
 		vfLogInfo("JobSystem initialized with {} threads", pImpl->scheduler.GetNumTaskThreads());
 	}
 
@@ -57,6 +60,19 @@ namespace threading {
 
 	void JobSystem::submitTask(std::function<void()> func, JobPriority priority)
 	{
+		// Auto-register external threads (e.g. detached std::thread, std::async)
+		if (pImpl->scheduler.GetThreadNum() == enki::NO_THREAD_NUM) {
+			if (!pImpl->scheduler.RegisterExternalTaskThread()) {
+				vfLogError("[JobSystem] Failed to register external thread");
+			}
+			// Ensure deregistration when thread exits
+			thread_local struct Guard {
+				enki::TaskScheduler* s = nullptr;
+				~Guard() { if (s) s->DeRegisterExternalTaskThread(); }
+			} guard;
+			guard.s = &pImpl->scheduler;
+		}
+
 		auto task = std::make_unique<enki::TaskSet>(1,
 			[f = std::move(func)](enki::TaskSetPartition, uint32_t) {
 				f();
@@ -70,9 +86,8 @@ namespace threading {
 			std::lock_guard<std::mutex> lock(pImpl->pendingMutex);
 			pImpl->collectCompleted();
 			pImpl->pendingTasks.push_back(std::move(task));
+			pImpl->scheduler.AddTaskSetToPipe(rawTask);
 		}
-
-		pImpl->scheduler.AddTaskSetToPipe(rawTask);
 	}
 
 }
