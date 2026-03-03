@@ -156,7 +156,13 @@ namespace events::controller
         std::string_view getName() const override { return "SetWalkSpeedThreshold"; }
     };
 
-    // Locomotion state queries
+    struct SetLocomotionStateCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        std::string state;
+        std::string_view getName() const override { return "SetLocomotionState"; }
+    };
+
     struct GetLocomotionStateQuery : IQuery<std::string>
     {
         services::EntityHandle entity;

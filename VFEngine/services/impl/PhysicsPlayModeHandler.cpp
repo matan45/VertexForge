@@ -613,7 +613,7 @@ namespace services
                 controller.currentVelocity = glm::vec3(0.0f);
                 controller.currentSpeed = 0.0f;
                 controller.verticalVelocity = 0.0f;
-                controller.locomotionState = components::LocomotionState::Idle;
+                controller.locomotionState = "Idle";
                 controller.characterControllerActive = true;
             }
         }
@@ -643,7 +643,7 @@ namespace services
                 controller.currentVelocity = glm::vec3(0.0f);
                 controller.currentSpeed = 0.0f;
                 controller.verticalVelocity = 0.0f;
-                controller.locomotionState = components::LocomotionState::Idle;
+                controller.locomotionState = "Idle";
             }
         }
 

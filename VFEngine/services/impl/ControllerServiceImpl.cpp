@@ -323,6 +323,18 @@ namespace services
             });
 
         // Locomotion state queries
+        dispatcher.registerCommandHandler<::events::controller::SetLocomotionStateCommand>(
+            [](const ::events::controller::SetLocomotionStateCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).locomotionState = cmd.state;
+            });
+
         dispatcher.registerQueryHandler<::events::controller::GetLocomotionStateQuery>(
             [](const ::events::controller::GetLocomotionStateQuery& query) -> std::string
             {
@@ -332,8 +344,7 @@ namespace services
                 {
                     return "Idle";
                 }
-                const auto& controller = registry.get<components::ControllerComponent>(entity);
-                return controller.locomotionConfig.getStateName(controller.locomotionState);
+                return registry.get<components::ControllerComponent>(entity).locomotionState;
             });
 
         dispatcher.registerQueryHandler<::events::controller::GetCurrentSpeedQuery>(
@@ -641,23 +652,25 @@ namespace services
 
     void ControllerServiceImpl::deriveLocomotionState(components::ControllerComponent& controller)
     {
+        const auto& config = controller.locomotionConfig;
+
         if (!controller.isGrounded)
         {
             controller.locomotionState = controller.verticalVelocity > 0.1f
-                ? components::LocomotionState::Jump
-                : components::LocomotionState::Fall;
+                ? config.jumpState
+                : config.fallState;
         }
         else if (controller.currentSpeed < 0.1f)
         {
-            controller.locomotionState = components::LocomotionState::Idle;
+            controller.locomotionState = config.idleState;
         }
         else if (controller.currentSpeed < controller.walkSpeedThreshold)
         {
-            controller.locomotionState = components::LocomotionState::Walk;
+            controller.locomotionState = config.walkState;
         }
         else
         {
-            controller.locomotionState = components::LocomotionState::Run;
+            controller.locomotionState = config.runState;
         }
     }
 

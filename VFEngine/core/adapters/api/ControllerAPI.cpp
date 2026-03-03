@@ -213,6 +213,18 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             });
 
+        interpreter->registerNativeFunction("_native_controller_setLocomotionState",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetLocomotionStateCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.state = extractString(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
         interpreter->registerNativeFunction("_native_controller_getCurrentSpeed",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {

@@ -124,12 +124,17 @@ public class Controller {
     }
 
     // ============================================
-    // Locomotion State (read-only at runtime)
+    // Locomotion State
     // ============================================
 
-    // Get current locomotion state as string: "Idle", "Walk", "Run", "Jump", "Fall"
+    // Get current locomotion state as string (auto-derived or script-set)
     public static function getLocomotionState(int entityId): string {
         return _native_controller_getLocomotionState(entityId);
+    }
+
+    // Set locomotion state to any custom string (overrides auto-derivation for this frame)
+    public static function setLocomotionState(int entityId, string state): void {
+        _native_controller_setLocomotionState(entityId, state);
     }
 
     // Get current horizontal speed (magnitude of velocity on XZ plane)

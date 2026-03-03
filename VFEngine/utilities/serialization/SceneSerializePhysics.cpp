@@ -518,28 +518,6 @@ namespace serialization
     // Controller Component
     // ============================================
 
-    static std::string locomotionStateToString(components::LocomotionState state)
-    {
-        switch (state)
-        {
-        case components::LocomotionState::Idle: return "Idle";
-        case components::LocomotionState::Walk: return "Walk";
-        case components::LocomotionState::Run: return "Run";
-        case components::LocomotionState::Jump: return "Jump";
-        case components::LocomotionState::Fall: return "Fall";
-        default: return "Idle";
-        }
-    }
-
-    static components::LocomotionState stringToLocomotionState(const std::string& str)
-    {
-        if (str == "Walk") return components::LocomotionState::Walk;
-        if (str == "Run") return components::LocomotionState::Run;
-        if (str == "Jump") return components::LocomotionState::Jump;
-        if (str == "Fall") return components::LocomotionState::Fall;
-        return components::LocomotionState::Idle;
-    }
-
     static std::string paramSourceToString(components::LocomotionParamSource source)
     {
         switch (source)
@@ -580,16 +558,11 @@ namespace serialization
         const auto& config = controller.locomotionConfig;
         json lc;
         lc["syncToAnimator"] = config.syncToAnimator;
-
-        json statesArr = json::array();
-        for (const auto& mapping : config.stateNames)
-        {
-            json s;
-            s["state"] = locomotionStateToString(mapping.state);
-            s["name"] = mapping.name;
-            statesArr.push_back(s);
-        }
-        lc["stateNames"] = statesArr;
+        lc["idleState"] = config.idleState;
+        lc["walkState"] = config.walkState;
+        lc["runState"] = config.runState;
+        lc["jumpState"] = config.jumpState;
+        lc["fallState"] = config.fallState;
 
         json paramsArr = json::array();
         for (const auto& mapping : config.paramMappings)
@@ -659,20 +632,16 @@ namespace serialization
             auto& config = controller.locomotionConfig;
             if (auto it = lc.find("syncToAnimator"); it != lc.end() && it->is_boolean())
                 config.syncToAnimator = it->get<bool>();
-
-            if (lc.contains("stateNames") && lc["stateNames"].is_array())
-            {
-                config.stateNames.clear();
-                for (const auto& sJson : lc["stateNames"])
-                {
-                    components::LocomotionStateMapping mapping;
-                    if (sJson.contains("state") && sJson["state"].is_string())
-                        mapping.state = stringToLocomotionState(sJson["state"].get<std::string>());
-                    if (sJson.contains("name") && sJson["name"].is_string())
-                        mapping.name = sJson["name"].get<std::string>();
-                    config.stateNames.push_back(mapping);
-                }
-            }
+            if (auto it = lc.find("idleState"); it != lc.end() && it->is_string())
+                config.idleState = it->get<std::string>();
+            if (auto it = lc.find("walkState"); it != lc.end() && it->is_string())
+                config.walkState = it->get<std::string>();
+            if (auto it = lc.find("runState"); it != lc.end() && it->is_string())
+                config.runState = it->get<std::string>();
+            if (auto it = lc.find("jumpState"); it != lc.end() && it->is_string())
+                config.jumpState = it->get<std::string>();
+            if (auto it = lc.find("fallState"); it != lc.end() && it->is_string())
+                config.fallState = it->get<std::string>();
 
             if (lc.contains("paramMappings") && lc["paramMappings"].is_array())
             {
@@ -697,7 +666,7 @@ namespace serialization
         controller.currentVelocity = glm::vec3(0.0f);
         controller.currentSpeed = 0.0f;
         controller.verticalVelocity = 0.0f;
-        controller.locomotionState = components::LocomotionState::Idle;
+        controller.locomotionState = "Idle";
         controller.characterControllerActive = false;
         controller.hasMoveToTarget = false;
         controller.moveToDestination = glm::vec3(0.0f);

@@ -9,19 +9,6 @@
 
 namespace windows::details
 {
-    static const char* locomotionStateLabel(components::LocomotionState state)
-    {
-        switch (state)
-        {
-        case components::LocomotionState::Idle: return "Idle";
-        case components::LocomotionState::Walk: return "Walk";
-        case components::LocomotionState::Run: return "Run";
-        case components::LocomotionState::Jump: return "Jump";
-        case components::LocomotionState::Fall: return "Fall";
-        default: return "Unknown";
-        }
-    }
-
     static const char* paramSourceLabel(components::LocomotionParamSource source)
     {
         switch (source)
@@ -33,6 +20,20 @@ namespace windows::details
         case components::LocomotionParamSource::DirectionY: return "Direction Y";
         default: return "Unknown";
         }
+    }
+
+    static void editString(const char* label, const char* id, std::string& str)
+    {
+        ImGui::Text("%s", label);
+        ImGui::SameLine(100.0f);
+
+        ImGui::PushItemWidth(-1.0f);
+        char buf[128];
+        std::strncpy(buf, str.c_str(), sizeof(buf));
+        buf[sizeof(buf) - 1] = '\0';
+        if (ImGui::InputText(id, buf, sizeof(buf)))
+            str = buf;
+        ImGui::PopItemWidth();
     }
 
     bool ControllerDrawer::draw(services::EntityHandle handle)
@@ -89,69 +90,11 @@ namespace windows::details
                 ImGui::Spacing();
                 ImGui::TextDisabled("State Names");
 
-                int stateRemoveIdx = -1;
-                for (size_t i = 0; i < config.stateNames.size(); ++i)
-                {
-                    ImGui::PushID(static_cast<int>(i));
-                    auto& mapping = config.stateNames[i];
-
-                    ImGui::Text("%s", locomotionStateLabel(mapping.state));
-                    ImGui::SameLine(100.0f);
-
-                    ImGui::PushItemWidth(-26.0f);
-                    char buf[128];
-                    std::strncpy(buf, mapping.name.c_str(), sizeof(buf));
-                    buf[sizeof(buf) - 1] = '\0';
-                    if (ImGui::InputText("##StateName", buf, sizeof(buf)))
-                        mapping.name = buf;
-                    ImGui::PopItemWidth();
-
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("x##RemState"))
-                        stateRemoveIdx = static_cast<int>(i);
-
-                    ImGui::PopID();
-                }
-
-                if (stateRemoveIdx >= 0)
-                    config.stateNames.erase(config.stateNames.begin() + stateRemoveIdx);
-
-                // Add state button with dropdown of unmapped states
-                constexpr components::LocomotionState allStates[] = {
-                    components::LocomotionState::Idle,
-                    components::LocomotionState::Walk,
-                    components::LocomotionState::Run,
-                    components::LocomotionState::Jump,
-                    components::LocomotionState::Fall
-                };
-
-                bool hasUnmapped = false;
-                for (auto s : allStates)
-                {
-                    bool found = false;
-                    for (const auto& m : config.stateNames)
-                        if (m.state == s) { found = true; break; }
-                    if (!found) { hasUnmapped = true; break; }
-                }
-
-                if (hasUnmapped && ImGui::Button("+ Add State##CtrlAddState"))
-                    ImGui::OpenPopup("AddStatePopup");
-
-                if (ImGui::BeginPopup("AddStatePopup"))
-                {
-                    for (auto s : allStates)
-                    {
-                        bool found = false;
-                        for (const auto& m : config.stateNames)
-                            if (m.state == s) { found = true; break; }
-                        if (found) continue;
-
-                        const char* label = locomotionStateLabel(s);
-                        if (ImGui::Selectable(label))
-                            config.stateNames.push_back({s, label});
-                    }
-                    ImGui::EndPopup();
-                }
+                editString("Idle", "##StateIdle", config.idleState);
+                editString("Walk", "##StateWalk", config.walkState);
+                editString("Run", "##StateRun", config.runState);
+                editString("Jump", "##StateJump", config.jumpState);
+                editString("Fall", "##StateFall", config.fallState);
 
                 ImGui::Spacing();
                 ImGui::TextDisabled("Parameter Mappings");
@@ -159,7 +102,7 @@ namespace windows::details
                 int paramRemoveIdx = -1;
                 for (size_t i = 0; i < config.paramMappings.size(); ++i)
                 {
-                    ImGui::PushID(static_cast<int>(i) + 100);
+                    ImGui::PushID(static_cast<int>(i));
                     auto& mapping = config.paramMappings[i];
 
                     ImGui::Text("%s", paramSourceLabel(mapping.source));
@@ -174,7 +117,7 @@ namespace windows::details
                     ImGui::PopItemWidth();
 
                     ImGui::SameLine();
-                    if (ImGui::SmallButton("x##RemParam"))
+                    if (ImGui::SmallButton("x"))
                         paramRemoveIdx = static_cast<int>(i);
 
                     ImGui::PopID();
@@ -183,7 +126,6 @@ namespace windows::details
                 if (paramRemoveIdx >= 0)
                     config.paramMappings.erase(config.paramMappings.begin() + paramRemoveIdx);
 
-                // Add param button with dropdown of unmapped sources
                 constexpr components::LocomotionParamSource allSources[] = {
                     components::LocomotionParamSource::Speed,
                     components::LocomotionParamSource::Grounded,
@@ -216,7 +158,6 @@ namespace windows::details
                         const char* label = paramSourceLabel(s);
                         if (ImGui::Selectable(label))
                         {
-                            // Default param name based on source
                             const char* defaultNames[] = {"speed", "grounded", "verticalVelocity", "directionX", "directionY"};
                             config.paramMappings.push_back({s, defaultNames[static_cast<int>(s)]});
                         }

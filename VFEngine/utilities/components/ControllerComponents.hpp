@@ -6,15 +6,6 @@
 
 namespace components
 {
-    enum class LocomotionState : uint8_t
-    {
-        Idle,
-        Walk,
-        Run,
-        Jump,
-        Fall
-    };
-
     enum class LocomotionParamSource : uint8_t
     {
         Speed,
@@ -22,12 +13,6 @@ namespace components
         VerticalVelocity,
         DirectionX,
         DirectionY
-    };
-
-    struct LocomotionStateMapping
-    {
-        LocomotionState state;
-        std::string name;
     };
 
     struct LocomotionParamMapping
@@ -40,13 +25,12 @@ namespace components
     {
         bool syncToAnimator = true;
 
-        std::vector<LocomotionStateMapping> stateNames = {
-            {LocomotionState::Idle, "Idle"},
-            {LocomotionState::Walk, "Walk"},
-            {LocomotionState::Run, "Run"},
-            {LocomotionState::Jump, "Jump"},
-            {LocomotionState::Fall, "Fall"}
-        };
+        // Auto-derived state names (index 0=idle, 1=walk, 2=run, 3=jump, 4=fall)
+        std::string idleState = "Idle";
+        std::string walkState = "Walk";
+        std::string runState = "Run";
+        std::string jumpState = "Jump";
+        std::string fallState = "Fall";
 
         std::vector<LocomotionParamMapping> paramMappings = {
             {LocomotionParamSource::Speed, "speed"},
@@ -55,15 +39,6 @@ namespace components
             {LocomotionParamSource::DirectionX, "directionX"},
             {LocomotionParamSource::DirectionY, "directionY"}
         };
-
-        std::string getStateName(LocomotionState state) const
-        {
-            for (const auto& mapping : stateNames)
-            {
-                if (mapping.state == state) return mapping.name;
-            }
-            return {};
-        }
     };
 
     struct ControllerComponent
@@ -102,7 +77,7 @@ namespace components
         glm::vec3 currentVelocity{0.0f};
         float currentSpeed = 0.0f;
         float verticalVelocity = 0.0f;
-        LocomotionState locomotionState = LocomotionState::Idle;
+        std::string locomotionState = "Idle";
 
         // Whether a CharacterVirtual is active for this entity (managed by PhysicsWorld, false when not in play mode)
         bool characterControllerActive = false;
