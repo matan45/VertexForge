@@ -74,17 +74,32 @@
       "angularVelocity": 0.05000000074505806,
       "linearVelocity": 0.05000000074505806,
       "timeToSleep": 0.5
+    },
+    "vfxCollision": {
+      "maxSceneColliders": 32
     }
   },
   "renderSettings": {
     "culling": {
       "frustumCullingEnabled": true,
+      "globalLodBias": 0.0,
       "lodSelectionEnabled": true,
       "meshletBackfaceCullingEnabled": true,
       "meshletFrustumCullingEnabled": true,
       "occlusionCullingEnabled": true,
       "terrainFrustumCullingEnabled": true,
       "terrainMeshletCullingEnabled": true
+    },
+    "distanceCulling": {
+      "billboardDistance": 1000.0,
+      "decalDistance": 200.0,
+      "enabled": false,
+      "foliageDistance": 500.0,
+      "shadowDistanceMultiplier": 0.5,
+      "staticMeshDistance": 1000.0,
+      "terrainDistance": 2000.0,
+      "vfxDistance": 300.0,
+      "waterDistance": 2000.0
     },
     "postProcess": {
       "bloom": {
@@ -110,7 +125,18 @@
         "maxBlurRadius": 5.0,
         "sampleCount": 32
       },
-      "enabled": true,
+      "edgeDetection": {
+        "edgeColor": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "edgeWidth": 1.0,
+        "enabled": false,
+        "opacity": 1.0,
+        "threshold": 0.10000000149011612
+      },
+      "enabled": false,
       "filmGrain": {
         "enabled": false,
         "intensity": 0.10000000149011612,
@@ -122,12 +148,22 @@
         "enabled": false,
         "quality": "medium"
       },
+      "ssao": {
+        "bias": 0.02500000037252903,
+        "enabled": false,
+        "intensity": 1.0,
+        "kernelSize": 32,
+        "power": 2.0,
+        "radius": 0.5
+      },
       "toneMapping": {
         "contrast": 1.0,
-        "enabled": true,
+        "enabled": false,
         "exposure": 1.0,
         "gamma": 2.200000047683716,
-        "mode": "aces"
+        "mode": "aces",
+        "shoulder": 0.0,
+        "toe": 0.0
       },
       "vignette": {
         "enabled": false,
@@ -135,20 +171,25 @@
         "radius": 0.800000011920929,
         "softness": 0.5
       },
-      "ssao": {
+      "volumetricFog": {
+        "absorptionCoefficient": 0.10000000149011612,
+        "ambientIntensity": 0.15000000596046448,
+        "anisotropy": 0.699999988079071,
         "enabled": false,
-        "radius": 0.5,
-        "bias": 0.025,
+        "fogColor": [
+          0.800000011920929,
+          0.8500000238418579,
+          0.8999999761581421
+        ],
+        "heightFogDensity": 0.05000000074505806,
+        "heightFogFalloff": 0.10000000149011612,
+        "heightFogOffset": 0.0,
         "intensity": 1.0,
-        "kernelSize": 32,
-        "power": 2.0
-      },
-      "edgeDetection": {
-        "enabled": false,
-        "threshold": 0.1,
-        "edgeWidth": 1.0,
-        "edgeColor": [0.0, 0.0, 0.0],
-        "opacity": 1.0
+        "maxDistance": 500.0,
+        "quality": "medium",
+        "scatteringCoefficient": 0.5,
+        "temporalBlendFactor": 0.8999999761581421,
+        "uniformDensity": 0.019999999552965164
       }
     },
     "shadows": {
@@ -156,10 +197,12 @@
       "cascadeSplitMode": "practical",
       "enabled": true,
       "normalBias": 0.019999999552965164,
+      "pcfKernelSize": "x3",
       "quality": "high",
       "shadowBias": 0.004999999888241291,
       "shadowIntensity": 0.5,
-      "slopeBias": 1.5
+      "slopeBias": 1.5,
+      "softShadowsEnabled": true
     },
     "terrain": {
       "enabled": true,
@@ -167,6 +210,9 @@
       "lodBias": 1.0,
       "shadowLOD": 2,
       "textureScale": 0.10000000149011612
+    },
+    "transparency": {
+      "wboitEnabled": true
     }
   },
   "root": {
@@ -191,7 +237,7 @@
         1.0
       ]
     },
-    "uuid": 3284051538547156574
+    "uuid": 15536976818760133102
   },
   "version": "1.1"
 }

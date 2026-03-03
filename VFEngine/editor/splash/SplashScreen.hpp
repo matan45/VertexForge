@@ -25,8 +25,8 @@ namespace editor
         std::mutex statusMutex;
         std::string currentStatus = "Starting...";
 
-        static constexpr int WINDOW_WIDTH = 800;
-        static constexpr int WINDOW_HEIGHT = 600;
+        int windowWidth = 0;
+        int windowHeight = 0;
 
     public:
         static SplashScreen& instance();

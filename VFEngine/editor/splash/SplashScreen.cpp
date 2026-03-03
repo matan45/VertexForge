@@ -125,17 +125,30 @@ namespace editor
 
     bool SplashScreen::createSplashWindow(const wchar_t* className)
     {
-        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-        int x = (screenWidth - WINDOW_WIDTH) / 2;
-        int y = (screenHeight - WINDOW_HEIGHT) / 2;
+        // Use the monitor that contains the cursor for proper multi-monitor centering
+        POINT cursorPos;
+        GetCursorPos(&cursorPos);
+        HMONITOR monitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi = {};
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoW(monitor, &mi);
+
+        int monitorWidth = mi.rcWork.right - mi.rcWork.left;
+        int monitorHeight = mi.rcWork.bottom - mi.rcWork.top;
+
+        // Size the splash window as 30% of monitor width, maintaining 4:3 aspect ratio
+        windowWidth = monitorWidth * 30 / 100;
+        windowHeight = windowWidth * 3 / 4;
+
+        int x = mi.rcWork.left + (monitorWidth - windowWidth) / 2;
+        int y = mi.rcWork.top + (monitorHeight - windowHeight) / 2;
 
         hwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             className,
             L"VertexForge",
             WS_POPUP,
-            x, y, WINDOW_WIDTH, WINDOW_HEIGHT,
+            x, y, windowWidth, windowHeight,
             nullptr, nullptr,
             GetModuleHandle(nullptr),
             this
@@ -208,26 +221,28 @@ namespace editor
         if (splashImage)
         {
             auto* image = static_cast<Gdiplus::Image*>(splashImage);
-            graphics.DrawImage(image, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+            graphics.DrawImage(image, 0, 0, windowWidth, windowHeight);
         }
         else
         {
             Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 30, 30, 35));
-            graphics.FillRectangle(&bgBrush, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+            graphics.FillRectangle(&bgBrush, 0, 0, windowWidth, windowHeight);
 
             Gdiplus::FontFamily fontFamily(L"Segoe UI");
-            Gdiplus::Font titleFont(&fontFamily, 28, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+            float titleFontSize = windowHeight * 28.0f / 600.0f;
+            Gdiplus::Font titleFont(&fontFamily, titleFontSize, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
             Gdiplus::SolidBrush titleBrush(Gdiplus::Color(255, 255, 255, 255));
 
             Gdiplus::StringFormat format;
             format.SetAlignment(Gdiplus::StringAlignmentCenter);
 
-            Gdiplus::RectF titleRect(0, 180.0f, static_cast<float>(WINDOW_WIDTH), 50);
+            float titleY = windowHeight * 180.0f / 600.0f;
+            Gdiplus::RectF titleRect(0, titleY, static_cast<float>(windowWidth), titleFontSize * 2.0f);
             graphics.DrawString(L"VertexForge", -1, &titleFont, titleRect, &format, &titleBrush);
         }
 
         Gdiplus::Pen borderPen(Gdiplus::Color(255, 80, 80, 90), 1);
-        graphics.DrawRectangle(&borderPen, 0, 0, WINDOW_WIDTH - 1, WINDOW_HEIGHT - 1);
+        graphics.DrawRectangle(&borderPen, 0, 0, windowWidth - 1, windowHeight - 1);
     }
 
     void SplashScreen::renderStatusText(HDC hdc)
@@ -254,11 +269,13 @@ namespace editor
             }
         }
 
-        Gdiplus::Font statusFont(&fontFamily, 20, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        float statusFontSize = windowHeight * 20.0f / 600.0f;
+        Gdiplus::Font statusFont(&fontFamily, statusFontSize, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
         Gdiplus::SolidBrush statusBrush(Gdiplus::Color(255, 120, 180, 255));
 
-        Gdiplus::RectF statusRect(0, WINDOW_HEIGHT - 50.0f,
-                                  static_cast<float>(WINDOW_WIDTH), 35);
+        float statusY = windowHeight - windowHeight * 50.0f / 600.0f;
+        Gdiplus::RectF statusRect(0, statusY,
+                                  static_cast<float>(windowWidth), statusFontSize * 2.0f);
         graphics.DrawString(wideStatus.c_str(), -1, &statusFont, statusRect, &format, &statusBrush);
     }
 
@@ -267,11 +284,12 @@ namespace editor
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
-        int dotY = WINDOW_HEIGHT - 75;
-        int dotRadius = 4;
-        int dotSpacing = 15;
+        int dotY = windowHeight - windowHeight * 75 / 600;
+        int dotRadius = windowHeight * 4 / 600;
+        if (dotRadius < 2) dotRadius = 2;
+        int dotSpacing = windowHeight * 15 / 600;
         int totalDotsWidth = 3 * (dotRadius * 2) + 2 * dotSpacing;
-        int startX = (WINDOW_WIDTH - totalDotsWidth) / 2;
+        int startX = (windowWidth - totalDotsWidth) / 2;
 
         static int animFrame = 0;
         animFrame = (animFrame + 1) % 30;
