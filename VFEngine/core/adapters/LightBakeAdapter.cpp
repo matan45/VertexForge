@@ -358,6 +358,19 @@ namespace core
     {
         assignLightmapComponents(lightmapData, outputPath, texelsPerUnit);
 
+        // Store lightmap path on root entity (like IBL) so it persists with scene save
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto view = registry.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
+            for (auto entity : view)
+            {
+                auto& lm = registry.emplace_or_replace<components::LightmapComponent>(entity);
+                lm.lightmapPath = outputPath;
+                lm.texelsPerUnit = texelsPerUnit;
+                break;
+            }
+        }
+
         lastLightmapPath = outputPath;
         lastTexelsPerUnit = texelsPerUnit;
 
@@ -517,6 +530,19 @@ namespace core
         }
 
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
+
+        // Store lightmap path on root entity (like IBL) so it persists with scene save
+        {
+            auto& reg = scene::EntityRegistry::getRegistry();
+            auto rootView = reg.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
+            for (auto entity : rootView)
+            {
+                auto& lm = reg.emplace_or_replace<components::LightmapComponent>(entity);
+                lm.lightmapPath = path;
+                lm.texelsPerUnit = texelsPerUnit;
+                break;
+            }
+        }
 
         lastLightmapPath = path;
         lastTexelsPerUnit = texelsPerUnit;

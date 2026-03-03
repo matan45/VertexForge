@@ -15,6 +15,7 @@
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
 #include "../../events/PostProcessEvents.hpp"
+#include "../../events/NavmeshEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <functional>
 
@@ -249,6 +250,18 @@ namespace services
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.fileName;
                     dispatcher.execute(setIblCmd);
+                }
+            }
+
+            // Auto-load navmesh from root entity if present
+            if (root.hasComponent<components::NavmeshComponent>())
+            {
+                const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
+                if (!navmeshComp.navmeshPath.empty())
+                {
+                    events::navmesh::LoadNavmeshCommand loadNavCmd;
+                    loadNavCmd.filePath = navmeshComp.navmeshPath;
+                    dispatcher.execute(loadNavCmd);
                 }
             }
 

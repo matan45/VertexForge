@@ -207,6 +207,9 @@ namespace serialization
         static json serializeNavmeshAgent(const components::NavmeshAgentComponent& agent);
         static void deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent);
 
+        static json serializeNavmesh(const components::NavmeshComponent& navmesh);
+        static void deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh);
+
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 

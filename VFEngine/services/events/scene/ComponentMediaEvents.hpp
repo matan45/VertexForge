@@ -257,4 +257,36 @@ namespace events::scene {
         std::string_view getName() const override { return "MeshDataChanged"; }
     };
 
+    // ============================================
+    // Lightmap Root Component Events (read-only on root entity)
+    // ============================================
+
+    struct HasLightmapRootQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasLightmapRoot"; }
+    };
+
+    struct GetLightmapRootDataQuery : IQuery<std::optional<services::LightmapRootData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetLightmapRootData"; }
+    };
+
+    // ============================================
+    // Navmesh Root Component Events (read-only on root entity)
+    // ============================================
+
+    struct HasNavmeshRootQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavmeshRoot"; }
+    };
+
+    struct GetNavmeshRootDataQuery : IQuery<std::optional<services::NavmeshRootData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetNavmeshRootData"; }
+    };
+
 }

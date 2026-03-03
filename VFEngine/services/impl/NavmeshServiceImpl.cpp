@@ -206,6 +206,16 @@ namespace services
         bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
         if (result)
         {
+            // Store navmesh path on root entity (like IBL) so it persists with scene save
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto view = registry.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
+            for (auto entity : view)
+            {
+                registry.emplace_or_replace<components::NavmeshComponent>(entity,
+                    components::NavmeshComponent{filePath});
+                break;
+            }
+
             events::resource::AssetSavedNotification notif;
             notif.filePath = filePath;
             ::events::EventDispatcher::instance().publish(notif);
@@ -247,6 +257,14 @@ namespace services
     {
         navmeshProvider->clearNavmesh();
         entityToAgentIndex.clear();
+
+        // Remove NavmeshComponent from root entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshComponent>();
+        for (auto entity : view)
+        {
+            registry.remove<components::NavmeshComponent>(entity);
+        }
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::render::ClearNavmeshDebugMeshCommand clearCmd;
