@@ -12,6 +12,7 @@
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include "data/RenderHookTypes.hpp"
+#include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 
 namespace render
 {
@@ -105,6 +106,8 @@ namespace controllers
         bool getShowNavmeshDebug() const;
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
         void clearNavmeshDebugMesh();
+
+        void updateImmediateDebugDrawList(render::mesh::ImmediateDebugDrawList drawList);
 
         void prepareFrameUICanvasOutlines();
         void prepareFrameUIImages();

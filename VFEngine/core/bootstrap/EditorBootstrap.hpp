@@ -26,6 +26,7 @@ namespace services
     class IRenderTextureProvider;
     class ILightBakeProvider;
     class IRenderHookProvider;
+    class IDebugDrawProvider;
 }
 
 namespace window
@@ -68,6 +69,7 @@ namespace core
     class RenderTextureAdapter;
     class LightBakeAdapter;
     class RenderHookAdapter;
+    class DebugDrawAdapter;
 
     class EditorBootstrap
     {
@@ -97,6 +99,7 @@ namespace core
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
+        std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -154,6 +157,8 @@ namespace core
         services::ILightBakeProvider* getLightBakeProvider();
 
         services::IRenderHookProvider* getRenderHookProvider();
+
+        services::IDebugDrawProvider* getDebugDrawProvider();
 
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();

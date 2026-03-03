@@ -10,6 +10,7 @@
 #include "tools/UICanvasDebugRenderer.hpp"
 #include "tools/UICanvasImageRenderer.hpp"
 #include "tools/NavmeshDebugRenderer.hpp"
+#include "tools/ImmediateDebugRenderer.hpp"
 
 namespace render
 {
@@ -27,6 +28,7 @@ namespace render
         uiCanvasRenderer = std::make_unique<mesh::UICanvasDebugRenderer>(device, swapChain);
         uiCanvasImageRenderer = std::make_unique<mesh::UICanvasImageRenderer>(device, swapChain);
         navmeshDebugRenderer = std::make_unique<mesh::NavmeshDebugRenderer>(device, swapChain);
+        immediateDebugRenderer = std::make_unique<mesh::ImmediateDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -44,6 +46,7 @@ namespace render
         uiCanvasRenderer->init(renderPass);
         uiCanvasImageRenderer->init(renderPass);
         navmeshDebugRenderer->init(renderPass);
+        immediateDebugRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -60,6 +63,7 @@ namespace render
         uiCanvasRenderer->recreate(renderPass);
         uiCanvasImageRenderer->recreate(renderPass);
         navmeshDebugRenderer->recreate(renderPass);
+        immediateDebugRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -107,6 +111,10 @@ namespace render
         if (navmeshDebugRenderer)
         {
             navmeshDebugRenderer->cleanUp();
+        }
+        if (immediateDebugRenderer)
+        {
+            immediateDebugRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -156,6 +164,10 @@ namespace render
         if (navmeshDebugRenderer)
         {
             navmeshDebugRenderer->cleanUpShader();
+        }
+        if (immediateDebugRenderer)
+        {
+            immediateDebugRenderer->cleanUpShader();
         }
     }
 
@@ -268,6 +280,11 @@ namespace render
         {
             navmeshDebugRenderer->render(commandBuffer, view, projection);
         }
+
+        if (immediateDebugRenderer)
+        {
+            immediateDebugRenderer->render(commandBuffer, view, projection);
+        }
     }
 
     bool DebugRenderer::hasItemsToRender() const
@@ -303,6 +320,14 @@ namespace render
         if (navmeshDebugRenderer)
         {
             navmeshDebugRenderer->clearMesh();
+        }
+    }
+
+    void DebugRenderer::updateImmediateDebugDrawList(mesh::ImmediateDebugDrawList drawList)
+    {
+        if (immediateDebugRenderer)
+        {
+            immediateDebugRenderer->updateDrawList(drawList);
         }
     }
 }

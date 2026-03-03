@@ -239,6 +239,8 @@
     <ClInclude Include="render\tools\DebugRendererBase.hpp" />
     <ClInclude Include="render\tools\FrustumDebugRenderer.hpp" />
     <ClInclude Include="render\tools\GridRenderer.hpp" />
+    <ClInclude Include="render\tools\ImmediateDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\ImmediateDebugTypes.hpp" />
     <ClInclude Include="render\tools\LightGizmoDebugRenderer.hpp" />
     <ClInclude Include="render\tools\NavmeshDebugRenderer.hpp" />
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
@@ -428,6 +430,7 @@
     <ClCompile Include="render\tools\DebugRendererBase.cpp" />
     <ClCompile Include="render\tools\FrustumDebugRenderer.cpp" />
     <ClCompile Include="render\tools\GridRenderer.cpp" />
+    <ClCompile Include="render\tools\ImmediateDebugRenderer.cpp" />
     <ClCompile Include="render\tools\LightGizmoDebugRenderer.cpp" />
     <ClCompile Include="render\tools\NavmeshDebugRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
@@ -525,6 +528,7 @@
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
+    <None Include="..\..\resources\shaders\tools\immediate_debug.glsl" />
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\ui_canvas_image.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />

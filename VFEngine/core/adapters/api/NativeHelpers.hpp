@@ -9,6 +9,7 @@
 #include "print/EditorLogger.hpp"
 
 #include <glm/vec3.hpp>
+#include <glm/mat4x4.hpp>
 #include <string>
 #include <optional>
 
@@ -237,6 +238,21 @@ namespace core::api
         arr->set(0, value::Value(v.x));
         arr->set(1, value::Value(v.y));
         arr->set(2, value::Value(v.z));
+        return value::Value(arr);
+    }
+
+    // Returns 16 floats in row-major order to match mType's Matrix4f layout.
+    // GLM stores column-major: m[col][row], so we transpose to row-major.
+    inline value::Value makeMat4Array(const glm::mat4& m)
+    {
+        auto arr = std::make_shared<value::NativeArray>(16, value::ValueType::FLOAT);
+        for (int row = 0; row < 4; ++row)
+        {
+            for (int col = 0; col < 4; ++col)
+            {
+                arr->set(row * 4 + col, value::Value(m[col][row]));
+            }
+        }
         return value::Value(arr);
     }
 }

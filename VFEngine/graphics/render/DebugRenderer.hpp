@@ -26,6 +26,8 @@ namespace render::mesh
     class UICanvasDebugRenderer;
     class UICanvasImageRenderer;
     class NavmeshDebugRenderer;
+    class ImmediateDebugRenderer;
+    struct ImmediateDebugDrawList;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
@@ -57,6 +59,7 @@ namespace render
         std::unique_ptr<mesh::UICanvasDebugRenderer> uiCanvasRenderer;
         std::unique_ptr<mesh::UICanvasImageRenderer> uiCanvasImageRenderer;
         std::unique_ptr<mesh::NavmeshDebugRenderer> navmeshDebugRenderer;
+        std::unique_ptr<mesh::ImmediateDebugRenderer> immediateDebugRenderer;
 
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
@@ -129,5 +132,7 @@ namespace render
         
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
+
+        void updateImmediateDebugDrawList(mesh::ImmediateDebugDrawList drawList);
     };
 }

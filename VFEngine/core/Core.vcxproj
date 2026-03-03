@@ -102,6 +102,7 @@
     <ClInclude Include="adapters\AnimationPreviewAdapter.hpp" />
     <ClInclude Include="adapters\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\AudioAdapter.hpp" />
+    <ClInclude Include="adapters\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
     <ClInclude Include="adapters\IKAdapter.hpp" />
     <ClInclude Include="adapters\LightBakeAdapter.hpp" />
@@ -130,7 +131,9 @@
     <ClInclude Include="adapters\WaterRenderAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
+    <ClInclude Include="adapters\api\CameraAPI.hpp" />
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
+    <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\FootIKAPI.hpp" />
@@ -187,6 +190,7 @@
     <ClCompile Include="adapters\AnimationPreviewAdapter.cpp" />
     <ClCompile Include="adapters\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\AudioAdapter.cpp" />
+    <ClCompile Include="adapters\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
     <ClCompile Include="adapters\IKAdapter.cpp" />
     <ClCompile Include="adapters\LightBakeAdapter.cpp" />
@@ -216,7 +220,9 @@
     <ClCompile Include="adapters\WaterRenderAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
+    <ClCompile Include="adapters\api\CameraAPI.cpp" />
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
+    <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\FootIKAPI.cpp" />

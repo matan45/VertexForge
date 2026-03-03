@@ -32,6 +32,7 @@
 #include "impl/LightBakeServiceImpl.hpp"
 #include "impl/ControllerServiceImpl.hpp"
 #include "impl/RenderHookServiceImpl.hpp"
+#include "impl/DebugDrawServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -196,6 +197,7 @@ namespace handlers
         controllerService.reset();
         ikComponentService.reset();
         renderHookService.reset();
+        debugDrawService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -281,6 +283,10 @@ namespace handlers
 
         renderHookService = std::make_shared<services::RenderHookServiceImpl>(
             bootstrap->getRenderHookProvider()
+        );
+
+        debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(
+            bootstrap->getDebugDrawProvider()
         );
     }
 
@@ -414,6 +420,7 @@ namespace handlers
         }
         exportHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
+        debugDrawService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

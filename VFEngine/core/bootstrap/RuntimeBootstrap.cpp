@@ -14,6 +14,7 @@
 #include "../adapters/PostProcessAdapter.hpp"
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "../adapters/RenderTextureAdapter.hpp"
+#include "../adapters/DebugDrawAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -43,6 +44,7 @@ namespace core
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
+        debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -97,6 +99,7 @@ namespace core
         }
 
         renderTextureAdapter.reset();
+        debugDrawAdapter.reset();
         postProcessAdapter.reset();
         waterRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
@@ -170,6 +173,11 @@ namespace core
         return renderTextureAdapter.get();
     }
 
+    services::IDebugDrawProvider* RuntimeBootstrap::getDebugDrawProvider()
+    {
+        return debugDrawAdapter.get();
+    }
+
     WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()
     {
         return waterRenderAdapter.get();
@@ -219,6 +227,16 @@ namespace core
                 if (cb)
                 {
                     cb();
+                }
+
+                // Consume immediate debug draw data and forward to renderer
+                if (debugDrawAdapter)
+                {
+                    auto drawList = debugDrawAdapter->consumeDrawList();
+                    if (!drawList.empty())
+                    {
+                        offScreen->updateImmediateDebugDrawList(std::move(drawList));
+                    }
                 }
             });
         }

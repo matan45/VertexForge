@@ -30,6 +30,7 @@
 #include "interfaces/ILightBakeService.hpp"
 #include "interfaces/IControllerService.hpp"
 #include "interfaces/IRenderHookService.hpp"
+#include "interfaces/IDebugDrawService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "events/EventTypes.hpp"
 
@@ -98,6 +99,7 @@ namespace handlers {
 		std::shared_ptr<services::IControllerService> controllerService;
 		std::shared_ptr<services::IKComponentService> ikComponentService;
 		std::shared_ptr<services::IRenderHookService> renderHookService;
+		std::shared_ptr<services::IDebugDrawService> debugDrawService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
