@@ -37,6 +37,7 @@ namespace services
 
     private:
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsAnimationEntities;
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activeCharacterControllers;
         std::unordered_map<EntityHandle, glm::vec3, EntityHandle::Hash> rootMotionLastSyncPos;
 
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
@@ -47,5 +48,7 @@ namespace services
         void syncStandardPhysicsEntity(EntityHandle handle);
         void initializePhysicsAnimations();
         void cleanupPhysicsAnimations();
+        void initializeCharacterControllers();
+        void cleanupCharacterControllers();
     };
 }

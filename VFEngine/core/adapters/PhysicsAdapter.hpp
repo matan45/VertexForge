@@ -108,6 +108,19 @@ namespace core
                                       const glm::vec3& impulse) override;
         void updatePhysicsAnimations(float deltaTime) override;
 
+        // Character controller
+        bool addCharacterController(services::EntityHandle entity, const CharacterControllerInfo& info,
+                                     const glm::vec3& position, const glm::quat& rotation) override;
+        void removeCharacterController(services::EntityHandle entity) override;
+        bool hasCharacterController(services::EntityHandle entity) const override;
+        CharacterUpdateResult updateCharacterController(services::EntityHandle entity,
+                                                          const glm::vec3& desiredVelocity,
+                                                          float deltaTime) override;
+        bool isCharacterGrounded(services::EntityHandle entity) const override;
+        glm::vec3 getCharacterPosition(services::EntityHandle entity) const override;
+        glm::vec3 getCharacterVelocity(services::EntityHandle entity) const override;
+        void setCharacterPosition(services::EntityHandle entity, const glm::vec3& position) override;
+
     private:
         std::unordered_set<uint64_t> waterSensorEntities;
 

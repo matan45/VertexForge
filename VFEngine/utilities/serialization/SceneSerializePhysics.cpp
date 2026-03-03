@@ -525,6 +525,15 @@ namespace serialization
         j["sprintMultiplier"] = controller.sprintMultiplier;
         j["jumpForce"] = controller.jumpForce;
         j["arrivalDistance"] = controller.arrivalDistance;
+        j["acceleration"] = controller.acceleration;
+        j["deceleration"] = controller.deceleration;
+        j["rotationSpeed"] = controller.rotationSpeed;
+        j["airControlFactor"] = controller.airControlFactor;
+        j["walkSpeedThreshold"] = controller.walkSpeedThreshold;
+        j["capsuleRadius"] = controller.capsuleRadius;
+        j["capsuleHeight"] = controller.capsuleHeight;
+        j["stepHeight"] = controller.stepHeight;
+        j["maxSlopeAngle"] = controller.maxSlopeAngle;
         return j;
     }
 
@@ -546,11 +555,53 @@ namespace serialization
         {
             controller.arrivalDistance = it->get<float>();
         }
+        if (auto it = j.find("acceleration"); it != j.end() && it->is_number())
+        {
+            controller.acceleration = it->get<float>();
+        }
+        if (auto it = j.find("deceleration"); it != j.end() && it->is_number())
+        {
+            controller.deceleration = it->get<float>();
+        }
+        if (auto it = j.find("rotationSpeed"); it != j.end() && it->is_number())
+        {
+            controller.rotationSpeed = it->get<float>();
+        }
+        if (auto it = j.find("airControlFactor"); it != j.end() && it->is_number())
+        {
+            controller.airControlFactor = it->get<float>();
+        }
+        if (auto it = j.find("walkSpeedThreshold"); it != j.end() && it->is_number())
+        {
+            controller.walkSpeedThreshold = it->get<float>();
+        }
+        if (auto it = j.find("capsuleRadius"); it != j.end() && it->is_number())
+        {
+            controller.capsuleRadius = it->get<float>();
+        }
+        if (auto it = j.find("capsuleHeight"); it != j.end() && it->is_number())
+        {
+            controller.capsuleHeight = it->get<float>();
+        }
+        if (auto it = j.find("stepHeight"); it != j.end() && it->is_number())
+        {
+            controller.stepHeight = it->get<float>();
+        }
+        if (auto it = j.find("maxSlopeAngle"); it != j.end() && it->is_number())
+        {
+            controller.maxSlopeAngle = it->get<float>();
+        }
 
         // Reset runtime state
         controller.moveInput = glm::vec3(0.0f);
         controller.wantsJump = false;
         controller.wantsSprint = false;
+        controller.isGrounded = false;
+        controller.currentVelocity = glm::vec3(0.0f);
+        controller.currentSpeed = 0.0f;
+        controller.verticalVelocity = 0.0f;
+        controller.locomotionState = components::LocomotionState::Idle;
+        controller.joltCharacter = nullptr;
         controller.hasMoveToTarget = false;
         controller.moveToDestination = glm::vec3(0.0f);
     }

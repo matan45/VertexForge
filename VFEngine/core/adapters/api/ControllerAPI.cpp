@@ -200,5 +200,153 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
+
+        // Locomotion state queries
+
+        interpreter->registerNativeFunction("_native_controller_getLocomotionState",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::string("Idle"));
+
+                ::events::controller::GetLocomotionStateQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                int stateInt = dispatcher.query(query);
+                const char* names[] = {"Idle", "Walk", "Run", "Jump", "Fall"};
+                if (stateInt >= 0 && stateInt < 5)
+                    return value::Value(std::string(names[stateInt]));
+                return value::Value(std::string("Idle"));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getCurrentSpeed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetCurrentSpeedQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getVerticalVelocity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetVerticalVelocityQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        // Locomotion settings
+
+        interpreter->registerNativeFunction("_native_controller_getAcceleration",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetAccelerationQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_setAcceleration",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetAccelerationCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.acceleration = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getDeceleration",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetDecelerationQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_setDeceleration",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetDecelerationCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.deceleration = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getRotationSpeed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetRotationSpeedQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_setRotationSpeed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetRotationSpeedCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.rotationSpeed = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getAirControl",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetAirControlFactorQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_setAirControl",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetAirControlFactorCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.airControlFactor = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_controller_getWalkRunThreshold",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0f);
+
+                ::events::controller::GetWalkSpeedThresholdQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_controller_setWalkRunThreshold",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                ::events::controller::SetWalkSpeedThresholdCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.walkSpeedThreshold = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
     }
 }

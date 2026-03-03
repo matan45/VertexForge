@@ -49,6 +49,92 @@ namespace animation
         return result;
     }
 
+    std::vector<glm::mat4> AnimationBlender::blendNPoses(
+        const std::vector<std::vector<glm::mat4>>& poses,
+        const std::vector<float>& weights)
+    {
+        if (poses.empty() || weights.empty())
+            return {};
+
+        // Find first non-zero weight pose to use as base
+        size_t boneCount = 0;
+        for (const auto& pose : poses)
+        {
+            if (!pose.empty())
+            {
+                boneCount = pose.size();
+                break;
+            }
+        }
+
+        if (boneCount == 0)
+            return {};
+
+        // Single active pose optimization
+        int activeCount = 0;
+        size_t lastActive = 0;
+        for (size_t i = 0; i < weights.size(); ++i)
+        {
+            if (weights[i] > 0.001f && i < poses.size() && !poses[i].empty())
+            {
+                activeCount++;
+                lastActive = i;
+            }
+        }
+
+        if (activeCount == 0)
+            return poses.empty() ? std::vector<glm::mat4>{} : poses[0];
+        if (activeCount == 1)
+            return poses[lastActive];
+
+        std::vector<glm::mat4> result(boneCount);
+
+        for (size_t bone = 0; bone < boneCount; ++bone)
+        {
+            glm::vec3 blendedPos{0.0f};
+            glm::vec3 blendedScale{0.0f};
+            glm::quat blendedRot{0.0f, 0.0f, 0.0f, 0.0f};
+            bool firstQuat = true;
+
+            for (size_t p = 0; p < poses.size() && p < weights.size(); ++p)
+            {
+                float w = weights[p];
+                if (w <= 0.001f || poses[p].empty() || bone >= poses[p].size())
+                    continue;
+
+                glm::vec3 pos, scale;
+                glm::quat rot;
+                decomposeMatrix(poses[p][bone], pos, rot, scale);
+
+                blendedPos += pos * w;
+                blendedScale += scale * w;
+
+                if (firstQuat)
+                {
+                    blendedRot = rot * w;
+                    firstQuat = false;
+                }
+                else
+                {
+                    // Ensure shortest path
+                    if (glm::dot(blendedRot, rot) < 0.0f)
+                        rot = -rot;
+                    blendedRot = blendedRot + rot * w;
+                }
+            }
+
+            float rotLen = glm::length(blendedRot);
+            if (rotLen > 0.0001f)
+                blendedRot = blendedRot / rotLen;
+            else
+                blendedRot = glm::quat{1.0f, 0.0f, 0.0f, 0.0f};
+
+            result[bone] = composeMatrix(blendedPos, blendedRot, blendedScale);
+        }
+
+        return result;
+    }
+
     BlendedBone AnimationBlender::blendBoneTransforms(
         const glm::vec3& posA, const glm::quat& rotA, const glm::vec3& scaleA,
         const glm::vec3& posB, const glm::quat& rotB, const glm::vec3& scaleB,

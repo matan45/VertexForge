@@ -102,6 +102,7 @@
     <ClInclude Include="animation\AnimationBlender.hpp" />
     <ClInclude Include="animation\AnimationEvaluator.hpp" />
     <ClInclude Include="animation\AnimatorStateMachine.hpp" />
+    <ClInclude Include="animation\BlendTree.hpp" />
     <ClInclude Include="animation\IKPostProcess.hpp" />
     <ClInclude Include="animation\IKSolver.hpp" />
     <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
@@ -281,6 +282,7 @@
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
     <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
+    <ClCompile Include="animation\BlendTree.cpp" />
     <ClCompile Include="animation\IKPostProcess.cpp" />
     <ClCompile Include="animation\IKSolver.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />

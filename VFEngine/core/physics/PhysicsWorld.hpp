@@ -7,6 +7,7 @@
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Ragdoll/Ragdoll.h>
 #include <Jolt/Skeleton/SkeletonPose.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include "PhysicsLayers.hpp"
 #include "PhysicsContactListener.hpp"
 #include "PhysicsSkeletonConverter.hpp"
@@ -80,6 +81,26 @@ namespace core::physics
         uint32_t collisionGroupId = 0;
     };
 
+    struct CharacterCreateInfo
+    {
+        float capsuleRadius = 0.3f;
+        float capsuleHeight = 1.8f;
+        float maxSlopeAngle = 45.0f;
+        float stepHeight = 0.35f;
+        glm::vec3 position{0.0f};
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+        uint8_t collisionLayer = 1;
+    };
+
+    struct CharacterUpdateResult
+    {
+        glm::vec3 position{0.0f};
+        glm::vec3 linearVelocity{0.0f};
+        bool isGrounded = false;
+        glm::vec3 groundNormal{0.0f, 1.0f, 0.0f};
+        glm::vec3 groundVelocity{0.0f};
+    };
+
     class PhysicsWorld
     {
     private:
@@ -105,6 +126,9 @@ namespace core::physics
         std::unordered_map<uint64_t, std::vector<JPH::BodyID>> entityBoneBodies;
         std::unordered_map<uint32_t, int> bodyToBoneIndex; // BodyID index to bone index
         uint32_t nextCollisionGroupId = 1;
+
+        // Character virtual instances
+        std::unordered_map<uint64_t, JPH::Ref<JPH::CharacterVirtual>> entityCharacters;
 
         bool initialized = false;
 
@@ -201,6 +225,18 @@ namespace core::physics
 
         // Bone body lookup
         int getBoneIndexForBody(JPH::BodyID bodyId) const;
+
+        // Character controller management
+        bool addCharacter(uint64_t entityId, const CharacterCreateInfo& info);
+        void removeCharacter(uint64_t entityId);
+        bool hasCharacter(uint64_t entityId) const;
+        CharacterUpdateResult updateCharacter(uint64_t entityId, const glm::vec3& desiredVelocity,
+                                               float deltaTime, const glm::vec3& gravity);
+        bool isCharacterGrounded(uint64_t entityId) const;
+        glm::vec3 getCharacterPosition(uint64_t entityId) const;
+        glm::vec3 getCharacterLinearVelocity(uint64_t entityId) const;
+        void setCharacterPosition(uint64_t entityId, const glm::vec3& position);
+        void setCharacterLinearVelocity(uint64_t entityId, const glm::vec3& velocity);
 
     };
 }

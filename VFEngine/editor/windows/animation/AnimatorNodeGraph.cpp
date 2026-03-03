@@ -159,7 +159,13 @@ namespace windows::animation
         {
             ImGui::TextColored(ImVec4(0.7f, 1.0f, 0.7f, 1.0f), "(Default)");
         }
-        if (!state.animationPath.empty())
+        if (state.blendTree.has_value())
+        {
+            const char* btLabel = state.blendTree->type == animator::BlendTreeType::BlendTree1D
+                ? "[Blend 1D]" : "[Blend 2D]";
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "%s", btLabel);
+        }
+        else if (!state.animationPath.empty())
         {
             fs::path animPath(state.animationPath);
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", animPath.filename().string().c_str());

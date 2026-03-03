@@ -157,6 +157,9 @@ namespace windows::animation
             }
             isDirty = true;
         }
+
+        ImGui::Separator();
+        drawBlendTreeEditor(state, animatorData, isDirty);
     }
 
     void AnimatorPropertiesPanel::drawTransitionPropertiesPanel(animator::AnimatorData* animatorData,
@@ -328,6 +331,150 @@ namespace windows::animation
                 }
             }
             break;
+        }
+    }
+
+    void AnimatorPropertiesPanel::drawBlendTreeEditor(animator::AnimatorState* state,
+                                                        animator::AnimatorData* animatorData,
+                                                        bool& isDirty)
+    {
+        if (!state)
+            return;
+
+        // Motion source selector
+        const char* motionTypes[] = {"Single Clip", "1D Blend Tree", "2D Blend Tree"};
+        int currentType = 0;
+        if (state->blendTree.has_value())
+        {
+            currentType = state->blendTree->type == animator::BlendTreeType::BlendTree1D ? 1 : 2;
+        }
+
+        if (ImGui::Combo("Motion Type", &currentType, motionTypes, IM_ARRAYSIZE(motionTypes)))
+        {
+            if (currentType == 0)
+            {
+                state->blendTree.reset();
+            }
+            else
+            {
+                if (!state->blendTree.has_value())
+                {
+                    state->blendTree = animator::BlendTreeData{};
+                }
+                state->blendTree->type = (currentType == 1)
+                    ? animator::BlendTreeType::BlendTree1D
+                    : animator::BlendTreeType::BlendTree2D;
+            }
+            isDirty = true;
+        }
+
+        if (!state->blendTree.has_value())
+            return;
+
+        auto& bt = state->blendTree.value();
+
+        // Parameter selection
+        auto drawParamCombo = [&](const char* label, std::string& paramName)
+        {
+            if (ImGui::BeginCombo(label, paramName.empty() ? "(none)" : paramName.c_str()))
+            {
+                for (const auto& param : animatorData->graph.parameters)
+                {
+                    if (param.type != animator::AnimatorParameterType::Float)
+                        continue;
+                    bool isSelected = (paramName == param.name);
+                    if (ImGui::Selectable(param.name.c_str(), isSelected))
+                    {
+                        paramName = param.name;
+                        isDirty = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        };
+
+        if (bt.type == animator::BlendTreeType::BlendTree1D)
+        {
+            drawParamCombo("Parameter", bt.parameterName);
+        }
+        else
+        {
+            drawParamCombo("Parameter X", bt.parameterName);
+            drawParamCombo("Parameter Y", bt.parameterNameY);
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Entries:");
+
+        int entryToRemove = -1;
+        for (size_t i = 0; i < bt.entries.size(); ++i)
+        {
+            ImGui::PushID(static_cast<int>(i));
+            auto& entry = bt.entries[i];
+
+            // Animation file
+            if (!entry.animationPath.empty())
+            {
+                fs::path animPath(entry.animationPath);
+                ImGui::Text("%s", animPath.filename().string().c_str());
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.3f, 1.0f), "(no animation)");
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Browse"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
+                if (!path.empty())
+                {
+                    entry.animationPath = path;
+                    isDirty = true;
+                }
+            }
+
+            if (bt.type == animator::BlendTreeType::BlendTree1D)
+            {
+                if (ImGui::DragFloat("Threshold", &entry.threshold, 0.01f))
+                {
+                    isDirty = true;
+                }
+            }
+            else
+            {
+                float pos[2] = {entry.position.x, entry.position.y};
+                if (ImGui::DragFloat2("Position", pos, 0.01f))
+                {
+                    entry.position.x = pos[0];
+                    entry.position.y = pos[1];
+                    isDirty = true;
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                entryToRemove = static_cast<int>(i);
+            }
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        if (entryToRemove >= 0)
+        {
+            bt.entries.erase(bt.entries.begin() + entryToRemove);
+            isDirty = true;
+        }
+
+        if (ImGui::Button("Add Entry"))
+        {
+            animator::BlendTreeEntry entry;
+            entry.threshold = bt.entries.empty() ? 0.0f : bt.entries.back().threshold + 1.0f;
+            bt.entries.push_back(std::move(entry));
+            isDirty = true;
         }
     }
 

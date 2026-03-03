@@ -5,6 +5,7 @@
 #include "animator/SocketTypes.hpp"
 #include "AnimationBlender.hpp"
 #include "AnimationEvaluator.hpp"
+#include "BlendTree.hpp"
 #include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <functional>
@@ -41,6 +42,7 @@ namespace animation
 
         AnimationEvaluator currentEvaluator;
         AnimationEvaluator previousEvaluator;
+        BlendTreeEvaluator blendTreeEvaluator;
 
         std::unordered_map<uint32_t, const resource::AnimationData*> loadedAnimations;
 
@@ -109,7 +111,11 @@ namespace animation
         void updateBlending(float deltaTime);
         void evaluateCurrentPose();
         bool loadAnimationForState(uint32_t stateId);
+        void loadBlendTreeAnimations(const animator::AnimatorState& state);
         float getAnimationDuration(uint32_t stateId) const;
+        bool hasBlendTree(uint32_t stateId) const;
+        std::vector<glm::mat4> evaluateBlendTreePose(const animator::AnimatorState& state, float time) const;
+        std::vector<glm::mat4> evaluateBlendTreePose(const animator::AnimatorState& state, float time, glm::vec3& outRootPosition) const;
 
         bool shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
                                     float normalizedTime, bool isLooping) const;

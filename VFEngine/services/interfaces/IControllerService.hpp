@@ -2,6 +2,8 @@
 
 namespace services {
 
+    class IPhysicsProvider;
+
     class IControllerService {
     public:
         virtual ~IControllerService() = default;

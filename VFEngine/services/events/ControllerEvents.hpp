@@ -119,4 +119,89 @@ namespace events::controller
         std::string_view getName() const override { return "IsGrounded"; }
     };
 
+    // Locomotion settings commands
+    struct SetAccelerationCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float acceleration;
+        std::string_view getName() const override { return "SetAcceleration"; }
+    };
+
+    struct SetDecelerationCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float deceleration;
+        std::string_view getName() const override { return "SetDeceleration"; }
+    };
+
+    struct SetRotationSpeedCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float rotationSpeed;
+        std::string_view getName() const override { return "SetRotationSpeed"; }
+    };
+
+    struct SetAirControlFactorCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float airControlFactor;
+        std::string_view getName() const override { return "SetAirControlFactor"; }
+    };
+
+    struct SetWalkSpeedThresholdCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float walkSpeedThreshold;
+        std::string_view getName() const override { return "SetWalkSpeedThreshold"; }
+    };
+
+    // Locomotion state queries
+    struct GetLocomotionStateQuery : IQuery<int>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetLocomotionState"; }
+    };
+
+    struct GetCurrentSpeedQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetCurrentSpeed"; }
+    };
+
+    struct GetVerticalVelocityQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetVerticalVelocity"; }
+    };
+
+    struct GetAccelerationQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAcceleration"; }
+    };
+
+    struct GetDecelerationQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetDeceleration"; }
+    };
+
+    struct GetRotationSpeedQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetRotationSpeed"; }
+    };
+
+    struct GetAirControlFactorQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAirControlFactor"; }
+    };
+
+    struct GetWalkSpeedThresholdQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetWalkSpeedThreshold"; }
+    };
+
 }

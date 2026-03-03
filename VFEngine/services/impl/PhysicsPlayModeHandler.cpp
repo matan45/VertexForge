@@ -5,6 +5,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
+#include "components/ControllerComponents.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
@@ -343,9 +344,11 @@ namespace services
         }
 
         initializePhysicsAnimations();
+        initializeCharacterControllers();
 
         physicsActive = true;
-        vfLogInfo("Physics play mode started with {} bodies", activePhysicsBodies.size());
+        vfLogInfo("Physics play mode started with {} bodies, {} characters",
+                  activePhysicsBodies.size(), activeCharacterControllers.size());
     }
 
     void PhysicsPlayModeHandler::exitPlayMode()
@@ -356,6 +359,7 @@ namespace services
         }
 
         cleanupPhysicsAnimations();
+        cleanupCharacterControllers();
 
         if (waterService)
         {
@@ -572,5 +576,74 @@ namespace services
         }
 
         activePhysicsAnimationEntities.clear();
+    }
+
+    void PhysicsPlayModeHandler::initializeCharacterControllers()
+    {
+        if (!physicsProvider) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ControllerComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            auto& controller = view.get<components::ControllerComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            IPhysicsProvider::CharacterControllerInfo info;
+            info.capsuleRadius = controller.capsuleRadius;
+            info.capsuleHeight = controller.capsuleHeight;
+            info.maxSlopeAngle = controller.maxSlopeAngle;
+            info.stepHeight = controller.stepHeight;
+
+            glm::vec3 eulerRad = glm::radians(transform.rotation);
+            glm::quat rotQuat = glm::quat(eulerRad);
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            if (physicsProvider->addCharacterController(handle, info, transform.position, rotQuat))
+            {
+                activeCharacterControllers.insert(handle);
+
+                // Reset runtime state
+                controller.isGrounded = false;
+                controller.currentVelocity = glm::vec3(0.0f);
+                controller.currentSpeed = 0.0f;
+                controller.verticalVelocity = 0.0f;
+                controller.locomotionState = components::LocomotionState::Idle;
+                controller.joltCharacter = reinterpret_cast<void*>(1); // Non-null marker indicating active
+            }
+        }
+
+        if (!activeCharacterControllers.empty())
+        {
+            vfLogInfo("Initialized {} character controllers", activeCharacterControllers.size());
+        }
+    }
+
+    void PhysicsPlayModeHandler::cleanupCharacterControllers()
+    {
+        if (!physicsProvider) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& handle : activeCharacterControllers)
+        {
+            physicsProvider->removeCharacterController(handle);
+
+            auto entity = internal::fromHandle(handle);
+            if (registry.valid(entity) && registry.all_of<components::ControllerComponent>(entity))
+            {
+                auto& controller = registry.get<components::ControllerComponent>(entity);
+                controller.joltCharacter = nullptr;
+                controller.isGrounded = false;
+                controller.currentVelocity = glm::vec3(0.0f);
+                controller.currentSpeed = 0.0f;
+                controller.verticalVelocity = 0.0f;
+                controller.locomotionState = components::LocomotionState::Idle;
+            }
+        }
+
+        activeCharacterControllers.clear();
     }
 }

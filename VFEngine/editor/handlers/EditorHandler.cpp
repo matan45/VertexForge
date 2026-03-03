@@ -309,7 +309,7 @@ namespace handlers
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
-        controllerService = std::make_shared<services::ControllerServiceImpl>();
+        controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
         if (auto* ikProvider = bootstrap->getIKProvider())
         {

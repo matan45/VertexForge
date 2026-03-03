@@ -3,16 +3,25 @@
 #include "../events/ControllerEvents.hpp"
 #include "../events/PhysicsEvents.hpp"
 #include "../events/NavmeshEvents.hpp"
+#include "../events/AnimatorEvents.hpp"
+#include "../providers/IPhysicsProvider.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/ControllerComponents.hpp"
 #include "components/CoreComponents.hpp"
 #include "components/NavmeshComponents.hpp"
 #include "components/PhysicsComponents.hpp"
+#include "components/MediaComponents.hpp"
 #include <glm/glm.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/norm.hpp>
 
 namespace services
 {
+    ControllerServiceImpl::ControllerServiceImpl(IPhysicsProvider* physicsProvider)
+        : physicsProvider(physicsProvider)
+    {
+    }
     void ControllerServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -251,6 +260,164 @@ namespace services
                 }
                 return registry.get<components::ControllerComponent>(entity).isGrounded;
             });
+
+        // Locomotion settings commands
+        dispatcher.registerCommandHandler<::events::controller::SetAccelerationCommand>(
+            [](const ::events::controller::SetAccelerationCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).acceleration = cmd.acceleration;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetDecelerationCommand>(
+            [](const ::events::controller::SetDecelerationCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).deceleration = cmd.deceleration;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetRotationSpeedCommand>(
+            [](const ::events::controller::SetRotationSpeedCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).rotationSpeed = cmd.rotationSpeed;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetAirControlFactorCommand>(
+            [](const ::events::controller::SetAirControlFactorCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).airControlFactor = cmd.airControlFactor;
+            });
+
+        dispatcher.registerCommandHandler<::events::controller::SetWalkSpeedThresholdCommand>(
+            [](const ::events::controller::SetWalkSpeedThresholdCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(cmd.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return;
+                }
+                registry.get<components::ControllerComponent>(entity).walkSpeedThreshold = cmd.walkSpeedThreshold;
+            });
+
+        // Locomotion state queries
+        dispatcher.registerQueryHandler<::events::controller::GetLocomotionStateQuery>(
+            [](const ::events::controller::GetLocomotionStateQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0;
+                }
+                return static_cast<int>(registry.get<components::ControllerComponent>(entity).locomotionState);
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetCurrentSpeedQuery>(
+            [](const ::events::controller::GetCurrentSpeedQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).currentSpeed;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetVerticalVelocityQuery>(
+            [](const ::events::controller::GetVerticalVelocityQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).verticalVelocity;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetAccelerationQuery>(
+            [](const ::events::controller::GetAccelerationQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).acceleration;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetDecelerationQuery>(
+            [](const ::events::controller::GetDecelerationQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).deceleration;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetRotationSpeedQuery>(
+            [](const ::events::controller::GetRotationSpeedQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).rotationSpeed;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetAirControlFactorQuery>(
+            [](const ::events::controller::GetAirControlFactorQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).airControlFactor;
+            });
+
+        dispatcher.registerQueryHandler<::events::controller::GetWalkSpeedThresholdQuery>(
+            [](const ::events::controller::GetWalkSpeedThresholdQuery& query)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
+                {
+                    return 0.0f;
+                }
+                return registry.get<components::ControllerComponent>(entity).walkSpeedThreshold;
+            });
     }
 
     void ControllerServiceImpl::applyControllerMovement(float deltaTime)
@@ -287,7 +454,6 @@ namespace services
                 // Delegate to navmesh if available (only dispatch when destination changed)
                 if (registry.all_of<components::NavmeshAgentComponent>(entity))
                 {
-                    // Apply sprint to navmesh agent speed
                     auto& agent = registry.get<components::NavmeshAgentComponent>(entity);
                     float targetSpeed = controller.moveSpeed;
                     if (controller.wantsSprint)
@@ -312,51 +478,233 @@ namespace services
                 controller.moveInput = dir;
             }
 
-            // Apply movement from moveInput
-            if (glm::length(controller.moveInput) > 0.001f)
+            // Route to character controller or rigid body path
+            if (controller.joltCharacter != nullptr && physicsProvider)
             {
-                float speed = controller.moveSpeed;
-                if (controller.wantsSprint)
-                {
-                    speed *= controller.sprintMultiplier;
-                }
-
-                glm::vec3 velocity = controller.moveInput * speed;
-
-                if (registry.all_of<components::RigidBodyComponent>(entity))
-                {
-                    ::events::physics::SetLinearVelocityCommand velCmd;
-                    velCmd.entity = handle;
-                    velCmd.velocity = glm::vec3(velocity.x, 0.0f, velocity.z);
-                    dispatcher.execute(velCmd);
-                }
-                else
-                {
-                    transform.position += velocity * deltaTime;
-                    transform.isDirty = true;
-                }
+                updateCharacterControllerEntity(entity, deltaTime);
+            }
+            else
+            {
+                updateRigidBodyEntity(entity, deltaTime);
             }
 
-            // Apply jump (only when grounded)
-            if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
-            {
-                if (registry.all_of<components::RigidBodyComponent>(entity))
-                {
-                    ::events::physics::ApplyImpulseCommand impulseCmd;
-                    impulseCmd.entity = handle;
-                    impulseCmd.impulse = glm::vec3(0.0f, controller.jumpForce, 0.0f);
-                    dispatcher.execute(impulseCmd);
-                    controller.isGrounded = false;
-                }
-            }
-            controller.wantsJump = false;
+            // Derive locomotion state from physics results
+            deriveLocomotionState(controller);
+
+            // Sync locomotion state to animator parameters
+            syncLocomotionToAnimator(entity, controller);
 
             // Reset per-frame input (scripts must set it again next frame)
+            controller.wantsJump = false;
             if (!controller.hasMoveToTarget)
             {
                 controller.moveInput = glm::vec3(0.0f);
             }
             controller.wantsSprint = false;
+        }
+    }
+
+    void ControllerServiceImpl::updateCharacterControllerEntity(entt::entity entity, float deltaTime)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& controller = registry.get<components::ControllerComponent>(entity);
+        auto& transform = registry.get<components::TransformComponent>(entity);
+        auto handle = internal::toHandle(entity);
+
+        // Compute target speed
+        float targetSpeed = controller.moveSpeed;
+        if (controller.wantsSprint)
+        {
+            targetSpeed *= controller.sprintMultiplier;
+        }
+
+        // Compute desired horizontal velocity from input
+        glm::vec3 desiredHorizontal{0.0f};
+        if (glm::length2(controller.moveInput) > 0.001f)
+        {
+            glm::vec3 normalizedInput = glm::normalize(controller.moveInput);
+            desiredHorizontal = normalizedInput * targetSpeed;
+        }
+
+        // Apply acceleration/deceleration smoothing on XZ plane
+        glm::vec3 currentHorizontal{controller.currentVelocity.x, 0.0f, controller.currentVelocity.z};
+        glm::vec3 velocityDiff = desiredHorizontal - currentHorizontal;
+        float diffLen = glm::length(velocityDiff);
+
+        if (diffLen > 0.001f)
+        {
+            // Determine if accelerating or decelerating
+            float rate = glm::length2(desiredHorizontal) >= glm::length2(currentHorizontal)
+                ? controller.acceleration
+                : controller.deceleration;
+
+            // Apply air control factor when airborne
+            if (!controller.isGrounded)
+            {
+                rate *= controller.airControlFactor;
+            }
+
+            float maxDelta = rate * deltaTime;
+            if (diffLen <= maxDelta)
+            {
+                currentHorizontal = desiredHorizontal;
+            }
+            else
+            {
+                currentHorizontal += (velocityDiff / diffLen) * maxDelta;
+            }
+        }
+
+        // Build full velocity: smoothed horizontal + vertical (gravity + jump)
+        float verticalVel = controller.currentVelocity.y;
+
+        // Apply gravity
+        auto gravity = physicsProvider->getGravity();
+        verticalVel += gravity.y * deltaTime;
+
+        // Apply jump if grounded
+        if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
+        {
+            verticalVel = controller.jumpForce;
+        }
+
+        glm::vec3 fullVelocity{currentHorizontal.x, verticalVel, currentHorizontal.z};
+
+        // Update character controller through physics
+        auto result = physicsProvider->updateCharacterController(handle, fullVelocity, deltaTime);
+
+        // Write back results
+        transform.position = result.position;
+        transform.isDirty = true;
+
+        controller.isGrounded = result.isGrounded;
+        controller.currentVelocity = result.linearVelocity;
+        controller.verticalVelocity = result.linearVelocity.y;
+        controller.currentSpeed = glm::length(glm::vec2(result.linearVelocity.x, result.linearVelocity.z));
+    }
+
+    void ControllerServiceImpl::updateRigidBodyEntity(entt::entity entity, float deltaTime)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& controller = registry.get<components::ControllerComponent>(entity);
+        auto& transform = registry.get<components::TransformComponent>(entity);
+        auto handle = internal::toHandle(entity);
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // Apply movement from moveInput
+        if (glm::length(controller.moveInput) > 0.001f)
+        {
+            float speed = controller.moveSpeed;
+            if (controller.wantsSprint)
+            {
+                speed *= controller.sprintMultiplier;
+            }
+
+            glm::vec3 velocity = controller.moveInput * speed;
+
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                ::events::physics::SetLinearVelocityCommand velCmd;
+                velCmd.entity = handle;
+                velCmd.velocity = glm::vec3(velocity.x, 0.0f, velocity.z);
+                dispatcher.execute(velCmd);
+            }
+            else
+            {
+                transform.position += velocity * deltaTime;
+                transform.isDirty = true;
+            }
+
+            controller.currentVelocity = velocity;
+            controller.currentSpeed = glm::length(glm::vec2(velocity.x, velocity.z));
+        }
+        else
+        {
+            controller.currentVelocity = glm::vec3(0.0f);
+            controller.currentSpeed = 0.0f;
+        }
+
+        // Apply jump (only when grounded)
+        if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
+        {
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                ::events::physics::ApplyImpulseCommand impulseCmd;
+                impulseCmd.entity = handle;
+                impulseCmd.impulse = glm::vec3(0.0f, controller.jumpForce, 0.0f);
+                dispatcher.execute(impulseCmd);
+                controller.isGrounded = false;
+            }
+        }
+    }
+
+    void ControllerServiceImpl::deriveLocomotionState(components::ControllerComponent& controller)
+    {
+        if (!controller.isGrounded)
+        {
+            controller.locomotionState = controller.verticalVelocity > 0.1f
+                ? components::LocomotionState::Jump
+                : components::LocomotionState::Fall;
+        }
+        else if (controller.currentSpeed < 0.1f)
+        {
+            controller.locomotionState = components::LocomotionState::Idle;
+        }
+        else if (controller.currentSpeed < controller.walkSpeedThreshold)
+        {
+            controller.locomotionState = components::LocomotionState::Walk;
+        }
+        else
+        {
+            controller.locomotionState = components::LocomotionState::Run;
+        }
+    }
+
+    void ControllerServiceImpl::syncLocomotionToAnimator(entt::entity entity,
+                                                          const components::ControllerComponent& controller)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::AnimatorComponent>(entity)) return;
+
+        const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+        if (!animComp.isInitialized) return;
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        auto handle = internal::toHandle(entity);
+
+        // Set animator parameters
+        ::services::events::animator::SetEntityAnimatorFloatCommand speedCmd;
+        speedCmd.entity = handle;
+        speedCmd.parameterName = "speed";
+        speedCmd.value = controller.currentSpeed;
+        dispatcher.execute(speedCmd);
+
+        ::services::events::animator::SetEntityAnimatorBoolCommand groundedCmd;
+        groundedCmd.entity = handle;
+        groundedCmd.parameterName = "grounded";
+        groundedCmd.value = controller.isGrounded;
+        dispatcher.execute(groundedCmd);
+
+        ::services::events::animator::SetEntityAnimatorFloatCommand vertVelCmd;
+        vertVelCmd.entity = handle;
+        vertVelCmd.parameterName = "verticalVelocity";
+        vertVelCmd.value = controller.verticalVelocity;
+        dispatcher.execute(vertVelCmd);
+
+        // Direction parameters for 2D blend trees
+        if (glm::length2(controller.moveInput) > 0.001f)
+        {
+            ::services::events::animator::SetEntityAnimatorFloatCommand dirXCmd;
+            dirXCmd.entity = handle;
+            dirXCmd.parameterName = "directionX";
+            dirXCmd.value = controller.moveInput.x;
+            dispatcher.execute(dirXCmd);
+
+            ::services::events::animator::SetEntityAnimatorFloatCommand dirYCmd;
+            dirYCmd.entity = handle;
+            dirYCmd.parameterName = "directionY";
+            dirYCmd.value = controller.moveInput.z;
+            dispatcher.execute(dirYCmd);
         }
     }
 }

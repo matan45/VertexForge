@@ -110,5 +110,35 @@ namespace services
         virtual void applyRagdollBoneImpulse(EntityHandle entity, int animBoneIndex,
                                               const glm::vec3& impulse) = 0;
         virtual void updatePhysicsAnimations(float deltaTime) = 0;
+
+        // Character controller (CharacterVirtual)
+        struct CharacterControllerInfo
+        {
+            float capsuleRadius = 0.3f;
+            float capsuleHeight = 1.8f;
+            float maxSlopeAngle = 45.0f;
+            float stepHeight = 0.35f;
+        };
+
+        struct CharacterUpdateResult
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 linearVelocity{0.0f};
+            bool isGrounded = false;
+            glm::vec3 groundNormal{0.0f, 1.0f, 0.0f};
+            glm::vec3 groundVelocity{0.0f};
+        };
+
+        virtual bool addCharacterController(EntityHandle entity, const CharacterControllerInfo& info,
+                                             const glm::vec3& position, const glm::quat& rotation) = 0;
+        virtual void removeCharacterController(EntityHandle entity) = 0;
+        virtual bool hasCharacterController(EntityHandle entity) const = 0;
+        virtual CharacterUpdateResult updateCharacterController(EntityHandle entity,
+                                                                  const glm::vec3& desiredVelocity,
+                                                                  float deltaTime) = 0;
+        virtual bool isCharacterGrounded(EntityHandle entity) const = 0;
+        virtual glm::vec3 getCharacterPosition(EntityHandle entity) const = 0;
+        virtual glm::vec3 getCharacterVelocity(EntityHandle entity) const = 0;
+        virtual void setCharacterPosition(EntityHandle entity, const glm::vec3& position) = 0;
     };
 }
