@@ -2,7 +2,7 @@
 // Provides a pure OOP interface for string operations
 // Internally uses string pooling for memory efficiency
 import * from "../Object.mt";
-public final class String implements Object<String> {
+public value class String implements Object<String> {
     private string value;
 
     // Constructors

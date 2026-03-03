@@ -2,7 +2,7 @@
 // Represents rotations without gimbal lock
 // Format: q = w + xi + yj + zk (w is the scalar part, xyz is the vector part)
 
-public class Quaternion {
+public value class Quaternion {
     public float x;
     public float y;
     public float z;

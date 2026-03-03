@@ -77,9 +77,9 @@ namespace core::api
 
     inline float extractFloat(const value::Value& val, const char* context = nullptr)
     {
-        if (std::holds_alternative<float>(val))
+        if (std::holds_alternative<double>(val))
         {
-            return std::get<float>(val);
+            return static_cast<float>(std::get<double>(val));
         }
         if (std::holds_alternative<int64_t>(val))
         {

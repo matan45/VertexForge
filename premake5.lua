@@ -606,6 +606,8 @@ project "meshoptimizer"
       "dependencies/meshoptimizer/src/indexanalyzer.cpp",
       "dependencies/meshoptimizer/src/indexcodec.cpp",
       "dependencies/meshoptimizer/src/indexgenerator.cpp",
+      "dependencies/meshoptimizer/src/meshletcodec.cpp",
+      "dependencies/meshoptimizer/src/meshletutils.cpp",
       "dependencies/meshoptimizer/src/overdrawoptimizer.cpp",
       "dependencies/meshoptimizer/src/partition.cpp",
       "dependencies/meshoptimizer/src/quantization.cpp",

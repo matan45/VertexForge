@@ -99,6 +99,8 @@
     <ClCompile Include="..\dependencies\meshoptimizer\src\indexanalyzer.cpp" />
     <ClCompile Include="..\dependencies\meshoptimizer\src\indexcodec.cpp" />
     <ClCompile Include="..\dependencies\meshoptimizer\src\indexgenerator.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\meshletcodec.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\meshletutils.cpp" />
     <ClCompile Include="..\dependencies\meshoptimizer\src\overdrawoptimizer.cpp" />
     <ClCompile Include="..\dependencies\meshoptimizer\src\partition.cpp" />
     <ClCompile Include="..\dependencies\meshoptimizer\src\quantization.cpp" />

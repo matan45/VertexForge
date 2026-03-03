@@ -3,7 +3,7 @@
 import * from "../Object.mt";
 import * from "./Bool.mt";
 
-public final class Int implements Object<Int> {
+public value class Int implements Object<Int> {
     private int value;
 
     // Constructors

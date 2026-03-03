@@ -1,7 +1,7 @@
 // Vec2f - 2D floating-point vector
 // Provides common 2D vector operations for graphics and math
 
-public class Vec2f {
+public value class Vec2f {
     public float x;
     public float y;
 

@@ -1,7 +1,7 @@
 // Bool - Object wrapper for boolean values
 // Provides a pure OOP interface for boolean operations
 import * from "../Object.mt";
-public final class Bool implements Object<Bool> {
+public value class Bool implements Object<Bool> {
     private bool value;
 
     // Constructors

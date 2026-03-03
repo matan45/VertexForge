@@ -2,7 +2,7 @@
 // Row-major order: m[row][col] = data[row * 4 + col]
 // Used for 3D transformations, projections, and view matrices
 
-public class Matrix4f {
+public value class Matrix4f {
     // Matrix elements stored in row-major order
     // | m00 m01 m02 m03 |
     // | m10 m11 m12 m13 |

@@ -236,6 +236,12 @@
     <ClInclude Include="..\dependencies\mtype\mType\gc\GCTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\gc\SuspectBuffer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\gc\WriteBarrier.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\FileWriteNative.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\JsonDeserializer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\JsonNatives.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\JsonParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\JsonSerializer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\json\JsonValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\lexer\BracketBalancer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\lexer\Lexer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.hpp" />
@@ -349,6 +355,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\PromiseValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\SparseMultiArray.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\StringPool.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ValueObject.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ValueType.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ValueTypeUtils.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\arrays\ArrayFactory.hpp" />
@@ -384,6 +391,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\NullNarrowingTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeValidator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\validation\CompileTimeValidator.hpp" />
@@ -669,6 +677,12 @@
     <ClCompile Include="..\dependencies\mtype\mType\gc\GCTracker.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\gc\SuspectBuffer.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\gc\WriteBarrier.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\FileWriteNative.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\JsonDeserializer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\JsonNatives.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\JsonParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\JsonSerializer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\json\JsonValue.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\lexer\BracketBalancer.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\lexer\Lexer.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.cpp" />
@@ -767,6 +781,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\value\IntegerCache.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\InternedString.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\StringPool.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\ValueObject.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\ValueTypeUtils.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\arrays\ArrayFactory.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\arrays\object\FlatMultiObjectArray.cpp" />
@@ -794,6 +809,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\NullNarrowingTracker.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\TypeValidator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\validation\CompileTimeValidator.cpp" />
@@ -818,9 +834,15 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Arrays.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_ControlFlow.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Core.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_EmitHelpers.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_OSR.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_Objects.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCompiler_StackOps.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers_Arithmetic.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers_Arrays.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers_Core.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers_OSR.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitHelpers_Objects.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitProfiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\LoopProfiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\OSRManager.cpp" />

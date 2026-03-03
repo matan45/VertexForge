@@ -149,6 +149,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\JobSystemSingleThreaded.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\JobSystemThreadPool.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\JobSystemWithBarrier.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\LSANSuppressions.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\LinearCurve.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\LockFreeHashMap.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Memory.h" />

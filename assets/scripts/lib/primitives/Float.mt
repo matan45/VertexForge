@@ -4,7 +4,7 @@ import * from "../Object.mt";
 import * from "Bool.mt";
 import * from "Int.mt";
 
-public final class Float implements Object<Float> {
+public value class Float implements Object<Float> {
     private float value;
 
     // Constructors
