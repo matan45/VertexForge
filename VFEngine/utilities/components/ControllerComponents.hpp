@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace components
 {
@@ -11,6 +13,57 @@ namespace components
         Run,
         Jump,
         Fall
+    };
+
+    enum class LocomotionParamSource : uint8_t
+    {
+        Speed,
+        Grounded,
+        VerticalVelocity,
+        DirectionX,
+        DirectionY
+    };
+
+    struct LocomotionStateMapping
+    {
+        LocomotionState state;
+        std::string name;
+    };
+
+    struct LocomotionParamMapping
+    {
+        LocomotionParamSource source;
+        std::string paramName;
+    };
+
+    struct LocomotionConfig
+    {
+        bool syncToAnimator = true;
+
+        std::vector<LocomotionStateMapping> stateNames = {
+            {LocomotionState::Idle, "Idle"},
+            {LocomotionState::Walk, "Walk"},
+            {LocomotionState::Run, "Run"},
+            {LocomotionState::Jump, "Jump"},
+            {LocomotionState::Fall, "Fall"}
+        };
+
+        std::vector<LocomotionParamMapping> paramMappings = {
+            {LocomotionParamSource::Speed, "speed"},
+            {LocomotionParamSource::Grounded, "grounded"},
+            {LocomotionParamSource::VerticalVelocity, "verticalVelocity"},
+            {LocomotionParamSource::DirectionX, "directionX"},
+            {LocomotionParamSource::DirectionY, "directionY"}
+        };
+
+        std::string getStateName(LocomotionState state) const
+        {
+            for (const auto& mapping : stateNames)
+            {
+                if (mapping.state == state) return mapping.name;
+            }
+            return {};
+        }
     };
 
     struct ControllerComponent
@@ -33,6 +86,9 @@ namespace components
         // Character controller behavior (shape comes from ColliderComponent)
         float stepHeight = 0.35f;
         float maxSlopeAngle = 45.0f;
+
+        // Animator sync configuration
+        LocomotionConfig locomotionConfig;
 
         // === Runtime state (not serialized) ===
 

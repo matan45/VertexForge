@@ -5,7 +5,6 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/ControllerEvents.hpp"
-#include <iterator>
 
 namespace core::api
 {
@@ -211,11 +210,7 @@ namespace core::api
 
                 ::events::controller::GetLocomotionStateQuery query;
                 query.entity = intToEntity(extractInt64(args[0]));
-                int stateInt = dispatcher.query(query);
-                const char* names[] = {"Idle", "Walk", "Run", "Jump", "Fall"};
-                if (stateInt >= 0 && stateInt < static_cast<int>(std::size(names)))
-                    return value::Value(std::string(names[stateInt]));
-                return value::Value(std::string("Idle"));
+                return value::Value(dispatcher.query(query));
             });
 
         interpreter->registerNativeFunction("_native_controller_getCurrentSpeed",

@@ -14,8 +14,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // --- Position ---
-
         interpreter->registerNativeFunction("_native_camera_getPosition",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -49,8 +47,6 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
-
-        // --- Rotation ---
 
         interpreter->registerNativeFunction("_native_camera_getRotation",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
@@ -86,8 +82,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // --- FOV ---
-
         interpreter->registerNativeFunction("_native_camera_getFOV",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -119,8 +113,6 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
-
-        // --- Near Plane ---
 
         interpreter->registerNativeFunction("_native_camera_getNearPlane",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
@@ -154,8 +146,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // --- Far Plane ---
-
         interpreter->registerNativeFunction("_native_camera_getFarPlane",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -188,8 +178,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // --- View / Projection Matrices (direct ECS read) ---
-
         interpreter->registerNativeFunction("_native_camera_getViewMatrix",
             [](const std::vector<value::Value>& args) -> value::Value
             {
@@ -213,8 +201,6 @@ namespace core::api
                 const auto& cam = registry.get<components::CameraComponent>(*entityOpt);
                 return makeMat4Array(cam.projectionMatrix);
             });
-
-        // --- Primary Camera ---
 
         interpreter->registerNativeFunction("_native_camera_getPrimary",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value

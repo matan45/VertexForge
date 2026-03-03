@@ -5,9 +5,36 @@
 #include "../../../services/data/EntityConversion.hpp"
 #include "components/Components.hpp"
 #include <imgui.h>
+#include <cstring>
 
 namespace windows::details
 {
+    static const char* locomotionStateLabel(components::LocomotionState state)
+    {
+        switch (state)
+        {
+        case components::LocomotionState::Idle: return "Idle";
+        case components::LocomotionState::Walk: return "Walk";
+        case components::LocomotionState::Run: return "Run";
+        case components::LocomotionState::Jump: return "Jump";
+        case components::LocomotionState::Fall: return "Fall";
+        default: return "Unknown";
+        }
+    }
+
+    static const char* paramSourceLabel(components::LocomotionParamSource source)
+    {
+        switch (source)
+        {
+        case components::LocomotionParamSource::Speed: return "Speed";
+        case components::LocomotionParamSource::Grounded: return "Grounded";
+        case components::LocomotionParamSource::VerticalVelocity: return "Vert. Velocity";
+        case components::LocomotionParamSource::DirectionX: return "Direction X";
+        case components::LocomotionParamSource::DirectionY: return "Direction Y";
+        default: return "Unknown";
+        }
+    }
+
     bool ControllerDrawer::draw(services::EntityHandle handle)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -26,7 +53,6 @@ namespace windows::details
             ImGui::Indent();
             ImGui::PushItemWidth(-1);
 
-            // Movement
             ImGui::DragFloat("##CtrlMoveSpeed", &controller.moveSpeed, 0.1f, 0.0f, 50.0f, "Move Speed: %.1f");
             ImGui::DragFloat("##CtrlSprintMult", &controller.sprintMultiplier, 0.05f, 1.0f, 5.0f, "Sprint Mult: %.2f");
             ImGui::DragFloat("##CtrlJumpForce", &controller.jumpForce, 0.1f, 0.0f, 50.0f, "Jump Force: %.1f");
@@ -49,7 +75,156 @@ namespace windows::details
             ImGui::DragFloat("##CtrlStepHeight", &controller.stepHeight, 0.01f, 0.0f, 2.0f, "Step Height: %.2f");
             ImGui::DragFloat("##CtrlMaxSlope", &controller.maxSlopeAngle, 1.0f, 0.0f, 89.0f, "Max Slope: %.0f");
 
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextDisabled("Animator Sync");
+
+            auto& config = controller.locomotionConfig;
+            ImGui::Checkbox("Sync to Animator##CtrlSync", &config.syncToAnimator);
+
             ImGui::PopItemWidth();
+
+            if (config.syncToAnimator)
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("State Names");
+
+                int stateRemoveIdx = -1;
+                for (size_t i = 0; i < config.stateNames.size(); ++i)
+                {
+                    ImGui::PushID(static_cast<int>(i));
+                    auto& mapping = config.stateNames[i];
+
+                    ImGui::Text("%s", locomotionStateLabel(mapping.state));
+                    ImGui::SameLine(100.0f);
+
+                    ImGui::PushItemWidth(-26.0f);
+                    char buf[128];
+                    std::strncpy(buf, mapping.name.c_str(), sizeof(buf));
+                    buf[sizeof(buf) - 1] = '\0';
+                    if (ImGui::InputText("##StateName", buf, sizeof(buf)))
+                        mapping.name = buf;
+                    ImGui::PopItemWidth();
+
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x##RemState"))
+                        stateRemoveIdx = static_cast<int>(i);
+
+                    ImGui::PopID();
+                }
+
+                if (stateRemoveIdx >= 0)
+                    config.stateNames.erase(config.stateNames.begin() + stateRemoveIdx);
+
+                // Add state button with dropdown of unmapped states
+                constexpr components::LocomotionState allStates[] = {
+                    components::LocomotionState::Idle,
+                    components::LocomotionState::Walk,
+                    components::LocomotionState::Run,
+                    components::LocomotionState::Jump,
+                    components::LocomotionState::Fall
+                };
+
+                bool hasUnmapped = false;
+                for (auto s : allStates)
+                {
+                    bool found = false;
+                    for (const auto& m : config.stateNames)
+                        if (m.state == s) { found = true; break; }
+                    if (!found) { hasUnmapped = true; break; }
+                }
+
+                if (hasUnmapped && ImGui::Button("+ Add State##CtrlAddState"))
+                    ImGui::OpenPopup("AddStatePopup");
+
+                if (ImGui::BeginPopup("AddStatePopup"))
+                {
+                    for (auto s : allStates)
+                    {
+                        bool found = false;
+                        for (const auto& m : config.stateNames)
+                            if (m.state == s) { found = true; break; }
+                        if (found) continue;
+
+                        const char* label = locomotionStateLabel(s);
+                        if (ImGui::Selectable(label))
+                            config.stateNames.push_back({s, label});
+                    }
+                    ImGui::EndPopup();
+                }
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Parameter Mappings");
+
+                int paramRemoveIdx = -1;
+                for (size_t i = 0; i < config.paramMappings.size(); ++i)
+                {
+                    ImGui::PushID(static_cast<int>(i) + 100);
+                    auto& mapping = config.paramMappings[i];
+
+                    ImGui::Text("%s", paramSourceLabel(mapping.source));
+                    ImGui::SameLine(100.0f);
+
+                    ImGui::PushItemWidth(-26.0f);
+                    char buf[128];
+                    std::strncpy(buf, mapping.paramName.c_str(), sizeof(buf));
+                    buf[sizeof(buf) - 1] = '\0';
+                    if (ImGui::InputText("##ParamName", buf, sizeof(buf)))
+                        mapping.paramName = buf;
+                    ImGui::PopItemWidth();
+
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("x##RemParam"))
+                        paramRemoveIdx = static_cast<int>(i);
+
+                    ImGui::PopID();
+                }
+
+                if (paramRemoveIdx >= 0)
+                    config.paramMappings.erase(config.paramMappings.begin() + paramRemoveIdx);
+
+                // Add param button with dropdown of unmapped sources
+                constexpr components::LocomotionParamSource allSources[] = {
+                    components::LocomotionParamSource::Speed,
+                    components::LocomotionParamSource::Grounded,
+                    components::LocomotionParamSource::VerticalVelocity,
+                    components::LocomotionParamSource::DirectionX,
+                    components::LocomotionParamSource::DirectionY
+                };
+
+                bool hasUnmappedParam = false;
+                for (auto s : allSources)
+                {
+                    bool found = false;
+                    for (const auto& m : config.paramMappings)
+                        if (m.source == s) { found = true; break; }
+                    if (!found) { hasUnmappedParam = true; break; }
+                }
+
+                if (hasUnmappedParam && ImGui::Button("+ Add Parameter##CtrlAddParam"))
+                    ImGui::OpenPopup("AddParamPopup");
+
+                if (ImGui::BeginPopup("AddParamPopup"))
+                {
+                    for (auto s : allSources)
+                    {
+                        bool found = false;
+                        for (const auto& m : config.paramMappings)
+                            if (m.source == s) { found = true; break; }
+                        if (found) continue;
+
+                        const char* label = paramSourceLabel(s);
+                        if (ImGui::Selectable(label))
+                        {
+                            // Default param name based on source
+                            const char* defaultNames[] = {"speed", "grounded", "verticalVelocity", "directionX", "directionY"};
+                            config.paramMappings.push_back({s, defaultNames[static_cast<int>(s)]});
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+            }
+
             ImGui::Unindent();
         }
 

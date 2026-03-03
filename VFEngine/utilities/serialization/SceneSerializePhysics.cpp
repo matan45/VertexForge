@@ -518,6 +518,50 @@ namespace serialization
     // Controller Component
     // ============================================
 
+    static std::string locomotionStateToString(components::LocomotionState state)
+    {
+        switch (state)
+        {
+        case components::LocomotionState::Idle: return "Idle";
+        case components::LocomotionState::Walk: return "Walk";
+        case components::LocomotionState::Run: return "Run";
+        case components::LocomotionState::Jump: return "Jump";
+        case components::LocomotionState::Fall: return "Fall";
+        default: return "Idle";
+        }
+    }
+
+    static components::LocomotionState stringToLocomotionState(const std::string& str)
+    {
+        if (str == "Walk") return components::LocomotionState::Walk;
+        if (str == "Run") return components::LocomotionState::Run;
+        if (str == "Jump") return components::LocomotionState::Jump;
+        if (str == "Fall") return components::LocomotionState::Fall;
+        return components::LocomotionState::Idle;
+    }
+
+    static std::string paramSourceToString(components::LocomotionParamSource source)
+    {
+        switch (source)
+        {
+        case components::LocomotionParamSource::Speed: return "Speed";
+        case components::LocomotionParamSource::Grounded: return "Grounded";
+        case components::LocomotionParamSource::VerticalVelocity: return "VerticalVelocity";
+        case components::LocomotionParamSource::DirectionX: return "DirectionX";
+        case components::LocomotionParamSource::DirectionY: return "DirectionY";
+        default: return "Speed";
+        }
+    }
+
+    static components::LocomotionParamSource stringToParamSource(const std::string& str)
+    {
+        if (str == "Grounded") return components::LocomotionParamSource::Grounded;
+        if (str == "VerticalVelocity") return components::LocomotionParamSource::VerticalVelocity;
+        if (str == "DirectionX") return components::LocomotionParamSource::DirectionX;
+        if (str == "DirectionY") return components::LocomotionParamSource::DirectionY;
+        return components::LocomotionParamSource::Speed;
+    }
+
     json SceneSerialization::serializeController(const components::ControllerComponent& controller)
     {
         json j;
@@ -532,6 +576,33 @@ namespace serialization
         j["walkSpeedThreshold"] = controller.walkSpeedThreshold;
         j["stepHeight"] = controller.stepHeight;
         j["maxSlopeAngle"] = controller.maxSlopeAngle;
+
+        const auto& config = controller.locomotionConfig;
+        json lc;
+        lc["syncToAnimator"] = config.syncToAnimator;
+
+        json statesArr = json::array();
+        for (const auto& mapping : config.stateNames)
+        {
+            json s;
+            s["state"] = locomotionStateToString(mapping.state);
+            s["name"] = mapping.name;
+            statesArr.push_back(s);
+        }
+        lc["stateNames"] = statesArr;
+
+        json paramsArr = json::array();
+        for (const auto& mapping : config.paramMappings)
+        {
+            json p;
+            p["source"] = paramSourceToString(mapping.source);
+            p["paramName"] = mapping.paramName;
+            paramsArr.push_back(p);
+        }
+        lc["paramMappings"] = paramsArr;
+
+        j["locomotionConfig"] = lc;
+
         return j;
     }
 
@@ -580,6 +651,42 @@ namespace serialization
         if (auto it = j.find("maxSlopeAngle"); it != j.end() && it->is_number())
         {
             controller.maxSlopeAngle = it->get<float>();
+        }
+
+        if (j.contains("locomotionConfig") && j["locomotionConfig"].is_object())
+        {
+            const auto& lc = j["locomotionConfig"];
+            auto& config = controller.locomotionConfig;
+            if (auto it = lc.find("syncToAnimator"); it != lc.end() && it->is_boolean())
+                config.syncToAnimator = it->get<bool>();
+
+            if (lc.contains("stateNames") && lc["stateNames"].is_array())
+            {
+                config.stateNames.clear();
+                for (const auto& sJson : lc["stateNames"])
+                {
+                    components::LocomotionStateMapping mapping;
+                    if (sJson.contains("state") && sJson["state"].is_string())
+                        mapping.state = stringToLocomotionState(sJson["state"].get<std::string>());
+                    if (sJson.contains("name") && sJson["name"].is_string())
+                        mapping.name = sJson["name"].get<std::string>();
+                    config.stateNames.push_back(mapping);
+                }
+            }
+
+            if (lc.contains("paramMappings") && lc["paramMappings"].is_array())
+            {
+                config.paramMappings.clear();
+                for (const auto& pJson : lc["paramMappings"])
+                {
+                    components::LocomotionParamMapping mapping;
+                    if (pJson.contains("source") && pJson["source"].is_string())
+                        mapping.source = stringToParamSource(pJson["source"].get<std::string>());
+                    if (pJson.contains("paramName") && pJson["paramName"].is_string())
+                        mapping.paramName = pJson["paramName"].get<std::string>();
+                    config.paramMappings.push_back(mapping);
+                }
+            }
         }
 
         // Reset runtime state

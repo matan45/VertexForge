@@ -324,15 +324,16 @@ namespace services
 
         // Locomotion state queries
         dispatcher.registerQueryHandler<::events::controller::GetLocomotionStateQuery>(
-            [](const ::events::controller::GetLocomotionStateQuery& query)
+            [](const ::events::controller::GetLocomotionStateQuery& query) -> std::string
             {
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto entity = internal::fromHandle(query.entity);
                 if (!registry.valid(entity) || !registry.all_of<components::ControllerComponent>(entity))
                 {
-                    return 0;
+                    return "Idle";
                 }
-                return static_cast<int>(registry.get<components::ControllerComponent>(entity).locomotionState);
+                const auto& controller = registry.get<components::ControllerComponent>(entity);
+                return controller.locomotionConfig.getStateName(controller.locomotionState);
             });
 
         dispatcher.registerQueryHandler<::events::controller::GetCurrentSpeedQuery>(
@@ -663,6 +664,8 @@ namespace services
     void ControllerServiceImpl::syncLocomotionToAnimator(entt::entity entity,
                                                           const components::ControllerComponent& controller)
     {
+        if (!controller.locomotionConfig.syncToAnimator) return;
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.all_of<components::AnimatorComponent>(entity)) return;
 
@@ -672,39 +675,62 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
         auto handle = internal::toHandle(entity);
 
-        // Set animator parameters
-        ::services::events::animator::SetEntityAnimatorFloatCommand speedCmd;
-        speedCmd.entity = handle;
-        speedCmd.parameterName = "speed";
-        speedCmd.value = controller.currentSpeed;
-        dispatcher.execute(speedCmd);
+        bool hasDirection = glm::length2(controller.moveInput) > 0.001f;
 
-        ::services::events::animator::SetEntityAnimatorBoolCommand groundedCmd;
-        groundedCmd.entity = handle;
-        groundedCmd.parameterName = "grounded";
-        groundedCmd.value = controller.isGrounded;
-        dispatcher.execute(groundedCmd);
-
-        ::services::events::animator::SetEntityAnimatorFloatCommand vertVelCmd;
-        vertVelCmd.entity = handle;
-        vertVelCmd.parameterName = "verticalVelocity";
-        vertVelCmd.value = controller.verticalVelocity;
-        dispatcher.execute(vertVelCmd);
-
-        // Direction parameters for 2D blend trees
-        if (glm::length2(controller.moveInput) > 0.001f)
+        for (const auto& mapping : controller.locomotionConfig.paramMappings)
         {
-            ::services::events::animator::SetEntityAnimatorFloatCommand dirXCmd;
-            dirXCmd.entity = handle;
-            dirXCmd.parameterName = "directionX";
-            dirXCmd.value = controller.moveInput.x;
-            dispatcher.execute(dirXCmd);
+            if (mapping.paramName.empty()) continue;
 
-            ::services::events::animator::SetEntityAnimatorFloatCommand dirYCmd;
-            dirYCmd.entity = handle;
-            dirYCmd.parameterName = "directionY";
-            dirYCmd.value = controller.moveInput.z;
-            dispatcher.execute(dirYCmd);
+            switch (mapping.source)
+            {
+            case components::LocomotionParamSource::Speed:
+            {
+                ::services::events::animator::SetEntityAnimatorFloatCommand cmd;
+                cmd.entity = handle;
+                cmd.parameterName = mapping.paramName;
+                cmd.value = controller.currentSpeed;
+                dispatcher.execute(cmd);
+                break;
+            }
+            case components::LocomotionParamSource::Grounded:
+            {
+                ::services::events::animator::SetEntityAnimatorBoolCommand cmd;
+                cmd.entity = handle;
+                cmd.parameterName = mapping.paramName;
+                cmd.value = controller.isGrounded;
+                dispatcher.execute(cmd);
+                break;
+            }
+            case components::LocomotionParamSource::VerticalVelocity:
+            {
+                ::services::events::animator::SetEntityAnimatorFloatCommand cmd;
+                cmd.entity = handle;
+                cmd.parameterName = mapping.paramName;
+                cmd.value = controller.verticalVelocity;
+                dispatcher.execute(cmd);
+                break;
+            }
+            case components::LocomotionParamSource::DirectionX:
+            {
+                if (!hasDirection) break;
+                ::services::events::animator::SetEntityAnimatorFloatCommand cmd;
+                cmd.entity = handle;
+                cmd.parameterName = mapping.paramName;
+                cmd.value = controller.moveInput.x;
+                dispatcher.execute(cmd);
+                break;
+            }
+            case components::LocomotionParamSource::DirectionY:
+            {
+                if (!hasDirection) break;
+                ::services::events::animator::SetEntityAnimatorFloatCommand cmd;
+                cmd.entity = handle;
+                cmd.parameterName = mapping.paramName;
+                cmd.value = controller.moveInput.z;
+                dispatcher.execute(cmd);
+                break;
+            }
+            }
         }
     }
 }

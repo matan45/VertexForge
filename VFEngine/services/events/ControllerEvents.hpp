@@ -2,6 +2,7 @@
 #include "EventTypes.hpp"
 #include "../data/EntityHandle.hpp"
 #include <glm/glm.hpp>
+#include <string>
 
 namespace events::controller
 {
@@ -156,7 +157,7 @@ namespace events::controller
     };
 
     // Locomotion state queries
-    struct GetLocomotionStateQuery : IQuery<int>
+    struct GetLocomotionStateQuery : IQuery<std::string>
     {
         services::EntityHandle entity;
         std::string_view getName() const override { return "GetLocomotionState"; }

@@ -12,7 +12,6 @@ namespace core::api
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // drawLine(sx, sy, sz, ex, ey, ez, r, g, b, a)
         interpreter->registerNativeFunction("_native_debugDraw_line",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -24,7 +23,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // drawRay(ox, oy, oz, dx, dy, dz, length, r, g, b, a)
         interpreter->registerNativeFunction("_native_debugDraw_ray",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -37,7 +35,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // drawBox(cx, cy, cz, hx, hy, hz, r, g, b, a)
         interpreter->registerNativeFunction("_native_debugDraw_box",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -49,7 +46,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // drawSphere(cx, cy, cz, radius, r, g, b, a)
         interpreter->registerNativeFunction("_native_debugDraw_sphere",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -61,7 +57,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // setEnabled(bool)
         interpreter->registerNativeFunction("_native_debugDraw_setEnabled",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -71,7 +66,6 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
-        // isEnabled() -> bool
         interpreter->registerNativeFunction("_native_debugDraw_isEnabled",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {
