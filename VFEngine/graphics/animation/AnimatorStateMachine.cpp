@@ -20,6 +20,7 @@ namespace animation
         state.isPlaying = true;
 
         loadedAnimations.clear();
+        loadedBlendTreeStates.clear();
 
         loadAnimationForState(state.currentStateId);
 
@@ -393,7 +394,10 @@ namespace animation
 
         if (animState->blendTree.has_value())
         {
+            if (loadedBlendTreeStates.contains(stateId))
+                return true;
             loadBlendTreeAnimations(*animState);
+            loadedBlendTreeStates.insert(stateId);
             return true;
         }
 

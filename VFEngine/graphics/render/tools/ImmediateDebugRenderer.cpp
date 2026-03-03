@@ -93,23 +93,31 @@ namespace render::mesh
         currentBufferSize = 0;
     }
 
-    void ImmediateDebugRenderer::updateDrawList(ImmediateDebugDrawList drawList)
+    void ImmediateDebugRenderer::updateDrawList(const ImmediateDebugDrawList& drawList)
     {
-        destroyVertexBuffer();
-
         if (drawList.empty())
         {
+            currentVertexCount = 0;
             return;
         }
 
         currentVertexCount = static_cast<uint32_t>(drawList.vertexCount());
         vk::DeviceSize bufferSize = static_cast<vk::DeviceSize>(currentVertexCount * sizeof(DebugLineVertex));
 
-        core::BufferInfoRequest request(device.getLogicalDevice(), device.getPhysicalDevice());
-        request.size = bufferSize;
-        request.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(request, vertexBuffer, vertexMemory);
+        if (bufferSize > currentBufferSize)
+        {
+            destroyVertexBuffer();
+
+            vk::DeviceSize allocSize = bufferSize + bufferSize / 2;
+
+            core::BufferInfoRequest request(device.getLogicalDevice(), device.getPhysicalDevice());
+            request.size = allocSize;
+            request.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexMemory);
+
+            currentBufferSize = allocSize;
+        }
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -120,8 +128,6 @@ namespace render::mesh
             drawList.lineVertices.data(),
             bufferSize
         );
-
-        currentBufferSize = bufferSize;
     }
 
     void ImmediateDebugRenderer::render(const vk::CommandBuffer& commandBuffer,

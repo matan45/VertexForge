@@ -138,7 +138,18 @@ namespace animation
             return weights;
         }
 
-        // Gradient band interpolation (simplified Cartesian weights)
+        float minX = entries[0].position.x, maxX = entries[0].position.x;
+        float minY = entries[0].position.y, maxY = entries[0].position.y;
+        for (size_t i = 1; i < n; ++i)
+        {
+            minX = std::min(minX, entries[i].position.x);
+            maxX = std::max(maxX, entries[i].position.x);
+            minY = std::min(minY, entries[i].position.y);
+            maxY = std::max(maxY, entries[i].position.y);
+        }
+        paramX = std::clamp(paramX, minX, maxX);
+        paramY = std::clamp(paramY, minY, maxY);
+
         glm::vec2 point(paramX, paramY);
 
         float totalWeight = 0.0f;

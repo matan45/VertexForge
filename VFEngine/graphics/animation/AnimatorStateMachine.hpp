@@ -9,6 +9,7 @@
 #include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <functional>
+#include <unordered_set>
 
 namespace animation
 {
@@ -45,6 +46,7 @@ namespace animation
         BlendTreeEvaluator blendTreeEvaluator;
 
         std::unordered_map<uint32_t, const resource::AnimationData*> loadedAnimations;
+        std::unordered_set<uint32_t> loadedBlendTreeStates;
 
         std::vector<glm::mat4> currentBoneMatrices;
 

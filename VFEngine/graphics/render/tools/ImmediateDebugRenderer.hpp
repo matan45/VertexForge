@@ -39,7 +39,7 @@ namespace render::mesh
         void cleanUp();
         void cleanUpShader();
 
-        void updateDrawList(ImmediateDebugDrawList drawList);
+        void updateDrawList(const ImmediateDebugDrawList& drawList);
 
         void render(const vk::CommandBuffer& commandBuffer,
                     const glm::mat4& view,

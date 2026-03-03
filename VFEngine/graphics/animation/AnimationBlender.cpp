@@ -94,6 +94,7 @@ namespace animation
             glm::vec3 blendedPos{0.0f};
             glm::vec3 blendedScale{0.0f};
             glm::quat blendedRot{0.0f, 0.0f, 0.0f, 0.0f};
+            glm::quat referenceRot;
             bool firstQuat = true;
 
             for (size_t p = 0; p < poses.size() && p < weights.size(); ++p)
@@ -111,13 +112,13 @@ namespace animation
 
                 if (firstQuat)
                 {
+                    referenceRot = rot;
                     blendedRot = rot * w;
                     firstQuat = false;
                 }
                 else
                 {
-                    // Ensure shortest path
-                    if (glm::dot(blendedRot, rot) < 0.0f)
+                    if (glm::dot(referenceRot, rot) < 0.0f)
                         rot = -rot;
                     blendedRot = blendedRot + rot * w;
                 }

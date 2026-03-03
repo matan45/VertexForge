@@ -628,23 +628,30 @@ namespace services
     {
         const auto& config = controller.locomotionConfig;
 
+        const std::string* newState = nullptr;
+
         if (!controller.isGrounded)
         {
-            controller.locomotionState = controller.verticalVelocity > 0.1f
-                ? config.jumpState
-                : config.fallState;
+            newState = controller.verticalVelocity > 0.1f
+                ? &config.jumpState
+                : &config.fallState;
         }
         else if (controller.currentSpeed < 0.1f)
         {
-            controller.locomotionState = config.idleState;
+            newState = &config.idleState;
         }
         else if (controller.currentSpeed < controller.walkSpeedThreshold)
         {
-            controller.locomotionState = config.walkState;
+            newState = &config.walkState;
         }
         else
         {
-            controller.locomotionState = config.runState;
+            newState = &config.runState;
+        }
+
+        if (newState && !newState->empty())
+        {
+            controller.locomotionState = *newState;
         }
     }
 
