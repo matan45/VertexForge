@@ -14,6 +14,9 @@ namespace services {
 
         virtual void registerEventHandlers() = 0;
 
+        // Per-frame update for deferred operations (e.g. scene loading)
+        virtual void update() {}
+
         // ============================================
         // Entity Lifecycle
         // ============================================

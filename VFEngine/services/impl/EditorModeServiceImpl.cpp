@@ -92,39 +92,15 @@ namespace services
             dispatcher.execute(removeCamCmd);
         }
 
-        // Publish loading started
-        events::scene::SceneLoadingStartedNotification startNotif;
-        startNotif.scenePath = "Restoring play mode snapshot";
-        dispatcher.publish(startNotif);
-
-        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
-        {
-            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
-            progressNotif.currentEntityName = entityName;
-            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
-            dispatcher.publish(progressNotif);
-        };
-
         // Restore scene from snapshot
         bool restoreSuccess = serialization::SceneSerialization::restoreFromSnapshot(
-            *playModeSnapshot, *sceneGraph, progressCallback);
+            *playModeSnapshot, *sceneGraph);
 
         if (!restoreSuccess)
         {
-            events::scene::SceneLoadingCompletedNotification completeNotif;
-            completeNotif.scenePath = "Restoring play mode snapshot";
-            completeNotif.success = false;
-            completeNotif.errorMessage = "Failed to restore snapshot";
-            dispatcher.publish(completeNotif);
-
             playModeSnapshot.reset();
             return;
         }
-
-        events::scene::SceneLoadingCompletedNotification completeNotif;
-        completeNotif.scenePath = "Restoring play mode snapshot";
-        completeNotif.success = true;
-        dispatcher.publish(completeNotif);
 
         // Re-set IBL if present on root entity
         scene::Entity& root = sceneGraph->GetRoot();

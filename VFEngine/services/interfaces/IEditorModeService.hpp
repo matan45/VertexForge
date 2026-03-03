@@ -10,6 +10,9 @@ namespace services {
         // Register CQRS event handlers
         virtual void registerEventHandlers() = 0;
 
+        // Per-frame update for deferred operations (e.g. snapshot restore)
+        virtual void update() {}
+
         // ============================================
         // Mode Control
         // ============================================

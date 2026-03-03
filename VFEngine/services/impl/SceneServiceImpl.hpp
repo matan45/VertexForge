@@ -73,6 +73,7 @@ namespace services
         ~SceneServiceImpl() override;
 
         void registerEventHandlers() override;
+        void update() override;
 
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,

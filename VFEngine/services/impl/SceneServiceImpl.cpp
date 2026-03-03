@@ -51,6 +51,11 @@ namespace services
 
     SceneServiceImpl::~SceneServiceImpl() = default;
 
+    void SceneServiceImpl::update()
+    {
+        persistenceService->update();
+    }
+
     void SceneServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();

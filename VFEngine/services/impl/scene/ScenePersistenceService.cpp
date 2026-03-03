@@ -159,6 +159,19 @@ namespace services
         return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
     }
 
+    void ScenePersistenceService::update()
+    {
+        if (!pendingLoadPath.has_value())
+        {
+            return;
+        }
+
+        std::string filePath = std::move(pendingLoadPath.value());
+        pendingLoadPath.reset();
+
+        performDeferredLoad(filePath);
+    }
+
     bool ScenePersistenceService::loadScene(const std::string& filePath)
     {
         if (!sceneGraph)
@@ -173,8 +186,23 @@ namespace services
             return false;
         }
 
+        // Only publish the loading started notification immediately.
+        // All cleanup and loading is deferred to the next frame
+        // so the progress window has a chance to render.
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        events::EventDispatcher::instance().publish(startNotif);
+
+        pendingLoadPath = filePath;
+
+        return true;
+    }
+
+    void ScenePersistenceService::performDeferredLoad(const std::string& filePath)
+    {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        // Cleanup: remove IBL, terrain, clear scene, clear selection
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
@@ -190,10 +218,6 @@ namespace services
 
         events::scene::SceneClearedNotification clearedNotif;
         dispatcher.publish(clearedNotif);
-
-        events::scene::SceneLoadingStartedNotification startNotif;
-        startNotif.scenePath = filePath;
-        dispatcher.publish(startNotif);
 
         auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
         {
@@ -299,8 +323,6 @@ namespace services
             notification.scenePath = filePath;
             dispatcher.publish(notification);
         }
-
-        return success;
     }
 
     bool ScenePersistenceService::savePrefab(EntityHandle entity, const std::string& filePath)

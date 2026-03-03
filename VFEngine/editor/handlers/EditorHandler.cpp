@@ -98,6 +98,12 @@ namespace handlers
 
         bootstrap->setFrameCallback([this]()
         {
+            // Process deferred scene loading before other updates
+            if (sceneService)
+            {
+                sceneService->update();
+            }
+
             if (inputService)
             {
                 inputService->update();
