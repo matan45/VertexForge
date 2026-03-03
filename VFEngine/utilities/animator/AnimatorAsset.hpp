@@ -36,6 +36,9 @@ namespace animator
         static nlohmann::json serializeParameterValue(const AnimatorParameterValue& val, AnimatorParameterType type);
         static AnimatorParameterValue deserializeParameterValue(const nlohmann::json& j, AnimatorParameterType type);
 
+        static nlohmann::json serializeBlendTree(const BlendTreeData& blendTree);
+        static BlendTreeData deserializeBlendTree(const nlohmann::json& j);
+
         // Load helpers
         static std::optional<nlohmann::json> readJsonFromFile(std::string_view path);
         static AnimatorData parseAnimatorData(const nlohmann::json& j, const WarningLogger& logWarning);

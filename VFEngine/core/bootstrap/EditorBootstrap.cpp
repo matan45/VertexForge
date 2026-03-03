@@ -23,6 +23,7 @@
 #include "../adapters/RenderTextureAdapter.hpp"
 #include "../adapters/LightBakeAdapter.hpp"
 #include "../adapters/RenderHookAdapter.hpp"
+#include "../adapters/DebugDrawAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -63,6 +64,7 @@ namespace core
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         lightBakeAdapter = std::make_unique<LightBakeAdapter>();
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
+        debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -142,6 +144,7 @@ namespace core
         terrainRaycastAdapter.reset();
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
+        debugDrawAdapter.reset();
         lightBakeAdapter.reset();
         waterRenderAdapter.reset();
 
@@ -251,6 +254,11 @@ namespace core
         return renderHookAdapter.get();
     }
 
+    services::IDebugDrawProvider* EditorBootstrap::getDebugDrawProvider()
+    {
+        return debugDrawAdapter.get();
+    }
+
     WaterRenderAdapter* EditorBootstrap::getWaterRenderAdapterInternal()
     {
         return waterRenderAdapter.get();
@@ -299,6 +307,16 @@ namespace core
                 if (cb)
                 {
                     cb();
+                }
+
+                // Consume immediate debug draw data and forward to renderer
+                if (debugDrawAdapter)
+                {
+                    auto drawList = debugDrawAdapter->consumeDrawList();
+                    if (!drawList.empty())
+                    {
+                        offScreen->updateImmediateDebugDrawList(std::move(drawList));
+                    }
                 }
             });
         }

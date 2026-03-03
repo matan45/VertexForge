@@ -70,6 +70,62 @@ namespace animator
         return param;
     }
 
+    json AnimatorAsset::serializeBlendTree(const BlendTreeData& blendTree)
+    {
+        json j;
+        j["type"] = blendTree.type == BlendTreeType::BlendTree1D ? "1D" : "2D";
+        j["parameterName"] = blendTree.parameterName;
+        if (blendTree.type == BlendTreeType::BlendTree2D)
+        {
+            j["parameterNameY"] = blendTree.parameterNameY;
+        }
+
+        json entriesJson = json::array();
+        for (const auto& entry : blendTree.entries)
+        {
+            json entryJ;
+            entryJ["animationPath"] = entry.animationPath;
+            if (blendTree.type == BlendTreeType::BlendTree1D)
+            {
+                entryJ["threshold"] = entry.threshold;
+            }
+            else
+            {
+                entryJ["position"] = json::array({entry.position.x, entry.position.y});
+            }
+            entriesJson.push_back(entryJ);
+        }
+        j["entries"] = entriesJson;
+        return j;
+    }
+
+    BlendTreeData AnimatorAsset::deserializeBlendTree(const json& j)
+    {
+        BlendTreeData blendTree;
+        std::string typeStr = j.value("type", "1D");
+        blendTree.type = (typeStr == "2D") ? BlendTreeType::BlendTree2D : BlendTreeType::BlendTree1D;
+        blendTree.parameterName = j.value("parameterName", "");
+        blendTree.parameterNameY = j.value("parameterNameY", "");
+
+        if (j.contains("entries") && j["entries"].is_array())
+        {
+            for (const auto& entryJson : j["entries"])
+            {
+                BlendTreeEntry entry;
+                entry.animationPath = entryJson.value("animationPath", "");
+                entry.threshold = entryJson.value("threshold", 0.0f);
+                if (entryJson.contains("position") && entryJson["position"].is_array()
+                    && entryJson["position"].size() >= 2)
+                {
+                    entry.position.x = entryJson["position"][0].get<float>();
+                    entry.position.y = entryJson["position"][1].get<float>();
+                }
+                blendTree.entries.push_back(std::move(entry));
+            }
+        }
+        return blendTree;
+    }
+
     json AnimatorAsset::serializeState(const AnimatorState& state)
     {
         json j;
@@ -95,6 +151,11 @@ namespace animator
                 eventsJson.push_back(eventJ);
             }
             j["events"] = eventsJson;
+        }
+
+        if (state.blendTree.has_value())
+        {
+            j["blendTree"] = serializeBlendTree(state.blendTree.value());
         }
 
         return j;
@@ -125,6 +186,11 @@ namespace animator
                 event.payload = eventJson.value("payload", "");
                 state.events.push_back(std::move(event));
             }
+        }
+
+        if (j.contains("blendTree") && j["blendTree"].is_object())
+        {
+            state.blendTree = deserializeBlendTree(j["blendTree"]);
         }
 
         return state;

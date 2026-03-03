@@ -94,6 +94,7 @@
     <ClInclude Include="animator\AnimationEventTypes.hpp" />
     <ClInclude Include="animator\AnimatorAsset.hpp" />
     <ClInclude Include="animator\AnimatorTypes.hpp" />
+    <ClInclude Include="animator\BlendTreeTypes.hpp" />
     <ClInclude Include="animator\FootIKHelper.hpp" />
     <ClInclude Include="animator\HandIKHelper.hpp" />
     <ClInclude Include="animator\IKTypes.hpp" />

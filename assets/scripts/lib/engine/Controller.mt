@@ -122,4 +122,82 @@ public class Controller {
     public static function setGrounded(int entityId, bool grounded): void {
         _native_controller_setGrounded(entityId, grounded);
     }
+
+    // ============================================
+    // Locomotion State
+    // ============================================
+
+    // Get current locomotion state as string (auto-derived or script-set)
+    public static function getLocomotionState(int entityId): string {
+        return _native_controller_getLocomotionState(entityId);
+    }
+
+    // Set locomotion state to any custom string (overrides auto-derivation for this frame)
+    public static function setLocomotionState(int entityId, string state): void {
+        _native_controller_setLocomotionState(entityId, state);
+    }
+
+    // Get current horizontal speed (magnitude of velocity on XZ plane)
+    public static function getCurrentSpeed(int entityId): float {
+        return _native_controller_getCurrentSpeed(entityId);
+    }
+
+    // Get current vertical velocity (positive = going up, negative = falling)
+    public static function getVerticalVelocity(int entityId): float {
+        return _native_controller_getVerticalVelocity(entityId);
+    }
+
+    // ============================================
+    // Locomotion Settings
+    // ============================================
+
+    // Get acceleration rate (how fast the character reaches target speed)
+    public static function getAcceleration(int entityId): float {
+        return _native_controller_getAcceleration(entityId);
+    }
+
+    // Set acceleration rate
+    public static function setAcceleration(int entityId, float value): void {
+        _native_controller_setAcceleration(entityId, value);
+    }
+
+    // Get deceleration rate (how fast the character stops)
+    public static function getDeceleration(int entityId): float {
+        return _native_controller_getDeceleration(entityId);
+    }
+
+    // Set deceleration rate
+    public static function setDeceleration(int entityId, float value): void {
+        _native_controller_setDeceleration(entityId, value);
+    }
+
+    // Get rotation speed in degrees per second
+    public static function getRotationSpeed(int entityId): float {
+        return _native_controller_getRotationSpeed(entityId);
+    }
+
+    // Set rotation speed in degrees per second
+    public static function setRotationSpeed(int entityId, float value): void {
+        _native_controller_setRotationSpeed(entityId, value);
+    }
+
+    // Get air control factor (0.0 = no air control, 1.0 = full control)
+    public static function getAirControl(int entityId): float {
+        return _native_controller_getAirControl(entityId);
+    }
+
+    // Set air control factor
+    public static function setAirControl(int entityId, float value): void {
+        _native_controller_setAirControl(entityId, value);
+    }
+
+    // Get walk/run speed threshold (below = walk, above = run)
+    public static function getWalkRunThreshold(int entityId): float {
+        return _native_controller_getWalkRunThreshold(entityId);
+    }
+
+    // Set walk/run speed threshold
+    public static function setWalkRunThreshold(int entityId, float value): void {
+        _native_controller_setWalkRunThreshold(entityId, value);
+    }
 }

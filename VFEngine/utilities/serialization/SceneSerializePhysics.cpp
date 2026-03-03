@@ -518,6 +518,28 @@ namespace serialization
     // Controller Component
     // ============================================
 
+    static std::string paramSourceToString(components::LocomotionParamSource source)
+    {
+        switch (source)
+        {
+        case components::LocomotionParamSource::Speed: return "Speed";
+        case components::LocomotionParamSource::Grounded: return "Grounded";
+        case components::LocomotionParamSource::VerticalVelocity: return "VerticalVelocity";
+        case components::LocomotionParamSource::DirectionX: return "DirectionX";
+        case components::LocomotionParamSource::DirectionY: return "DirectionY";
+        default: return "Speed";
+        }
+    }
+
+    static components::LocomotionParamSource stringToParamSource(const std::string& str)
+    {
+        if (str == "Grounded") return components::LocomotionParamSource::Grounded;
+        if (str == "VerticalVelocity") return components::LocomotionParamSource::VerticalVelocity;
+        if (str == "DirectionX") return components::LocomotionParamSource::DirectionX;
+        if (str == "DirectionY") return components::LocomotionParamSource::DirectionY;
+        return components::LocomotionParamSource::Speed;
+    }
+
     json SceneSerialization::serializeController(const components::ControllerComponent& controller)
     {
         json j;
@@ -525,6 +547,35 @@ namespace serialization
         j["sprintMultiplier"] = controller.sprintMultiplier;
         j["jumpForce"] = controller.jumpForce;
         j["arrivalDistance"] = controller.arrivalDistance;
+        j["acceleration"] = controller.acceleration;
+        j["deceleration"] = controller.deceleration;
+        j["rotationSpeed"] = controller.rotationSpeed;
+        j["airControlFactor"] = controller.airControlFactor;
+        j["walkSpeedThreshold"] = controller.walkSpeedThreshold;
+        j["stepHeight"] = controller.stepHeight;
+        j["maxSlopeAngle"] = controller.maxSlopeAngle;
+
+        const auto& config = controller.locomotionConfig;
+        json lc;
+        lc["syncToAnimator"] = config.syncToAnimator;
+        lc["idleState"] = config.idleState;
+        lc["walkState"] = config.walkState;
+        lc["runState"] = config.runState;
+        lc["jumpState"] = config.jumpState;
+        lc["fallState"] = config.fallState;
+
+        json paramsArr = json::array();
+        for (const auto& mapping : config.paramMappings)
+        {
+            json p;
+            p["source"] = paramSourceToString(mapping.source);
+            p["paramName"] = mapping.paramName;
+            paramsArr.push_back(p);
+        }
+        lc["paramMappings"] = paramsArr;
+
+        j["locomotionConfig"] = lc;
+
         return j;
     }
 
@@ -546,11 +597,77 @@ namespace serialization
         {
             controller.arrivalDistance = it->get<float>();
         }
+        if (auto it = j.find("acceleration"); it != j.end() && it->is_number())
+        {
+            controller.acceleration = it->get<float>();
+        }
+        if (auto it = j.find("deceleration"); it != j.end() && it->is_number())
+        {
+            controller.deceleration = it->get<float>();
+        }
+        if (auto it = j.find("rotationSpeed"); it != j.end() && it->is_number())
+        {
+            controller.rotationSpeed = it->get<float>();
+        }
+        if (auto it = j.find("airControlFactor"); it != j.end() && it->is_number())
+        {
+            controller.airControlFactor = it->get<float>();
+        }
+        if (auto it = j.find("walkSpeedThreshold"); it != j.end() && it->is_number())
+        {
+            controller.walkSpeedThreshold = it->get<float>();
+        }
+        if (auto it = j.find("stepHeight"); it != j.end() && it->is_number())
+        {
+            controller.stepHeight = it->get<float>();
+        }
+        if (auto it = j.find("maxSlopeAngle"); it != j.end() && it->is_number())
+        {
+            controller.maxSlopeAngle = it->get<float>();
+        }
+
+        if (j.contains("locomotionConfig") && j["locomotionConfig"].is_object())
+        {
+            const auto& lc = j["locomotionConfig"];
+            auto& config = controller.locomotionConfig;
+            if (auto it = lc.find("syncToAnimator"); it != lc.end() && it->is_boolean())
+                config.syncToAnimator = it->get<bool>();
+            if (auto it = lc.find("idleState"); it != lc.end() && it->is_string())
+                config.idleState = it->get<std::string>();
+            if (auto it = lc.find("walkState"); it != lc.end() && it->is_string())
+                config.walkState = it->get<std::string>();
+            if (auto it = lc.find("runState"); it != lc.end() && it->is_string())
+                config.runState = it->get<std::string>();
+            if (auto it = lc.find("jumpState"); it != lc.end() && it->is_string())
+                config.jumpState = it->get<std::string>();
+            if (auto it = lc.find("fallState"); it != lc.end() && it->is_string())
+                config.fallState = it->get<std::string>();
+
+            if (lc.contains("paramMappings") && lc["paramMappings"].is_array())
+            {
+                config.paramMappings.clear();
+                for (const auto& pJson : lc["paramMappings"])
+                {
+                    components::LocomotionParamMapping mapping;
+                    if (pJson.contains("source") && pJson["source"].is_string())
+                        mapping.source = stringToParamSource(pJson["source"].get<std::string>());
+                    if (pJson.contains("paramName") && pJson["paramName"].is_string())
+                        mapping.paramName = pJson["paramName"].get<std::string>();
+                    config.paramMappings.push_back(mapping);
+                }
+            }
+        }
 
         // Reset runtime state
         controller.moveInput = glm::vec3(0.0f);
         controller.wantsJump = false;
         controller.wantsSprint = false;
+        controller.isGrounded = false;
+        controller.currentVelocity = glm::vec3(0.0f);
+        controller.currentSpeed = 0.0f;
+        controller.verticalVelocity = 0.0f;
+        controller.locomotionState = "Idle";
+        controller.characterControllerActive = false;
         controller.hasMoveToTarget = false;
         controller.moveToDestination = glm::vec3(0.0f);
     }

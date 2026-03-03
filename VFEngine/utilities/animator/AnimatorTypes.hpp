@@ -4,9 +4,11 @@
 #include <vector>
 #include <unordered_map>
 #include <variant>
+#include <optional>
 #include <cstdint>
 #include <glm/glm.hpp>
 #include "AnimationEventTypes.hpp"
+#include "BlendTreeTypes.hpp"
 
 namespace animator
 {
@@ -57,6 +59,9 @@ namespace animator
 
         // Animation events triggered at specific normalized times
         std::vector<AnimationEvent> events;
+
+        // Optional blend tree (replaces single animationPath when set)
+        std::optional<BlendTreeData> blendTree;
     };
 
     struct AnimatorTransition

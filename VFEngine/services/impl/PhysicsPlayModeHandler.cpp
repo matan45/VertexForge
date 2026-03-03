@@ -5,6 +5,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
+#include "components/ControllerComponents.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
@@ -15,7 +16,6 @@ namespace services
     {
         void applyScaleToCollider(ColliderData& colData, const glm::vec3& scale)
         {
-            // Use absolute scale to handle negative scaling
             glm::vec3 absScale = glm::abs(scale);
 
             switch (colData.shape)
@@ -31,7 +31,6 @@ namespace services
             }
             case ColliderData::Shape::Capsule:
             {
-                // Capsule is vertical: radius scales by horizontal, height by vertical
                 float horizontalScale = glm::max(absScale.x, absScale.z);
                 colData.size.x *= horizontalScale;
                 colData.height *= absScale.y;
@@ -95,7 +94,6 @@ namespace services
                     return fmt::format("Entity '{}': TriangleMesh collider has no mesh path specified",
                         entityName);
                 }
-                // Triangle meshes must be static - they cannot be dynamic in physics engines
                 if (rigidBody.type == components::RigidBodyType::Dynamic)
                 {
                     return fmt::format("Entity '{}': TriangleMesh collider cannot be used with Dynamic rigid body (use Static or Kinematic)",
@@ -266,7 +264,6 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
-        // Also add entities with ColliderComponent but no RigidBodyComponent as static bodies
         auto colliderOnlyView = registry.view<components::ColliderComponent, components::TransformComponent>(
             entt::exclude<components::RigidBodyComponent>);
 
@@ -343,9 +340,11 @@ namespace services
         }
 
         initializePhysicsAnimations();
+        initializeCharacterControllers();
 
         physicsActive = true;
-        vfLogInfo("Physics play mode started with {} bodies", activePhysicsBodies.size());
+        vfLogInfo("Physics play mode started with {} bodies, {} characters",
+                  activePhysicsBodies.size(), activeCharacterControllers.size());
     }
 
     void PhysicsPlayModeHandler::exitPlayMode()
@@ -356,6 +355,7 @@ namespace services
         }
 
         cleanupPhysicsAnimations();
+        cleanupCharacterControllers();
 
         if (waterService)
         {
@@ -402,7 +402,6 @@ namespace services
             if (!registry.valid(entity))
                 continue;
 
-            // Standalone colliders (no RigidBody) are static — nothing to sync
             if (!registry.all_of<components::RigidBodyComponent>(entity))
                 continue;
 
@@ -435,7 +434,6 @@ namespace services
         auto it = rootMotionLastSyncPos.find(handle);
         if (it != rootMotionLastSyncPos.end())
         {
-            // Physics delta = how physics moved the body (gravity, collisions)
             glm::vec3 physicsDelta = physPos - it->second;
             transform.position += physicsDelta;
         }
@@ -572,5 +570,76 @@ namespace services
         }
 
         activePhysicsAnimationEntities.clear();
+    }
+
+    void PhysicsPlayModeHandler::initializeCharacterControllers()
+    {
+        if (!physicsProvider) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ControllerComponent, components::TransformComponent,
+                                   components::ColliderComponent>();
+
+        for (auto entity : view)
+        {
+            auto& controller = view.get<components::ControllerComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            const auto& collider = view.get<components::ColliderComponent>(entity);
+
+            IPhysicsProvider::CharacterControllerInfo info;
+            info.shape = collider.shape;
+            info.size = collider.size;
+            info.maxSlopeAngle = controller.maxSlopeAngle;
+            info.stepHeight = controller.stepHeight;
+            info.collisionLayer = collider.collisionLayer;
+
+            glm::vec3 eulerRad = glm::radians(transform.rotation);
+            glm::quat rotQuat = glm::quat(eulerRad);
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            if (physicsProvider->addCharacterController(handle, info, transform.position, rotQuat))
+            {
+                activeCharacterControllers.insert(handle);
+
+                controller.isGrounded = false;
+                controller.currentVelocity = glm::vec3(0.0f);
+                controller.currentSpeed = 0.0f;
+                controller.verticalVelocity = 0.0f;
+                controller.locomotionState = "Idle";
+                controller.characterControllerActive = true;
+            }
+        }
+
+        if (!activeCharacterControllers.empty())
+        {
+            vfLogInfo("Initialized {} character controllers", activeCharacterControllers.size());
+        }
+    }
+
+    void PhysicsPlayModeHandler::cleanupCharacterControllers()
+    {
+        if (!physicsProvider) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& handle : activeCharacterControllers)
+        {
+            physicsProvider->removeCharacterController(handle);
+
+            auto entity = internal::fromHandle(handle);
+            if (registry.valid(entity) && registry.all_of<components::ControllerComponent>(entity))
+            {
+                auto& controller = registry.get<components::ControllerComponent>(entity);
+                controller.characterControllerActive = false;
+                controller.isGrounded = false;
+                controller.currentVelocity = glm::vec3(0.0f);
+                controller.currentSpeed = 0.0f;
+                controller.verticalVelocity = 0.0f;
+                controller.locomotionState = "Idle";
+            }
+        }
+
+        activeCharacterControllers.clear();
     }
 }

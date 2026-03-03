@@ -16,6 +16,7 @@ namespace services
     class IVFXRuntimeProvider;
     class IPostProcessProvider;
     class IRenderTextureProvider;
+    class IDebugDrawProvider;
 }
 
 namespace window
@@ -48,6 +49,7 @@ namespace core
     class PostProcessAdapter;
     class WaterRenderAdapter;
     class RenderTextureAdapter;
+    class DebugDrawAdapter;
 
     class RuntimeBootstrap
     {
@@ -67,6 +69,7 @@ namespace core
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
+        std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -105,6 +108,8 @@ namespace core
         services::IPostProcessProvider* getPostProcessProvider();
 
         services::IRenderTextureProvider* getRenderTextureProvider();
+
+        services::IDebugDrawProvider* getDebugDrawProvider();
 
         // For late binding - allows RuntimeHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();

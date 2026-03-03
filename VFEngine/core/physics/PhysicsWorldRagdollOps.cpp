@@ -129,23 +129,6 @@ namespace core::physics
         return true;
     }
 
-    void PhysicsWorld::setRagdollPose(uint64_t entityId, const JPH::SkeletonPose& pose)
-    {
-        auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
-
-        it->second.ragdoll->SetPose(pose);
-        it->second.ragdoll->ResetWarmStart();
-    }
-
-    void PhysicsWorld::driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& target, float deltaTime)
-    {
-        auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
-
-        it->second.ragdoll->DriveToPoseUsingKinematics(target, deltaTime);
-    }
-
     void PhysicsWorld::applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse)
     {
         auto it = entityRagdolls.find(entityId);
@@ -171,13 +154,6 @@ namespace core::physics
         }
     }
 
-    const SkeletonConversionResult* PhysicsWorld::getRagdollSkeletonConversion(uint64_t entityId) const
-    {
-        auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end()) return nullptr;
-        return &it->second.skeletonConversion;
-    }
-
     bool PhysicsWorld::createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,
                                                   const glm::vec3& entityPosition)
     {
@@ -197,7 +173,6 @@ namespace core::physics
 
         auto& bodyInterface = physicsSystem->GetBodyInterface();
 
-        // Collision group prevents self-collision between bone bodies of the same entity
         uint32_t groupId = nextCollisionGroupId++;
         JPH::Ref<JPH::GroupFilterTable> groupFilter = new JPH::GroupFilterTable(static_cast<uint32_t>(parts.size()));
 
@@ -255,11 +230,6 @@ namespace core::physics
         entityBoneBodies.erase(it);
     }
 
-    bool PhysicsWorld::hasKinematicBoneBodies(uint64_t entityId) const
-    {
-        return entityBoneBodies.find(entityId) != entityBoneBodies.end();
-    }
-
     void PhysicsWorld::updateKinematicBonePoses(uint64_t entityId,
                                                   const std::vector<glm::mat4>& boneWorldTransforms,
                                                   const std::vector<int>& physicsToAnimBoneIndex,
@@ -307,10 +277,4 @@ namespace core::physics
         createKinematicBoneBodies(entityId, buildResult, entityPosition);
     }
 
-    int PhysicsWorld::getBoneIndexForBody(JPH::BodyID bodyId) const
-    {
-        if (bodyId.IsInvalid()) return -1;
-        auto it = bodyToBoneIndex.find(bodyId.GetIndex());
-        return it != bodyToBoneIndex.end() ? it->second : -1;
-    }
 }

@@ -21,6 +21,10 @@ namespace animation
             const std::vector<glm::mat4>& poseB,
             float blendWeight);
 
+        static std::vector<glm::mat4> blendNPoses(
+            const std::vector<std::vector<glm::mat4>>& poses,
+            const std::vector<float>& weights);
+
         static BlendedBone blendBoneTransforms(
             const glm::vec3& posA, const glm::quat& rotA, const glm::vec3& scaleA,
             const glm::vec3& posB, const glm::quat& rotB, const glm::vec3& scaleB,

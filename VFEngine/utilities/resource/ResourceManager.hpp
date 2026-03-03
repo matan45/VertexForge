@@ -63,6 +63,11 @@ namespace resource {
 		static void invalidateMaterialInstanceCache(std::string_view path);
 		static void invalidateTerrainMaterialCache(std::string_view path);
 
+		// Cache migration (for file move/rename/delete)
+		static void migrateCache(const std::string& oldPath, const std::string& newPath);
+		static void removeCacheEntry(const std::string& path);
+		static void migrateCachePrefix(const std::string& oldPrefix, const std::string& newPrefix);
+
 		static void init();
 		static void cleanUp();
 

@@ -20,6 +20,7 @@ namespace animation
         state.isPlaying = true;
 
         loadedAnimations.clear();
+        loadedBlendTreeStates.clear();
 
         loadAnimationForState(state.currentStateId);
 
@@ -277,6 +278,50 @@ namespace animation
         }
     }
 
+    std::vector<glm::mat4> AnimatorStateMachine::evaluateStatePose(
+        uint32_t stateId, float time, AnimationEvaluator& evaluator, glm::vec3* outRootPos) const
+    {
+        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+
+        if (animState && hasBlendTree(stateId))
+        {
+            if (outRootPos)
+                return evaluateBlendTreePose(*animState, time, *outRootPos);
+            return evaluateBlendTreePose(*animState, time);
+        }
+
+        auto it = loadedAnimations.find(stateId);
+        if (it == loadedAnimations.end() || !it->second)
+            return {};
+
+        evaluator.loadAnimation(*it->second, *skeletonData);
+        float timeInTicks = evaluator.secondsToTicks(time);
+
+        if (outRootPos)
+            return evaluator.evaluatePose(timeInTicks, *outRootPos);
+        return evaluator.evaluatePose(timeInTicks);
+    }
+
+    void AnimatorStateMachine::updateRootMotionDelta(const glm::vec3& currentRootPosition)
+    {
+        if (rootMotionFirstFrame)
+        {
+            rootMotionDelta = glm::vec3(0.0f);
+            rootMotionFirstFrame = false;
+        }
+        else if (state.currentLoopCount != rootMotionLastLoopCount)
+        {
+            rootMotionDelta = glm::vec3(0.0f);
+        }
+        else
+        {
+            rootMotionDelta = currentRootPosition - previousRootPosition;
+        }
+
+        previousRootPosition = currentRootPosition;
+        rootMotionLastLoopCount = state.currentLoopCount;
+    }
+
     void AnimatorStateMachine::evaluateCurrentPose()
     {
         if (!animatorData || !skeletonData)
@@ -288,84 +333,49 @@ namespace animation
         }
 
         glm::vec3 currentRootPosition{0.0f};
+        glm::vec3* rootPtr = rootMotionEnabled ? &currentRootPosition : nullptr;
 
         if (state.isBlending)
         {
-            auto itPrev = loadedAnimations.find(state.previousStateId);
-            auto itCurr = loadedAnimations.find(state.currentStateId);
+            glm::vec3 prevRoot{0.0f}, currRoot{0.0f};
+            glm::vec3* prevRootPtr = rootMotionEnabled ? &prevRoot : nullptr;
+            glm::vec3* currRootPtr = rootMotionEnabled ? &currRoot : nullptr;
 
-            if (itPrev != loadedAnimations.end() && itPrev->second &&
-                itCurr != loadedAnimations.end() && itCurr->second)
+            auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
+                                               previousEvaluator, prevRootPtr);
+            auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
+                                               currentEvaluator, currRootPtr);
+
+            if (!prevPose.empty() && !currPose.empty())
             {
-                previousEvaluator.loadAnimation(*itPrev->second, *skeletonData);
-                currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
-
-                float prevTimeInTicks = previousEvaluator.secondsToTicks(state.previousStateTime);
-                float currTimeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-
+                currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
                 if (rootMotionEnabled)
-                {
-                    glm::vec3 prevRoot, currRoot;
-                    std::vector<glm::mat4> prevPose = previousEvaluator.evaluatePose(prevTimeInTicks, prevRoot);
-                    std::vector<glm::mat4> currPose = currentEvaluator.evaluatePose(currTimeInTicks, currRoot);
-                    currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
                     currentRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
-                }
-                else
-                {
-                    std::vector<glm::mat4> prevPose = previousEvaluator.evaluatePose(prevTimeInTicks);
-                    std::vector<glm::mat4> currPose = currentEvaluator.evaluatePose(currTimeInTicks);
-                    currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
-                }
             }
-            else if (itCurr != loadedAnimations.end() && itCurr->second)
+            else if (!currPose.empty())
             {
-                currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
-                float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
+                currentBoneMatrices = currPose;
                 if (rootMotionEnabled)
-                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks, currentRootPosition);
-                else
-                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
+                    currentRootPosition = currRoot;
             }
         }
         else
         {
-            auto it = loadedAnimations.find(state.currentStateId);
-            if (it != loadedAnimations.end() && it->second)
+            auto pose = evaluateStatePose(state.currentStateId, state.stateTime,
+                                           currentEvaluator, rootPtr);
+            if (!pose.empty())
             {
-                currentEvaluator.loadAnimation(*it->second, *skeletonData);
-                float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
-                if (rootMotionEnabled)
-                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks, currentRootPosition);
-                else
-                    currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
+                currentBoneMatrices = std::move(pose);
             }
             else
             {
-                vfLogWarning("[AnimatorStateMachine] Animation not found for state {} (loaded={})",
-                             state.currentStateId, it != loadedAnimations.end());
+                vfLogWarning("[AnimatorStateMachine] Animation not found for state {}",
+                             state.currentStateId);
             }
         }
 
         if (rootMotionEnabled)
-        {
-            if (rootMotionFirstFrame)
-            {
-                rootMotionDelta = glm::vec3(0.0f);
-                rootMotionFirstFrame = false;
-            }
-            else if (state.currentLoopCount != rootMotionLastLoopCount)
-            {
-                rootMotionDelta = glm::vec3(0.0f);
-            }
-            else
-            {
-                rootMotionDelta = currentRootPosition - previousRootPosition;
-            }
-
-            previousRootPosition = currentRootPosition;
-            rootMotionLastLoopCount = state.currentLoopCount;
-        }
+            updateRootMotionDelta(currentRootPosition);
     }
 
     bool AnimatorStateMachine::loadAnimationForState(uint32_t stateId)
@@ -375,17 +385,26 @@ namespace animation
             return false;
         }
 
-        auto it = loadedAnimations.find(stateId);
-        if (it != loadedAnimations.end())
-        {
-            return it->second != nullptr;
-        }
-
         const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
         if (!animState)
         {
             loadedAnimations[stateId] = nullptr;
             return false;
+        }
+
+        if (animState->blendTree.has_value())
+        {
+            if (loadedBlendTreeStates.contains(stateId))
+                return true;
+            loadBlendTreeAnimations(*animState);
+            loadedBlendTreeStates.insert(stateId);
+            return true;
+        }
+
+        auto it = loadedAnimations.find(stateId);
+        if (it != loadedAnimations.end())
+        {
+            return it->second != nullptr;
         }
 
         if (animState->animationPath.empty())
@@ -400,8 +419,42 @@ namespace animation
         return animData != nullptr;
     }
 
+    void AnimatorStateMachine::loadBlendTreeAnimations(const animator::AnimatorState& animState)
+    {
+        if (!animState.blendTree.has_value() || !animationLoadCallback)
+            return;
+
+        for (const auto& entry : animState.blendTree->entries)
+        {
+            if (!entry.animationPath.empty())
+            {
+                animationLoadCallback(entry.animationPath);
+            }
+        }
+    }
+
     float AnimatorStateMachine::getAnimationDuration(uint32_t stateId) const
     {
+        if (animatorData)
+        {
+            const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+            if (animState && animState->blendTree.has_value() && !animState->blendTree->entries.empty())
+            {
+                for (const auto& entry : animState->blendTree->entries)
+                {
+                    if (!entry.animationPath.empty() && animationLoadCallback)
+                    {
+                        const resource::AnimationData* data = animationLoadCallback(entry.animationPath);
+                        if (data)
+                        {
+                            float tps = data->ticksPerSecond > 0.0f ? data->ticksPerSecond : 24.0f;
+                            return data->duration / tps;
+                        }
+                    }
+                }
+            }
+        }
+
         auto it = loadedAnimations.find(stateId);
         if (it != loadedAnimations.end() && it->second)
         {
@@ -409,5 +462,33 @@ namespace animation
             return it->second->duration / tps;
         }
         return 0.0f;
+    }
+
+    bool AnimatorStateMachine::hasBlendTree(uint32_t stateId) const
+    {
+        if (!animatorData)
+            return false;
+        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+        return animState && animState->blendTree.has_value();
+    }
+
+    std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
+        const animator::AnimatorState& animState, float time) const
+    {
+        if (!animState.blendTree.has_value() || !skeletonData || !animationLoadCallback)
+            return {};
+
+        return blendTreeEvaluator.evaluate(
+            animState.blendTree.value(), parameters, *skeletonData, time, animationLoadCallback);
+    }
+
+    std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
+        const animator::AnimatorState& animState, float time, glm::vec3& outRootPosition) const
+    {
+        if (!animState.blendTree.has_value() || !skeletonData || !animationLoadCallback)
+            return {};
+
+        return blendTreeEvaluator.evaluate(
+            animState.blendTree.value(), parameters, *skeletonData, time, animationLoadCallback, outRootPosition);
     }
 }

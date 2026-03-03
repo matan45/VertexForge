@@ -1,6 +1,7 @@
 #pragma once
 
 #include "animator/AnimatorTypes.hpp"
+#include "animator/BlendTreeTypes.hpp"
 #include <string>
 
 namespace windows::animation
@@ -31,5 +32,12 @@ namespace windows::animation
         void drawConditionEditor(animator::TransitionCondition& condition,
                                   animator::AnimatorData* animatorData,
                                   bool& isDirty);
+        void drawBlendTreeEditor(animator::AnimatorState* state,
+                                  animator::AnimatorData* animatorData,
+                                  bool& isDirty);
+        bool drawMotionTypeCombo(animator::AnimatorState* state, bool& isDirty);
+        void drawBlendTreeEntry(animator::BlendTreeEntry& entry,
+                                 animator::BlendTreeType type,
+                                 bool& isDirty);
     };
 }

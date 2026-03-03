@@ -5,9 +5,11 @@
 #include "animator/SocketTypes.hpp"
 #include "AnimationBlender.hpp"
 #include "AnimationEvaluator.hpp"
+#include "BlendTree.hpp"
 #include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <functional>
+#include <unordered_set>
 
 namespace animation
 {
@@ -41,8 +43,10 @@ namespace animation
 
         AnimationEvaluator currentEvaluator;
         AnimationEvaluator previousEvaluator;
+        BlendTreeEvaluator blendTreeEvaluator;
 
         std::unordered_map<uint32_t, const resource::AnimationData*> loadedAnimations;
+        std::unordered_set<uint32_t> loadedBlendTreeStates;
 
         std::vector<glm::mat4> currentBoneMatrices;
 
@@ -108,8 +112,16 @@ namespace animation
         void startTransition(const animator::AnimatorTransition& transition);
         void updateBlending(float deltaTime);
         void evaluateCurrentPose();
+        std::vector<glm::mat4> evaluateStatePose(uint32_t stateId, float time,
+                                                   AnimationEvaluator& evaluator,
+                                                   glm::vec3* outRootPos) const;
+        void updateRootMotionDelta(const glm::vec3& currentRootPosition);
         bool loadAnimationForState(uint32_t stateId);
+        void loadBlendTreeAnimations(const animator::AnimatorState& state);
         float getAnimationDuration(uint32_t stateId) const;
+        bool hasBlendTree(uint32_t stateId) const;
+        std::vector<glm::mat4> evaluateBlendTreePose(const animator::AnimatorState& state, float time) const;
+        std::vector<glm::mat4> evaluateBlendTreePose(const animator::AnimatorState& state, float time, glm::vec3& outRootPosition) const;
 
         bool shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
                                     float normalizedTime, bool isLooping) const;

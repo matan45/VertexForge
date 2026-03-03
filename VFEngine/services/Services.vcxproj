@@ -113,6 +113,7 @@
     <ClInclude Include="events\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\BrushEvents.hpp" />
     <ClInclude Include="events\ControllerEvents.hpp" />
+    <ClInclude Include="events\DebugDrawEvents.hpp" />
     <ClInclude Include="events\EditorModeEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
@@ -163,6 +164,7 @@
     <ClInclude Include="impl\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\BrushServiceImpl.hpp" />
     <ClInclude Include="impl\ControllerServiceImpl.hpp" />
+    <ClInclude Include="impl\DebugDrawServiceImpl.hpp" />
     <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\FileOperationsServiceImpl.hpp" />
@@ -216,6 +218,7 @@
     <ClInclude Include="interfaces\IAudioService.hpp" />
     <ClInclude Include="interfaces\IBrushService.hpp" />
     <ClInclude Include="interfaces\IControllerService.hpp" />
+    <ClInclude Include="interfaces\IDebugDrawService.hpp" />
     <ClInclude Include="interfaces\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\IFileOperationsService.hpp" />
@@ -244,6 +247,7 @@
     <ClInclude Include="providers\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\IAudioProvider.hpp" />
+    <ClInclude Include="providers\IDebugDrawProvider.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\IIKProvider.hpp" />
     <ClInclude Include="providers\ILightBakeProvider.hpp" />
@@ -271,6 +275,7 @@
     <ClCompile Include="impl\AudioServiceImpl.cpp" />
     <ClCompile Include="impl\BrushServiceImpl.cpp" />
     <ClCompile Include="impl\ControllerServiceImpl.cpp" />
+    <ClCompile Include="impl\DebugDrawServiceImpl.cpp" />
     <ClCompile Include="impl\EditorModeServiceImpl.cpp" />
     <ClCompile Include="impl\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\FileOperationsServiceImpl.cpp" />

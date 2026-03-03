@@ -251,6 +251,11 @@ namespace controllers {
 		offScreenController->clearNavmeshDebugMesh();
 	}
 
+	void OffScreen::updateImmediateDebugDrawList(render::mesh::ImmediateDebugDrawList drawList)
+	{
+		offScreenController->updateImmediateDebugDrawList(std::move(drawList));
+	}
+
 	void OffScreen::prepareFrameUICanvasOutlines()
 	{
 		offScreenController->prepareFrameUICanvasOutlines();

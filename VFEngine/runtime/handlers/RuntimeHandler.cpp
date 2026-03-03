@@ -17,6 +17,7 @@
 #include "../adapters/WaterRenderAdapter.hpp"
 #include "impl/RenderTextureServiceImpl.hpp"
 #include "impl/RenderTexturePlayModeHandler.hpp"
+#include "impl/DebugDrawServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
@@ -125,6 +126,7 @@ namespace handlers {
         audioService.reset();
         scriptingService.reset();
         renderTextureService.reset();
+        debugDrawService.reset();
         renderService.reset();
         sceneService.reset();
         windowStateService.reset();
@@ -237,7 +239,7 @@ namespace handlers {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
-        controllerService = std::make_shared<services::ControllerServiceImpl>();
+        controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
         if (auto* ikProvider = bootstrap->getIKProvider())
         {
@@ -246,6 +248,10 @@ namespace handlers {
 
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()
+        );
+
+        debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(
+            bootstrap->getDebugDrawProvider()
         );
 
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
@@ -275,6 +281,7 @@ namespace handlers {
             navmeshService->registerEventHandlers();
         }
         renderTextureService->registerEventHandlers();
+        debugDrawService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {

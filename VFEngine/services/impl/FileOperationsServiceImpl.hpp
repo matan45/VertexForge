@@ -11,7 +11,6 @@ namespace services
     {
     private:
         std::shared_ptr<IUndoRedoService> undoRedoService;
-        std::string projectRoot;
         std::filesystem::path trashFolder;  // For storing deleted files for undo
 
     public:
@@ -26,6 +25,7 @@ namespace services
         FileOperationResult deleteFile(const std::string& path) override;
 
     private:
+        std::string getProjectRoot() const;
         bool ensureTrashFolder();
         std::string generateTrashPath(const std::string& originalPath);
         bool isSubPath(const std::filesystem::path& path, const std::filesystem::path& base) const;

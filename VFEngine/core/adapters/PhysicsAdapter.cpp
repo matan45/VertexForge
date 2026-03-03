@@ -421,4 +421,80 @@ namespace core
     {
         return waterSensorEntities.contains(entity.id);
     }
+
+    // ============================================
+    // Character Controller
+    // ============================================
+
+    bool PhysicsAdapter::addCharacterController(services::EntityHandle entity,
+                                                 const CharacterControllerInfo& info,
+                                                 const glm::vec3& position,
+                                                 const glm::quat& rotation)
+    {
+        if (!physicsWorld) return false;
+
+        physics::CharacterCreateInfo createInfo;
+        createInfo.shape = info.shape;
+        createInfo.size = info.size;
+        createInfo.maxSlopeAngle = info.maxSlopeAngle;
+        createInfo.stepHeight = info.stepHeight;
+        createInfo.collisionLayer = info.collisionLayer;
+        createInfo.position = position;
+        createInfo.rotation = rotation;
+
+        return physicsWorld->addCharacter(entity.id, createInfo);
+    }
+
+    void PhysicsAdapter::removeCharacterController(services::EntityHandle entity)
+    {
+        if (physicsWorld) physicsWorld->removeCharacter(entity.id);
+    }
+
+    bool PhysicsAdapter::hasCharacterController(services::EntityHandle entity) const
+    {
+        if (!physicsWorld) return false;
+        return physicsWorld->hasCharacter(entity.id);
+    }
+
+    PhysicsAdapter::CharacterUpdateResult PhysicsAdapter::updateCharacterController(
+        services::EntityHandle entity,
+        const glm::vec3& desiredVelocity,
+        float deltaTime)
+    {
+        CharacterUpdateResult result;
+        if (!physicsWorld) return result;
+
+        auto gravity = physicsWorld->getGravity();
+        auto physResult = physicsWorld->updateCharacter(entity.id, desiredVelocity, deltaTime, gravity);
+
+        result.position = physResult.position;
+        result.linearVelocity = physResult.linearVelocity;
+        result.isGrounded = physResult.isGrounded;
+        result.groundNormal = physResult.groundNormal;
+        result.groundVelocity = physResult.groundVelocity;
+        return result;
+    }
+
+    bool PhysicsAdapter::isCharacterGrounded(services::EntityHandle entity) const
+    {
+        if (!physicsWorld) return false;
+        return physicsWorld->isCharacterGrounded(entity.id);
+    }
+
+    glm::vec3 PhysicsAdapter::getCharacterPosition(services::EntityHandle entity) const
+    {
+        if (!physicsWorld) return glm::vec3(0.0f);
+        return physicsWorld->getCharacterPosition(entity.id);
+    }
+
+    glm::vec3 PhysicsAdapter::getCharacterVelocity(services::EntityHandle entity) const
+    {
+        if (!physicsWorld) return glm::vec3(0.0f);
+        return physicsWorld->getCharacterLinearVelocity(entity.id);
+    }
+
+    void PhysicsAdapter::setCharacterPosition(services::EntityHandle entity, const glm::vec3& position)
+    {
+        if (physicsWorld) physicsWorld->setCharacterPosition(entity.id, position);
+    }
 }

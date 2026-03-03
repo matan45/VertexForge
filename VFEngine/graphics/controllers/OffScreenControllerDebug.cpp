@@ -96,6 +96,27 @@ namespace controllers
         }
     }
 
+    void OffScreenController::updateImmediateDebugDrawList(render::mesh::ImmediateDebugDrawList drawList)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            if (renderHandler->isMeshPipelineInitialized() && !renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                auto* debugRendererPtr = renderHandler->getDebugRenderer();
+                if (debugRendererPtr)
+                {
+                    debugRendererPtr->updateImmediateDebugDrawList(std::move(drawList));
+                }
+            }
+        }
+    }
+
     void OffScreenController::setPlayMode(bool playMode)
     {
         playModeActive = playMode;
