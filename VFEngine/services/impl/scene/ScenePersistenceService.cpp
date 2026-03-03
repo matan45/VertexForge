@@ -105,6 +105,8 @@ namespace services
             return false;
         }
 
+        scene::EntityRegistry::setSceneTransitioning(true);
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         events::render::RemoveIBLCommand removeIblCmd;
@@ -138,6 +140,8 @@ namespace services
 
         events::scene::SceneClearedNotification notification;
         dispatcher.publish(notification);
+
+        scene::EntityRegistry::setSceneTransitioning(false);
 
         vfLogInfo("New scene created.");
         return true;
@@ -201,6 +205,9 @@ namespace services
 
     void ScenePersistenceService::performDeferredLoad(const std::string& filePath)
     {
+        // Block render preparation from accessing registry during scene load
+        scene::EntityRegistry::setSceneTransitioning(true);
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Cleanup: remove IBL, terrain, clear scene, clear selection
@@ -239,7 +246,12 @@ namespace services
         }
         dispatcher.publish(completeNotif);
 
-        if (success)
+        if (!success)
+        {
+            scene::EntityRegistry::setSceneTransitioning(false);
+            return;
+        }
+
         {
             scene::Entity& root = sceneGraph->GetRoot();
             if (root.hasComponent<components::IBLComponent>())
@@ -336,6 +348,9 @@ namespace services
             notification.scenePath = filePath;
             dispatcher.publish(notification);
         }
+
+        // Re-allow render preparation to access registry
+        scene::EntityRegistry::setSceneTransitioning(false);
     }
 
     bool ScenePersistenceService::savePrefab(EntityHandle entity, const std::string& filePath)

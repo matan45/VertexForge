@@ -125,6 +125,8 @@ namespace animation
         {
             if (!animator || !animator->isInitialized() || !animator->isPlaying())
                 continue;
+            if (!registry.valid(entity))
+                continue;
             activeAnimators.push_back({entity, animator.get()});
         }
 
@@ -225,6 +227,8 @@ namespace animation
         auto attachmentView = registry.view<components::SocketAttachmentComponent>();
         for (auto attachedEntity : attachmentView)
         {
+            if (!registry.valid(attachedEntity))
+                continue;
             resolveAttachmentParent(attachedEntity);
             applyAttachmentTransform(attachedEntity);
         }
@@ -264,6 +268,10 @@ namespace animation
     void RuntimeAnimatorSystem::resolveAttachmentParent(entt::entity attachedEntity)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.valid(attachedEntity) || !registry.all_of<components::SocketAttachmentComponent>(attachedEntity))
+        {
+            return;
+        }
         auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
 
         if (!attachment.needsParentResolution || attachment.parentEntityName.empty())
@@ -309,6 +317,8 @@ namespace animation
     void RuntimeAnimatorSystem::applyAttachmentTransform(entt::entity attachedEntity)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.valid(attachedEntity) || !registry.all_of<components::SocketAttachmentComponent>(attachedEntity))
+            return;
         auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
 
         if (!attachment.isActive || attachment.parentEntity == entt::null)
