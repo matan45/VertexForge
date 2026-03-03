@@ -31,7 +31,8 @@ namespace serialization
         static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
         static json createSnapshot(scene::SceneGraphSystem& sceneGraph);
-        static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph);
+        static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                        SceneLoadProgressCallback progressCallback = nullptr);
 
     private:
         static json serializeEntity(scene::Entity& entity);

@@ -10,6 +10,7 @@
 #include "navigation/NavmeshSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
 #include <cassert>
 
@@ -153,11 +154,11 @@ namespace services
         vfLogInfo("NavmeshService: Baking navmesh with {} vertices, {} triangles",
                   geometry.getVertexCount(), geometry.getTriangleCount());
 
-        bakeFuture = std::async(std::launch::async,
+        bakeFuture = threading::JobSystem::instance().submit(
             [this, geom = std::move(geometry), settings]()
             {
                 return navmeshProvider->buildNavmesh(geom, settings);
-            });
+            }, threading::JobPriority::LOW);
     }
 
     types::NavmeshBakeProgress NavmeshServiceImpl::getBakeProgress() const

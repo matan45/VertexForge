@@ -287,10 +287,11 @@ project "Utilities"
       "dependencies/glm",
 	  "dependencies/entt/single_include",
 	  "dependencies/json/single_include",
-	  "dependencies/meshoptimizer/src"  -- meshoptimizer for terrain meshlet generation
+	  "dependencies/meshoptimizer/src",  -- meshoptimizer for terrain meshlet generation
+	  "dependencies/enkiTS/src"          -- enkiTS task scheduler
    }
 
-   links { "spdLog", "meshoptimizer" }
+   links { "spdLog", "meshoptimizer", "enkiTS" }
 
    buildoptions { "/bigobj" }
 
@@ -391,7 +392,7 @@ project "Window"
 	  "dependencies/spdlog/include",
       vulkanLibPath.."/Include"
    }
-   
+
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
    links {  "GLFW",
@@ -656,6 +657,36 @@ project "recast"
       "dependencies/recastnavigation/Recast/Include",
       "dependencies/recastnavigation/Detour/Include",
       "dependencies/recastnavigation/DetourCrowd/Include"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: enkiTS (Task Scheduler for game engines)
+project "enkiTS"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/enkiTS/src/TaskScheduler.h",
+      "dependencies/enkiTS/src/TaskScheduler.cpp",
+      "dependencies/enkiTS/src/LockLessMultiReadPipe.h",
+      "dependencies/enkiTS/src/TaskScheduler_c.h",
+      "dependencies/enkiTS/src/TaskScheduler_c.cpp"
+   }
+
+   includedirs {
+      "dependencies/enkiTS/src"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

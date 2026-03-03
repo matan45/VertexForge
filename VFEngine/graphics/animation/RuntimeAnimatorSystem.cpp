@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
@@ -118,17 +119,47 @@ namespace animation
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
+        // Phase 1: parallel animation evaluation (bone matrix computation)
+        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> activeAnimators;
         for (auto& [entity, animator] : animators)
         {
             if (!animator || !animator->isInitialized() || !animator->isPlaying())
                 continue;
+            activeAnimators.push_back({entity, animator.get()});
+        }
 
-            animator->update(deltaTime);
+        if (activeAnimators.size() > 1)
+        {
+            std::vector<std::future<void>> futures;
+            futures.reserve(activeAnimators.size());
 
-            const auto& firedEvents = animator->getFiredEvents();
+            for (auto& [entity, anim] : activeAnimators)
+            {
+                futures.push_back(threading::JobSystem::instance().submit(
+                    [anim, deltaTime]()
+                    {
+                        anim->update(deltaTime);
+                    }, threading::JobPriority::HIGH
+                ));
+            }
+
+            for (auto& f : futures)
+            {
+                f.get();
+            }
+        }
+        else if (!activeAnimators.empty())
+        {
+            activeAnimators[0].second->update(deltaTime);
+        }
+
+        // Phase 2: sequential post-processing (events, root motion, IK)
+        for (auto& [entity, anim] : activeAnimators)
+        {
+            const auto& firedEvents = anim->getFiredEvents();
             if (!firedEvents.empty())
             {
-                const animator::AnimatorState* currentState = animator->getCurrentAnimatorState();
+                const animator::AnimatorState* currentState = anim->getCurrentAnimatorState();
                 std::string stateName = currentState ? currentState->name : "";
                 auto entityHandle = services::internal::toHandle(entity);
 
@@ -149,7 +180,7 @@ namespace animation
                 const auto& animComp = registry.get<components::AnimatorComponent>(entity);
                 if (animComp.applyRootMotion)
                 {
-                    glm::vec3 delta = animator->consumeRootMotionDelta();
+                    glm::vec3 delta = anim->consumeRootMotionDelta();
                     if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
                     {
                         auto& transform = registry.get<components::TransformComponent>(entity);
@@ -161,7 +192,6 @@ namespace animation
                 }
             }
 
-            // IK post-processing: solve after animation evaluation, before GPU upload
             if (registry.valid(entity) &&
                 registry.all_of<components::IKTargetComponent>(entity))
             {
@@ -178,7 +208,7 @@ namespace animation
 
                     if (skeleton)
                     {
-                        auto& matrices = animator->getMutableBoneMatrices();
+                        auto& matrices = anim->getMutableBoneMatrices();
                         IKPostProcessor::applyIK(matrices, *skeleton,
                                                   ikComp.chains, ikComp.runtimeStates);
                     }

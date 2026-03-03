@@ -7,6 +7,7 @@
 #include "../controllers/imguiHandler/ImguiWindowHandler.hpp"
 #include "resource/ResourceManager.hpp"
 #include "scene/LevelHandler.hpp"
+#include "threading/JobSystem.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -17,6 +18,7 @@ namespace core {
 
 	MainLoop::MainLoop()
 	{
+		threading::JobSystem::instance().init();
 		resource::ResourceManager::init();
 		controllers::WindowController::init();
 		mainWindow = controllers::WindowController::getWindow();
@@ -68,6 +70,7 @@ namespace core {
 		controllers::Graphics::destroyContext();
 		controllers::WindowController::cleanUp();
 		resource::ResourceManager::cleanUp();
+		threading::JobSystem::instance().shutdown();
 	}
 
 

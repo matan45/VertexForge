@@ -1,4 +1,5 @@
 #include "MeshLODGenerator.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
 
 #include <algorithm>
@@ -314,9 +315,24 @@ namespace types
 
         lodLevels[0] = lod0;
 
+        // Each LOD simplifies from lod0 independently — parallelize
+        std::vector<std::future<LODMeshData>> futures;
+        futures.reserve(resource::LOD_LEVEL_COUNT - 1);
+
         for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level)
         {
-            lodLevels[level] = simplifyMesh(lod0, lodRatios[level]);
+            float ratio = lodRatios[level];
+            futures.push_back(threading::JobSystem::instance().submit(
+                [this, &lod0, ratio]() -> LODMeshData
+                {
+                    return simplifyMesh(lod0, ratio);
+                }, threading::JobPriority::NORMAL
+            ));
+        }
+
+        for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level)
+        {
+            lodLevels[level] = futures[level - 1].get();
 
             vfLogInfo("  LOD{}: {} vertices, {} triangles ({}%)",
                       level,

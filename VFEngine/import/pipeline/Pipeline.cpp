@@ -1,6 +1,6 @@
 #include "Pipeline.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
-#include <future>
 
 namespace pipeline
 {
@@ -22,10 +22,10 @@ namespace pipeline
 
         for (const auto& file : files)
         {
-            futures.push_back(std::async(std::launch::async,
+            futures.push_back(threading::JobSystem::instance().submit(
                 [this, file, location, fileIndex, totalFiles, progressCallback]() -> std::optional<ImportContext> {
                     return processFile(file, location, fileIndex, totalFiles, progressCallback);
-                }));
+                }, threading::JobPriority::NORMAL));
             fileIndex++;
         }
 

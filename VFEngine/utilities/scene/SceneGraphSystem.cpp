@@ -1,5 +1,6 @@
 #include "SceneGraphSystem.hpp"
 #include "../components/MediaComponents.hpp"
+#include "../threading/JobSystem.hpp"
 
 namespace scene {
 	SceneGraphSystem::SceneGraphSystem() : root{ Entity("Root") }
@@ -96,7 +97,36 @@ namespace scene {
 			return;
 		}
 		glm::mat4 identityMatrix(1.0f);
-		updateChildWorldTransforms(root, identityMatrix);
+
+		// Parallelize top-level children: each subtree is independent
+		auto children = root.getChildren();
+		if (children.size() > 1)
+		{
+			std::vector<std::future<void>> futures;
+			futures.reserve(children.size());
+
+			for (auto& child : children)
+			{
+				if (child.isAlive())
+				{
+					futures.push_back(threading::JobSystem::instance().submit(
+						[this, child, identityMatrix]() mutable
+						{
+							updateChildWorldTransforms(child, identityMatrix);
+						}, threading::JobPriority::HIGH
+					));
+				}
+			}
+
+			for (auto& f : futures)
+			{
+				f.get();
+			}
+		}
+		else
+		{
+			updateChildWorldTransforms(root, identityMatrix);
+		}
 	}
 
 	void SceneGraphSystem::updateCamera() const

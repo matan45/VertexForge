@@ -52,3 +52,6 @@
 [submodule "dependencies/recastnavigation"]
 	path = dependencies/recastnavigation
 	url = https://github.com/recastnavigation/recastnavigation.git
+[submodule "dependencies/enkiTS"]
+	path = dependencies/enkiTS
+	url = https://github.com/dougbinks/enkiTS.git

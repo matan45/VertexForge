@@ -147,6 +147,7 @@
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
+    <ClInclude Include="windows\SceneLoadProgressWindow.hpp" />
     <ClInclude Include="windows\SculptToolPanel.hpp" />
     <ClInclude Include="windows\TerrainCreationWindow.hpp" />
     <ClInclude Include="windows\TerrainMaterialEditorWindow.hpp" />
@@ -268,6 +269,7 @@
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
+    <ClCompile Include="windows\SceneLoadProgressWindow.cpp" />
     <ClCompile Include="windows\SculptToolPanel.cpp" />
     <ClCompile Include="windows\TerrainCreationWindow.cpp" />
     <ClCompile Include="windows\TerrainMaterialEditorWindow.cpp" />

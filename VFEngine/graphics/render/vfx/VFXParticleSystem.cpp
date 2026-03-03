@@ -1,4 +1,5 @@
 #include "VFXParticleSystem.hpp"
+#include "threading/JobSystem.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/constants.hpp>
@@ -34,17 +35,54 @@ namespace render::vfx
         timeAccumulator += deltaTime;
         emissionTime += deltaTime;
 
-        for (auto& particle : particles)
+        // Parallel particle update: each particle is independent (reads config, writes only to itself)
+        constexpr size_t PARALLEL_THRESHOLD = 256;
+        size_t particleCount = particles.size();
+
+        if (particleCount >= PARALLEL_THRESHOLD)
         {
-            if (particle.active)
+            uint32_t threadCount = 4;
+            uint32_t chunkSize = static_cast<uint32_t>((particleCount + threadCount - 1) / threadCount);
+
+            std::vector<std::future<void>> futures;
+            futures.reserve(threadCount);
+
+            for (uint32_t t = 0; t < threadCount; ++t)
             {
-                updateParticle(particle, deltaTime);
+                uint32_t start = t * chunkSize;
+                uint32_t end = std::min(start + chunkSize, static_cast<uint32_t>(particleCount));
+
+                futures.push_back(threading::JobSystem::instance().submit(
+                    [this, start, end, deltaTime]()
+                    {
+                        for (uint32_t i = start; i < end; ++i)
+                        {
+                            if (particles[i].active)
+                            {
+                                updateParticle(particles[i], deltaTime);
+                            }
+                        }
+                    }, threading::JobPriority::HIGH
+                ));
+            }
+
+            for (auto& f : futures)
+            {
+                f.get();
+            }
+        }
+        else
+        {
+            for (auto& particle : particles)
+            {
+                if (particle.active)
+                {
+                    updateParticle(particle, deltaTime);
+                }
             }
         }
 
-        // Only spawn new particles if:
-        // - looping is enabled, OR
-        // - we haven't exceeded the emission duration (one lifetime cycle)
+        // Spawning must remain sequential (uses rng and shared ribbon state)
         bool canSpawn = config.looping || (emissionTime < config.lifetime);
 
         if (config.spawnRate > 0.0f && canSpawn)
