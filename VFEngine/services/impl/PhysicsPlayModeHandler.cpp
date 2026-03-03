@@ -597,6 +597,7 @@ namespace services
             info.size = collider.size;
             info.maxSlopeAngle = controller.maxSlopeAngle;
             info.stepHeight = controller.stepHeight;
+            info.collisionLayer = collider.collisionLayer;
 
             glm::vec3 eulerRad = glm::radians(transform.rotation);
             glm::quat rotQuat = glm::quat(eulerRad);
@@ -613,7 +614,7 @@ namespace services
                 controller.currentSpeed = 0.0f;
                 controller.verticalVelocity = 0.0f;
                 controller.locomotionState = components::LocomotionState::Idle;
-                controller.joltCharacter = reinterpret_cast<void*>(1); // Non-null marker indicating active
+                controller.characterControllerActive = true;
             }
         }
 
@@ -637,7 +638,7 @@ namespace services
             if (registry.valid(entity) && registry.all_of<components::ControllerComponent>(entity))
             {
                 auto& controller = registry.get<components::ControllerComponent>(entity);
-                controller.joltCharacter = nullptr;
+                controller.characterControllerActive = false;
                 controller.isGrounded = false;
                 controller.currentVelocity = glm::vec3(0.0f);
                 controller.currentSpeed = 0.0f;

@@ -1,4 +1,5 @@
 #include "DebugDrawAdapter.hpp"
+#include "print/EditorLogger.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 
@@ -8,7 +9,12 @@ namespace core
     {
         if (drawList.lineVertices.size() >= MAX_LINE_VERTICES)
         {
-            return; // Budget exceeded
+            if (!budgetWarned)
+            {
+                vfLogWarning("Debug draw budget exceeded ({} vertices). Additional lines will be dropped this frame.", MAX_LINE_VERTICES);
+                budgetWarned = true;
+            }
+            return;
         }
         drawList.lineVertices.push_back({start, color});
         drawList.lineVertices.push_back({end, color});
@@ -91,6 +97,7 @@ namespace core
     {
         render::mesh::ImmediateDebugDrawList result = std::move(drawList);
         drawList = render::mesh::ImmediateDebugDrawList{};
+        budgetWarned = false;
         return result;
     }
 }

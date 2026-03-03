@@ -11,8 +11,22 @@ namespace animation
         float stateTime,
         const AnimationLoadCallback& loadCallback) const
     {
+        std::vector<float> weights;
+
+        if (blendTree.type == animator::BlendTreeType::BlendTree1D)
+        {
+            float paramValue = params.getFloat(blendTree.parameterName);
+            weights = compute1DWeights(blendTree, paramValue);
+        }
+        else
+        {
+            float paramX = params.getFloat(blendTree.parameterName);
+            float paramY = params.getFloat(blendTree.parameterNameY);
+            weights = compute2DWeights(blendTree, paramX, paramY);
+        }
+
         glm::vec3 unused;
-        return evaluateAndBlend(blendTree, {}, skeleton, stateTime, loadCallback, false, unused);
+        return evaluateAndBlend(blendTree, weights, skeleton, stateTime, loadCallback, false, unused);
     }
 
     std::vector<glm::mat4> BlendTreeEvaluator::evaluate(

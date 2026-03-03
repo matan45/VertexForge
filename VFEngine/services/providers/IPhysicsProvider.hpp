@@ -118,6 +118,7 @@ namespace services
             glm::vec3 size{1.0f};        // Box half-extents / Sphere: x=radius / Capsule: x=radius, y=height
             float maxSlopeAngle = 45.0f;
             float stepHeight = 0.35f;
+            uint8_t collisionLayer = 1;
         };
 
         struct CharacterUpdateResult

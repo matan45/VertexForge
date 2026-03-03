@@ -438,6 +438,7 @@ namespace core
         createInfo.size = info.size;
         createInfo.maxSlopeAngle = info.maxSlopeAngle;
         createInfo.stepHeight = info.stepHeight;
+        createInfo.collisionLayer = info.collisionLayer;
         createInfo.position = position;
         createInfo.rotation = rotation;
 

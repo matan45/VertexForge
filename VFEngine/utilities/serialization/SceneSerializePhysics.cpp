@@ -591,7 +591,7 @@ namespace serialization
         controller.currentSpeed = 0.0f;
         controller.verticalVelocity = 0.0f;
         controller.locomotionState = components::LocomotionState::Idle;
-        controller.joltCharacter = nullptr;
+        controller.characterControllerActive = false;
         controller.hasMoveToTarget = false;
         controller.moveToDestination = glm::vec3(0.0f);
     }

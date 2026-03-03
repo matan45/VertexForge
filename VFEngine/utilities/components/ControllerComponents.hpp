@@ -48,8 +48,8 @@ namespace components
         float verticalVelocity = 0.0f;
         LocomotionState locomotionState = LocomotionState::Idle;
 
-        // CharacterVirtual handle (managed by PhysicsWorld, nullptr when not in play mode)
-        void* joltCharacter = nullptr;
+        // Whether a CharacterVirtual is active for this entity (managed by PhysicsWorld, false when not in play mode)
+        bool characterControllerActive = false;
 
         // Navigation
         bool hasMoveToTarget = false;

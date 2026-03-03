@@ -129,6 +129,7 @@ namespace core::physics
 
         // Character virtual instances
         std::unordered_map<uint64_t, JPH::Ref<JPH::CharacterVirtual>> entityCharacters;
+        std::unordered_map<uint64_t, uint8_t> entityCharacterLayers;
 
         bool initialized = false;
 

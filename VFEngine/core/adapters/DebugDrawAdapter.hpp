@@ -12,6 +12,7 @@ namespace core
     private:
         render::mesh::ImmediateDebugDrawList drawList;
         bool enabled = true;
+        bool budgetWarned = false;
 
         static constexpr size_t MAX_LINE_VERTICES = 128 * 1024; // 64K line segments = 128K vertices
 

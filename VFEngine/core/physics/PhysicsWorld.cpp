@@ -184,6 +184,7 @@ namespace core::physics
         bodyToBoneIndex.clear();
 
         entityCharacters.clear();
+        entityCharacterLayers.clear();
 
         for (auto& [entityId, bodyId] : entityToBody)
             removeAndDestroyBody(bodyInterface, bodyId);
@@ -602,6 +603,7 @@ namespace core::physics
         );
 
         entityCharacters[entityId] = character;
+        entityCharacterLayers[entityId] = info.collisionLayer;
 
         loggerInfo("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
                    entityId, info.position.x, info.position.y, info.position.z);
@@ -611,6 +613,7 @@ namespace core::physics
     void PhysicsWorld::removeCharacter(uint64_t entityId)
     {
         entityCharacters.erase(entityId);
+        entityCharacterLayers.erase(entityId);
     }
 
     bool PhysicsWorld::hasCharacter(uint64_t entityId) const
@@ -637,9 +640,12 @@ namespace core::physics
         updateSettings.mStickToFloorStepDown = JPH::Vec3(0.0f, -0.5f, 0.0f);
         updateSettings.mWalkStairsStepUp = JPH::Vec3(0.0f, 0.4f, 0.0f);
 
-        // Use default accept-all filters for character collision queries
-        JPH::BroadPhaseLayerFilter broadPhaseFilter;
-        JPH::ObjectLayerFilter objectLayerFilter;
+        // Filter collisions based on the character's assigned collision layer
+        auto layerIt = entityCharacterLayers.find(entityId);
+        JPH::ObjectLayer charLayer = static_cast<JPH::ObjectLayer>(
+            layerIt != entityCharacterLayers.end() ? layerIt->second : Layers::DYNAMIC);
+        JPH::DefaultBroadPhaseLayerFilter broadPhaseFilter(*objectVsBroadPhaseFilter, charLayer);
+        JPH::DefaultObjectLayerFilter objectLayerFilter(*objectLayerPairFilter, charLayer);
         JPH::BodyFilter bodyFilter;
         JPH::ShapeFilter shapeFilter;
 

@@ -327,7 +327,7 @@ namespace render
     {
         if (immediateDebugRenderer)
         {
-            immediateDebugRenderer->updateDrawList(drawList);
+            immediateDebugRenderer->updateDrawList(std::move(drawList));
         }
     }
 }

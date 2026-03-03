@@ -479,7 +479,7 @@ namespace services
             }
 
             // Route to character controller or rigid body path
-            if (controller.joltCharacter != nullptr && physicsProvider)
+            if (controller.characterControllerActive && physicsProvider)
             {
                 updateCharacterControllerEntity(entity, deltaTime);
             }

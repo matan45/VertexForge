@@ -96,7 +96,7 @@ namespace render::mesh
         currentBufferSize = 0;
     }
 
-    void ImmediateDebugRenderer::updateDrawList(const ImmediateDebugDrawList& drawList)
+    void ImmediateDebugRenderer::updateDrawList(ImmediateDebugDrawList drawList)
     {
         destroyVertexBuffer();
 

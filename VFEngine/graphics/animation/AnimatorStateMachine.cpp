@@ -471,7 +471,9 @@ namespace animation
 
     float AnimatorStateMachine::getAnimationDuration(uint32_t stateId) const
     {
-        // For blend tree states, use the first entry's duration as reference
+        // For blend tree states, use the first valid clip's duration as a reference.
+        // If clips have different durations, transition exit-time calculations
+        // will be approximate (based on this single duration, not a weighted blend).
         if (animatorData)
         {
             const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
