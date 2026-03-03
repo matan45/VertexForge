@@ -336,6 +336,90 @@ namespace resource
         terrainMaterialCache.erase(std::string(path));
     }
 
+    void ResourceManager::migrateCache(const std::string& oldPath, const std::string& newPath)
+    {
+        std::scoped_lock lock(cacheMutex);
+
+        auto migrate = [&](auto& cache) {
+            auto it = cache.find(oldPath);
+            if (it != cache.end())
+            {
+                cache[newPath] = std::move(it->second);
+                cache.erase(it);
+            }
+        };
+
+        migrate(textureCache);
+        migrate(hdrCache);
+        migrate(audioCache);
+        migrate(meshCache);
+        migrate(shaderCache);
+        migrate(materialCache);
+        migrate(materialInstanceCache);
+        migrate(fontCache);
+        migrate(animationCache);
+        migrate(animatorCache);
+        migrate(terrainMaterialCache);
+    }
+
+    void ResourceManager::removeCacheEntry(const std::string& path)
+    {
+        std::scoped_lock lock(cacheMutex);
+
+        textureCache.erase(path);
+        hdrCache.erase(path);
+        audioCache.erase(path);
+        meshCache.erase(path);
+        shaderCache.erase(path);
+        materialCache.erase(path);
+        materialInstanceCache.erase(path);
+        fontCache.erase(path);
+        animationCache.erase(path);
+        animatorCache.erase(path);
+        terrainMaterialCache.erase(path);
+    }
+
+    void ResourceManager::migrateCachePrefix(const std::string& oldPrefix, const std::string& newPrefix)
+    {
+        std::scoped_lock lock(cacheMutex);
+
+        auto migratePrefix = [&](auto& cache) {
+            std::vector<std::pair<std::string, typename std::remove_reference_t<decltype(cache)>::mapped_type>> toInsert;
+            std::vector<std::string> toErase;
+
+            for (auto& [key, value] : cache)
+            {
+                if (key.starts_with(oldPrefix))
+                {
+                    std::string newKey = newPrefix + key.substr(oldPrefix.size());
+                    toInsert.emplace_back(std::move(newKey), std::move(value));
+                    toErase.push_back(key);
+                }
+            }
+
+            for (const auto& key : toErase)
+            {
+                cache.erase(key);
+            }
+            for (auto& [key, value] : toInsert)
+            {
+                cache[std::move(key)] = std::move(value);
+            }
+        };
+
+        migratePrefix(textureCache);
+        migratePrefix(hdrCache);
+        migratePrefix(audioCache);
+        migratePrefix(meshCache);
+        migratePrefix(shaderCache);
+        migratePrefix(materialCache);
+        migratePrefix(materialInstanceCache);
+        migratePrefix(fontCache);
+        migratePrefix(animationCache);
+        migratePrefix(animatorCache);
+        migratePrefix(terrainMaterialCache);
+    }
+
     std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(std::string_view path)
     {
         {

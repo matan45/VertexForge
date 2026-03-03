@@ -1,8 +1,10 @@
 #include "FileOperationsServiceImpl.hpp"
 #include "../data/UndoTypes.hpp"
 #include "asset/AssetReferenceScanner.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/FileOperationsEvents.hpp"
+#include "../events/ProjectEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <algorithm>
 #include <chrono>
@@ -17,6 +19,16 @@ namespace services
     FileOperationsServiceImpl::FileOperationsServiceImpl(std::shared_ptr<IUndoRedoService> undoRedoService)
         : undoRedoService(std::move(undoRedoService))
     {
+    }
+
+    std::string FileOperationsServiceImpl::getProjectRoot() const
+    {
+        auto pathOpt = events::EventDispatcher::instance().query(events::project::GetProjectPathQuery{});
+        if (pathOpt.has_value() && !pathOpt.value().empty())
+        {
+            return fs::path(pathOpt.value()).parent_path().string();
+        }
+        return {};
     }
 
     void FileOperationsServiceImpl::registerEventHandlers()
@@ -145,10 +157,12 @@ namespace services
             return result;
         }
 
+        std::string projRoot = getProjectRoot();
+
         std::vector<std::pair<std::string, std::string>> originalContents;
-        if (!projectRoot.empty())
+        if (!projRoot.empty())
         {
-            auto scanResult = asset::AssetReferenceScanner::findReferencingFiles(sourcePath, projectRoot);
+            auto scanResult = asset::AssetReferenceScanner::findReferencingFiles(sourcePath, projRoot);
             originalContents = asset::AssetReferenceScanner::getOriginalContents(scanResult.referencingFiles);
         }
 
@@ -162,10 +176,20 @@ namespace services
             return result;
         }
 
-        if (!projectRoot.empty())
+        if (!projRoot.empty())
         {
-            auto updateResult = asset::AssetReferenceScanner::updateReferences(sourcePath, dest.string(), projectRoot);
+            auto updateResult = asset::AssetReferenceScanner::updateReferences(sourcePath, dest.string(), projRoot);
             result.updatedReferences = updateResult.updatedFiles;
+        }
+
+        // Migrate ResourceManager cache entries
+        if (fs::is_directory(dest))
+        {
+            resource::ResourceManager::migrateCachePrefix(sourcePath, dest.string());
+        }
+        else
+        {
+            resource::ResourceManager::migrateCache(sourcePath, dest.string());
         }
 
         if (undoRedoService)
@@ -173,7 +197,7 @@ namespace services
             try
             {
                 auto undoCmd = std::make_unique<MoveFileUndoCommand>(sourcePath, dest.string(),
-                                                                     result.updatedReferences, projectRoot);
+                                                                     result.updatedReferences, projRoot);
                 undoCmd->originalRefContents.insert(originalContents.begin(), originalContents.end());
                 undoRedoService->pushCommand(std::move(undoCmd));
             }
@@ -312,6 +336,9 @@ namespace services
             return result;
         }
 
+        // Remove stale ResourceManager cache entries
+        resource::ResourceManager::removeCacheEntry(path);
+
         if (undoRedoService)
         {
             try
@@ -358,6 +385,8 @@ namespace services
         {
             asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
         }
+
+        resource::ResourceManager::migrateCache(sourcePath, destPath);
     }
 
     void MoveFileUndoCommand::undo()
@@ -372,6 +401,8 @@ namespace services
         asset::AssetReferenceScanner::restoreOriginalContents(
             std::vector<std::pair<std::string, std::string>>(
                 originalRefContents.begin(), originalRefContents.end()));
+
+        resource::ResourceManager::migrateCache(destPath, sourcePath);
 
         // Notify UI to refresh
         events::fileops::FileMovedNotification notification;
@@ -440,6 +471,8 @@ namespace services
         {
             throw std::runtime_error("Failed to redo delete: " + ec.message());
         }
+
+        resource::ResourceManager::removeCacheEntry(originalPath);
     }
 
     void DeleteFileUndoCommand::undo()

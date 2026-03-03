@@ -49,7 +49,10 @@ namespace asset
         static bool updateSceneOrPrefabFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath);
         static bool updateMaterialFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath);
         static bool updateMaterialInstanceFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath);
-        
+
+        static bool scanTerrainFile(const fs::path& filePath, const std::string& targetPath);
+        static bool updateTerrainFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath);
+
         static std::string normalizePath(const std::string& path);
 
         static std::vector<fs::path> collectAssetFiles(const fs::path& searchRoot);
