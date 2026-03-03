@@ -583,16 +583,18 @@ namespace services
         if (!physicsProvider) return;
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::ControllerComponent, components::TransformComponent>();
+        auto view = registry.view<components::ControllerComponent, components::TransformComponent,
+                                   components::ColliderComponent>();
 
         for (auto entity : view)
         {
             auto& controller = view.get<components::ControllerComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
+            const auto& collider = view.get<components::ColliderComponent>(entity);
 
             IPhysicsProvider::CharacterControllerInfo info;
-            info.capsuleRadius = controller.capsuleRadius;
-            info.capsuleHeight = controller.capsuleHeight;
+            info.shape = collider.shape;
+            info.size = collider.size;
             info.maxSlopeAngle = controller.maxSlopeAngle;
             info.stepHeight = controller.stepHeight;
 

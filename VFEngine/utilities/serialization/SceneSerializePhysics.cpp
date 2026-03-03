@@ -530,8 +530,6 @@ namespace serialization
         j["rotationSpeed"] = controller.rotationSpeed;
         j["airControlFactor"] = controller.airControlFactor;
         j["walkSpeedThreshold"] = controller.walkSpeedThreshold;
-        j["capsuleRadius"] = controller.capsuleRadius;
-        j["capsuleHeight"] = controller.capsuleHeight;
         j["stepHeight"] = controller.stepHeight;
         j["maxSlopeAngle"] = controller.maxSlopeAngle;
         return j;
@@ -574,14 +572,6 @@ namespace serialization
         if (auto it = j.find("walkSpeedThreshold"); it != j.end() && it->is_number())
         {
             controller.walkSpeedThreshold = it->get<float>();
-        }
-        if (auto it = j.find("capsuleRadius"); it != j.end() && it->is_number())
-        {
-            controller.capsuleRadius = it->get<float>();
-        }
-        if (auto it = j.find("capsuleHeight"); it != j.end() && it->is_number())
-        {
-            controller.capsuleHeight = it->get<float>();
         }
         if (auto it = j.find("stepHeight"); it != j.end() && it->is_number())
         {

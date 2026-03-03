@@ -562,14 +562,30 @@ namespace core::physics
         if (!initialized || !physicsSystem) return false;
         if (entityCharacters.count(entityId)) return false;
 
-        // Build capsule shape: Jolt capsule is defined as half-height of the cylinder + radius
-        float cylinderHalfHeight = (info.capsuleHeight * 0.5f) - info.capsuleRadius;
-        if (cylinderHalfHeight < 0.01f) cylinderHalfHeight = 0.01f;
-
-        JPH::RefConst<JPH::Shape> capsuleShape = new JPH::CapsuleShape(cylinderHalfHeight, info.capsuleRadius);
+        // Build shape based on collider type
+        JPH::RefConst<JPH::Shape> characterShape;
+        switch (info.shape)
+        {
+        case types::ColliderShape::Sphere:
+            characterShape = new JPH::SphereShape(info.size.x);
+            break;
+        case types::ColliderShape::Box:
+            characterShape = new JPH::BoxShape(JPH::Vec3(info.size.x, info.size.y, info.size.z));
+            break;
+        case types::ColliderShape::Capsule:
+        default:
+        {
+            float radius = info.size.x;
+            float totalHeight = info.size.y;
+            float cylinderHalfHeight = (totalHeight * 0.5f) - radius;
+            if (cylinderHalfHeight < 0.01f) cylinderHalfHeight = 0.01f;
+            characterShape = new JPH::CapsuleShape(cylinderHalfHeight, radius);
+            break;
+        }
+        }
 
         JPH::CharacterVirtualSettings settings;
-        settings.mShape = capsuleShape;
+        settings.mShape = characterShape;
         settings.mMaxSlopeAngle = JPH::DegreesToRadians(info.maxSlopeAngle);
         settings.mMaxStrength = 100.0f;
         settings.mMass = 70.0f;

@@ -114,8 +114,8 @@ namespace services
         // Character controller (CharacterVirtual)
         struct CharacterControllerInfo
         {
-            float capsuleRadius = 0.3f;
-            float capsuleHeight = 1.8f;
+            types::ColliderShape shape = types::ColliderShape::Capsule;
+            glm::vec3 size{1.0f};        // Box half-extents / Sphere: x=radius / Capsule: x=radius, y=height
             float maxSlopeAngle = 45.0f;
             float stepHeight = 0.35f;
         };

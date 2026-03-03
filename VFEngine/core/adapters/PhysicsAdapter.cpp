@@ -434,8 +434,8 @@ namespace core
         if (!physicsWorld) return false;
 
         physics::CharacterCreateInfo createInfo;
-        createInfo.capsuleRadius = info.capsuleRadius;
-        createInfo.capsuleHeight = info.capsuleHeight;
+        createInfo.shape = info.shape;
+        createInfo.size = info.size;
         createInfo.maxSlopeAngle = info.maxSlopeAngle;
         createInfo.stepHeight = info.stepHeight;
         createInfo.position = position;

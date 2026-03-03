@@ -30,9 +30,7 @@ namespace components
         float airControlFactor = 0.3f;
         float walkSpeedThreshold = 2.5f;
 
-        // Capsule
-        float capsuleRadius = 0.3f;
-        float capsuleHeight = 1.8f;
+        // Character controller behavior (shape comes from ColliderComponent)
         float stepHeight = 0.35f;
         float maxSlopeAngle = 45.0f;
 

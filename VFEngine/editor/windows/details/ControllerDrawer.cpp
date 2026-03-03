@@ -44,10 +44,8 @@ namespace windows::details
 
             ImGui::Spacing();
             ImGui::Separator();
-            ImGui::TextDisabled("Capsule");
+            ImGui::TextDisabled("Character Controller");
 
-            ImGui::DragFloat("##CtrlCapRadius", &controller.capsuleRadius, 0.01f, 0.05f, 5.0f, "Radius: %.2f");
-            ImGui::DragFloat("##CtrlCapHeight", &controller.capsuleHeight, 0.05f, 0.2f, 10.0f, "Height: %.2f");
             ImGui::DragFloat("##CtrlStepHeight", &controller.stepHeight, 0.01f, 0.0f, 2.0f, "Step Height: %.2f");
             ImGui::DragFloat("##CtrlMaxSlope", &controller.maxSlopeAngle, 1.0f, 0.0f, 89.0f, "Max Slope: %.0f");
 
