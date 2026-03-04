@@ -264,10 +264,6 @@ namespace core
             result.push_back(tile);
         }
 
-        if (!result.empty())
-        {
-        }
-
         return result;
     }
 

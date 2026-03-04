@@ -153,7 +153,6 @@ namespace core
             {
                 compiled = true;
                 vfLogInfo("[ScriptingAdapter] Build successful: {} files compiled", result.filesCompiled);
-                vfLogInfo("[Script] Build successful: {} files compiled", result.filesCompiled);
             }
             else
             {
@@ -194,7 +193,6 @@ namespace core
             compiled = false;
 
             vfLogInfo("[ScriptingAdapter] Clean completed");
-            vfLogInfo("[Script] Clean completed");
         }
         catch (const std::exception& e)
         {
