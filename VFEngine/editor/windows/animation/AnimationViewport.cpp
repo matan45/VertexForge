@@ -1,7 +1,7 @@
 #include "AnimationViewport.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AnimationPreviewEvents.hpp"
+#include "events/animation/AnimationPreviewEvents.hpp"
 #include "imgui.h"
 #include <glm/gtc/quaternion.hpp>
 #include <cmath>

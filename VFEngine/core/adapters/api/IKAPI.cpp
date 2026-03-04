@@ -3,7 +3,7 @@
 #include "IKAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/IKEvents.hpp"
+#include "events/physics/IKEvents.hpp"
 
 namespace core::api
 {

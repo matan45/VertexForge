@@ -3,7 +3,7 @@
 
 #include "ScriptVFXEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "../../services/events/VFXEventNotifications.hpp"
+#include "../../services/events/vfx/VFXEventNotifications.hpp"
 
 #include "print/Log.hpp"
 namespace core

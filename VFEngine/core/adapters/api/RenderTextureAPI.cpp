@@ -4,7 +4,7 @@
 #include "RenderTextureAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderTextureEvents.hpp"
+#include "events/render/RenderTextureEvents.hpp"
 #include "events/scene/ComponentMediaEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"

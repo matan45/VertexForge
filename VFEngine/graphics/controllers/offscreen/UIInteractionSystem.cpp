@@ -6,7 +6,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/UIEvents.hpp"
+#include "../../../services/events/ui/UIEvents.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include <algorithm>
 #include <cmath>

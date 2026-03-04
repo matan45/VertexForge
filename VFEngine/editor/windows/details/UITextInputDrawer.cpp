@@ -1,7 +1,7 @@
 #include "UITextInputDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/UIEvents.hpp"
+#include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>

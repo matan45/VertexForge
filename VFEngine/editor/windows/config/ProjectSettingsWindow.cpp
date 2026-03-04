@@ -1,7 +1,7 @@
 #include "print/Log.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/ProjectEvents.hpp"
+#include "events/project/ProjectEvents.hpp"
 #include <imgui.h>
 #include <filesystem>
 

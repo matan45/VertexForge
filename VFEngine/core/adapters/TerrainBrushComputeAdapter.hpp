@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/ITerrainBrushComputeProvider.hpp"
+#include "../../services/providers/terrain/ITerrainBrushComputeProvider.hpp"
 
 namespace controllers
 {

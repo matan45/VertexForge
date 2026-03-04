@@ -1,6 +1,6 @@
 #include "PhysicsAdapter.hpp"
 #include "PhysicsConversions.hpp"
-#include "../../services/events/PhysicsEvents.hpp"
+#include "../../services/events/physics/PhysicsEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 
 namespace core

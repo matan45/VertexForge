@@ -1,7 +1,7 @@
 #include "LightmapPreviewWindow.hpp"
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "lightbake/LightmapAtlas.hpp"
 #include <filesystem>
 #include <cmath>

@@ -4,8 +4,8 @@
 #include "UIInputAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/UIEvents.hpp"
-#include "../../../services/events/SceneEvents.hpp"
+#include "../../../services/events/ui/UIEvents.hpp"
+#include "../../../services/events/project/SceneEvents.hpp"
 
 namespace core::api
 {

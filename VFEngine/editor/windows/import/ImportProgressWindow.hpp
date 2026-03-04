@@ -1,7 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/ResourceEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <string>
 #include <mutex>
 #include <atomic>

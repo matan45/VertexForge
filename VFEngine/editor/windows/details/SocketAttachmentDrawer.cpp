@@ -1,7 +1,7 @@
 #include "SocketAttachmentDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SocketEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include <imgui.h>
 

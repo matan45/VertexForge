@@ -7,7 +7,7 @@
 #include <vfx/VFXModifierConfigLoader.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
 #include <vfx/VFXShapeConfigLoader.hpp>
-#include <providers/IVFXPreviewProvider.hpp>
+#include <providers/vfx/IVFXPreviewProvider.hpp>
 #include "imgui.h"
 #include <filesystem>
 #include <algorithm>

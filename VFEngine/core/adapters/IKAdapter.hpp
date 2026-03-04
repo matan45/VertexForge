@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IIKProvider.hpp"
+#include "../../services/providers/physics/IIKProvider.hpp"
 #include <entt/entt.hpp>
 #include <optional>
 

@@ -18,9 +18,9 @@
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "transparency/WBOITPipeline.hpp"
-#include "../../services/providers/IVFXRuntimeProvider.hpp"
-#include "../../services/providers/ITerrainRenderProvider.hpp"
-#include "../../services/providers/IWaterRenderProvider.hpp"
+#include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
+#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
 

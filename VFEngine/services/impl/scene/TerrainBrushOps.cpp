@@ -11,12 +11,12 @@
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/BrushEvents.hpp"
-#include "../../events/PaintBrushEvents.hpp"
-#include "../../events/HoleBrushEvents.hpp"
-#include "../../events/SculptModeEvents.hpp"
-#include "../../events/PaintModeEvents.hpp"
-#include "../../events/HoleModeEvents.hpp"
+#include "../../events/terrain/BrushEvents.hpp"
+#include "../../events/terrain/PaintBrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/editor/SculptModeEvents.hpp"
+#include "../../events/terrain/PaintModeEvents.hpp"
+#include "../../events/terrain/HoleModeEvents.hpp"
 
 namespace services
 {

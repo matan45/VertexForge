@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../interfaces/IWaterService.hpp"
+#include "../../interfaces/terrain/IWaterService.hpp"
 #include "../../data/EntityHandle.hpp"
-#include "../../events/WaterEvents.hpp"
+#include "../../events/terrain/WaterEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "water/WaterTypes.hpp"
 #include "math/Frustum.hpp"

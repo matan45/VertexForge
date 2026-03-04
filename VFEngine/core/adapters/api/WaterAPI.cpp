@@ -4,7 +4,7 @@
 #include "WaterAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/WaterEvents.hpp"
+#include "../../../services/events/terrain/WaterEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

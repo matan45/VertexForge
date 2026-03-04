@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IMeshPreviewProvider.hpp"
+#include "../../services/providers/render/IMeshPreviewProvider.hpp"
 #include "../../graphics/controllers/preview/MeshPreviewController.hpp"
 #include <memory>
 #include <unordered_map>

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IEditorTextureProvider.hpp"
+#include "../../services/providers/render/IEditorTextureProvider.hpp"
 #include "../../services/data/AsyncLoadingTypes.hpp"
 #include "../controllers/texture/EditorTexture.hpp"
 #include <unordered_map>

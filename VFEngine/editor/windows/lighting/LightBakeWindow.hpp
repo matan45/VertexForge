@@ -1,7 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/LightBakeEvents.hpp"
+#include "events/lightbake/LightBakeEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <string>
 #include <mutex>

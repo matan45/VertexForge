@@ -1,6 +1,6 @@
 #include "SocketAdapter.hpp"
 #include "../../services/data/EntityConversion.hpp"
-#include "../../services/events/SocketEvents.hpp"
+#include "../../services/events/physics/SocketEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"

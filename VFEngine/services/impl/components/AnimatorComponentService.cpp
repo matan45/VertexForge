@@ -1,7 +1,7 @@
 #include "AnimatorComponentService.hpp"
-#include "../../providers/IAnimatorProvider.hpp"
+#include "../../providers/animation/IAnimatorProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/AnimatorEvents.hpp"
+#include "../../events/animation/AnimatorEvents.hpp"
 
 namespace services
 {

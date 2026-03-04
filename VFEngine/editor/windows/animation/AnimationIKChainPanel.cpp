@@ -1,6 +1,6 @@
 #include "AnimationIKChainPanel.hpp"
 #include "MeshIKChainWriter.hpp"
-#include "../../../services/events/IKEvents.hpp"
+#include "../../../services/events/physics/IKEvents.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>

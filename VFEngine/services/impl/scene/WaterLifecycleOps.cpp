@@ -8,8 +8,8 @@
 #include "water/WaterTypes.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/WaterEvents.hpp"
-#include "../../providers/IPhysicsProvider.hpp"
+#include "../../events/terrain/WaterEvents.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
 
 namespace services
 {

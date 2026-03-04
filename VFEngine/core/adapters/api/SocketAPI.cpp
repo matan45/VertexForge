@@ -3,7 +3,7 @@
 #include "SocketAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SocketEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 
 namespace core::api

@@ -1,6 +1,6 @@
 #pragma once
 #include <material/MaterialTypes.hpp>
-#include <providers/IMaterialPreviewProvider.hpp>
+#include <providers/render/IMaterialPreviewProvider.hpp>
 #include <optional>
 #include <string>
 #include <memory>

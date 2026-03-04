@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IAnimatorProvider.hpp"
+#include "../../services/providers/animation/IAnimatorProvider.hpp"
 #include <memory>
 
 namespace controllers

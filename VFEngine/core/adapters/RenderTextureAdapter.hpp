@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IRenderTextureProvider.hpp"
+#include "../../services/providers/render/IRenderTextureProvider.hpp"
 #include <memory>
 #include <unordered_map>
 

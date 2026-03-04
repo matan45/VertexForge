@@ -2,7 +2,7 @@
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AudioEvents.hpp"
+#include "events/audio/AudioEvents.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <cmath>

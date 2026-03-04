@@ -1,8 +1,8 @@
 #include "FolderStructureWindow.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/FileOperationsEvents.hpp"
-#include "events/ProjectEvents.hpp"
+#include "events/project/FileOperationsEvents.hpp"
+#include "events/project/ProjectEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>

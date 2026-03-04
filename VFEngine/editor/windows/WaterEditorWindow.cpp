@@ -1,6 +1,6 @@
 #include "WaterEditorWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/WaterEvents.hpp"
+#include "events/terrain/WaterEvents.hpp"
 #include <imgui.h>
 
 namespace windows

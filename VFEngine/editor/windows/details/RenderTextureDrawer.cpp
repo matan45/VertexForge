@@ -1,7 +1,7 @@
 #include "RenderTextureDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details

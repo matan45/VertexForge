@@ -1,8 +1,8 @@
 #include "MaterialDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/MaterialEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include <imgui.h>

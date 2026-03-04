@@ -6,12 +6,12 @@
 #include "terrain/TerrainTypes.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/TerrainEvents.hpp"
-#include "../../events/BrushEvents.hpp"
-#include "../../events/PaintBrushEvents.hpp"
-#include "../../events/HoleBrushEvents.hpp"
-#include "../../events/SceneEvents.hpp"
-#include "../../events/PhysicsEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/terrain/BrushEvents.hpp"
+#include "../../events/terrain/PaintBrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 
 namespace services
 {

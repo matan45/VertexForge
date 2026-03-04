@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/INavmeshProvider.hpp"
+#include "../../services/providers/navmesh/INavmeshProvider.hpp"
 #include <memory>
 #include <mutex>
 

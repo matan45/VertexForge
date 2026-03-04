@@ -1,7 +1,7 @@
 #include "IBLWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/RenderEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
 

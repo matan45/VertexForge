@@ -2,7 +2,7 @@
 #include "TextDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <cstring>

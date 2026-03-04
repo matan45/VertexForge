@@ -4,7 +4,7 @@
 #include "ControllerAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/ControllerEvents.hpp"
+#include "../../../services/events/physics/ControllerEvents.hpp"
 
 namespace core::api
 {

@@ -1,7 +1,7 @@
 #pragma once
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
-#include "interfaces/IAudioService.hpp"
+#include "interfaces/audio/IAudioService.hpp"
 #include <unordered_map>
 
 namespace windows::details

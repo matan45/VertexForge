@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IRenderHookProvider.hpp"
+#include "../../services/providers/render/IRenderHookProvider.hpp"
 
 namespace controllers
 {

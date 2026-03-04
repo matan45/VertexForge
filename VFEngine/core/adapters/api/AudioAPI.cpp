@@ -4,7 +4,7 @@
 #include "AudioAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/AudioEvents.hpp"
+#include "../../../services/events/audio/AudioEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

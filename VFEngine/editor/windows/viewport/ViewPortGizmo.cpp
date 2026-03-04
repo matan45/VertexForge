@@ -1,9 +1,9 @@
 #include "ViewPortGizmo.hpp"
 #include "../../camera/EditorCamera.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/EditorModeEvents.hpp"
-#include "events/SculptModeEvents.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 

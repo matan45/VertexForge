@@ -1,6 +1,6 @@
 #include "ImportModalDialog.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/ResourceEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "files/FileUtils.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"

@@ -4,7 +4,7 @@
 #include "VFXAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/VFXRuntimeEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"

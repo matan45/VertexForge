@@ -11,7 +11,7 @@
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/TerrainEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include <cfloat>
 
 namespace services

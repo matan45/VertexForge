@@ -2,7 +2,7 @@
 #include "MaterialGraphEvaluator.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include <events/EventDispatcher.hpp>
-#include <events/PreviewEvents.hpp>
+#include <events/render/PreviewEvents.hpp>
 #include <time/Timer.hpp>
 #include "imgui.h"
 #include <algorithm>

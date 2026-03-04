@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IScriptingProvider.hpp"
+#include "../../services/providers/scripting/IScriptingProvider.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>

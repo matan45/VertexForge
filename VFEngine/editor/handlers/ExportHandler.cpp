@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "ExportHandler.hpp"
-#include "events/ProjectEvents.hpp"
+#include "events/project/ProjectEvents.hpp"
 #include "export/GameExporter.hpp"
 #include <filesystem>
 

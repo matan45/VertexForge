@@ -5,7 +5,7 @@
 #include "components/PhysicsAnimationComponent.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/SceneEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
 
 namespace services
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/IDebugDrawProvider.hpp"
+#include "../../services/providers/render/IDebugDrawProvider.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>

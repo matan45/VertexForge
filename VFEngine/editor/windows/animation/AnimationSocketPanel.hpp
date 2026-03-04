@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "animator/SocketTypes.hpp"
 #include <vector>
 #include <string>

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IMaterialPreviewProvider.hpp"
+#include "../../services/providers/render/IMaterialPreviewProvider.hpp"
 #include "../../graphics/controllers/preview/MaterialPreviewController.hpp"
 #include <memory>
 #include <unordered_map>

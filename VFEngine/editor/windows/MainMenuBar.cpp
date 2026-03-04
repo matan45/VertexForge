@@ -13,14 +13,14 @@
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/RenderEvents.hpp"
-#include "events/NavmeshEvents.hpp"
-#include "events/ApplicationEvents.hpp"
-#include "events/EditorModeEvents.hpp"
-#include "events/ScriptingEvents.hpp"
-#include "events/SculptModeEvents.hpp"
-#include "events/ExportEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/render/RenderEvents.hpp"
+#include "events/navmesh/NavmeshEvents.hpp"
+#include "events/project/ApplicationEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
+#include "events/project/ExportEvents.hpp"
 #include <imgui.h>
 
 namespace windows

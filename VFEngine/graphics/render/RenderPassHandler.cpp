@@ -18,9 +18,9 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
-#include "../../services/providers/IVFXRuntimeProvider.hpp"
-#include "../../services/providers/ITerrainRenderProvider.hpp"
-#include "../../services/providers/IWaterRenderProvider.hpp"
+#include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
+#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "material/MaterialTypes.hpp"
 

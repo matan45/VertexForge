@@ -3,7 +3,7 @@
 
 #include "ScriptSocketEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "events/SocketEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

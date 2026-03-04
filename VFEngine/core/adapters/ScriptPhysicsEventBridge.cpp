@@ -3,7 +3,7 @@
 
 #include "ScriptPhysicsEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "events/PhysicsEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

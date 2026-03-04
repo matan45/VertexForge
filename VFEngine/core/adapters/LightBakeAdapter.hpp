@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/ILightBakeProvider.hpp"
+#include "../../services/providers/lightbake/ILightBakeProvider.hpp"
 #include "../../utilities/lightbake/BakeSceneMesh.hpp"
 #include "../../utilities/lightbake/LightmapAtlas.hpp"
 #include "../../utilities/lightbake/LightBaker.hpp"

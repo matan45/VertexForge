@@ -1,7 +1,7 @@
 #include "AssetGridRenderer.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include <algorithm>
 

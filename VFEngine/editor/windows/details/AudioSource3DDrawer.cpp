@@ -2,8 +2,8 @@
 #include "AudioSource3DDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/AudioEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/audio/AudioEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/IAudioProvider.hpp"
+#include "../../services/providers/audio/IAudioProvider.hpp"
 #include <memory>
 
 namespace core::audio

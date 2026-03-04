@@ -18,7 +18,7 @@
 #include "terrain/HoleToolPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/TerrainEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 
 namespace editor
 {

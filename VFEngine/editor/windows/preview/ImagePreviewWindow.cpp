@@ -1,7 +1,7 @@
 #include "ImagePreviewWindow.hpp"
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include <glm/glm.hpp>
 #include <filesystem>
 #include <cmath>

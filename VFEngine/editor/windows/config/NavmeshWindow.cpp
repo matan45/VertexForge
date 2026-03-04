@@ -1,7 +1,7 @@
 #include "NavmeshWindow.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/NavmeshEvents.hpp"
-#include "../../services/events/RenderEvents.hpp"
+#include "../../services/events/navmesh/NavmeshEvents.hpp"
+#include "../../services/events/render/RenderEvents.hpp"
 #include <imgui.h>
 
 namespace windows

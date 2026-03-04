@@ -1,8 +1,8 @@
 #include "print/Log.hpp"
 #include "AsyncFileOperations.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/FileOperationsEvents.hpp"
-#include "events/UndoRedoEvents.hpp"
+#include "events/project/FileOperationsEvents.hpp"
+#include "events/editor/UndoRedoEvents.hpp"
 #include "threading/JobSystem.hpp"
 #include <filesystem>
 

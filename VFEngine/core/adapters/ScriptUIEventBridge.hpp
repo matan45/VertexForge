@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/providers/IScriptingProvider.hpp"
+#include "../../services/providers/scripting/IScriptingProvider.hpp"
 #include <value/ValueType.hpp>
 #include <unordered_map>
 #include <unordered_set>

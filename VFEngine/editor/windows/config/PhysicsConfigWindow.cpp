@@ -1,8 +1,8 @@
 #include "print/Log.hpp"
 #include "PhysicsConfigWindow.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/PhysicsSettingsEvents.hpp"
-#include "../../services/events/SceneEvents.hpp"
+#include "../../services/events/physics/PhysicsSettingsEvents.hpp"
+#include "../../services/events/project/SceneEvents.hpp"
 #include <imgui.h>
 #include <vector>
 #include <cstring>

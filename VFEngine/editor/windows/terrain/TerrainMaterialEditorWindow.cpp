@@ -3,7 +3,7 @@
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
-#include "events/TerrainEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
 #include <filesystem>

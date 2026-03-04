@@ -1,7 +1,7 @@
 #include "HoleToolPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/HoleModeEvents.hpp"
-#include "events/HoleBrushEvents.hpp"
+#include "events/terrain/HoleModeEvents.hpp"
+#include "events/terrain/HoleBrushEvents.hpp"
 #include <imgui.h>
 
 namespace windows

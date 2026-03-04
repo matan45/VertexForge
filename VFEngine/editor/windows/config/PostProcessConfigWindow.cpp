@@ -1,7 +1,7 @@
 #include "PostProcessConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/PostProcessEvents.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/render/PostProcessEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <imgui.h>
 
 namespace windows

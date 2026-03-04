@@ -1,8 +1,8 @@
 #include "PaintToolPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/PaintModeEvents.hpp"
-#include "events/PaintBrushEvents.hpp"
-#include "events/TerrainEvents.hpp"
+#include "events/terrain/PaintModeEvents.hpp"
+#include "events/terrain/PaintBrushEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>

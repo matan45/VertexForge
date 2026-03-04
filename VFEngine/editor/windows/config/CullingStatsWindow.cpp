@@ -1,6 +1,6 @@
 #include "CullingStatsWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include <imgui.h>
 #include <string>
 

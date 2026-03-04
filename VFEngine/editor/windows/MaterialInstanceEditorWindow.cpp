@@ -4,8 +4,8 @@
 #include <material/MaterialGraphHelper.hpp>
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
-#include "events/PreviewEvents.hpp"
-#include "events/MaterialEvents.hpp"
+#include "events/render/PreviewEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>

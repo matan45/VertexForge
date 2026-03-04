@@ -3,7 +3,7 @@
 
 #include "ScriptUIEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "events/UIEvents.hpp"
+#include "events/ui/UIEvents.hpp"
 
 #include "print/Log.hpp"
 namespace core

@@ -1,7 +1,7 @@
 #include "print/Log.hpp"
 #include "AnimationInfoPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AnimationPreviewEvents.hpp"
+#include "events/animation/AnimationPreviewEvents.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"

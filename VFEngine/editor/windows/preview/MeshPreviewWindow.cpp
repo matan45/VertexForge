@@ -4,7 +4,7 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
-#include "events/PreviewEvents.hpp"
+#include "events/render/PreviewEvents.hpp"
 #include <filesystem>
 
 namespace windows

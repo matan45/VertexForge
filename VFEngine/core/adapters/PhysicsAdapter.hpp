@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/IPhysicsProvider.hpp"
+#include "../../services/providers/physics/IPhysicsProvider.hpp"
 #include "../physics/PhysicsWorld.hpp"
 #include "../physics/FixedTimestep.hpp"
 #include "../physics/RagdollSettingsBuilder.hpp"

@@ -11,8 +11,8 @@
 #include <resource/ResourceManager.hpp>
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
-#include "events/MaterialEvents.hpp"
-#include "events/ResourceEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <filesystem>
 
 namespace windows

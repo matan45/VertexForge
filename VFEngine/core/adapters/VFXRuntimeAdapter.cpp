@@ -6,9 +6,9 @@
 #include "components/CoreComponents.hpp"
 #include "components/PhysicsComponents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/SceneEvents.hpp"
-#include "../../services/events/TerrainEvents.hpp"
-#include "../../services/events/BrushEvents.hpp"
+#include "../../services/events/project/SceneEvents.hpp"
+#include "../../services/events/terrain/TerrainEvents.hpp"
+#include "../../services/events/terrain/BrushEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include "print/Log.hpp"

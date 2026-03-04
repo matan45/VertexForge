@@ -1,8 +1,8 @@
 #include "print/Log.hpp"
 #include "AudioConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AudioSettingsEvents.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/audio/AudioSettingsEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <imgui.h>
 
 namespace windows

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../data/EntityHandle.hpp"
-#include "../../events/SocketEvents.hpp"
+#include "../../events/physics/SocketEvents.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>

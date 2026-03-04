@@ -5,7 +5,7 @@
 #include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/MaterialEvents.hpp"
+#include "../../events/render/MaterialEvents.hpp"
 
 namespace services {
 

@@ -3,8 +3,8 @@
 #include "imgui.h"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/FileOperationsEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/project/FileOperationsEvents.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>

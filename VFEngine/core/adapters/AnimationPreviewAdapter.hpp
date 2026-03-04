@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "../../graphics/controllers/preview/AnimatedMeshPreviewController.hpp"
 #include <memory>
 #include <unordered_map>

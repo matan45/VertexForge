@@ -1,7 +1,7 @@
 #include "IKComponentService.hpp"
-#include "../../providers/IIKProvider.hpp"
+#include "../../providers/physics/IIKProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/IKEvents.hpp"
+#include "../../events/physics/IKEvents.hpp"
 
 namespace services
 {

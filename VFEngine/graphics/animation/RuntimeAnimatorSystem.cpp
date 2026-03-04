@@ -5,10 +5,10 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
-#include "../../services/events/SceneEvents.hpp"
-#include "../../services/events/EditorModeEvents.hpp"
-#include "../../services/events/AnimationEventEvents.hpp"
-#include "../../services/events/SocketEvents.hpp"
+#include "../../services/events/project/SceneEvents.hpp"
+#include "../../services/events/editor/EditorModeEvents.hpp"
+#include "../../services/events/animation/AnimationEventEvents.hpp"
+#include "../../services/events/physics/SocketEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>

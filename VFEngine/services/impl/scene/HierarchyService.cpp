@@ -6,8 +6,8 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../data/ScriptTypes.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/SceneEvents.hpp"
-#include "../../events/ScriptingEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
+#include "../../events/scripting/ScriptingEvents.hpp"
 #include <functional>
 
 namespace services

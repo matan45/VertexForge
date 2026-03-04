@@ -3,7 +3,7 @@
 
 #include "ScriptAnimationEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "../../services/events/AnimationEventEvents.hpp"
+#include "../../services/events/animation/AnimationEventEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

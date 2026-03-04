@@ -3,7 +3,7 @@
 #include <texture/OrmTexturePacker.hpp>
 #include <nfd/FileDialog.hpp>
 #include <events/EventDispatcher.hpp>
-#include <events/ResourceEvents.hpp>
+#include <events/project/ResourceEvents.hpp>
 #include "imgui.h"
 #include <filesystem>
 

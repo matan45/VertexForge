@@ -1,7 +1,7 @@
 #include "SculptToolPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SculptModeEvents.hpp"
-#include "events/BrushEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
+#include "events/terrain/BrushEvents.hpp"
 #include <imgui.h>
 
 namespace windows

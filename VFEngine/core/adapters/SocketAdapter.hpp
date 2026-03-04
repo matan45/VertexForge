@@ -1,5 +1,5 @@
 #pragma once
-#include "../../services/providers/ISocketProvider.hpp"
+#include "../../services/providers/physics/ISocketProvider.hpp"
 #include <entt/entt.hpp>
 #include <optional>
 

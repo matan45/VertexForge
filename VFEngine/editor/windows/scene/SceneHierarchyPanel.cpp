@@ -1,7 +1,7 @@
 #include "SceneHierarchyPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/SculptModeEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
 #include <imgui.h>
 
 namespace windows

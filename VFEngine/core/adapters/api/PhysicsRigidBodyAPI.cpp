@@ -4,7 +4,7 @@
 #include "PhysicsRigidBodyAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/PhysicsEvents.hpp"
+#include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

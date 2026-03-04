@@ -1,12 +1,12 @@
 #include "ViewPortOverlay.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/RenderEvents.hpp"
-#include "events/EditorModeEvents.hpp"
-#include "events/SculptModeEvents.hpp"
-#include "events/PaintModeEvents.hpp"
-#include "events/HoleModeEvents.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/TerrainEvents.hpp"
+#include "events/render/RenderEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
+#include "events/terrain/PaintModeEvents.hpp"
+#include "events/terrain/HoleModeEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
 
 namespace windows

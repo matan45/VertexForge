@@ -1,7 +1,7 @@
 #include "SocketComponentService.hpp"
-#include "../../providers/ISocketProvider.hpp"
+#include "../../providers/physics/ISocketProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/SocketEvents.hpp"
+#include "../../events/physics/SocketEvents.hpp"
 
 namespace services
 {

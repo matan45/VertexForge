@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/IWaterRenderProvider.hpp"
+#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
 
 namespace services
 {

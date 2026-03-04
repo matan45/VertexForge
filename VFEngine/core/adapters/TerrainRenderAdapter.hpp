@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include <memory>
 #include <atomic>
 

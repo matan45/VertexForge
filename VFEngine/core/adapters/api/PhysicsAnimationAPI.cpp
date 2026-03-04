@@ -4,7 +4,7 @@
 #include "PhysicsAnimationAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/PhysicsAnimationEvents.hpp"
+#include "../../../services/events/physics/PhysicsAnimationEvents.hpp"
 
 namespace core::api
 {

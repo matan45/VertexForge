@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IVFXPreviewProvider.hpp"
+#include "providers/vfx/IVFXPreviewProvider.hpp"
 #include "../../graphics/controllers/preview/VFXPreviewController.hpp"
 #include <memory>
 #include <unordered_map>

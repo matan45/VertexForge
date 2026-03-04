@@ -1,8 +1,8 @@
 #include "TerrainRenderAdapter.hpp"
 #include "../../services/impl/scene/TerrainService.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/LightBakeEvents.hpp"
-#include "../../services/events/TerrainEvents.hpp"
+#include "../../services/events/lightbake/LightBakeEvents.hpp"
+#include "../../services/events/terrain/TerrainEvents.hpp"
 
 namespace core
 {

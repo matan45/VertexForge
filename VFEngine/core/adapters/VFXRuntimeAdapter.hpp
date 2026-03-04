@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include <memory>
 #include <vector>

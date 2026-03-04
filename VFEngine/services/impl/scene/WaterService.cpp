@@ -8,9 +8,9 @@
 #include "water/WaterTypes.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/WaterEvents.hpp"
-#include "../../events/SceneEvents.hpp"
-#include "../../events/PhysicsEvents.hpp"
+#include "../../events/terrain/WaterEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 
 namespace services
 {

@@ -12,7 +12,7 @@
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
-#include "../../services/events/VFXEventNotifications.hpp"
+#include "../../services/events/vfx/VFXEventNotifications.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "print/Log.hpp"
 #include <random>

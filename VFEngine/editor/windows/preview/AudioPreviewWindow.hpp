@@ -1,7 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "resource/Types.hpp"
-#include "interfaces/IAudioService.hpp"
+#include "interfaces/audio/IAudioService.hpp"
 #include <string>
 #include <vector>
 #include <future>
