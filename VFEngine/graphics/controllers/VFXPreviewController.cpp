@@ -119,7 +119,6 @@ namespace controllers
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
-        vfLogInfo("VFX Preview Controller initialized");
     }
 
     void VFXPreviewController::cleanUp()

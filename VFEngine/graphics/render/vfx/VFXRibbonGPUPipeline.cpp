@@ -81,7 +81,6 @@ namespace render::vfx
             }
 
             initialized = true;
-            vfLogInfo("VFXRibbonGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {

@@ -30,7 +30,6 @@ namespace render::gpudriven
             renderPass
         });
 
-        vfLogInfo("GPUDrivenRenderer: Water pipeline initialized");
     }
 
     void GPUDrivenRenderer::updateWater(const std::vector<::water::WaterTile*>& visibleTiles,

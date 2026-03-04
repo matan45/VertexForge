@@ -35,7 +35,6 @@ namespace render::transparency
             return;
         }
         initialized = true;
-        vfLogInfo("WBOITPipeline: Initialized");
     }
 
     void WBOITPipeline::cleanup()

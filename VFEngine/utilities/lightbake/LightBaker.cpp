@@ -171,7 +171,6 @@ namespace lightbake
             return true;
         }
 
-        vfLogInfo("[LightBake] {} valid texels out of {} total", validTexelCount, totalTexels);
 
         if (!bakeIrradianceMultithreaded(texelSamples, lights, sceneMesh, outLightmap,
                                           validTexelCount, progressCallback))
@@ -179,7 +178,6 @@ namespace lightbake
             return false;
         }
 
-        vfLogInfo("[LightBake] Bake complete: {} texels processed", validTexelCount);
 
         dilateLightmap(outLightmap, texelSamples);
 
@@ -262,7 +260,6 @@ namespace lightbake
 
         if (cancelled.load())
         {
-            vfLogInfo("[LightBake] Bake cancelled");
             return false;
         }
 

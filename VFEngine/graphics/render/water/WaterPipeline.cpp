@@ -43,7 +43,6 @@ namespace render::water
         createGraphicsPipeline(config);
 
         initialized = true;
-        vfLogInfo("WaterPipeline: Initialized");
     }
 
     void WaterPipeline::recreate(const WaterPipelineLayoutConfig& config)

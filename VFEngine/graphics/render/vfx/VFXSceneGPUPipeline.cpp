@@ -74,7 +74,6 @@ namespace render::vfx
             }
 
             initialized = true;
-            vfLogInfo("VFXSceneGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {

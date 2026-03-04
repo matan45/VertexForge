@@ -90,7 +90,6 @@ namespace render::vfx
             createFramebuffers();
 
             initialized = true;
-            vfLogInfo("VFXMeshPreviewPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {

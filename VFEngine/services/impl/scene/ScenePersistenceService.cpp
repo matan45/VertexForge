@@ -142,7 +142,6 @@ namespace services
 
         scene::EntityRegistry::setSceneTransitioning(false);
 
-        vfLogInfo("New scene created.");
         return true;
     }
 

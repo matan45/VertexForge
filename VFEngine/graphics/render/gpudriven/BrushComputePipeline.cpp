@@ -33,7 +33,6 @@ namespace render::gpudriven
         createCommandPool();
 
         initialized = true;
-        vfLogInfo("BrushComputePipeline initialized");
     }
 
     void BrushComputePipeline::cleanup()

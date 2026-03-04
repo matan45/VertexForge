@@ -46,14 +46,12 @@ namespace render::gpudriven
             shadowSystem->getShadowTextureLayout(),
             renderPass
         );
-        vfLogInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
 
         shadowSystem->initTerrainShadowPass(
             terrain.pipeline->getTerrainDataLayout(),
             terrain.pipeline->getCachedMeshletLayout(),
             terrain.pipeline->getCachedVertexLayout()
         );
-        vfLogInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
     }
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)

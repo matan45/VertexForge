@@ -245,7 +245,6 @@ namespace controllers
                     gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
 
-            vfLogInfo("Destroyed VFX instance {}", id);
             instances.erase(it);
 
             // Destroy any sub-emitters owned by this instance
@@ -296,7 +295,6 @@ namespace controllers
             gpuBufferManager->resetAllocator();
         }
 
-        vfLogInfo("Destroyed all VFX instances");
     }
 
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)

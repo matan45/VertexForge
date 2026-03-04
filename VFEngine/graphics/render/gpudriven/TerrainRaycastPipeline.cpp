@@ -37,7 +37,6 @@ namespace render::gpudriven
         createDepthSampler();
 
         initialized = true;
-        vfLogInfo("TerrainRaycastPipeline initialized");
     }
 
     void TerrainRaycastPipeline::cleanup()

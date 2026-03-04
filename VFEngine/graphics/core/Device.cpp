@@ -336,7 +336,7 @@ namespace core {
 		if (!requiredExtensions.empty()) {
 			if (debug) {
 				for (const auto& ext : requiredExtensions) {
-					vfLogError("Required device extension not found: {}", ext);
+					vfLogInfo("Device extension not available: {}", ext);
 				}
 			}
 			return false;

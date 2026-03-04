@@ -366,7 +366,6 @@ namespace render::mesh
         defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
         defaultTextureCreated = true;
-        vfLogInfo("Created default 1x1 white texture for material slots");
     }
     
     bool MaterialTextureCache::loadTexture(const std::string& path)

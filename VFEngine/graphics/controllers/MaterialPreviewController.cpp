@@ -219,7 +219,6 @@ namespace controllers
     {
         std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
         defaultTexture = uploadPixelsToGPU(device, whitePixel.data(), 1, 1);
-        vfLogInfo("Created default white texture for material preview");
     }
 
     static PreviewTextureGPU loadTextureFromFileImpl(core::Device& device, const std::string& path)
@@ -301,7 +300,6 @@ namespace controllers
 
             if (sphereLoaded)
             {
-                vfLogInfo("Material preview sphere created");
             }
             else
             {

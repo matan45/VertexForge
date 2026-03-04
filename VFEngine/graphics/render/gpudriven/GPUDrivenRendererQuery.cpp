@@ -138,7 +138,6 @@ namespace render::gpudriven
         lightOcclusionCulling->init(hiZBuffer);
         lightCulling.useOcclusion = true;
 
-        vfLogInfo("GPUDrivenRenderer: Light occlusion culling initialized");
     }
 
     void GPUDrivenRenderer::readBackLightOcclusionResults()
@@ -198,7 +197,6 @@ namespace render::gpudriven
             shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
             shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
 
-        vfLogInfo("GPUDrivenRenderer: Volumetric fog initialized");
     }
 
     void GPUDrivenRenderer::setVolumetricFogEnabled(bool value)

@@ -133,7 +133,6 @@ namespace controllers
         importPipeline->addStage(std::make_unique<pipeline::stages::FileTypeDetectionStage>());
         importPipeline->addStage(std::make_unique<pipeline::stages::FileProcessingStage>());
 
-        vfLogInfo("Import pipeline initialized with {} stages", 4);
     }
 
     ImportResult Import::waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,

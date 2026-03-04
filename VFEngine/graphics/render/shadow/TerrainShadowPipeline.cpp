@@ -184,7 +184,6 @@ namespace render::shadow
         }
 
         terrainShadowPipeline = result.value;
-        vfLogInfo("TerrainShadowPipeline: Successfully created terrain shadow pipeline");
     }
 
     void TerrainShadowPipeline::dispatch(vk::CommandBuffer cmd,

@@ -82,7 +82,6 @@ namespace render::vfx
             }
 
             initialized = true;
-            vfLogInfo("VFXMeshGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {

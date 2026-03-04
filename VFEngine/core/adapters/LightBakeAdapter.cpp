@@ -42,7 +42,6 @@ namespace core
             {
                 if (!lastLightmapPath.empty())
                 {
-                    vfLogInfo("[LightBake] Scene loaded, re-applying lightmap: {}", lastLightmapPath);
                     loadLightmap(lastLightmapPath, lastTexelsPerUnit);
                     return;
                 }
@@ -54,7 +53,6 @@ namespace core
                     const auto& lm = view.get<components::LightmapComponent>(entity);
                     if (!lm.lightmapPath.empty())
                     {
-                        vfLogInfo("[LightBake] Scene loaded, loading lightmap from component: {}", lm.lightmapPath);
                         loadLightmap(lm.lightmapPath, lm.texelsPerUnit);
                         return;
                     }
@@ -205,9 +203,6 @@ namespace core
         ::events::terrain::GetTerrainBakeGeometryQuery query;
         auto terrainResult = dispatcher.query(query);
 
-        vfLogInfo("[LightBake] collectTerrainGeometry: query returned {} vertices, {} triangles, {} tileInfos",
-                     terrainResult.vertices.size(), terrainResult.triangles.size(), terrainResult.tileInfos.size());
-
         if (!terrainResult.vertices.empty())
         {
             result.vertices = std::move(terrainResult.vertices);
@@ -225,17 +220,9 @@ namespace core
                 bakeInfo.firstTriangleIndex = tileInfo.firstTriangleIndex;
                 bakeInfo.triangleCount = tileInfo.triangleCount;
                 result.tileInfos.push_back(bakeInfo);
-                vfLogInfo("[LightBake]   tile ({},{}) origin=({},{},{}), size={}, firstTri={}, triCount={}",
-                             bakeInfo.coordX, bakeInfo.coordZ,
-                             bakeInfo.worldOrigin.x, bakeInfo.worldOrigin.y, bakeInfo.worldOrigin.z,
-                             bakeInfo.tileSize,
-                             bakeInfo.firstTriangleIndex, bakeInfo.triangleCount);
             }
 
             lastTerrainTileInfos = result.tileInfos;
-
-            vfLogInfo("[LightBake] Collected terrain geometry: {} vertices, {} triangles, {} tiles",
-                         result.vertices.size() / 3, result.triangles.size() / 3, result.tileInfos.size());
         }
         else
         {
@@ -279,7 +266,6 @@ namespace core
 
         if (!result.empty())
         {
-            vfLogInfo("[LightBake] Collected {} water tiles", result.size());
         }
 
         return result;
@@ -339,9 +325,6 @@ namespace core
             lm.atlasScaleOffset = region.scaleOffset;
             entityCount++;
         }
-
-        vfLogInfo("[LightBake] Assigned LightmapComponent to {} entities, {} terrain tiles",
-                     entityCount, terrainTileCount);
     }
 
     std::vector<services::TerrainLightmapTileInfo> LightBakeAdapter::getTerrainLightmapData() const
@@ -412,7 +395,6 @@ namespace core
         services::LightBakeResult result;
 
         // Step 1: Build scene mesh BVH (0% - 20%)
-        vfLogInfo("[LightBake] Step 1/4: Building scene mesh BVH...");
         auto terrainGeometry = collectTerrainGeometry();
         auto waterTiles = collectWaterTiles();
 
@@ -428,7 +410,6 @@ namespace core
         }
 
         // Step 2: Generate lightmap atlas (20% - 30%)
-        vfLogInfo("[LightBake] Step 2/4: Generating lightmap UV atlas...");
         progress.store(0.2f);
 
         lightbake::LightmapConfig lmConfig;
@@ -444,7 +425,6 @@ namespace core
         progress.store(0.3f);
 
         // Step 3: Collect lights (30%)
-        vfLogInfo("[LightBake] Step 3/4: Collecting lights...");
         auto lights = collectLightsFromScene();
         if (lights.empty())
         {
@@ -456,7 +436,6 @@ namespace core
             lights.directionalLights.size() + lights.pointLights.size() + lights.spotLights.size());
 
         // Step 4: Run baker (30% - 95%)
-        vfLogInfo("[LightBake] Step 4/4: Baking irradiance...");
         auto& lightmapData = atlas.getLightmapData();
 
         bool bakeSuccess = baker.bake(sceneMesh, atlas, lights, lightmapData,
@@ -502,7 +481,6 @@ namespace core
             lastResult = {};
         }
 
-        vfLogInfo("[LightBake] Lightmap cleared");
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         services::events::lightbake::LightmapClearedNotification notif;

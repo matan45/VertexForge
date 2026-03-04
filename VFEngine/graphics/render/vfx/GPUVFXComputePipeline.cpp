@@ -30,7 +30,6 @@ namespace render::vfx
         allocateDescriptorSet();
 
         initialized = true;
-        vfLogInfo("GPUVFXComputePipeline initialized");
     }
 
     void GPUVFXComputePipeline::cleanup()

@@ -149,7 +149,6 @@ namespace render::occlusion
         camera->occlusionManager->init(camera->hiZBuffer.get());
         camera->occlusionInitialized = true;
 
-        vfLogInfo("Recreated Hi-Z and occlusion culling for camera {}", id);
     }
 
     void CameraOcclusionManager::initCameraOcclusionCulling(CameraId id)

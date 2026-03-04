@@ -89,7 +89,6 @@ namespace render::vfx
             createFramebuffers();
 
             initialized = true;
-            vfLogInfo("VFXRibbonPreviewPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {

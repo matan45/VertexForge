@@ -15,7 +15,6 @@ namespace lightbake
         clear();
 
         auto meshEntities = collectStaticMeshEntities();
-        vfLogInfo("[LightBake] Found {} static mesh entities for baking", meshEntities.size());
 
         std::vector<math::RayBVHTriangle> triangles;
         loadMeshTriangles(meshEntities, triangles, progressCallback);
@@ -28,9 +27,7 @@ namespace lightbake
             return false;
         }
 
-        vfLogInfo("[LightBake] Building BVH from {} triangles", triangles.size());
         bvh_.build(std::move(triangles));
-        vfLogInfo("[LightBake] BVH built: {} nodes", bvh_.getNodeCount());
 
         return true;
     }
@@ -140,8 +137,6 @@ namespace lightbake
 
         size_t vertCount = terrain.vertices.size() / 3;
         size_t triCount = terrain.triangles.size() / 3;
-        vfLogInfo("[LightBake] Adding {} terrain triangles ({} vertices, {} tiles)",
-                     triCount, vertCount, terrain.tileInfos.size());
 
         auto findTileForTriangle = [&](size_t triIdx) -> const TerrainTileBakeInfo*
         {
@@ -269,7 +264,6 @@ namespace lightbake
             }
         }
 
-        vfLogInfo("[LightBake] Added {} water triangles from {} tiles", totalWaterTris, waterTiles.size());
     }
 
     std::optional<math::RayHitResult> BakeSceneMesh::traceRay(

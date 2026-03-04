@@ -192,7 +192,6 @@ namespace render::shadow
         terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
                                      shadowPassPipeline->getRenderPass());
 
-        vfLogInfo("ShadowSystem: Terrain shadow pass initialized");
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)

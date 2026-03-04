@@ -195,7 +195,6 @@ namespace render::gpudriven
             .wboitMode = true
         });
 
-        vfLogInfo("GPUDrivenRenderer: WBOIT mesh shader pipeline initialized");
     }
 
     void GPUDrivenRenderer::cleanup()

@@ -76,7 +76,6 @@ namespace core
             vfxEventBridge->subscribeAll();
 
             initialized = true;
-            vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
             return true;
         }
         catch (const std::exception& e)
