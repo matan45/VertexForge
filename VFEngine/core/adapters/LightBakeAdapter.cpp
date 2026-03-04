@@ -285,6 +285,19 @@ namespace core
         return result;
     }
 
+    void LightBakeAdapter::storeLightmapOnRoot(const std::string& path, float texelsPerUnit)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+        if (rootHandle.isValid())
+        {
+            auto rootEntity = services::internal::fromHandle(rootHandle);
+            auto& lm = registry.emplace_or_replace<components::LightmapComponent>(rootEntity);
+            lm.lightmapPath = path;
+            lm.texelsPerUnit = texelsPerUnit;
+        }
+    }
+
     void LightBakeAdapter::assignLightmapComponents(
         const resource::LightmapData& lightmapData,
         const std::string& outputPath, float texelsPerUnit)
@@ -360,18 +373,7 @@ namespace core
     {
         assignLightmapComponents(lightmapData, outputPath, texelsPerUnit);
 
-        // Store lightmap path on root entity (like IBL) so it persists with scene save
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
-            if (rootHandle.isValid())
-            {
-                auto rootEntity = services::internal::fromHandle(rootHandle);
-                auto& lm = registry.emplace_or_replace<components::LightmapComponent>(rootEntity);
-                lm.lightmapPath = outputPath;
-                lm.texelsPerUnit = texelsPerUnit;
-            }
-        }
+        storeLightmapOnRoot(outputPath, texelsPerUnit);
 
         lastLightmapPath = outputPath;
         lastTexelsPerUnit = texelsPerUnit;
@@ -533,18 +535,7 @@ namespace core
 
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
 
-        // Store lightmap path on root entity (like IBL) so it persists with scene save
-        {
-            auto& reg = scene::EntityRegistry::getRegistry();
-            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
-            if (rootHandle.isValid())
-            {
-                auto rootEntity = services::internal::fromHandle(rootHandle);
-                auto& lm = reg.emplace_or_replace<components::LightmapComponent>(rootEntity);
-                lm.lightmapPath = path;
-                lm.texelsPerUnit = texelsPerUnit;
-            }
-        }
+        storeLightmapOnRoot(path, texelsPerUnit);
 
         lastLightmapPath = path;
         lastTexelsPerUnit = texelsPerUnit;

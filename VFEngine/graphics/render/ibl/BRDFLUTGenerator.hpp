@@ -18,7 +18,7 @@ namespace render::ibl
         ImageData brdfLUTImage{};
         std::shared_ptr<core::Shader> brdfLUTShader;
 
-        bool loadFromFile(const std::string& filePath, const vk::CommandPool& commandPool);
+        bool loadFromFile(const std::string& filePath);
         void generateGPU(const vk::CommandPool& commandPool);
 
     public:

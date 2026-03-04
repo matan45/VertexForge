@@ -17,7 +17,7 @@ namespace render::ibl
     {
     }
 
-    bool BRDFLUTGenerator::loadFromFile(const std::string& filePath, const vk::CommandPool& commandPool)
+    bool BRDFLUTGenerator::loadFromFile(const std::string& filePath)
     {
         if (!std::filesystem::exists(filePath))
         {
@@ -32,7 +32,6 @@ namespace render::ibl
 
         const auto& mip0 = textureData.mipData[0];
 
-        // Create GPU image as R8G8B8A8Unorm (linear, NOT sRGB — BRDF data is linear)
         core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         imageRequest.format = vk::Format::eR8G8B8A8Unorm;
         imageRequest.width = mip0.width;
@@ -40,19 +39,16 @@ namespace render::ibl
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
 
-        // Upload pixel data via staging buffer
         core::ImageUtilities::uploadStagedPixelData(
             device, brdfLUTImage.image,
             mip0.data.data(),
             static_cast<vk::DeviceSize>(mip0.data.size()),
             mip0.width, mip0.height);
 
-        // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), brdfLUTImage.image);
         viewRequest.format = vk::Format::eR8G8B8A8Unorm;
         core::ImageUtilities::createImageView(viewRequest, brdfLUTImage.imageView);
 
-        // Create sampler (same as GPU-generated path)
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
         samplerInfo.minFilter = vk::Filter::eLinear;
@@ -76,7 +72,7 @@ namespace render::ibl
     {
         // Try loading pre-baked BRDF LUT from fixed engine resource path
         std::string lutPath = resource::PathResolver::resolveEnginePath("../../resources/ibl/brdf_lut.vfImage");
-        if (loadFromFile(lutPath, commandPool))
+        if (loadFromFile(lutPath))
         {
             return;
         }
@@ -90,7 +86,6 @@ namespace render::ibl
         brdfLUTShader = std::make_shared<core::Shader>(device);
         brdfLUTShader->readShader("../../resources/shaders/ibl/brdf.glsl");
 
-        // BRDF LUT image setup
         core::ImageInfoRequest brdfLUTImageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         brdfLUTImageRequest.format = vk::Format::eR16G16Sfloat;
         brdfLUTImageRequest.width = CUBE_MAP_SIZE;
@@ -98,7 +93,6 @@ namespace render::ibl
         brdfLUTImageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
         core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
 
-        // BRDF LUT image view
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), brdfLUTImage.image);
         imageViewRequest.format = vk::Format::eR16G16Sfloat;
         core::ImageUtilities::createImageView(imageViewRequest, brdfLUTImage.imageView);
@@ -118,7 +112,6 @@ namespace render::ibl
 
         brdfLUTImage.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        // SET UP RENDER PASS
         vk::AttachmentDescription colorAttachment;
         colorAttachment.format = vk::Format::eR16G16Sfloat;
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -156,7 +149,6 @@ namespace render::ibl
 
         vk::RenderPass renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
 
-        // DEFINE THE VERTEX BUFFER
         vk::VertexInputBindingDescription vertexInputBindingDescription;
         vertexInputBindingDescription.binding = 0;
         vertexInputBindingDescription.stride = sizeof(QuadVertex);
@@ -191,7 +183,6 @@ namespace render::ibl
         memcpy(data, quad.data(), quadBufferInfo.size);
         device.getLogicalDevice().unmapMemory(quadVertexBufferMemory);
 
-        // DEFINE GRAPHICS PIPELINE
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
@@ -255,7 +246,6 @@ namespace render::ibl
 
         vk::Pipeline graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
 
-        // Framebuffer for BRDF LUT rendering
         vk::FramebufferCreateInfo framebufferInfo = {};
         framebufferInfo.renderPass = renderPass;
         framebufferInfo.attachmentCount = 1;
@@ -266,7 +256,6 @@ namespace render::ibl
 
         vk::Framebuffer framebuffer = device.getLogicalDevice().createFramebuffer(framebufferInfo);
 
-        // Command buffer recording
         vk::UniqueCommandBuffer commandBuffer = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
@@ -286,7 +275,6 @@ namespace render::ibl
         commandBuffer->draw(6, 1, 0, 0);
         commandBuffer->endRenderPass();
 
-        // Execute and wait
         vk::Fence renderFence = device.getLogicalDevice().createFence({});
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBuffer, renderFence);
         if (vk::Result result = device.getLogicalDevice().waitForFences(renderFence, VK_TRUE, UINT64_MAX); result !=
@@ -295,7 +283,6 @@ namespace render::ibl
             loggerError("Failed to to wait for Fence BRDFLUT:");
         }
 
-        // Transition image layout to shader-readable
         vk::UniqueCommandBuffer transitionCommandBuffer = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
@@ -308,7 +295,6 @@ namespace render::ibl
         );
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionCommandBuffer);
 
-        // cleanUp
         device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyFence(renderFence);
 

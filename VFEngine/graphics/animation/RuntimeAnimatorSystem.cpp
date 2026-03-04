@@ -117,10 +117,22 @@ namespace animation
 
     void RuntimeAnimatorSystem::updateAll(float deltaTime)
     {
+        auto activeAnimators = evaluateAnimations(deltaTime);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto& [entity, anim] : activeAnimators)
+        {
+            publishAnimationEvents(entity, anim);
+            applyRootMotion(entity, anim, registry);
+            applyIKPostProcess(entity, anim, registry);
+        }
+    }
+
+    RuntimeAnimatorSystem::ActiveAnimatorList RuntimeAnimatorSystem::evaluateAnimations(float deltaTime)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Phase 1: parallel animation evaluation (bone matrix computation)
-        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> activeAnimators;
+        ActiveAnimatorList activeAnimators;
         for (auto& [entity, animator] : animators)
         {
             if (!animator || !animator->isInitialized() || !animator->isPlaying())
@@ -155,67 +167,75 @@ namespace animation
             activeAnimators[0].second->update(deltaTime);
         }
 
-        // Phase 2: sequential post-processing (events, root motion, IK)
-        for (auto& [entity, anim] : activeAnimators)
+        return activeAnimators;
+    }
+
+    void RuntimeAnimatorSystem::publishAnimationEvents(entt::entity entity, AnimatorStateMachine* anim)
+    {
+        const auto& firedEvents = anim->getFiredEvents();
+        if (firedEvents.empty())
+            return;
+
+        const animator::AnimatorState* currentState = anim->getCurrentAnimatorState();
+        std::string stateName = currentState ? currentState->name : "";
+        auto entityHandle = services::internal::toHandle(entity);
+
+        for (const auto* event : firedEvents)
         {
-            const auto& firedEvents = anim->getFiredEvents();
-            if (!firedEvents.empty())
-            {
-                const animator::AnimatorState* currentState = anim->getCurrentAnimatorState();
-                std::string stateName = currentState ? currentState->name : "";
-                auto entityHandle = services::internal::toHandle(entity);
+            events::animation::AnimationEventFiredNotification notification;
+            notification.entity = entityHandle;
+            notification.eventName = event->name;
+            notification.stateName = stateName;
+            notification.payload = event->payload;
+            events::EventDispatcher::instance().publish(notification);
+        }
+    }
 
-                for (const auto* event : firedEvents)
-                {
-                    events::animation::AnimationEventFiredNotification notification;
-                    notification.entity = entityHandle;
-                    notification.eventName = event->name;
-                    notification.stateName = stateName;
-                    notification.payload = event->payload;
-                    events::EventDispatcher::instance().publish(notification);
-                }
-            }
+    void RuntimeAnimatorSystem::applyRootMotion(entt::entity entity, AnimatorStateMachine* anim,
+                                                 entt::registry& registry)
+    {
+        if (!registry.valid(entity) ||
+            !registry.all_of<components::AnimatorComponent, components::TransformComponent>(entity))
+            return;
 
-            if (registry.valid(entity) &&
-                registry.all_of<components::AnimatorComponent, components::TransformComponent>(entity))
-            {
-                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                if (animComp.applyRootMotion)
-                {
-                    glm::vec3 delta = anim->consumeRootMotionDelta();
-                    if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
-                    {
-                        auto& transform = registry.get<components::TransformComponent>(entity);
-                        delta *= transform.scale;
-                        glm::quat rotation = glm::quat(glm::radians(transform.rotation));
-                        transform.position += rotation * delta;
-                        transform.isDirty = true;
-                    }
-                }
-            }
+        const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+        if (!animComp.applyRootMotion)
+            return;
 
-            if (registry.valid(entity) &&
-                registry.all_of<components::IKTargetComponent>(entity))
-            {
-                auto& ikComp = registry.get<components::IKTargetComponent>(entity);
-                if (!ikComp.chains.empty())
-                {
-                    const resource::SkeletonData* skeleton = nullptr;
-                    if (registry.all_of<components::MeshComponent>(entity))
-                    {
-                        const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                        if (!meshComp.meshPath.empty())
-                            skeleton = loadSkeleton(meshComp.meshPath);
-                    }
+        glm::vec3 delta = anim->consumeRootMotionDelta();
+        if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
+        {
+            auto& transform = registry.get<components::TransformComponent>(entity);
+            delta *= transform.scale;
+            glm::quat rotation = glm::quat(glm::radians(transform.rotation));
+            transform.position += rotation * delta;
+            transform.isDirty = true;
+        }
+    }
 
-                    if (skeleton)
-                    {
-                        auto& matrices = anim->getMutableBoneMatrices();
-                        IKPostProcessor::applyIK(matrices, *skeleton,
-                                                  ikComp.chains, ikComp.runtimeStates);
-                    }
-                }
-            }
+    void RuntimeAnimatorSystem::applyIKPostProcess(entt::entity entity, AnimatorStateMachine* anim,
+                                                    entt::registry& registry)
+    {
+        if (!registry.valid(entity) || !registry.all_of<components::IKTargetComponent>(entity))
+            return;
+
+        auto& ikComp = registry.get<components::IKTargetComponent>(entity);
+        if (ikComp.chains.empty())
+            return;
+
+        const resource::SkeletonData* skeleton = nullptr;
+        if (registry.all_of<components::MeshComponent>(entity))
+        {
+            const auto& meshComp = registry.get<components::MeshComponent>(entity);
+            if (!meshComp.meshPath.empty())
+                skeleton = loadSkeleton(meshComp.meshPath);
+        }
+
+        if (skeleton)
+        {
+            auto& matrices = anim->getMutableBoneMatrices();
+            IKPostProcessor::applyIK(matrices, *skeleton,
+                                      ikComp.chains, ikComp.runtimeStates);
         }
     }
 

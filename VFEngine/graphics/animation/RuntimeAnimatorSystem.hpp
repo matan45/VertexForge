@@ -55,10 +55,17 @@ namespace animation
         const std::vector<glm::mat4>* getCachedSocketTransforms(entt::entity entity) const;
 
     private:
+        using ActiveAnimatorList = std::vector<std::pair<entt::entity, AnimatorStateMachine*>>;
+
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
         RuntimeAnimatorSystem(const RuntimeAnimatorSystem&) = delete;
         RuntimeAnimatorSystem& operator=(const RuntimeAnimatorSystem&) = delete;
+
+        ActiveAnimatorList evaluateAnimations(float deltaTime);
+        void publishAnimationEvents(entt::entity entity, AnimatorStateMachine* anim);
+        void applyRootMotion(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
+        void applyIKPostProcess(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
 
         const resource::AnimationData* loadAnimation(const std::string& path);
 
