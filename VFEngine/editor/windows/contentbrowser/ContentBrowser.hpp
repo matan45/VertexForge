@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_set>
+#include <atomic>
 
 namespace fs = std::filesystem;
 
@@ -45,6 +46,8 @@ namespace windows
         events::SubscriptionToken fileDeletedToken;
         events::SubscriptionToken folderSelectedToken;
         events::SubscriptionToken projectLoadedToken;
+        events::SubscriptionToken batchCompletedToken;
+        std::atomic<bool> pendingRefresh{false};
 
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;

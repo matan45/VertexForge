@@ -3,6 +3,7 @@
 #include "resource/PathResolver.hpp"
 #include <stdexcept>
 #include <filesystem>
+#include <mutex>
 
 namespace pipeline::stages
 {
@@ -72,12 +73,15 @@ namespace pipeline::stages
         textureProcessor.loadHDRFile(context.file, context.fileName, context.location,
                                      wrapProgress<types::TextureProgressCallback>(context));
 
-        // Auto-generate BRDF LUT on first HDR import if it doesn't exist
-        const std::string lutPath = resource::PathResolver::resolveEnginePath("../../resources/ibl/brdf_lut.vfImage");
-        if (!std::filesystem::exists(lutPath))
+        static std::once_flag brdfLutFlag;
+        std::call_once(brdfLutFlag, []()
         {
-            types::BRDFLUTExporter::generateAndSave(lutPath);
-        }
+            const std::string lutPath = resource::PathResolver::resolveEnginePath("../../resources/ibl/brdf_lut.vfImage");
+            if (!std::filesystem::exists(lutPath))
+            {
+                types::BRDFLUTExporter::generateAndSave(lutPath);
+            }
+        });
     }
 
     void FileProcessingStage::processAudio(ImportContext& context)

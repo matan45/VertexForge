@@ -101,6 +101,12 @@ namespace windows
             {
                 navigateTo(notification.folderPath);
             });
+
+        batchCompletedToken = dispatcher.subscribe<events::fileops::FileOpBatchCompletedNotification>(
+            [this](const events::fileops::FileOpBatchCompletedNotification&)
+            {
+                pendingRefresh.store(true);
+            });
     }
 
     ContentBrowser::~ContentBrowser()
@@ -130,10 +136,23 @@ namespace windows
         {
             dispatcher.unsubscribe(folderSelectedToken);
         }
+        if (batchCompletedToken.isValid())
+        {
+            dispatcher.unsubscribe(batchCompletedToken);
+        }
     }
 
     void ContentBrowser::draw()
     {
+        if (pendingRefresh.exchange(false))
+        {
+            if (fs::exists(currentPath) && fs::is_directory(currentPath))
+            {
+                loadDirectory(currentPath);
+                clearSelection();
+            }
+        }
+
         gridRenderer->ensureIconsLoaded();
 
         if (!importLocationSet)

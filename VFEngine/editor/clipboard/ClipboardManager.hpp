@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
+#include <atomic>
 
 namespace windows
 {
@@ -25,8 +26,9 @@ namespace windows
     {
     private:
         std::vector<ClipboardItem> items;
-        std::unordered_set<std::string> cutPathsSet; // For O(1) lookup
+        std::unordered_set<std::string> cutPathsSet;
         ClipboardOperation operation = ClipboardOperation::None;
+        mutable std::atomic<bool> pendingClear{false};
 
     public:
         static ClipboardManager& instance();
@@ -54,5 +56,6 @@ namespace windows
         ~ClipboardManager() = default;
 
         void updateCutPathsSet();
+        void drainPendingClear();
     };
 }

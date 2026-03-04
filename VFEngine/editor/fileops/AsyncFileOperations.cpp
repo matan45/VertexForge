@@ -17,8 +17,8 @@ namespace windows
         return busy.load();
     }
 
-    void AsyncFileOperations::pasteAsync(std::vector<ClipboardItem> items, ClipboardOperation operation,
-                                         const std::string& targetFolder, std::function<void()> onCutComplete)
+    void AsyncFileOperations::executeBatch(std::vector<std::string> sourcePaths, bool isMove,
+                                           const std::string& targetFolder, std::function<void()> onComplete)
     {
         if (busy.exchange(true))
         {
@@ -29,104 +29,16 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
 
         events::fileops::FileOpBatchStartedNotification startNotif;
-        startNotif.totalOperations = static_cast<uint32_t>(items.size());
-        startNotif.operationType = (operation == ClipboardOperation::Cut) ? "Moving" : "Copying";
-        dispatcher.publish(startNotif);
-
-        threading::JobSystem::instance().submit(
-            [items = std::move(items), operation, targetFolder, onCutComplete = std::move(onCutComplete)]()
-            {
-                auto& dispatcher = events::EventDispatcher::instance();
-                uint32_t total = static_cast<uint32_t>(items.size());
-
-                if (total > 1)
-                {
-                    events::undoredo::BeginBatchCommand batchCmd;
-                    batchCmd.description = (operation == ClipboardOperation::Cut ? "Move " : "Copy ") +
-                                           std::to_string(total) + " items";
-                    dispatcher.execute(batchCmd);
-                }
-
-                bool allSuccess = true;
-                std::string errors;
-                std::vector<std::string> conflicts;
-
-                for (uint32_t i = 0; i < total; ++i)
-                {
-                    services::FileOperationResult opResult;
-                    if (operation == ClipboardOperation::Cut)
-                    {
-                        events::fileops::MoveFileCommand cmd;
-                        cmd.sourcePath = items[i].path;
-                        cmd.destPath = targetFolder;
-                        opResult = dispatcher.execute(cmd);
-                    }
-                    else
-                    {
-                        events::fileops::CopyFileCommand cmd;
-                        cmd.sourcePath = items[i].path;
-                        cmd.destPath = targetFolder;
-                        opResult = dispatcher.execute(cmd);
-                    }
-
-                    if (!opResult.success)
-                    {
-                        allSuccess = false;
-                        errors += opResult.errorMessage + "\n";
-                        conflicts.insert(conflicts.end(),
-                            opResult.conflicts.begin(), opResult.conflicts.end());
-                    }
-
-                    events::fileops::FileOpBatchProgressNotification progressNotif;
-                    progressNotif.currentFile = fs::path(items[i].path).filename().string();
-                    progressNotif.completed = i + 1;
-                    progressNotif.total = total;
-                    dispatcher.publish(progressNotif);
-                }
-
-                if (total > 1)
-                {
-                    dispatcher.execute(events::undoredo::EndBatchCommand{});
-                }
-
-                if (operation == ClipboardOperation::Cut && allSuccess && onCutComplete)
-                {
-                    onCutComplete();
-                }
-
-                events::fileops::FileOpBatchCompletedNotification completeNotif;
-                completeNotif.success = allSuccess;
-                completeNotif.errorMessage = errors;
-                completeNotif.conflicts = std::move(conflicts);
-                dispatcher.publish(completeNotif);
-
-                busy.store(false);
-            },
-            threading::JobPriority::LOW
-        );
-    }
-
-    void AsyncFileOperations::dropAsync(std::vector<std::string> paths, bool isMove,
-                                        const std::string& targetFolder)
-    {
-        if (busy.exchange(true))
-        {
-            vfLogWarning("File operation already in progress");
-            return;
-        }
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        events::fileops::FileOpBatchStartedNotification startNotif;
-        startNotif.totalOperations = static_cast<uint32_t>(paths.size());
+        startNotif.totalOperations = static_cast<uint32_t>(sourcePaths.size());
         startNotif.operationType = isMove ? "Moving" : "Copying";
         dispatcher.publish(startNotif);
 
         threading::JobSystem::instance().submit(
-            [paths = std::move(paths), isMove, targetFolder]()
+            [sourcePaths = std::move(sourcePaths), isMove, targetFolder,
+             onComplete = std::move(onComplete)]()
             {
                 auto& dispatcher = events::EventDispatcher::instance();
-                uint32_t total = static_cast<uint32_t>(paths.size());
+                uint32_t total = static_cast<uint32_t>(sourcePaths.size());
 
                 if (total > 1)
                 {
@@ -146,14 +58,14 @@ namespace windows
                     if (isMove)
                     {
                         events::fileops::MoveFileCommand cmd;
-                        cmd.sourcePath = paths[i];
+                        cmd.sourcePath = sourcePaths[i];
                         cmd.destPath = targetFolder;
                         opResult = dispatcher.execute(cmd);
                     }
                     else
                     {
                         events::fileops::CopyFileCommand cmd;
-                        cmd.sourcePath = paths[i];
+                        cmd.sourcePath = sourcePaths[i];
                         cmd.destPath = targetFolder;
                         opResult = dispatcher.execute(cmd);
                     }
@@ -167,7 +79,7 @@ namespace windows
                     }
 
                     events::fileops::FileOpBatchProgressNotification progressNotif;
-                    progressNotif.currentFile = fs::path(paths[i]).filename().string();
+                    progressNotif.currentFile = fs::path(sourcePaths[i]).filename().string();
                     progressNotif.completed = i + 1;
                     progressNotif.total = total;
                     dispatcher.publish(progressNotif);
@@ -176,6 +88,11 @@ namespace windows
                 if (total > 1)
                 {
                     dispatcher.execute(events::undoredo::EndBatchCommand{});
+                }
+
+                if (allSuccess && onComplete)
+                {
+                    onComplete();
                 }
 
                 events::fileops::FileOpBatchCompletedNotification completeNotif;
@@ -188,6 +105,26 @@ namespace windows
             },
             threading::JobPriority::LOW
         );
+    }
+
+    void AsyncFileOperations::pasteAsync(std::vector<ClipboardItem> items, ClipboardOperation operation,
+                                         const std::string& targetFolder, std::function<void()> onCutComplete)
+    {
+        std::vector<std::string> paths;
+        paths.reserve(items.size());
+        for (auto& item : items)
+        {
+            paths.push_back(std::move(item.path));
+        }
+
+        bool isMove = (operation == ClipboardOperation::Cut);
+        executeBatch(std::move(paths), isMove, targetFolder, isMove ? std::move(onCutComplete) : nullptr);
+    }
+
+    void AsyncFileOperations::dropAsync(std::vector<std::string> paths, bool isMove,
+                                        const std::string& targetFolder)
+    {
+        executeBatch(std::move(paths), isMove, targetFolder, nullptr);
     }
 
     void AsyncFileOperations::deleteAsync(const std::string& path)

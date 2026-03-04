@@ -33,7 +33,7 @@ namespace render::ibl
         const auto& mip0 = textureData.mipData[0];
 
         core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageRequest.format = vk::Format::eR8G8B8A8Unorm;
+        imageRequest.format = vk::Format::eB8G8R8A8Unorm;
         imageRequest.width = mip0.width;
         imageRequest.height = mip0.height;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
@@ -46,7 +46,7 @@ namespace render::ibl
             mip0.width, mip0.height);
 
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), brdfLUTImage.image);
-        viewRequest.format = vk::Format::eR8G8B8A8Unorm;
+        viewRequest.format = vk::Format::eB8G8R8A8Unorm;
         core::ImageUtilities::createImageView(viewRequest, brdfLUTImage.imageView);
 
         vk::SamplerCreateInfo samplerInfo;
@@ -55,10 +55,9 @@ namespace render::ibl
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 1.0f;
-        samplerInfo.maxAnisotropy = 1.0;
         samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
@@ -103,10 +102,9 @@ namespace render::ibl
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 1.0f;
-        samplerInfo.maxAnisotropy = 1.0;
         samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
 

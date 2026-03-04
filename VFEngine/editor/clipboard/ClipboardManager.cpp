@@ -10,8 +10,19 @@ namespace windows
         return instance;
     }
 
+    void ClipboardManager::drainPendingClear()
+    {
+        if (pendingClear.exchange(false))
+        {
+            items.clear();
+            cutPathsSet.clear();
+            operation = ClipboardOperation::None;
+        }
+    }
+
     void ClipboardManager::cut(const std::vector<ClipboardItem>& itemsToCut)
     {
+        drainPendingClear();
         items = itemsToCut;
         operation = ClipboardOperation::Cut;
         updateCutPathsSet();
@@ -20,6 +31,7 @@ namespace windows
 
     void ClipboardManager::copy(const std::vector<ClipboardItem>& itemsToCopy)
     {
+        drainPendingClear();
         items = itemsToCopy;
         operation = ClipboardOperation::Copy;
         cutPathsSet.clear();
@@ -28,6 +40,7 @@ namespace windows
 
     void ClipboardManager::clear()
     {
+        pendingClear.store(false);
         items.clear();
         cutPathsSet.clear();
         operation = ClipboardOperation::None;
@@ -35,6 +48,8 @@ namespace windows
 
     void ClipboardManager::paste(const std::string& targetFolder)
     {
+        drainPendingClear();
+
         if (!hasItems() || AsyncFileOperations::isBusy())
         {
             return;
@@ -50,22 +65,26 @@ namespace windows
 
         AsyncFileOperations::pasteAsync(
             std::move(currentItems), currentOp, targetFolder,
-            [this]() { clear(); }
+            [this]() { pendingClear.store(true); }
         );
     }
 
     bool ClipboardManager::hasItems() const
     {
+        if (pendingClear.load()) return false;
         return !items.empty();
     }
 
     bool ClipboardManager::isCut() const
     {
+        if (pendingClear.load()) return false;
         return operation == ClipboardOperation::Cut;
     }
 
     const std::unordered_set<std::string>& ClipboardManager::getCutPaths() const
     {
+        static const std::unordered_set<std::string> empty;
+        if (pendingClear.load()) return empty;
         return cutPathsSet;
     }
 

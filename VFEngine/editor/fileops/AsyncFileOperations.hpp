@@ -21,6 +21,9 @@ namespace windows
         static bool isBusy();
 
     private:
+        static void executeBatch(std::vector<std::string> sourcePaths, bool isMove,
+                                 const std::string& targetFolder, std::function<void()> onComplete);
+
         static std::atomic<bool> busy;
     };
 }

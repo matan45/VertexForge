@@ -142,6 +142,8 @@ namespace animation
             activeAnimators.push_back({entity, animator.get()});
         }
 
+        // Safe to use raw pointers: main thread blocks on f.get() below,
+        // so no animator can be destroyed while jobs are in flight.
         if (activeAnimators.size() > 1)
         {
             std::vector<std::future<void>> futures;

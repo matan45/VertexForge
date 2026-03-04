@@ -1,5 +1,4 @@
 #include "BRDFLUTExporter.hpp"
-#include "Texture.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/Types.hpp"
 #include "config/Config.hpp"
@@ -107,9 +106,9 @@ namespace
                 auto [scaleA, biasB] = integrateBRDF(NdotV, roughness);
 
                 size_t idx = (static_cast<size_t>(y) * LUT_SIZE + x) * 4;
-                pixelData[idx + 0] = static_cast<unsigned char>(std::clamp(scaleA, 0.0f, 1.0f) * 255.0f + 0.5f);
+                pixelData[idx + 0] = 0;
                 pixelData[idx + 1] = static_cast<unsigned char>(std::clamp(biasB, 0.0f, 1.0f) * 255.0f + 0.5f);
-                pixelData[idx + 2] = 0;
+                pixelData[idx + 2] = static_cast<unsigned char>(std::clamp(scaleA, 0.0f, 1.0f) * 255.0f + 0.5f);
                 pixelData[idx + 3] = 255;
             }
         }
@@ -176,8 +175,7 @@ namespace types
         resource::endian::writeLE<uint32_t>(outFile, LUT_SIZE);
         resource::endian::writeLE<uint32_t>(outFile, LUT_SIZE);
 
-        // Pixel data in BGRA order (TGA convention)
-        TGAWriter::writeTGA(outFile, pixelData);
+        outFile.write(reinterpret_cast<const char*>(pixelData.data()), pixelData.size());
 
         outFile.close();
         vfLogInfo("BRDF LUT saved to: {}", outputPath);

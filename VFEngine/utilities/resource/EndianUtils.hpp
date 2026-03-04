@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <bit>
 #include <fstream>
+#include <vector>
 
 namespace resource::endian
 {
