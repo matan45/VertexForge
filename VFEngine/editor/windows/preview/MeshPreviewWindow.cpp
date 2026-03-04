@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "MeshPreviewWindow.hpp"
-#include "../camera/OrbitCamera.hpp"
+#include "../../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"

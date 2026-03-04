@@ -3,7 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"
 #include "events/ProjectEvents.hpp"
-#include "../dragdrop/DragDropManager.hpp"
+#include "../../dragdrop/DragDropManager.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
 

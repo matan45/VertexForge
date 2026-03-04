@@ -1,5 +1,5 @@
 #include "SocketAttachmentDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SocketEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"

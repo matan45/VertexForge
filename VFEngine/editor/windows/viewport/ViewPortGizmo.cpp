@@ -1,5 +1,5 @@
 #include "ViewPortGizmo.hpp"
-#include "../camera/EditorCamera.hpp"
+#include "../../camera/EditorCamera.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/SculptModeEvents.hpp"

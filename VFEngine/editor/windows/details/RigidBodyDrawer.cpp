@@ -1,5 +1,5 @@
 #include "RigidBodyDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "types/PhysicsTypes.hpp"

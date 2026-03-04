@@ -17,7 +17,7 @@
 #include "components/Components.hpp"
 #include "data/DTOs.hpp"
 #include "data/EntityConversion.hpp"
-#include "../dragdrop/DragDropManager.hpp"
+#include "../../dragdrop/DragDropManager.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
 #include <filesystem>

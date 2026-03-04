@@ -3,7 +3,7 @@
 #include "ViewPortPicker.hpp"
 #include "ViewPortGizmo.hpp"
 #include "ViewPortOverlay.hpp"
-#include "../camera/EditorCamera.hpp"
+#include "../../camera/EditorCamera.hpp"
 #include <memory>
 
 namespace windows

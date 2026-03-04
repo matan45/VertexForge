@@ -1,5 +1,5 @@
 #include "UIDropdownDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"

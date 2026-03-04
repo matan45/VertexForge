@@ -1,5 +1,5 @@
 #include "ContentBrowser.hpp"
-#include "../FolderStructureWindow.hpp"
+#include "../scene/FolderStructureWindow.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"

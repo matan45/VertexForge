@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "AudioSource3DDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/AudioEvents.hpp"

@@ -1,5 +1,5 @@
 #include "EditorCameraWindow.hpp"
-#include "../camera/EditorCamera.hpp"
+#include "../../camera/EditorCamera.hpp"
 #include <imgui.h>
 #include <algorithm>
 

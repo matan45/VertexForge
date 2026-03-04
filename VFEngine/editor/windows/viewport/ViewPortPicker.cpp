@@ -1,5 +1,5 @@
 #include "ViewPortPicker.hpp"
-#include "../camera/EditorCamera.hpp"
+#include "../../camera/EditorCamera.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "scene/EntityRegistry.hpp"

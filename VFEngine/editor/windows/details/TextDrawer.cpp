@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "TextDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"

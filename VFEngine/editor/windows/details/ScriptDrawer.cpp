@@ -1,5 +1,5 @@
 #include "ScriptDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ScriptingEvents.hpp"
 #include "nfd/FileDialog.hpp"

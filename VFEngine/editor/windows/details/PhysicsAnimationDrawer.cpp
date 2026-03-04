@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "PhysicsAnimationDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "types/PhysicsAnimationTypes.hpp"

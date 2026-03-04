@@ -1,5 +1,5 @@
 #include "LightBakeWindow.hpp"
-#include "LightmapPreviewWindow.hpp"
+#include "../preview/LightmapPreviewWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "imgui.h"

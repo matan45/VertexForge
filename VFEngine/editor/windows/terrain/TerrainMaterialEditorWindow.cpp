@@ -1,5 +1,5 @@
 #include "TerrainMaterialEditorWindow.hpp"
-#include "../graph/ShaderGraphCompiler.hpp"
+#include "../../graph/ShaderGraphCompiler.hpp"
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
