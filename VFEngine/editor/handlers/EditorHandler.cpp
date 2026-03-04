@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "EditorHandler.hpp"
-#include "EditorBootstrap.hpp"
+#include "editor/EditorBootstrap.hpp"
 #include "../splash/SplashScreen.hpp"
 #include "impl/project/SceneServiceImpl.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
