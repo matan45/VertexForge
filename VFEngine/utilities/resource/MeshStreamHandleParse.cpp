@@ -20,28 +20,24 @@ namespace resource
         header.version.minor = minorVersion;
         header.version.patch = patchVersion;
 
-        bool isLODFormat = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 3);
-        if (!isLODFormat)
+        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
         {
-            vfLogError("MeshStreamHandle: Incompatible mesh file version: {}.{}.{}",
-                       majorVersion, minorVersion, patchVersion);
+            vfLogError("MeshStreamHandle: Incompatible mesh file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       majorVersion, minorVersion, patchVersion,
+                       Version::major, Version::minor, Version::patch);
             return false;
         }
 
-        hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
-        hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
-        // Version 0.0.7+ uses 64-byte vertices (with bone data), older versions use 32-byte
-        has64ByteVertices = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
+        hasMeshlets = true;
+        hasConvexHulls = true;
+        has64ByteVertices = true;
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
 
-        // Version 0.0.7+ has a skeleton reference field after numSubmeshes
-        if (has64ByteVertices)
         {
             uint32_t skeletonRefLength = endian::readLE<uint32_t>(file);
             if (skeletonRefLength > 0)
             {
-                // Skip skeleton reference path string if present
                 file.seekg(skeletonRefLength, std::ios::cur);
             }
         }
@@ -106,8 +102,7 @@ namespace resource
                         return false;
                     }
 
-                    // Vertex size depends on file version: 64 bytes for v0.0.7+ (with bone data), 32 bytes for older
-                    size_t vertexSize = has64ByteVertices ? 64 : 32;
+                    size_t vertexSize = 64;
                     file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
 
                     lodInfo.indexCount = endian::readLE<uint32_t>(file);
@@ -139,30 +134,20 @@ namespace resource
                 }
             }
 
-            if (hasMeshlets)
-            {
-                if (!parseMeshletHeaders(meshIdx))
-                {
-                    return false;
-                }
-            }
-
-            if (hasConvexHulls)
-            {
-                if (!parseConvexHeaders(meshIdx))
-                {
-                    return false;
-                }
-            }
-        }
-
-        // Parse skeleton data header (v0.0.7+)
-        if (has64ByteVertices)
-        {
-            if (!parseSkeletonHeader())
+            if (!parseMeshletHeaders(meshIdx))
             {
                 return false;
             }
+
+            if (!parseConvexHeaders(meshIdx))
+            {
+                return false;
+            }
+        }
+
+        if (!parseSkeletonHeader())
+        {
+            return false;
         }
 
         return true;

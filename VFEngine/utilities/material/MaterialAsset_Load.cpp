@@ -309,7 +309,7 @@ namespace material
 
         void parseCachedShaders(
             const json& j, MaterialData& material,
-            bool needsMigration, const LogWarningFn& logWarning)
+            const LogWarningFn& logWarning)
         {
             if (!j.contains("cachedShader"))
                 return;
@@ -326,7 +326,7 @@ namespace material
             if (material.needsRecompile || material.cachedFragmentShader.empty())
                 return;
 
-            if (isShaderTextureArrayOutdated(material.cachedFragmentShader) || needsMigration)
+            if (isShaderTextureArrayOutdated(material.cachedFragmentShader))
             {
                 logWarning(
                     "Material has outdated cached shader (texture array size changed), clearing for recompile");
@@ -405,16 +405,14 @@ namespace material
 
         void parseBasicFields(
             const json& j, MaterialData& material,
-            std::string_view path, bool& needsMigration,
+            std::string_view path,
             const LogWarningFn& logWarning)
         {
             std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION);
-            needsMigration = (fileVersion != MATERIAL_FORMAT_VERSION);
-            if (needsMigration)
+            if (fileVersion != MATERIAL_FORMAT_VERSION)
             {
-                logWarning(std::format(
-                    "Material file '{}' has version {} (current is {}). Will migrate on save.",
-                    std::string(path), fileVersion, MATERIAL_FORMAT_VERSION));
+                vfLogError("Incompatible material file version: {}, expected {}. Re-import required. path: {}",
+                           fileVersion, MATERIAL_FORMAT_VERSION, std::string(path));
             }
 
             material.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));
@@ -454,12 +452,11 @@ namespace material
             try
             {
                 MaterialData material;
-                bool needsMigration = false;
 
-                parseBasicFields(j, material, path, needsMigration, logWarning);
+                parseBasicFields(j, material, path, logWarning);
                 parseGraph(j, material, logWarning);
                 ensurePBROutputNode(material, logWarning);
-                parseCachedShaders(j, material, needsMigration, logWarning);
+                parseCachedShaders(j, material, logWarning);
 
                 if (warnings.count > 0)
                     vfLogWarning("Loaded material '{}' with {} warning(s)", material.name, warnings.count);

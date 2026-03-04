@@ -35,10 +35,13 @@ namespace terrain
         outHeader.versionMinor = readLE<uint32_t>(file);
         outHeader.versionPatch = readLE<uint32_t>(file);
 
-        if (outHeader.versionMajor > TERRAIN_FORMAT_VERSION_MAJOR)
+        if (outHeader.versionMajor != TERRAIN_FORMAT_VERSION_MAJOR ||
+            outHeader.versionMinor != TERRAIN_FORMAT_VERSION_MINOR ||
+            outHeader.versionPatch != TERRAIN_FORMAT_VERSION_PATCH)
         {
-            vfLogError("TerrainSerializer: Unsupported version {}.{}.{}",
-                       outHeader.versionMajor, outHeader.versionMinor, outHeader.versionPatch);
+            vfLogError("TerrainSerializer: Incompatible version {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       outHeader.versionMajor, outHeader.versionMinor, outHeader.versionPatch,
+                       TERRAIN_FORMAT_VERSION_MAJOR, TERRAIN_FORMAT_VERSION_MINOR, TERRAIN_FORMAT_VERSION_PATCH);
             return false;
         }
 

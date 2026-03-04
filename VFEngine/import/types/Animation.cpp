@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "Animation.hpp"
+#include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
 
 #include <vector>
@@ -178,17 +179,20 @@ namespace types
         }
 
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(animData.headerFileType));
-        resource::endian::writeLE<uint32_t>(outFile, 0);
-        resource::endian::writeLE<uint32_t>(outFile, 0);
-        resource::endian::writeLE<uint32_t>(outFile, 8);
+        resource::endian::writeLE<uint32_t>(outFile, Version::major);
+        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
 
         writeString(outFile, animData.name);
         resource::endian::writeLE<float>(outFile, animData.duration);
         resource::endian::writeLE<float>(outFile, animData.ticksPerSecond);
         writeChannels(outFile, animData.channels);
 
+        // Write empty event section (events added later via AnimationEventWriter)
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+
         outFile.close();
-        vfLogInfo("Animation saved (v0.0.8): {} channels", animData.channels.size());
+        vfLogInfo("Animation saved: {} channels", animData.channels.size());
     }
 
     void Animation::writeString(std::ofstream& file, const std::string& str) const

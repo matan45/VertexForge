@@ -29,11 +29,11 @@ namespace resource
         data.version.minor = endian::readLE<uint32_t>(file);
         data.version.patch = endian::readLE<uint32_t>(file);
 
-        // v0.0.8+: keyframes only, skeleton comes from mesh
-        if (data.version.patch < 8)
+        if (data.version.major != Version::major || data.version.minor != Version::minor || data.version.patch != Version::patch)
         {
-            vfLogError("Animation file version {} is not supported. Please re-import your animations.",
-                       data.version.patch);
+            vfLogError("Incompatible animation file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       data.version.major, data.version.minor, data.version.patch,
+                       Version::major, Version::minor, Version::patch);
             return data;
         }
 
@@ -87,10 +87,9 @@ namespace resource
 
         data.headerFileType = FileType::ANIMATION;
 
-        // Try to read animation events after channels (backward compatible)
-        std::streampos beforeEvents = file.tellg();
+        // Read animation events (mandatory at v1.0)
         uint32_t numEvents = endian::readLE<uint32_t>(file);
-        if (!file.fail() && numEvents < 256)
+        if (!file.fail() && numEvents > 0 && numEvents < 256)
         {
             data.events.resize(numEvents);
             for (uint32_t e = 0; e < numEvents; ++e)
@@ -99,23 +98,7 @@ namespace resource
                 event.name = readString(file);
                 event.normalizedTime = endian::readLE<float>(file);
                 event.payload = readString(file);
-
-                if (file.fail())
-                {
-                    data.events.clear();
-                    break;
-                }
             }
-
-            if (!data.events.empty())
-            {
-                vfLogInfo("Loaded {} animation events", data.events.size());
-            }
-        }
-        else
-        {
-            // No event data or EOF — backward compatible with old files
-            file.clear();
         }
 
         vfLogInfo("Loaded animation '{}' - {} channels, duration: {:.2f}s",
@@ -141,7 +124,7 @@ namespace resource
         uint32_t minor = endian::readLE<uint32_t>(file);
         uint32_t patch = endian::readLE<uint32_t>(file);
 
-        if (patch < 8)
+        if (major != Version::major || minor != Version::minor || patch != Version::patch)
             return 0;
 
         // Skip name, duration, ticksPerSecond

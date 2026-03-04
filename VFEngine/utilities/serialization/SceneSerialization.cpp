@@ -259,7 +259,7 @@ namespace serialization
         try
         {
             json sceneJson;
-            sceneJson["version"] = "1.1";
+            sceneJson["version"] = "1.0";
             sceneJson["root"] = serializeRootEntity(sceneGraph.GetRoot());
             sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
@@ -291,7 +291,7 @@ namespace serialization
         try
         {
             json snapshot;
-            snapshot["version"] = "1.1";
+            snapshot["version"] = "1.0";
             snapshot["root"] = serializeRootEntity(sceneGraph.GetRoot());
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());

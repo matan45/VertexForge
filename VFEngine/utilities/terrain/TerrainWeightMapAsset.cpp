@@ -11,8 +11,8 @@ namespace terrain
     using namespace resource::endian;
 
     static constexpr std::array<char, 4> WEIGHT_MAP_MAGIC = {'V', 'F', 'W', 'M'};
-    static constexpr uint32_t FORMAT_VERSION_MAJOR = 0;
-    static constexpr uint32_t FORMAT_VERSION_MINOR = 1;
+    static constexpr uint32_t FORMAT_VERSION_MAJOR = 1;
+    static constexpr uint32_t FORMAT_VERSION_MINOR = 0;
     static constexpr uint32_t FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TILE_COUNT = 10000;
 
@@ -132,17 +132,17 @@ namespace terrain
             uint32_t minor = readLE<uint32_t>(file);
             uint32_t patch = readLE<uint32_t>(file);
 
-            if (major > FORMAT_VERSION_MAJOR)
+            if (major != FORMAT_VERSION_MAJOR || minor != FORMAT_VERSION_MINOR || patch != FORMAT_VERSION_PATCH)
             {
-                vfLogError("TerrainWeightMapAsset: Unsupported version {}.{}.{} in {}",
-                           major, minor, patch, path);
+                vfLogError("TerrainWeightMapAsset: Incompatible version {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                           major, minor, patch,
+                           FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR, FORMAT_VERSION_PATCH);
                 return result;
             }
 
             uint32_t tileCount = readLE<uint32_t>(file);
             uint32_t resolution = readLE<uint32_t>(file);
 
-            if (minor >= 1 || major > 0)
             {
                 uint32_t pathLen = readLE<uint32_t>(file);
                 if (pathLen > 0)
