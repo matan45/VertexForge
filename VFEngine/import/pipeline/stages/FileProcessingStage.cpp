@@ -1,5 +1,6 @@
 #include "FileProcessingStage.hpp"
 #include "../../types/BRDFLUTExporter.hpp"
+#include "resource/PathResolver.hpp"
 #include <stdexcept>
 #include <filesystem>
 
@@ -72,7 +73,7 @@ namespace pipeline::stages
                                      wrapProgress<types::TextureProgressCallback>(context));
 
         // Auto-generate BRDF LUT on first HDR import if it doesn't exist
-        const std::string lutPath = "../../resources/ibl/brdf_lut.vfImage";
+        const std::string lutPath = resource::PathResolver::resolveEnginePath("../../resources/ibl/brdf_lut.vfImage");
         if (!std::filesystem::exists(lutPath))
         {
             types::BRDFLUTExporter::generateAndSave(lutPath);

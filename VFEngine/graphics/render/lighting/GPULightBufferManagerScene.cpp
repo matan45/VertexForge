@@ -7,9 +7,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
-#include "threading/JobSystem.hpp"
 #include <cmath>
-#include <future>
 
 namespace render::lighting
 {
@@ -31,22 +29,12 @@ namespace render::lighting
         pendingPointShadow.clear();
         pendingSpotShadow.clear();
 
-        auto f1 = threading::JobSystem::instance().submit(
-            [this, filterPtr]() { collectDirectionalLights(filterPtr, pendingDirShadow); },
-            threading::JobPriority::HIGH
-        );
-        auto f2 = threading::JobSystem::instance().submit(
-            [this, filterPtr]() { collectPointLights(filterPtr, pendingPointShadow); },
-            threading::JobPriority::HIGH
-        );
-        auto f3 = threading::JobSystem::instance().submit(
-            [this, filterPtr]() { collectSpotLights(filterPtr, pendingSpotShadow); },
-            threading::JobPriority::HIGH
-        );
-
-        f1.get();
-        f2.get();
-        f3.get();
+        // Collect sequentially: EnTT registry is not thread-safe for concurrent view
+        // iteration, even read-only. The work per light type is trivial (iterate entities,
+        // copy data to staging arrays), so parallelism adds more overhead than benefit.
+        collectDirectionalLights(filterPtr, pendingDirShadow);
+        collectPointLights(filterPtr, pendingPointShadow);
+        collectSpotLights(filterPtr, pendingSpotShadow);
 
         processPendingShadowRegistrations();
         cleanupStaleShadowRegistrations();

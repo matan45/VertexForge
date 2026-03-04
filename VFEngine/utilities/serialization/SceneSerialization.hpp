@@ -35,6 +35,7 @@ namespace serialization
                                         SceneLoadProgressCallback progressCallback = nullptr);
 
     private:
+        static json serializeRootEntity(scene::Entity& root);
         static json serializeEntity(scene::Entity& entity);
         static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,

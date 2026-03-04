@@ -34,7 +34,7 @@ namespace threading {
 		return inst;
 	}
 
-	void JobSystem::init(uint32_t threadCount)
+	void JobSystem::init(uint32_t threadCount, uint32_t maxExternalThreads)
 	{
 		if (threadCount == 0) {
 			uint32_t hw = std::thread::hardware_concurrency();
@@ -43,9 +43,15 @@ namespace threading {
 
 		enki::TaskSchedulerConfig config;
 		config.numTaskThreadsToCreate = threadCount;
-		config.numExternalTaskThreads = 8;
+		config.numExternalTaskThreads = maxExternalThreads;
 		pImpl->scheduler.Initialize(config);
-		vfLogInfo("JobSystem initialized with {} threads", pImpl->scheduler.GetNumTaskThreads());
+		vfLogInfo("JobSystem initialized with {} threads, {} external slots",
+			pImpl->scheduler.GetNumTaskThreads(), maxExternalThreads);
+	}
+
+	uint32_t JobSystem::getThreadCount() const
+	{
+		return pImpl->scheduler.GetNumTaskThreads();
 	}
 
 	void JobSystem::shutdown()
@@ -63,7 +69,11 @@ namespace threading {
 		// Auto-register external threads (e.g. detached std::thread, std::async)
 		if (pImpl->scheduler.GetThreadNum() == enki::NO_THREAD_NUM) {
 			if (!pImpl->scheduler.RegisterExternalTaskThread()) {
-				vfLogError("[JobSystem] Failed to register external thread");
+				vfLogError("[JobSystem] Failed to register external thread - all {} external slots exhausted. "
+					"Increase maxExternalThreads in JobSystem::init()", pImpl->scheduler.GetNumRegisteredExternalTaskThreads());
+				// Run the task inline as a fallback to avoid undefined behaviour
+				func();
+				return;
 			}
 			// Ensure deregistration when thread exits
 			thread_local struct Guard {

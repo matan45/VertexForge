@@ -41,7 +41,7 @@ namespace render::vfx
 
         if (particleCount >= PARALLEL_THRESHOLD)
         {
-            uint32_t threadCount = 4;
+            uint32_t threadCount = std::max(1u, threading::JobSystem::instance().getThreadCount());
             uint32_t chunkSize = static_cast<uint32_t>((particleCount + threadCount - 1) / threadCount);
 
             std::vector<std::future<void>> futures;

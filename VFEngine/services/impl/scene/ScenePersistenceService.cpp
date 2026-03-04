@@ -191,9 +191,10 @@ namespace services
             return false;
         }
 
-        // Only publish the loading started notification immediately.
-        // All cleanup and loading is deferred to the next frame
-        // so the progress window has a chance to render.
+        // NOTE: This only queues the load for the next frame (deferred loading).
+        // A return value of true means the request was accepted, NOT that the scene
+        // loaded successfully. Callers must subscribe to SceneLoadingCompletedNotification
+        // to determine actual load success/failure.
         events::scene::SceneLoadingStartedNotification startNotif;
         startNotif.scenePath = filePath;
         events::EventDispatcher::instance().publish(startNotif);

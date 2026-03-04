@@ -118,7 +118,7 @@ namespace asset
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
             futures.push_back(threading::JobSystem::instance().submit(
-                [&file, &assetPath, ext]() -> bool
+                [file, &assetPath, ext]() -> bool
                 {
                     if (ext == ".vfterrain")
                     {

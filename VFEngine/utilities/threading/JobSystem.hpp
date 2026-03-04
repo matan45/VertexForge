@@ -16,8 +16,13 @@ namespace threading {
 	public:
 		static JobSystem& instance();
 
-		void init(uint32_t threadCount = 0); // 0 = auto (hw_concurrency - 2, min 2)
+		// threadCount: 0 = auto (hw_concurrency - 2, min 2)
+		// maxExternalThreads: max number of non-enkiTS threads that can call submitTask concurrently
+		void init(uint32_t threadCount = 0, uint32_t maxExternalThreads = 8);
 		void shutdown();
+
+		// Returns the number of worker threads (excludes the main thread)
+		uint32_t getThreadCount() const;
 
 		// Submit a callable, returns std::future<T> (drop-in replacement for std::async)
 		template<typename F>

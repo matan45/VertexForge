@@ -7,6 +7,8 @@
 #include "../../services/events/LightBakeEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
 #include "../../services/events/scene/ScenePersistenceEvents.hpp"
+#include "../../services/events/scene/EntityTransformEvents.hpp"
+#include "../../services/data/EntityConversion.hpp"
 #include "../../utilities/components/WaterComponents.hpp"
 #include "print/Logger.hpp"
 #include <chrono>
@@ -361,13 +363,13 @@ namespace core
         // Store lightmap path on root entity (like IBL) so it persists with scene save
         {
             auto& registry = scene::EntityRegistry::getRegistry();
-            auto view = registry.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
-            for (auto entity : view)
+            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+            if (rootHandle.isValid())
             {
-                auto& lm = registry.emplace_or_replace<components::LightmapComponent>(entity);
+                auto rootEntity = services::internal::fromHandle(rootHandle);
+                auto& lm = registry.emplace_or_replace<components::LightmapComponent>(rootEntity);
                 lm.lightmapPath = outputPath;
                 lm.texelsPerUnit = texelsPerUnit;
-                break;
             }
         }
 
@@ -534,13 +536,13 @@ namespace core
         // Store lightmap path on root entity (like IBL) so it persists with scene save
         {
             auto& reg = scene::EntityRegistry::getRegistry();
-            auto rootView = reg.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
-            for (auto entity : rootView)
+            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+            if (rootHandle.isValid())
             {
-                auto& lm = reg.emplace_or_replace<components::LightmapComponent>(entity);
+                auto rootEntity = services::internal::fromHandle(rootHandle);
+                auto& lm = reg.emplace_or_replace<components::LightmapComponent>(rootEntity);
                 lm.lightmapPath = path;
                 lm.texelsPerUnit = texelsPerUnit;
-                break;
             }
         }
 

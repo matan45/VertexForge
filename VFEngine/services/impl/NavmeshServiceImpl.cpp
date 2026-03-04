@@ -4,6 +4,7 @@
 #include "../events/RenderEvents.hpp"
 #include "../events/ResourceEvents.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/scene/EntityTransformEvents.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -208,12 +209,12 @@ namespace services
         {
             // Store navmesh path on root entity (like IBL) so it persists with scene save
             auto& registry = scene::EntityRegistry::getRegistry();
-            auto view = registry.view<components::NameComponent>(entt::exclude<components::ParentComponent>);
-            for (auto entity : view)
+            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+            if (rootHandle.isValid())
             {
-                registry.emplace_or_replace<components::NavmeshComponent>(entity,
+                auto rootEntity = internal::fromHandle(rootHandle);
+                registry.emplace_or_replace<components::NavmeshComponent>(rootEntity,
                     components::NavmeshComponent{filePath});
-                break;
             }
 
             events::resource::AssetSavedNotification notif;

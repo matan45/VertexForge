@@ -119,9 +119,17 @@ namespace scene
                 registry.emplace<components::WorldTransformComponent>(entity);
             }
         }
-        // Parallelize top-level children: each subtree is independent
+        // Parallelize top-level children: each subtree is independent and disjoint —
+        // no entity belongs to two subtrees. Each thread reads/writes only its own subtree's
+        // components (via entity handles, not registry iteration), so there is no concurrent
+        // access to the same component instances. No structural registry mutations occur here
+        // (emplace is done in the pre-pass above, single-threaded).
+        // Note: EnTT stores components contiguously, so adjacent entities from different
+        // subtrees may share cache lines (false sharing). Only parallelize when there are
+        // enough children for the work to outweigh the overhead.
         auto children = root.getChildren();
-        if (children.size() > 1)
+        constexpr size_t PARALLEL_THRESHOLD = 4;
+        if (children.size() >= PARALLEL_THRESHOLD)
         {
             std::vector<std::future<void>> futures;
             futures.reserve(children.size());
