@@ -2,10 +2,12 @@
 #include "BakeSceneMesh.hpp"
 #include "../resource/EndianUtils.hpp"
 #include "../print/EditorLogger.hpp"
+#include "../threading/JobSystem.hpp"
 #include <unordered_map>
 #include <algorithm>
 #include <fstream>
 #include <cmath>
+#include <future>
 
 namespace lightbake
 {
@@ -126,6 +128,7 @@ namespace lightbake
 
                 lightmapData.entityRegions.reserve(charts.size());
 
+                // Build entity regions (sequential — populates metadata)
                 for (size_t i = 0; i < charts.size(); ++i)
                 {
                     auto [px, py] = positions[i];
@@ -143,8 +146,27 @@ namespace lightbake
                         static_cast<float>(py) / static_cast<float>(atlasH)
                     );
                     lightmapData.entityRegions.push_back(region);
+                }
 
-                    rasterizeChart(charts[i], bvh, px, py, charts[i].width, charts[i].height);
+                // Rasterize charts in parallel — each chart writes to distinct texelSamples indices
+                std::vector<std::future<void>> rasterFutures;
+                rasterFutures.reserve(charts.size());
+
+                for (size_t i = 0; i < charts.size(); ++i)
+                {
+                    auto [px, py] = positions[i];
+                    rasterFutures.push_back(threading::JobSystem::instance().submit(
+                        [this, &charts, &bvh, i, px, py]()
+                        {
+                            rasterizeChart(charts[i], bvh, px, py, charts[i].width, charts[i].height);
+                        },
+                        threading::JobPriority::HIGH
+                    ));
+                }
+
+                for (auto& f : rasterFutures)
+                {
+                    f.get();
                 }
 
                 return true;
