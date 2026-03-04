@@ -1,11 +1,11 @@
 // mType headers must come first to avoid Windows macro conflicts
-#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 
 #include "ScriptVFXEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "../../services/events/VFXEventNotifications.hpp"
 
+#include "print/Log.hpp"
 namespace core
 {
     ScriptVFXEventBridge::ScriptVFXEventBridge(

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "print/Log.hpp"
 #include <value/ValueType.hpp>
 #include <value/NativeArray.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>
 #include "../../../services/data/EntityHandle.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "print/Log.hpp"
 
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>

@@ -65,8 +65,6 @@ namespace animation
                 {
                     reg.get<components::SocketAttachmentComponent>(entity).needsParentResolution = true;
                 }
-
-                          notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
             });
 
         socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
@@ -603,7 +601,6 @@ namespace animation
         for (auto entity : toRemove)
         {
             animators.erase(entity);
-                      static_cast<uint32_t>(entity));
         }
 
         if (pendingCacheCleanup)
@@ -738,6 +735,7 @@ namespace animation
 
         if (removedAnimators > 0 || removedAnimations > 0 || removedSkeletons > 0)
         {
+            vfLogInfo("Cleaned up {} animators, {} animations, {} skeletons",
                       removedAnimators, removedAnimations, removedSkeletons);
         }
     }

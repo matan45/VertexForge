@@ -1,4 +1,3 @@
-#include "print/Log.hpp"
 #include "PhysicsAdapter.hpp"
 #include "../physics/PhysicsSkeletonConverter.hpp"
 #include "../physics/RagdollSettingsBuilder.hpp"
@@ -7,6 +6,7 @@
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
 
+#include "print/Log.hpp"
 namespace core
 {
     bool PhysicsAdapter::createPhysicsAnimation(services::EntityHandle entity,

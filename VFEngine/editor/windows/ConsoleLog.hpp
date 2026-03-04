@@ -1,6 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
-#include "print/LogEntry.hpp"
+#include "print/Log.hpp"
 #include "imgui.h"
 #include <unordered_set>
 #include <vector>

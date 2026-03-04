@@ -1,8 +1,8 @@
-#include "print/Log.hpp"
 #include "DebugDrawAdapter.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 
+#include "print/Log.hpp"
 namespace core
 {
     void DebugDrawAdapter::addLine(const glm::vec3& start, const glm::vec3& end, const glm::vec4& color)

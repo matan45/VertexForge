@@ -122,8 +122,6 @@ namespace render::lighting
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, clusterLightGridBuffer, clusterLightGridMemory);
-
-                       bufferSize / 1024);
         }
 
         // ClusterLightIndexList buffer (DEVICE_LOCAL)

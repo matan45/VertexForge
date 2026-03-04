@@ -160,7 +160,7 @@ namespace core {
 			if (isDeviceSuitable(device)) {
 				physicalDevice = device;
 				if (debug) {
-					vfLogInfo("Selected physical device: {}", physicalDevice.getProperties().deviceName);
+					vfLogInfo("Selected physical device: {}", static_cast<const char*>(physicalDevice.getProperties().deviceName));
 				}
 				break;
 			}

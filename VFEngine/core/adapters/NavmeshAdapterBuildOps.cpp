@@ -1,4 +1,3 @@
-#include "print/Log.hpp"
 #include "NavmeshAdapter.hpp"
 
 #include <Recast.h>
@@ -7,6 +6,7 @@
 
 #include <cstring>
 
+#include "print/Log.hpp"
 namespace core
 {
     static rcConfig createRecastConfig(const types::NavmeshBakeSettings& settings,

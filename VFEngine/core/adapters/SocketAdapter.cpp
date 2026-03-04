@@ -1,4 +1,3 @@
-#include "print/Log.hpp"
 #include "SocketAdapter.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "../../services/events/SocketEvents.hpp"
@@ -7,6 +6,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
+#include "print/Log.hpp"
 namespace core
 {
     SocketAdapter::SocketAdapter() = default;

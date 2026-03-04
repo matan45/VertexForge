@@ -1,4 +1,3 @@
-#include "print/Log.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "api/LogAPI.hpp"
 #include "api/EntityAPI.hpp"
@@ -22,6 +21,7 @@
 #include "api/CameraAPI.hpp"
 #include "api/DebugDrawAPI.hpp"
 
+#include "print/Log.hpp"
 namespace core
 {
     NativeAPIRegistry::NativeAPIRegistry(::services::ScriptInterpreter* interp)

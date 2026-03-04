@@ -1,5 +1,4 @@
 // mType headers must come first to avoid Windows macro conflicts
-#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 
 #include "UIAPI.hpp"
@@ -7,6 +6,7 @@
 #include "UIInputAPI.hpp"
 #include "UIValueAPI.hpp"
 
+#include "print/Log.hpp"
 namespace core::api
 {
     void UIAPI::registerAPI(services::ScriptInterpreter* interpreter)

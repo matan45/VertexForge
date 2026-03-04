@@ -1,4 +1,3 @@
-#include "print/Log.hpp"
 #include "NavmeshAdapter.hpp"
 
 #include <DetourNavMesh.h>
@@ -9,6 +8,7 @@
 #include <cstring>
 #include <algorithm>
 
+#include "print/Log.hpp"
 namespace core
 {
     static constexpr int MAX_POLYS = 2048;

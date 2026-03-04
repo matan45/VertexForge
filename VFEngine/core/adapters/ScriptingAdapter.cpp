@@ -1,5 +1,4 @@
 // mType headers must come first to avoid Windows macro conflicts
-#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 #include <project/ProjectBuilder.hpp>
 #include <project/ProjectConfigParser.hpp>
@@ -17,6 +16,7 @@
 #include <array>
 
 
+#include "print/Log.hpp"
 namespace core
 {
     namespace

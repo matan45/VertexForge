@@ -1,5 +1,4 @@
 // mType headers must come first to avoid Windows macro conflicts
-#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 
 #include "ScriptSocketEventBridge.hpp"
@@ -8,6 +7,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
+#include "print/Log.hpp"
 namespace core
 {
     ScriptSocketEventBridge::ScriptSocketEventBridge(
