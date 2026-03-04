@@ -1,4 +1,5 @@
 #include "TerrainGrid.hpp"
+#include "../threading/JobSystem.hpp"
 #include "../print/EditorLogger.hpp"
 #include <algorithm>
 
@@ -52,6 +53,28 @@ namespace terrain
         auto getTile = [this](const TileCoord& coord) -> const TerrainTile* {
             return this->getTile(coord);
         };
+
+        // Pre-load neighbor heights so overrideBoundaryNormals can access
+        // cross-tile height data (neighbors may not have heights during streaming)
+        if (fileCache)
+        {
+            for (auto& [coord, tile] : tiles)
+            {
+                if (!tile->edgeSyncDirty && !(tile->isDirty && tile->dirtyLODMask != 0))
+                    continue;
+
+                if (!tile->hasHeightData())
+                    fileCache->ensureHeightsLoaded(*tile);
+
+                for (uint8_t i = 0; i < 4; ++i)
+                {
+                    TileCoord nc = coord + TileCoord::getNeighborOffset(static_cast<TileEdge>(i));
+                    auto nit = tiles.find(nc);
+                    if (nit != tiles.end() && !nit->second->hasHeightData())
+                        fileCache->ensureHeightsLoaded(*nit->second);
+                }
+            }
+        }
 
         for (auto& [coord, tile] : tiles)
         {
@@ -178,7 +201,8 @@ namespace terrain
 
             if (tile->stitchingChanged())
             {
-                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                tile->edgeSyncDirty = true;
                 tile->saveStitchState();
 
                 if (std::find(changedTiles.begin(), changedTiles.end(), coord) == changedTiles.end())
@@ -221,21 +245,57 @@ namespace terrain
                                  ProgressCallback progress)
     {
         int32_t totalTiles = (maxX - minX + 1) * (maxZ - minZ + 1);
-        int32_t currentTile = 0;
 
+        struct TileGenResult
+        {
+            TileCoord coord;
+            std::future<std::unique_ptr<TerrainTile>> future;
+        };
+
+        std::vector<TileGenResult> genResults;
+        genResults.reserve(totalTiles);
+
+        if (progress)
+        {
+            progress(0.0f, "Generating tiles...");
+        }
+
+        // Phase 1: generate tiles in parallel (pure computation, no shared state)
         for (int32_t z = minZ; z <= maxZ; ++z)
         {
             for (int32_t x = minX; x <= maxX; ++x)
             {
-                if (progress)
-                {
-                    progress(static_cast<float>(currentTile) / static_cast<float>(totalTiles),
-                             "Creating tile (" + std::to_string(x) + ", " + std::to_string(z) + ")");
-                }
+                TileCoord coord(x, z);
+                if (tiles.find(coord) != tiles.end())
+                    continue;
 
-                (void)getOrCreateTile(TileCoord(x, z));
-                ++currentTile;
+                auto* gen = generator.get();
+                genResults.push_back({coord,
+                    threading::JobSystem::instance().submit(
+                        [gen, coord]() -> std::unique_ptr<TerrainTile>
+                        {
+                            return gen->generateTile(coord);
+                        }, threading::JobPriority::NORMAL
+                    )
+                });
             }
+        }
+
+        // Phase 2: insert generated tiles and update neighbors sequentially
+        int32_t currentTile = 0;
+        for (auto& gr : genResults)
+        {
+            if (progress)
+            {
+                progress(static_cast<float>(currentTile) / static_cast<float>(totalTiles),
+                         "Inserting tile (" + std::to_string(gr.coord.x) + ", " + std::to_string(gr.coord.z) + ")");
+            }
+
+            auto tile = gr.future.get();
+            TerrainTile* tilePtr = tile.get();
+            tiles.emplace(gr.coord, std::move(tile));
+            updateNeighborReferences(*tilePtr);
+            ++currentTile;
         }
 
         if (progress)

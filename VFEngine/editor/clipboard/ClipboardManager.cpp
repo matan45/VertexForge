@@ -1,7 +1,5 @@
 #include "ClipboardManager.hpp"
-#include "events/EventDispatcher.hpp"
-#include "events/FileOperationsEvents.hpp"
-#include "events/UndoRedoEvents.hpp"
+#include "../fileops/AsyncFileOperations.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace windows
@@ -35,75 +33,25 @@ namespace windows
         operation = ClipboardOperation::None;
     }
 
-    services::FileOperationResult ClipboardManager::paste(const std::string& targetFolder)
+    void ClipboardManager::paste(const std::string& targetFolder)
     {
-        services::FileOperationResult result;
-
-        if (!hasItems())
+        if (!hasItems() || AsyncFileOperations::isBusy())
         {
-            result.success = false;
-            result.errorMessage = "Clipboard is empty";
-            return result;
+            return;
         }
-
-        auto& dispatcher = events::EventDispatcher::instance();
 
         if (operation != ClipboardOperation::Cut && operation != ClipboardOperation::Copy)
         {
-            result.success = false;
-            result.errorMessage = "Invalid clipboard operation";
-            return result;
+            return;
         }
 
-        // Begin batch for grouped undo
-        if (items.size() > 1)
-        {
-            events::undoredo::BeginBatchCommand batchCmd;
-            batchCmd.description = (operation == ClipboardOperation::Cut ? "Move " : "Copy ") +
-                                   std::to_string(items.size()) + " items";
-            dispatcher.execute(batchCmd);
-        }
+        auto currentOp = operation;
+        auto currentItems = items;
 
-        result.success = true;
-        for (const auto& item : items)
-        {
-            services::FileOperationResult opResult;
-            if (operation == ClipboardOperation::Cut)
-            {
-                events::fileops::MoveFileCommand cmd;
-                cmd.sourcePath = item.path;
-                cmd.destPath = targetFolder;
-                opResult = dispatcher.execute(cmd);
-            }
-            else
-            {
-                events::fileops::CopyFileCommand cmd;
-                cmd.sourcePath = item.path;
-                cmd.destPath = targetFolder;
-                opResult = dispatcher.execute(cmd);
-            }
-
-            if (!opResult.success)
-            {
-                result.success = false;
-                result.errorMessage += opResult.errorMessage + "\n";
-            }
-            result.updatedReferences.insert(result.updatedReferences.end(),
-                opResult.updatedReferences.begin(), opResult.updatedReferences.end());
-        }
-
-        // End batch
-        if (items.size() > 1)
-        {
-            dispatcher.execute(events::undoredo::EndBatchCommand{});
-        }
-
-        if (operation == ClipboardOperation::Cut && result.success)
-        {
-            clear();
-        }
-
-        return result;
+        AsyncFileOperations::pasteAsync(
+            std::move(currentItems), currentOp, targetFolder,
+            [this]() { clear(); }
+        );
     }
 
     bool ClipboardManager::hasItems() const

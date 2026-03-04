@@ -15,6 +15,7 @@
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
 #include "../../events/PostProcessEvents.hpp"
+#include "../../events/NavmeshEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <functional>
 
@@ -104,6 +105,8 @@ namespace services
             return false;
         }
 
+        scene::EntityRegistry::setSceneTransitioning(true);
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         events::render::RemoveIBLCommand removeIblCmd;
@@ -138,6 +141,8 @@ namespace services
         events::scene::SceneClearedNotification notification;
         dispatcher.publish(notification);
 
+        scene::EntityRegistry::setSceneTransitioning(false);
+
         vfLogInfo("New scene created.");
         return true;
     }
@@ -159,6 +164,19 @@ namespace services
         return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
     }
 
+    void ScenePersistenceService::update()
+    {
+        if (!pendingLoadPath.has_value())
+        {
+            return;
+        }
+
+        std::string filePath = std::move(pendingLoadPath.value());
+        pendingLoadPath.reset();
+
+        performDeferredLoad(filePath);
+    }
+
     bool ScenePersistenceService::loadScene(const std::string& filePath)
     {
         if (!sceneGraph)
@@ -172,6 +190,24 @@ namespace services
             vfLogError("File path is empty, cannot load scene.");
             return false;
         }
+
+        // NOTE: This only queues the load for the next frame (deferred loading).
+        // A return value of true means the request was accepted, NOT that the scene
+        // loaded successfully. Callers must subscribe to SceneLoadingCompletedNotification
+        // to determine actual load success/failure.
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        events::EventDispatcher::instance().publish(startNotif);
+
+        pendingLoadPath = filePath;
+
+        return true;
+    }
+
+    void ScenePersistenceService::performDeferredLoad(const std::string& filePath)
+    {
+        // Block render preparation from accessing registry during scene load
+        scene::EntityRegistry::setSceneTransitioning(true);
 
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -190,10 +226,6 @@ namespace services
 
         events::scene::SceneClearedNotification clearedNotif;
         dispatcher.publish(clearedNotif);
-
-        events::scene::SceneLoadingStartedNotification startNotif;
-        startNotif.scenePath = filePath;
-        dispatcher.publish(startNotif);
 
         auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
         {
@@ -214,7 +246,12 @@ namespace services
         }
         dispatcher.publish(completeNotif);
 
-        if (success)
+        if (!success)
+        {
+            scene::EntityRegistry::setSceneTransitioning(false);
+            return;
+        }
+
         {
             scene::Entity& root = sceneGraph->GetRoot();
             if (root.hasComponent<components::IBLComponent>())
@@ -225,6 +262,17 @@ namespace services
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.fileName;
                     dispatcher.execute(setIblCmd);
+                }
+            }
+
+            if (root.hasComponent<components::NavmeshComponent>())
+            {
+                const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
+                if (!navmeshComp.navmeshPath.empty())
+                {
+                    events::navmesh::LoadNavmeshCommand loadNavCmd;
+                    loadNavCmd.filePath = navmeshComp.navmeshPath;
+                    dispatcher.execute(loadNavCmd);
                 }
             }
 
@@ -273,7 +321,6 @@ namespace services
                 }
             }
 
-            // Rebuild water runtime state from deserialized components
             {
                 events::water::RebuildWaterFromComponentsCommand rebuildWaterCmd;
                 dispatcher.execute(rebuildWaterCmd);
@@ -300,7 +347,8 @@ namespace services
             dispatcher.publish(notification);
         }
 
-        return success;
+        // Re-allow render preparation to access registry
+        scene::EntityRegistry::setSceneTransitioning(false);
     }
 
     bool ScenePersistenceService::savePrefab(EntityHandle entity, const std::string& filePath)

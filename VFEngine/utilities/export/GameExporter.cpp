@@ -204,6 +204,16 @@ namespace gameExport
 
 		copyDirectoryRecursive(shaderSrc, shaderDst, result);
 
+		// Copy IBL resources (pre-baked BRDF LUT)
+		fs::path iblSrc = findIBLDirectory();
+		if (fs::exists(iblSrc))
+		{
+			fs::path iblDst = config.outputDirectory / "resources" / "ibl";
+			std::error_code ec;
+			fs::create_directories(iblDst, ec);
+			copyDirectoryRecursive(iblSrc, iblDst, result);
+		}
+
 		// Copy editor resources (window icon fallback)
 		fs::path editorSrc = findResourcesEditorDirectory();
 		if (fs::exists(editorSrc))
@@ -380,6 +390,25 @@ namespace gameExport
 
 		// From repo root
 		candidate = cwd / "resources/shaders";
+		if (fs::exists(candidate))
+		{
+			return fs::canonical(candidate);
+		}
+
+		return {};
+	}
+
+	fs::path GameExporter::findIBLDirectory() const
+	{
+		fs::path cwd = fs::current_path();
+
+		fs::path candidate = cwd / "../../resources/ibl";
+		if (fs::exists(candidate))
+		{
+			return fs::canonical(candidate);
+		}
+
+		candidate = cwd / "resources/ibl";
 		if (fs::exists(candidate))
 		{
 			return fs::canonical(candidate);

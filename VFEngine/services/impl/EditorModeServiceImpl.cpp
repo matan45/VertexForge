@@ -70,6 +70,9 @@ namespace services
             return;
         }
 
+        // Block render preparation from accessing registry during scene transition
+        scene::EntityRegistry::setSceneTransitioning(true);
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Clear entity selection
@@ -93,8 +96,12 @@ namespace services
         }
 
         // Restore scene from snapshot
-        if (!serialization::SceneSerialization::restoreFromSnapshot(*playModeSnapshot, *sceneGraph))
+        bool restoreSuccess = serialization::SceneSerialization::restoreFromSnapshot(
+            *playModeSnapshot, *sceneGraph);
+
+        if (!restoreSuccess)
         {
+            scene::EntityRegistry::setSceneTransitioning(false);
             playModeSnapshot.reset();
             return;
         }
@@ -134,6 +141,9 @@ namespace services
                 dispatcher.publish(meshNotif);
             }
         }
+
+        // Re-allow render preparation to access registry
+        scene::EntityRegistry::setSceneTransitioning(false);
 
         playModeSnapshot.reset();
     }

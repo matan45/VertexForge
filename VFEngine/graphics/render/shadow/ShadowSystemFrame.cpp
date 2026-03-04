@@ -5,7 +5,9 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Logger.hpp"
+#include "threading/JobSystem.hpp"
 #include <chrono>
+#include <future>
 
 namespace render::shadow
 {
@@ -17,15 +19,20 @@ namespace render::shadow
             !registry.all_of<components::WorldTransformComponent>(entity))
             return;
 
-        const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
-        glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
+        updatePointCubeShadowMatricesFromData(data,
+            registry.get<components::WorldTransformComponent>(entity).worldMatrix,
+            registry.all_of<components::PointLightComponent>(entity)
+                ? registry.get<components::PointLightComponent>(entity).radius
+                : data.settings.farPlane);
+    }
 
-        float farPlane = data.settings.farPlane;
-        if (registry.all_of<components::PointLightComponent>(entity))
-        {
-            const auto& pointLight = registry.get<components::PointLightComponent>(entity);
-            farPlane = pointLight.radius;
-        }
+    void ShadowSystem::updatePointCubeShadowMatricesFromData(LightShadowData& data,
+                                                              const glm::mat4& worldMatrix,
+                                                              float radius)
+    {
+        glm::vec3 lightPosition = glm::vec3(worldMatrix[3]);
+
+        float farPlane = radius;
         float nearPlane = data.settings.nearPlane;
 
         auto faceMatrices = PointShadowCalculator::computeCubeFaceMatrices(
@@ -58,13 +65,6 @@ namespace render::shadow
             !registry.all_of<components::WorldTransformComponent>(entity))
             return;
 
-        const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
-        glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
-
-        glm::vec3 lightDirection = glm::normalize(
-            glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
-        );
-
         float outerAngle = 45.0f;
         float range = 20.0f;
         if (registry.all_of<components::SpotLightComponent>(entity))
@@ -73,6 +73,21 @@ namespace render::shadow
             outerAngle = spotLight.outerAngle;
             range = spotLight.range;
         }
+
+        updateSpotShadowMatricesFromData(data,
+            registry.get<components::WorldTransformComponent>(entity).worldMatrix,
+            outerAngle, range);
+    }
+
+    void ShadowSystem::updateSpotShadowMatricesFromData(LightShadowData& data,
+                                                         const glm::mat4& worldMatrix,
+                                                         float outerAngle, float range)
+    {
+        glm::vec3 lightPosition = glm::vec3(worldMatrix[3]);
+
+        glm::vec3 lightDirection = glm::normalize(
+            glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+        );
 
         float nearPlane = data.settings.nearPlane;
 
@@ -110,10 +125,19 @@ namespace render::shadow
             return;
         }
 
-        const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+        updateDirectionalCSMMatricesFromData(data,
+            registry.get<components::WorldTransformComponent>(entity).worldMatrix,
+            cameraView, cameraProjection, cameraNear, cameraFar);
+    }
 
+    void ShadowSystem::updateDirectionalCSMMatricesFromData(LightShadowData& data,
+                                                             const glm::mat4& worldMatrix,
+                                                             const glm::mat4& cameraView,
+                                                             const glm::mat4& cameraProjection,
+                                                             float cameraNear, float cameraFar)
+    {
         glm::vec3 lightDirection = glm::normalize(
-            glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+            glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
         );
 
         auto splits = CascadeShadowCalculator::computeSplitDistances(
@@ -307,20 +331,75 @@ namespace render::shadow
         spotShadowViews.clear();
         entityToShadowIndex.clear();
 
+        // Pre-collect entity data on main thread (EnTT registry is not thread-safe),
+        // then dispatch pure computation in parallel.
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
+        struct SpotLightRef { LightShadowData* data; glm::mat4 worldMatrix; float outerAngle; float range; };
+        struct DirLightRef { LightShadowData* data; glm::mat4 worldMatrix; };
+
+        std::vector<PointLightRef> pointLights;
+        std::vector<SpotLightRef> spotLights;
+        std::vector<DirLightRef> directionalLights;
+
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
+            auto entity = static_cast<entt::entity>(entityId);
+            if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
+                continue;
+
+            const auto& worldMatrix = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
+
             if (data.type == ShadowMapType::PointCube)
-                updatePointCubeShadowMatrices(data, entityId);
-
-            if (data.type == ShadowMapType::Spot2D)
-                updateSpotShadowMatrices(data, entityId);
-
-            if (data.type == ShadowMapType::DirectionalCSM)
-                updateDirectionalCSMMatrices(data, entityId, cameraView, cameraProjection, cameraNear, cameraFar);
+            {
+                float radius = data.settings.farPlane;
+                if (registry.all_of<components::PointLightComponent>(entity))
+                    radius = registry.get<components::PointLightComponent>(entity).radius;
+                pointLights.push_back({&data, worldMatrix, radius});
+            }
+            else if (data.type == ShadowMapType::Spot2D)
+            {
+                float outerAngle = 45.0f, range = 20.0f;
+                if (registry.all_of<components::SpotLightComponent>(entity))
+                {
+                    const auto& spotLight = registry.get<components::SpotLightComponent>(entity);
+                    outerAngle = spotLight.outerAngle;
+                    range = spotLight.range;
+                }
+                spotLights.push_back({&data, worldMatrix, outerAngle, range});
+            }
+            else if (data.type == ShadowMapType::DirectionalCSM)
+            {
+                directionalLights.push_back({&data, worldMatrix});
+            }
         }
+
+        auto f1 = threading::JobSystem::instance().submit(
+            [this, &pointLights]() {
+                for (auto& ref : pointLights)
+                    updatePointCubeShadowMatricesFromData(*ref.data, ref.worldMatrix, ref.radius);
+            }, threading::JobPriority::HIGH
+        );
+        auto f2 = threading::JobSystem::instance().submit(
+            [this, &spotLights]() {
+                for (auto& ref : spotLights)
+                    updateSpotShadowMatricesFromData(*ref.data, ref.worldMatrix, ref.outerAngle, ref.range);
+            }, threading::JobPriority::HIGH
+        );
+        auto f3 = threading::JobSystem::instance().submit(
+            [this, &directionalLights, &cameraView, &cameraProjection, cameraNear, cameraFar]() {
+                for (auto& ref : directionalLights)
+                    updateDirectionalCSMMatricesFromData(*ref.data, ref.worldMatrix, cameraView, cameraProjection, cameraNear, cameraFar);
+            }, threading::JobPriority::HIGH
+        );
+
+        f1.get();
+        f2.get();
+        f3.get();
 
         collectShadowViewsForGPU(visibleLightIds);
     }

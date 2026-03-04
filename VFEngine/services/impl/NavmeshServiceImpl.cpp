@@ -4,12 +4,14 @@
 #include "../events/RenderEvents.hpp"
 #include "../events/ResourceEvents.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/scene/EntityTransformEvents.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "navigation/NavmeshSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
 #include <cassert>
 
@@ -153,11 +155,11 @@ namespace services
         vfLogInfo("NavmeshService: Baking navmesh with {} vertices, {} triangles",
                   geometry.getVertexCount(), geometry.getTriangleCount());
 
-        bakeFuture = std::async(std::launch::async,
+        bakeFuture = threading::JobSystem::instance().submit(
             [this, geom = std::move(geometry), settings]()
             {
                 return navmeshProvider->buildNavmesh(geom, settings);
-            });
+            }, threading::JobPriority::LOW);
     }
 
     types::NavmeshBakeProgress NavmeshServiceImpl::getBakeProgress() const
@@ -205,6 +207,16 @@ namespace services
         bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
         if (result)
         {
+            // Store navmesh path on root entity (like IBL) so it persists with scene save
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+            if (rootHandle.isValid())
+            {
+                auto rootEntity = internal::fromHandle(rootHandle);
+                registry.emplace_or_replace<components::NavmeshComponent>(rootEntity,
+                    components::NavmeshComponent{filePath});
+            }
+
             events::resource::AssetSavedNotification notif;
             notif.filePath = filePath;
             ::events::EventDispatcher::instance().publish(notif);
@@ -246,6 +258,14 @@ namespace services
     {
         navmeshProvider->clearNavmesh();
         entityToAgentIndex.clear();
+
+        // Remove NavmeshComponent from root entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshComponent>();
+        for (auto entity : view)
+        {
+            registry.remove<components::NavmeshComponent>(entity);
+        }
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::render::ClearNavmeshDebugMeshCommand clearCmd;

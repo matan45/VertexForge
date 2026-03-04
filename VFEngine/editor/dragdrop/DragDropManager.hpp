@@ -1,5 +1,4 @@
 #pragma once
-#include "data/FileOperationsTypes.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <string>
@@ -33,7 +32,7 @@ namespace windows
 
         void setDragPayload();
 
-        services::FileOperationResult acceptDrop(const std::string& targetPath);
+        void acceptDrop(const std::string& targetPath);
 
         bool isValidDropTarget(const std::string& targetPath) const;
 

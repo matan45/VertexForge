@@ -5,6 +5,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/FileOperationsEvents.hpp"
+#include "../../fileops/AsyncFileOperations.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>
@@ -532,23 +533,10 @@ namespace windows
 
             if (ImGui::Button("Delete", ImVec2(120, 0)))
             {
-                if (!selectedFile.empty())
+                if (!selectedFile.empty() && !AsyncFileOperations::isBusy())
                 {
-                    // Use FileOperationsService via events for undo support
-                    events::fileops::DeleteFileCommand cmd;
-                    cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
-
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    auto result = dispatcher.execute(cmd);
-
-                    if (result.success)
-                    {
-                        if (refreshCallback) refreshCallback();
-                    }
-                    else
-                    {
-                        showError("Delete Failed", result.errorMessage);
-                    }
+                    std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                    AsyncFileOperations::deleteAsync(path);
                 }
                 ImGui::CloseCurrentPopup();
                 showDeleteConfirmModal = false;

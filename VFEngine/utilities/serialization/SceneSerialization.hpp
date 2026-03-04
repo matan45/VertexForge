@@ -31,9 +31,11 @@ namespace serialization
         static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
         static json createSnapshot(scene::SceneGraphSystem& sceneGraph);
-        static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph);
+        static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                        SceneLoadProgressCallback progressCallback = nullptr);
 
     private:
+        static json serializeRootEntity(scene::Entity& root);
         static json serializeEntity(scene::Entity& entity);
         static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
@@ -205,6 +207,9 @@ namespace serialization
 
         static json serializeNavmeshAgent(const components::NavmeshAgentComponent& agent);
         static void deserializeNavmeshAgent(const json& j, components::NavmeshAgentComponent& agent);
+
+        static json serializeNavmesh(const components::NavmeshComponent& navmesh);
+        static void deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh);
 
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);

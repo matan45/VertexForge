@@ -671,4 +671,19 @@ namespace serialization
         controller.hasMoveToTarget = false;
         controller.moveToDestination = glm::vec3(0.0f);
     }
+
+    json SceneSerialization::serializeNavmesh(const components::NavmeshComponent& navmesh)
+    {
+        json j;
+        j["navmeshPath"] = navmesh.navmeshPath;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh)
+    {
+        if (auto it = j.find("navmeshPath"); it != j.end() && it->is_string())
+        {
+            navmesh.navmeshPath = it->get<std::string>();
+        }
+    }
 }

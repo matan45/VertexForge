@@ -30,6 +30,7 @@ namespace services
     class TextComponentService;
     class LightComponentService;
     class UIComponentService;
+    class BakeInfoComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -58,6 +59,7 @@ namespace services
         std::unique_ptr<TextComponentService> textService;
         std::unique_ptr<LightComponentService> lightService;
         std::unique_ptr<UIComponentService> uiService;
+        std::unique_ptr<BakeInfoComponentService> bakeInfoService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;
@@ -73,6 +75,7 @@ namespace services
         ~SceneServiceImpl() override;
 
         void registerEventHandlers() override;
+        void update() override;
 
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,

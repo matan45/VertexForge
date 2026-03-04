@@ -222,6 +222,12 @@ namespace serialization
                 entity.getComponent<components::NavmeshAgentComponent>());
         }
 
+        if (entity.hasComponent<components::NavmeshComponent>())
+        {
+            componentsJson["navmesh"] = serializeNavmesh(
+                entity.getComponent<components::NavmeshComponent>());
+        }
+
         if (entity.hasComponent<components::RenderTextureComponent>())
         {
             componentsJson["renderTexture"] = serializeRenderTexture(
@@ -503,6 +509,12 @@ namespace serialization
         {
             auto& agentComp = entity.addOrReplaceComponent<components::NavmeshAgentComponent>();
             deserializeNavmeshAgent(componentsJson["navmeshAgent"], agentComp);
+        }
+
+        if (componentsJson.contains("navmesh"))
+        {
+            auto& navmeshComp = entity.addOrReplaceComponent<components::NavmeshComponent>();
+            deserializeNavmesh(componentsJson["navmesh"], navmeshComp);
         }
 
         if (componentsJson.contains("renderTexture"))

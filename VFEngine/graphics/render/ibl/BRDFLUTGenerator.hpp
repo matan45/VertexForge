@@ -1,6 +1,7 @@
 #pragma once
 #include "IBLTypes.hpp"
 #include <memory>
+#include <string>
 
 namespace core
 {
@@ -16,6 +17,9 @@ namespace render::ibl
         core::Device& device;
         ImageData brdfLUTImage{};
         std::shared_ptr<core::Shader> brdfLUTShader;
+
+        bool loadFromFile(const std::string& filePath);
+        void generateGPU(const vk::CommandPool& commandPool);
 
     public:
         explicit BRDFLUTGenerator(core::Device& device);

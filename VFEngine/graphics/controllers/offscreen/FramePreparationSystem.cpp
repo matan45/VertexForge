@@ -95,10 +95,7 @@ namespace controllers::offscreen
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (ctx.bvhManager->isStaticDirty() && frustumReady)
-        {
-            ctx.bvhManager->rebuildStaticBVH();
-        }
+        bool staticNeedsRebuild = ctx.bvhManager->isStaticDirty() && frustumReady;
 
         static int dynamicBvhCooldown = 0;
 
@@ -109,18 +106,28 @@ namespace controllers::offscreen
         else if (!ctx.bvhManager->needsDynamicRebuild())
         {
             auto dynamicView = registry.view<components::TransformComponent, components::MeshComponent>();
+            std::vector<uint32_t> dirtyIds;
             for (auto entity : dynamicView)
             {
                 const auto& transform = dynamicView.get<components::TransformComponent>(entity);
-
                 if (!transform.isStatic && transform.isDirty)
                 {
-                    ctx.bvhManager->markDynamicEntityDirty(static_cast<uint32_t>(entity));
+                    dirtyIds.push_back(static_cast<uint32_t>(entity));
                 }
+            }
+            for (uint32_t id : dirtyIds)
+            {
+                ctx.bvhManager->markDynamicEntityDirty(id);
             }
         }
 
-        if (ctx.bvhManager->isDynamicDirty() && frustumReady)
+        bool dynamicNeedsUpdate = ctx.bvhManager->isDynamicDirty() && frustumReady;
+
+        if (staticNeedsRebuild)
+        {
+            ctx.bvhManager->rebuildStaticBVH();
+        }
+        if (dynamicNeedsUpdate)
         {
             ctx.bvhManager->updateDynamicBVH();
             dynamicBvhCooldown = 5;

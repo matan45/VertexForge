@@ -1,5 +1,6 @@
 #include "AssetReferenceScanner.hpp"
 #include "../terrain/TerrainSerializer.hpp"
+#include "../threading/JobSystem.hpp"
 #include "../print/EditorLogger.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -108,24 +109,31 @@ namespace asset
 
         auto files = collectAssetFiles(fs::path(searchRoot));
 
+        std::vector<std::future<bool>> futures;
+        futures.reserve(files.size());
+
         for (const auto& file : files)
         {
             std::string ext = file.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-            bool found = false;
-            if (ext == ".vfterrain")
-            {
-                found = scanTerrainFile(file, assetPath);
-            }
-            else
-            {
-                found = scanSceneOrPrefabFile(file, assetPath);
-            }
+            futures.push_back(threading::JobSystem::instance().submit(
+                [file, &assetPath, ext]() -> bool
+                {
+                    if (ext == ".vfterrain")
+                    {
+                        return scanTerrainFile(file, assetPath);
+                    }
+                    return scanSceneOrPrefabFile(file, assetPath);
+                }, threading::JobPriority::NORMAL
+            ));
+        }
 
-            if (found)
+        for (size_t i = 0; i < futures.size(); ++i)
+        {
+            if (futures[i].get())
             {
-                result.referencingFiles.push_back(file.string());
+                result.referencingFiles.push_back(files[i].string());
             }
         }
 

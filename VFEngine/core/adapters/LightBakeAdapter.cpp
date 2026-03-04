@@ -7,6 +7,8 @@
 #include "../../services/events/LightBakeEvents.hpp"
 #include "../../services/events/TerrainEvents.hpp"
 #include "../../services/events/scene/ScenePersistenceEvents.hpp"
+#include "../../services/events/scene/EntityTransformEvents.hpp"
+#include "../../services/data/EntityConversion.hpp"
 #include "../../utilities/components/WaterComponents.hpp"
 #include "print/Logger.hpp"
 #include <chrono>
@@ -283,6 +285,19 @@ namespace core
         return result;
     }
 
+    void LightBakeAdapter::storeLightmapOnRoot(const std::string& path, float texelsPerUnit)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+        if (rootHandle.isValid())
+        {
+            auto rootEntity = services::internal::fromHandle(rootHandle);
+            auto& lm = registry.emplace_or_replace<components::LightmapComponent>(rootEntity);
+            lm.lightmapPath = path;
+            lm.texelsPerUnit = texelsPerUnit;
+        }
+    }
+
     void LightBakeAdapter::assignLightmapComponents(
         const resource::LightmapData& lightmapData,
         const std::string& outputPath, float texelsPerUnit)
@@ -357,6 +372,8 @@ namespace core
                                          std::chrono::high_resolution_clock::time_point startTime)
     {
         assignLightmapComponents(lightmapData, outputPath, texelsPerUnit);
+
+        storeLightmapOnRoot(outputPath, texelsPerUnit);
 
         lastLightmapPath = outputPath;
         lastTexelsPerUnit = texelsPerUnit;
@@ -517,6 +534,8 @@ namespace core
         }
 
         assignLightmapComponents(lightmapData, path, texelsPerUnit);
+
+        storeLightmapOnRoot(path, texelsPerUnit);
 
         lastLightmapPath = path;
         lastTexelsPerUnit = texelsPerUnit;

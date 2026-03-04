@@ -2,6 +2,7 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/EditorModeEvents.hpp"
 #include "../events/PostProcessEvents.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 
@@ -38,6 +39,13 @@ namespace services
             return ViewportTextureHandle{};
         }
 
+        // Skip all render preparation during scene transitions to prevent
+        // race condition with entity destruction (registry is not thread-safe)
+        if (scene::EntityRegistry::isSceneTransitioning())
+        {
+            return lastViewportHandle;
+        }
+
         frameCounter++;
         offScreenProvider->prepareGrid();
         offScreenProvider->prepareCameras();
@@ -60,6 +68,7 @@ namespace services
         handle.width = viewportWidth;
         handle.height = viewportHeight;
 
+        lastViewportHandle = handle;
         return handle;
     }
 

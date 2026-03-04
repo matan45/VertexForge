@@ -7,6 +7,7 @@
 #include "components/PhysicsAnimationComponent.hpp"
 #include "components/ControllerComponents.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "threading/JobSystem.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
 
@@ -487,28 +488,54 @@ namespace services
                                    components::MeshComponent,
                                    components::TransformComponent>();
 
+        // Pre-load all skeleton data in parallel (I/O heavy)
+        struct PhysAnimEntry
+        {
+            entt::entity entity;
+            std::string meshPath;
+        };
+
+        std::vector<PhysAnimEntry> entries;
         for (auto entity : view)
         {
             const auto& meshComp = view.get<components::MeshComponent>(entity);
+            if (meshComp.meshPath.empty() || meshComp.animatorPath.empty())
+                continue;
+            entries.push_back({entity, meshComp.meshPath});
+        }
+
+        // Phase 1: parallel skeleton loading
+        std::vector<std::future<std::shared_ptr<resource::SkeletonData>>> skeletonFutures;
+        skeletonFutures.reserve(entries.size());
+
+        for (const auto& entry : entries)
+        {
+            skeletonFutures.push_back(threading::JobSystem::instance().submit(
+                [meshPath = entry.meshPath]() -> std::shared_ptr<resource::SkeletonData>
+                {
+                    auto stream = resource::MeshStreamResource::openStream(meshPath);
+                    if (!stream || !stream->hasSkeletonData())
+                        return nullptr;
+
+                    auto skeletonData = std::make_shared<resource::SkeletonData>();
+                    if (!stream->readSkeleton(*skeletonData) || skeletonData->bones.empty())
+                        return nullptr;
+
+                    return skeletonData;
+                }, threading::JobPriority::NORMAL
+            ));
+        }
+
+        // Phase 2: sequential physics provider calls
+        for (size_t i = 0; i < entries.size(); ++i)
+        {
+            auto skeletonData = skeletonFutures[i].get();
+            if (!skeletonData)
+                continue;
+
+            auto entity = entries[i].entity;
             const auto& transform = view.get<components::TransformComponent>(entity);
             auto& physAnimComp = view.get<components::PhysicsAnimationComponent>(entity);
-
-            if (meshComp.meshPath.empty() || meshComp.animatorPath.empty())
-            {
-                continue;
-            }
-
-            auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
-            if (!stream || !stream->hasSkeletonData())
-            {
-                continue;
-            }
-
-            resource::SkeletonData skeletonData;
-            if (!stream->readSkeleton(skeletonData) || skeletonData.bones.empty())
-            {
-                continue;
-            }
 
             EntityHandle handle = internal::toHandle(entity);
 
@@ -516,7 +543,7 @@ namespace services
             glm::quat rotQuat = glm::quat(eulerRad);
 
             bool created = physicsProvider->createPhysicsAnimation(
-                handle, physAnimComp.config, skeletonData, transform.position, rotQuat);
+                handle, physAnimComp.config, *skeletonData, transform.position, rotQuat);
 
             if (!created)
             {

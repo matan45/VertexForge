@@ -105,6 +105,7 @@
     <ClInclude Include="camera\OrbitCamera.hpp" />
     <ClInclude Include="clipboard\ClipboardManager.hpp" />
     <ClInclude Include="dragdrop\DragDropManager.hpp" />
+    <ClInclude Include="fileops\AsyncFileOperations.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
     <ClInclude Include="graph\VFXGraphEditor.hpp" />
@@ -125,6 +126,7 @@
     <ClInclude Include="windows\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\ExportProgressWindow.hpp" />
+    <ClInclude Include="windows\FileOperationProgressWindow.hpp" />
     <ClInclude Include="windows\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\FontPreviewWindow.hpp" />
     <ClInclude Include="windows\HoleToolPanel.hpp" />
@@ -147,6 +149,7 @@
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
+    <ClInclude Include="windows\SceneLoadProgressWindow.hpp" />
     <ClInclude Include="windows\SculptToolPanel.hpp" />
     <ClInclude Include="windows\TerrainCreationWindow.hpp" />
     <ClInclude Include="windows\TerrainMaterialEditorWindow.hpp" />
@@ -182,9 +185,11 @@
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\IKDrawer.hpp" />
+    <ClInclude Include="windows\details\LightmapRootDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
+    <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTextureDrawer.hpp" />
@@ -224,6 +229,7 @@
     <ClCompile Include="camera\OrbitCamera.cpp" />
     <ClCompile Include="clipboard\ClipboardManager.cpp" />
     <ClCompile Include="dragdrop\DragDropManager.cpp" />
+    <ClCompile Include="fileops\AsyncFileOperations.cpp" />
     <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
     <ClCompile Include="graph\ShaderGraphEditor.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
@@ -245,6 +251,7 @@
     <ClCompile Include="windows\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\ExportProgressWindow.cpp" />
+    <ClCompile Include="windows\FileOperationProgressWindow.cpp" />
     <ClCompile Include="windows\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\FontPreviewWindow.cpp" />
     <ClCompile Include="windows\HoleToolPanel.cpp" />
@@ -268,6 +275,7 @@
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
+    <ClCompile Include="windows\SceneLoadProgressWindow.cpp" />
     <ClCompile Include="windows\SculptToolPanel.cpp" />
     <ClCompile Include="windows\TerrainCreationWindow.cpp" />
     <ClCompile Include="windows\TerrainMaterialEditorWindow.cpp" />
@@ -302,9 +310,11 @@
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\IKDrawer.cpp" />
+    <ClCompile Include="windows\details\LightmapRootDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
+    <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTextureDrawer.cpp" />

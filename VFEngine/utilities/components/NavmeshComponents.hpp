@@ -1,8 +1,14 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <string>
 
 namespace components
 {
+    struct NavmeshComponent
+    {
+        std::string navmeshPath;
+    };
+
     struct NavmeshAgentComponent
     {
         float radius = 0.3f;

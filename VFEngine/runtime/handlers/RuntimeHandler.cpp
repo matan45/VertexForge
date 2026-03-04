@@ -177,8 +177,10 @@ namespace handlers {
 
         events::scene::LoadSceneCommand sceneCmd;
         sceneCmd.filePath = scenePath.string();
+        // loadScene is deferred: returns false only for invalid arguments (null sceneGraph, empty path).
+        // Actual load success/failure is reported via SceneLoadingCompletedNotification.
         if (!dispatcher.execute(sceneCmd)) {
-            vfLogError("Failed to load startup scene: {}", scenePath.string());
+            vfLogError("Failed to queue startup scene load: {}", scenePath.string());
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }

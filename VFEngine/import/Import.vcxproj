@@ -115,6 +115,7 @@
     <ClInclude Include="types\Animation.hpp" />
     <ClInclude Include="types\AnimationEventWriter.hpp" />
     <ClInclude Include="types\Audio.hpp" />
+    <ClInclude Include="types\BRDFLUTExporter.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\FontAtlasGenerator.hpp" />
     <ClInclude Include="types\FontSerializer.hpp" />
@@ -138,6 +139,7 @@
     <ClCompile Include="types\Animation.cpp" />
     <ClCompile Include="types\AnimationEventWriter.cpp" />
     <ClCompile Include="types\Audio.cpp" />
+    <ClCompile Include="types\BRDFLUTExporter.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\FontAtlasGenerator.cpp" />
     <ClCompile Include="types\FontSerializer.cpp" />

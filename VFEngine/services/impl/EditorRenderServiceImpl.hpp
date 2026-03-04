@@ -25,6 +25,7 @@ namespace services
         uint32_t viewportHeight = 0;
         uint64_t frameCounter = 0;
         bool showNavmeshDebug = false;
+        ViewportTextureHandle lastViewportHandle{};
 
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;

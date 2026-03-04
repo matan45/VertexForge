@@ -2,6 +2,7 @@
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
+#include "../threading/JobSystem.hpp"
 #include "../print/EditorLogger.hpp"
 #include <fstream>
 #include <algorithm>
@@ -207,16 +208,59 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeRootEntity(scene::Entity& root)
+    {
+        auto children = root.getChildren();
+        if (children.size() > 1)
+        {
+            json rootJson;
+            rootJson["uuid"] = root.getUUID().getValue();
+            rootJson["name"] = root.getName();
+
+            if (root.hasComponent<components::NameComponent>())
+            {
+                rootJson["isActive"] = root.getComponent<components::NameComponent>().isActive;
+            }
+            if (root.hasComponent<components::TransformComponent>())
+            {
+                rootJson["transform"] = serializeTransform(root.getComponent<components::TransformComponent>());
+            }
+            rootJson["components"] = serializeEntityComponents(root);
+
+            // Safe to parallelize: each child subtree is disjoint and serialization
+            // is read-only (no structural registry mutations). Each thread reads only
+            // its own subtree's components via entity handles.
+            std::vector<std::future<json>> futures;
+            futures.reserve(children.size());
+            for (auto& child : children)
+            {
+                futures.push_back(threading::JobSystem::instance().submit(
+                    [child]() mutable -> json
+                    {
+                        return serializeEntity(child);
+                    }, threading::JobPriority::NORMAL
+                ));
+            }
+
+            json childrenJson = json::array();
+            for (auto& f : futures)
+            {
+                childrenJson.push_back(f.get());
+            }
+            rootJson["children"] = childrenJson;
+            return rootJson;
+        }
+
+        return serializeEntity(root);
+    }
+
     bool SceneSerialization::saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
     {
         try
         {
             json sceneJson;
             sceneJson["version"] = "1.1";
-
-            scene::Entity& root = sceneGraph.GetRoot();
-
-            sceneJson["root"] = serializeEntity(root);
+            sceneJson["root"] = serializeRootEntity(sceneGraph.GetRoot());
             sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
             sceneJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
@@ -248,9 +292,7 @@ namespace serialization
         {
             json snapshot;
             snapshot["version"] = "1.1";
-
-            scene::Entity& root = sceneGraph.GetRoot();
-            snapshot["root"] = serializeEntity(root);
+            snapshot["root"] = serializeRootEntity(sceneGraph.GetRoot());
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
             snapshot["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
@@ -264,7 +306,8 @@ namespace serialization
         }
     }
 
-    bool SceneSerialization::restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph)
+    bool SceneSerialization::restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                                  SceneLoadProgressCallback progressCallback)
     {
         try
         {
@@ -286,7 +329,7 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
-            deserializeEntity(snapshot["root"], root, sceneGraph, true, nullptr, entitiesLoaded, totalEntities);
+            deserializeEntity(snapshot["root"], root, sceneGraph, true, progressCallback, entitiesLoaded, totalEntities);
 
             resolveRenderTextureSourceNames();
 

@@ -175,11 +175,7 @@ namespace windows
             const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER);
             if (payload && isValid)
             {
-                auto result = DragDropManager::instance().acceptDrop(folderPath.string());
-                if (!result.success)
-                {
-                    vfLogError("Drop failed: {}", result.errorMessage);
-                }
+                DragDropManager::instance().acceptDrop(folderPath.string());
             }
 
             ImGui::EndDragDropTarget();

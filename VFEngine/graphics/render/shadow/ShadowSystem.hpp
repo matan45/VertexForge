@@ -141,10 +141,19 @@ namespace render
             void freeShadowMaps(LightShadowData& data);
 
             void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
+            void updatePointCubeShadowMatricesFromData(LightShadowData& data,
+                                                        const glm::mat4& worldMatrix, float radius);
             void updateSpotShadowMatrices(LightShadowData& data, uint32_t entityId);
+            void updateSpotShadowMatricesFromData(LightShadowData& data,
+                                                    const glm::mat4& worldMatrix,
+                                                    float outerAngle, float range);
             void updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
                                                const glm::mat4& cameraView, const glm::mat4& cameraProjection,
                                                float cameraNear, float cameraFar);
+            void updateDirectionalCSMMatricesFromData(LightShadowData& data,
+                                                       const glm::mat4& worldMatrix,
+                                                       const glm::mat4& cameraView, const glm::mat4& cameraProjection,
+                                                       float cameraNear, float cameraFar);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void handleAtlasResize(const types::RenderSettings& settings,
                                    const types::ShadowAtlasConfig& atlasConfig);

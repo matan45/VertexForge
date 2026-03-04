@@ -1,6 +1,6 @@
 #include "LightBaker.hpp"
 #include "../print/EditorLogger.hpp"
-#include <future>
+#include "../threading/JobSystem.hpp"
 #include <thread>
 #include <algorithm>
 #include <cmath>
@@ -206,7 +206,7 @@ namespace lightbake
             uint32_t start = t * chunkSize;
             uint32_t end = std::min(start + chunkSize, totalTexels);
 
-            futures.push_back(std::async(std::launch::async,
+            futures.push_back(threading::JobSystem::instance().submit(
                 [this, &texelSamples, &lights, &sceneMesh, &outLightmap,
                  &processedTexels, validTexelCount, progressCallback,
                  start, end]()
@@ -251,7 +251,7 @@ namespace lightbake
                             progressCallback(static_cast<float>(done) / static_cast<float>(validTexelCount));
                         }
                     }
-                }
+                }, threading::JobPriority::LOW
             ));
         }
 

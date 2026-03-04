@@ -1,6 +1,5 @@
 #pragma once
 #include "../windows/contentbrowser/ContentBrowserTypes.hpp"
-#include "data/FileOperationsTypes.hpp"
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -42,7 +41,7 @@ namespace windows
 
         void clear();
 
-        services::FileOperationResult paste(const std::string& targetFolder);
+        void paste(const std::string& targetFolder);
 
         bool hasItems() const;
 

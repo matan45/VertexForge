@@ -53,6 +53,7 @@ namespace core
         std::vector<lightbake::WaterBakeTile> collectWaterTiles() const;
         void assignLightmapComponents(const resource::LightmapData& lightmapData,
                                        const std::string& outputPath, float texelsPerUnit);
+        void storeLightmapOnRoot(const std::string& path, float texelsPerUnit);
         void runBake(const services::LightBakeConfig& config);
         void publishBakeFailure(const std::string& errorMessage);
         void finalizeBake(services::LightBakeResult& result,

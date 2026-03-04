@@ -25,9 +25,18 @@ namespace render::lighting
 
         const std::unordered_set<uint32_t>* filterPtr = visibleLightIds.empty() ? nullptr : &visibleLightIds;
 
-        collectDirectionalLights(filterPtr);
-        collectPointLights(filterPtr);
-        collectSpotLights(filterPtr);
+        pendingDirShadow.clear();
+        pendingPointShadow.clear();
+        pendingSpotShadow.clear();
+
+        // Collect sequentially: EnTT registry is not thread-safe for concurrent view
+        // iteration, even read-only. The work per light type is trivial (iterate entities,
+        // copy data to staging arrays), so parallelism adds more overhead than benefit.
+        collectDirectionalLights(filterPtr, pendingDirShadow);
+        collectPointLights(filterPtr, pendingPointShadow);
+        collectSpotLights(filterPtr, pendingSpotShadow);
+
+        processPendingShadowRegistrations();
         cleanupStaleShadowRegistrations();
 
         if (detectChanges())
@@ -58,7 +67,8 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds)
+    void GPULightBufferManager::collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                                                          std::vector<PendingShadowReg>& pendingShadow)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
@@ -98,7 +108,7 @@ namespace render::lighting
                 settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
                 settings.enabled = true;
                 settings.castShadows = true;
-                updateShadowRegistration(entityId, shadow::ShadowMapType::DirectionalCSM, settings);
+                pendingShadow.push_back({entityId, shadow::ShadowMapType::DirectionalCSM, settings});
             }
 
             if (isStaticLight) continue;
@@ -127,7 +137,8 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds)
+    void GPULightBufferManager::collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                                                     std::vector<PendingShadowReg>& pendingShadow)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
@@ -171,7 +182,7 @@ namespace render::lighting
                 settings.farPlane = light.radius;
                 settings.enabled = true;
                 settings.castShadows = true;
-                updateShadowRegistration(entityId, shadow::ShadowMapType::PointCube, settings);
+                pendingShadow.push_back({entityId, shadow::ShadowMapType::PointCube, settings});
             }
 
             if (isStaticLight) continue;
@@ -210,7 +221,8 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds)
+    void GPULightBufferManager::collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                                                    std::vector<PendingShadowReg>& pendingShadow)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
@@ -254,7 +266,7 @@ namespace render::lighting
                 settings.farPlane = light.range;
                 settings.enabled = true;
                 settings.castShadows = true;
-                updateShadowRegistration(entityId, shadow::ShadowMapType::Spot2D, settings);
+                pendingShadow.push_back({entityId, shadow::ShadowMapType::Spot2D, settings});
             }
 
             if (isStaticLight) continue;
@@ -294,6 +306,16 @@ namespace render::lighting
         {
             warnedSpotLimit = false;
         }
+    }
+
+    void GPULightBufferManager::processPendingShadowRegistrations()
+    {
+        for (const auto& reg : pendingDirShadow)
+            updateShadowRegistration(reg.entityId, reg.type, reg.settings);
+        for (const auto& reg : pendingPointShadow)
+            updateShadowRegistration(reg.entityId, reg.type, reg.settings);
+        for (const auto& reg : pendingSpotShadow)
+            updateShadowRegistration(reg.entityId, reg.type, reg.settings);
     }
 
     void GPULightBufferManager::cleanupStaleShadowRegistrations()

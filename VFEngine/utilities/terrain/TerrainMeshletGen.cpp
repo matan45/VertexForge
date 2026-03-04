@@ -285,7 +285,7 @@ namespace terrain
                 const TerrainTile* n = getTile(nc);
                 uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
                 uint32_t neighborHz = static_cast<uint32_t>(hz - static_cast<int32_t>(baseVertCount) + 1);
-                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                return (n && n->hasHeightData()) ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
                          : tile.getHeight(clampedX, baseVertCount - 1);
             }
 
@@ -295,7 +295,7 @@ namespace terrain
                 const TerrainTile* n = getTile(nc);
                 uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
                 uint32_t neighborHz = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hz);
-                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                return (n && n->hasHeightData()) ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
                          : tile.getHeight(clampedX, 0);
             }
 
@@ -305,7 +305,7 @@ namespace terrain
                 const TerrainTile* n = getTile(nc);
                 uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
                 uint32_t neighborHx = static_cast<uint32_t>(hx - static_cast<int32_t>(baseVertCount) + 1);
-                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                return (n && n->hasHeightData()) ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
                          : tile.getHeight(baseVertCount - 1, clampedZ);
             }
 
@@ -315,7 +315,7 @@ namespace terrain
                 const TerrainTile* n = getTile(nc);
                 uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
                 uint32_t neighborHx = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hx);
-                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                return (n && n->hasHeightData()) ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
                          : tile.getHeight(0, clampedZ);
             }
 

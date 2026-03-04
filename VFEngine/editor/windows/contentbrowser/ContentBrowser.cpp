@@ -284,11 +284,7 @@ namespace windows
                 bool isValid = DragDropManager::instance().isValidDropTarget(currentPath.string());
                 if (isValid)
                 {
-                    auto result = DragDropManager::instance().acceptDrop(currentPath.string());
-                    if (result.success)
-                    {
-                        loadDirectory(currentPath);
-                    }
+                    DragDropManager::instance().acceptDrop(currentPath.string());
                 }
             }
             ImGui::EndDragDropTarget();
@@ -686,16 +682,8 @@ namespace windows
         auto& clipboard = ClipboardManager::instance();
         if (clipboard.hasItems())
         {
-            auto result = clipboard.paste(currentPath.string());
-            if (result.success)
-            {
-                loadDirectory(currentPath);
-                return true;
-            }
-            else
-            {
-                modals->showError("Paste Failed", result.errorMessage, result.conflicts);
-            }
+            clipboard.paste(currentPath.string());
+            return true;
         }
         return false;
     }
