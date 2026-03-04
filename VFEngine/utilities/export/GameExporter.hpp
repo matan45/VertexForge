@@ -22,6 +22,7 @@ namespace gameExport
 
 		std::filesystem::path findRuntimeExe() const;
 		std::filesystem::path findShaderDirectory() const;
+		std::filesystem::path findIBLDirectory() const;
 		std::filesystem::path findResourcesEditorDirectory() const;
 
 		void copyDirectoryRecursive(const std::filesystem::path& src,

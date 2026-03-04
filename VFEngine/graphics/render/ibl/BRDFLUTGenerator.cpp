@@ -4,19 +4,92 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "resource/TextureResource.hpp"
+#include "resource/PathResolver.hpp"
 #include "print/Logger.hpp"
+
+#include <filesystem>
 
 namespace render::ibl
 {
     BRDFLUTGenerator::BRDFLUTGenerator(core::Device& device)
         : device{device}
     {
-        brdfLUTShader = std::make_shared<core::Shader>(device);
-        brdfLUTShader->readShader("../../resources/shaders/ibl/brdf.glsl");
+    }
+
+    bool BRDFLUTGenerator::loadFromFile(const std::string& filePath, const vk::CommandPool& commandPool)
+    {
+        if (!std::filesystem::exists(filePath))
+        {
+            return false;
+        }
+
+        auto textureData = resource::TextureResource::loadTexture(filePath);
+        if (textureData.mipData.empty() || textureData.width == 0 || textureData.height == 0)
+        {
+            return false;
+        }
+
+        const auto& mip0 = textureData.mipData[0];
+
+        // Create GPU image as R8G8B8A8Unorm (linear, NOT sRGB — BRDF data is linear)
+        core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageRequest.format = vk::Format::eR8G8B8A8Unorm;
+        imageRequest.width = mip0.width;
+        imageRequest.height = mip0.height;
+        imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+
+        // Upload pixel data via staging buffer
+        core::ImageUtilities::uploadStagedPixelData(
+            device, brdfLUTImage.image,
+            mip0.data.data(),
+            static_cast<vk::DeviceSize>(mip0.data.size()),
+            mip0.width, mip0.height);
+
+        // Create image view
+        core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), brdfLUTImage.image);
+        viewRequest.format = vk::Format::eR8G8B8A8Unorm;
+        core::ImageUtilities::createImageView(viewRequest, brdfLUTImage.imageView);
+
+        // Create sampler (same as GPU-generated path)
+        vk::SamplerCreateInfo samplerInfo;
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
+        samplerInfo.maxAnisotropy = 1.0;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+        brdfLUTImage.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+
+        loggerInfo("BRDF LUT loaded from file: {}", filePath);
+        return true;
     }
 
     void BRDFLUTGenerator::generate(const vk::CommandPool& commandPool)
     {
+        // Try loading pre-baked BRDF LUT from fixed engine resource path
+        std::string lutPath = resource::PathResolver::resolveEnginePath("../../resources/ibl/brdf_lut.vfImage");
+        if (loadFromFile(lutPath, commandPool))
+        {
+            return;
+        }
+
+        // Fallback: GPU generation (file not found — use import pipeline to generate it)
+        generateGPU(commandPool);
+    }
+
+    void BRDFLUTGenerator::generateGPU(const vk::CommandPool& commandPool)
+    {
+        brdfLUTShader = std::make_shared<core::Shader>(device);
+        brdfLUTShader->readShader("../../resources/shaders/ibl/brdf.glsl");
+
         // BRDF LUT image setup
         core::ImageInfoRequest brdfLUTImageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         brdfLUTImageRequest.format = vk::Format::eR16G16Sfloat;
@@ -257,6 +330,9 @@ namespace render::ibl
 
     void BRDFLUTGenerator::cleanUpShader()
     {
-        brdfLUTShader->cleanUp();
+        if (brdfLUTShader)
+        {
+            brdfLUTShader->cleanUp();
+        }
     }
 }
