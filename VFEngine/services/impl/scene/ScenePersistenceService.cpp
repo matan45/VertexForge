@@ -211,7 +211,6 @@ namespace services
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Cleanup: remove IBL, terrain, clear scene, clear selection
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
@@ -266,7 +265,6 @@ namespace services
                 }
             }
 
-            // Auto-load navmesh from root entity if present
             if (root.hasComponent<components::NavmeshComponent>())
             {
                 const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
@@ -323,7 +321,6 @@ namespace services
                 }
             }
 
-            // Rebuild water runtime state from deserialized components
             {
                 events::water::RebuildWaterFromComponentsCommand rebuildWaterCmd;
                 dispatcher.execute(rebuildWaterCmd);

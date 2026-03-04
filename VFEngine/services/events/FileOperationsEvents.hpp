@@ -50,4 +50,31 @@ namespace events::fileops {
         std::string_view getName() const override { return "FolderCreated"; }
     };
 
+    // ============================================
+    // BATCH OPERATION NOTIFICATIONS - Async progress
+    // ============================================
+
+    struct FileOpBatchStartedNotification : INotification {
+        uint32_t totalOperations = 0;
+        std::string operationType; // "Moving", "Copying", "Deleting"
+
+        std::string_view getName() const override { return "FileOpBatchStarted"; }
+    };
+
+    struct FileOpBatchProgressNotification : INotification {
+        std::string currentFile;
+        uint32_t completed = 0;
+        uint32_t total = 0;
+
+        std::string_view getName() const override { return "FileOpBatchProgress"; }
+    };
+
+    struct FileOpBatchCompletedNotification : INotification {
+        bool success = true;
+        std::string errorMessage;
+        std::vector<std::string> conflicts;
+
+        std::string_view getName() const override { return "FileOpBatchCompleted"; }
+    };
+
 }
