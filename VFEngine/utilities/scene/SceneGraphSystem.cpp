@@ -182,11 +182,6 @@ namespace scene
 
     void SceneGraphSystem::markTransformDirty(Entity& entity) const
     {
-        markTransformDirtyRecursive(entity);
-    }
-
-    void SceneGraphSystem::markTransformDirtyRecursive(Entity& entity) const
-    {
         if (!entity.isAlive()) return;
         if (entity.hasComponent<components::TransformComponent>())
         {
@@ -196,7 +191,7 @@ namespace scene
         {
             if (child.isAlive())
             {
-                markTransformDirtyRecursive(child);
+                markTransformDirty(child);
             }
         }
     }
@@ -236,7 +231,6 @@ namespace scene
         auto& worldTransform = entity.getComponent<components::WorldTransformComponent>();
         glm::mat4 worldMatrix;
 
-        // Recompute if this entity's local transform changed OR if the parent's world transform changed
         bool dirty = transform.isDirty || parentDirty;
 
         if (dirty)

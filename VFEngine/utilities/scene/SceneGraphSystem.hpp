@@ -70,7 +70,6 @@ namespace scene {
 		}
 
 	private:
-		void markTransformDirtyRecursive(Entity& entity) const;
 		void updateChildWorldTransforms(Entity& parent, const glm::mat4& parentWorldTransform, bool parentDirty = false);
 		bool isDescendant(scene::Entity& parent, scene::Entity& child) const;
 	};
