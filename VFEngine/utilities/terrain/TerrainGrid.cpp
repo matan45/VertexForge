@@ -54,6 +54,28 @@ namespace terrain
             return this->getTile(coord);
         };
 
+        // Pre-load neighbor heights so overrideBoundaryNormals can access
+        // cross-tile height data (neighbors may not have heights during streaming)
+        if (fileCache)
+        {
+            for (auto& [coord, tile] : tiles)
+            {
+                if (!tile->edgeSyncDirty && !(tile->isDirty && tile->dirtyLODMask != 0))
+                    continue;
+
+                if (!tile->hasHeightData())
+                    fileCache->ensureHeightsLoaded(*tile);
+
+                for (uint8_t i = 0; i < 4; ++i)
+                {
+                    TileCoord nc = coord + TileCoord::getNeighborOffset(static_cast<TileEdge>(i));
+                    auto nit = tiles.find(nc);
+                    if (nit != tiles.end() && !nit->second->hasHeightData())
+                        fileCache->ensureHeightsLoaded(*nit->second);
+                }
+            }
+        }
+
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->edgeSyncDirty)
@@ -179,7 +201,8 @@ namespace terrain
 
             if (tile->stitchingChanged())
             {
-                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                tile->edgeSyncDirty = true;
                 tile->saveStitchState();
 
                 if (std::find(changedTiles.begin(), changedTiles.end(), coord) == changedTiles.end())
