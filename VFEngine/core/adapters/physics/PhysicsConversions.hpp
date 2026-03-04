@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../services/providers/physics/IPhysicsProvider.hpp"
-#include "../physics/PhysicsWorld.hpp"
+#include "../../physics/PhysicsWorld.hpp"
 
 // Compile-time validation that enum values match between physics and services layers
 static_assert(

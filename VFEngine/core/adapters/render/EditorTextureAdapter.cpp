@@ -1,6 +1,6 @@
 #include "EditorTextureAdapter.hpp"
-#include "../controllers/EditorTextureController.hpp"
-#include "../controllers/texture/EditorTexture.hpp"
+#include "../../controllers/EditorTextureController.hpp"
+#include "../../controllers/texture/EditorTexture.hpp"
 #include "../../graphics/loaders/AsyncTextureLoader.hpp"
 #include "print/Log.hpp"
 

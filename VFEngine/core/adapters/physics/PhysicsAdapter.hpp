@@ -1,9 +1,9 @@
 #pragma once
 
 #include "../../services/providers/physics/IPhysicsProvider.hpp"
-#include "../physics/PhysicsWorld.hpp"
-#include "../physics/FixedTimestep.hpp"
-#include "../physics/RagdollSettingsBuilder.hpp"
+#include "../../physics/PhysicsWorld.hpp"
+#include "../../physics/FixedTimestep.hpp"
+#include "../../physics/RagdollSettingsBuilder.hpp"
 #include <memory>
 #include <mutex>
 #include <unordered_map>

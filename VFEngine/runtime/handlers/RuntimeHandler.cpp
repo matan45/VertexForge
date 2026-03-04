@@ -15,7 +15,7 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
-#include "../adapters/WaterRenderAdapter.hpp"
+#include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"

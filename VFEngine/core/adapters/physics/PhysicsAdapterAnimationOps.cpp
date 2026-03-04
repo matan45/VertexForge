@@ -1,6 +1,6 @@
 #include "PhysicsAdapter.hpp"
-#include "../physics/PhysicsSkeletonConverter.hpp"
-#include "../physics/RagdollSettingsBuilder.hpp"
+#include "../../physics/PhysicsSkeletonConverter.hpp"
+#include "../../physics/RagdollSettingsBuilder.hpp"
 #include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "../../graphics/animation/AnimatorStateMachine.hpp"
 #include "components/PhysicsAnimationComponent.hpp"

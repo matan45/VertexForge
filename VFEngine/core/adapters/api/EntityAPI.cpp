@@ -3,7 +3,7 @@
 
 #include "EntityAPI.hpp"
 #include "NativeHelpers.hpp"
-#include "../NativeAPIRegistry.hpp"
+#include "../scripting/NativeAPIRegistry.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/project/SceneEvents.hpp"
 
