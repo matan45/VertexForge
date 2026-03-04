@@ -5,7 +5,9 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Logger.hpp"
+#include "threading/JobSystem.hpp"
 #include <chrono>
+#include <future>
 
 namespace render::shadow
 {
@@ -307,20 +309,45 @@ namespace render::shadow
         spotShadowViews.clear();
         entityToShadowIndex.clear();
 
+        // Partition lights by type for parallel matrix computation
+        struct LightRef { uint32_t entityId; LightShadowData* data; };
+        std::vector<LightRef> pointLights, spotLights, directionalLights;
+
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
             if (data.type == ShadowMapType::PointCube)
-                updatePointCubeShadowMatrices(data, entityId);
-
-            if (data.type == ShadowMapType::Spot2D)
-                updateSpotShadowMatrices(data, entityId);
-
-            if (data.type == ShadowMapType::DirectionalCSM)
-                updateDirectionalCSMMatrices(data, entityId, cameraView, cameraProjection, cameraNear, cameraFar);
+                pointLights.push_back({entityId, &data});
+            else if (data.type == ShadowMapType::Spot2D)
+                spotLights.push_back({entityId, &data});
+            else if (data.type == ShadowMapType::DirectionalCSM)
+                directionalLights.push_back({entityId, &data});
         }
+
+        auto f1 = threading::JobSystem::instance().submit(
+            [this, &pointLights]() {
+                for (auto& ref : pointLights)
+                    updatePointCubeShadowMatrices(*ref.data, ref.entityId);
+            }, threading::JobPriority::HIGH
+        );
+        auto f2 = threading::JobSystem::instance().submit(
+            [this, &spotLights]() {
+                for (auto& ref : spotLights)
+                    updateSpotShadowMatrices(*ref.data, ref.entityId);
+            }, threading::JobPriority::HIGH
+        );
+        auto f3 = threading::JobSystem::instance().submit(
+            [this, &directionalLights, &cameraView, &cameraProjection, cameraNear, cameraFar]() {
+                for (auto& ref : directionalLights)
+                    updateDirectionalCSMMatrices(*ref.data, ref.entityId, cameraView, cameraProjection, cameraNear, cameraFar);
+            }, threading::JobPriority::HIGH
+        );
+
+        f1.get();
+        f2.get();
+        f3.get();
 
         collectShadowViewsForGPU(visibleLightIds);
     }

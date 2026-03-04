@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 #include <unordered_set>
+#include <cstdint>
 
 namespace core
 {
@@ -76,6 +77,16 @@ namespace render::lighting
         float shadowIntensity = 0.5f;
         std::unordered_set<uint32_t> registeredShadowLights;
 
+        struct PendingShadowReg
+        {
+            uint32_t entityId;
+            shadow::ShadowMapType type;
+            shadow::ShadowSettings settings;
+        };
+        std::vector<PendingShadowReg> pendingDirShadow;
+        std::vector<PendingShadowReg> pendingPointShadow;
+        std::vector<PendingShadowReg> pendingSpotShadow;
+
     public:
         explicit GPULightBufferManager(core::Device& device);
         ~GPULightBufferManager();
@@ -119,9 +130,13 @@ namespace render::lighting
         void allocateDescriptorSet();
         void updateDescriptors();
 
-        void collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
-        void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
-        void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+        void collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                                       std::vector<PendingShadowReg>& pendingShadow);
+        void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                                std::vector<PendingShadowReg>& pendingShadow);
+        void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds,
+                               std::vector<PendingShadowReg>& pendingShadow);
+        void processPendingShadowRegistrations();
         void updateShadowRegistration(uint32_t entityId, shadow::ShadowMapType type,
                                        const shadow::ShadowSettings& settings);
         void cleanupStaleShadowRegistrations();
