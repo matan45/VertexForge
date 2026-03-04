@@ -1,7 +1,7 @@
 #include "GPUVFXBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::vfx
 {
@@ -231,7 +231,7 @@ namespace render::vfx
 
         if (!initialized)
         {
-            loggerError("GPUVFXBufferManager::allocateEmitter: Not initialized");
+            vfLogError("GPUVFXBufferManager::allocateEmitter: Not initialized");
             return allocation;
         }
 
@@ -247,13 +247,13 @@ namespace render::vfx
 
         if (freeSlot == UINT32_MAX)
         {
-            loggerError("GPUVFXBufferManager::allocateEmitter: No free emitter slots");
+            vfLogError("GPUVFXBufferManager::allocateEmitter: No free emitter slots");
             return allocation;
         }
 
         if (allocatedParticleCount + particleCount > maxParticles)
         {
-            loggerError("GPUVFXBufferManager::allocateEmitter: Not enough particle budget ({} + {} > {})",
+            vfLogError("GPUVFXBufferManager::allocateEmitter: Not enough particle budget ({} + {} > {})",
                         allocatedParticleCount, particleCount, maxParticles);
             return allocation;
         }
@@ -268,7 +268,7 @@ namespace render::vfx
         allocatedParticleCount += particleCount;
         activeEmitterCount++;
 
-        loggerInfo("GPUVFXBufferManager: Allocated emitter {} with {} particles at offset {}",
+        vfLogInfo("GPUVFXBufferManager: Allocated emitter {} with {} particles at offset {}",
                    freeSlot, particleCount, allocation.particleOffset);
 
         return allocation;
@@ -284,6 +284,6 @@ namespace render::vfx
         emitterSlots[emitterIndex] = false;
         activeEmitterCount--;
 
-        loggerInfo("GPUVFXBufferManager: Freed emitter {}", emitterIndex);
+        vfLogInfo("GPUVFXBufferManager: Freed emitter {}", emitterIndex);
     }
 }

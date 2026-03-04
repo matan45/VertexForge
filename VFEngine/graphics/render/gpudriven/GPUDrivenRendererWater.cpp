@@ -3,7 +3,7 @@
 #include "water/WaterTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::gpudriven
 {
@@ -30,7 +30,6 @@ namespace render::gpudriven
             renderPass
         });
 
-        loggerInfo("GPUDrivenRenderer: Water pipeline initialized");
     }
 
     void GPUDrivenRenderer::updateWater(const std::vector<::water::WaterTile*>& visibleTiles,

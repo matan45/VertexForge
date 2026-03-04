@@ -1,5 +1,5 @@
 #include "MeshStreamHandle.hpp"
-#include "../print/EditorLogger.hpp"
+#include "../print/Log.hpp"
 #include "EndianUtils.hpp"
 
 namespace resource
@@ -10,6 +10,7 @@ namespace resource
 
         if (!file.is_open())
         {
+            
             vfLogError("MeshStreamHandle: File not open");
             return false;
         }

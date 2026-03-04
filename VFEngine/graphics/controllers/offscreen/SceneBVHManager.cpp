@@ -4,7 +4,7 @@
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../render/occlusion/OcclusionCullingManager.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/SceneEvents.hpp"
+#include "../../../services/events/project/SceneEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "material/MaterialTypes.hpp"

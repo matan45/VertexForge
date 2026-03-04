@@ -1,7 +1,7 @@
+#include "print/Log.hpp"
 #include "MeshSocketWriter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <fstream>
 #include <vector>

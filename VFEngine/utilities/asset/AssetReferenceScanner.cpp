@@ -1,7 +1,7 @@
 #include "AssetReferenceScanner.hpp"
+#include "../print/Log.hpp"
 #include "../terrain/TerrainSerializer.hpp"
 #include "../threading/JobSystem.hpp"
-#include "../print/EditorLogger.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>

@@ -8,15 +8,14 @@
 #include "serialization/PrefabSerialization.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/SceneEvents.hpp"
-#include "../../events/RenderEvents.hpp"
-#include "../../events/TerrainEvents.hpp"
-#include "../../events/WaterEvents.hpp"
-#include "../../events/PhysicsSettingsEvents.hpp"
-#include "../../events/AudioSettingsEvents.hpp"
-#include "../../events/PostProcessEvents.hpp"
-#include "../../events/NavmeshEvents.hpp"
-#include "print/EditorLogger.hpp"
+#include "../../events/project/SceneEvents.hpp"
+#include "../../events/render/RenderEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/terrain/WaterEvents.hpp"
+#include "../../events/physics/PhysicsSettingsEvents.hpp"
+#include "../../events/audio/AudioSettingsEvents.hpp"
+#include "../../events/render/PostProcessEvents.hpp"
+#include "../../events/navmesh/NavmeshEvents.hpp"
 #include <functional>
 
 namespace services
@@ -143,7 +142,6 @@ namespace services
 
         scene::EntityRegistry::setSceneTransitioning(false);
 
-        vfLogInfo("New scene created.");
         return true;
     }
 

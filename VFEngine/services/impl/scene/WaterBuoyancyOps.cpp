@@ -2,7 +2,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
-#include "../../providers/IPhysicsProvider.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
 
 namespace services
 {

@@ -1,5 +1,5 @@
+#include "../print/Log.hpp"
 #include "JobSystem.hpp"
-#include "../print/EditorLogger.hpp"
 
 #include <TaskScheduler.h>
 #include <algorithm>

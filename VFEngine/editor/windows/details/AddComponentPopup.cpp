@@ -1,11 +1,11 @@
 #include "AddComponentPopup.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
-#include "events/ScriptingEvents.hpp"
-#include "events/UIEvents.hpp"
-#include "events/SocketEvents.hpp"
-#include "events/IKEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
+#include "events/ui/UIEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
+#include "events/physics/IKEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details

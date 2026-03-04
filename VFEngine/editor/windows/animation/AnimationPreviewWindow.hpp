@@ -10,7 +10,7 @@
 #include "AnimationIKChainPanel.hpp"
 #include "resource/Types.hpp"
 #include "providers/PreviewInstanceId.hpp"
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include <string>
 #include <vector>

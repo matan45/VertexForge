@@ -1,5 +1,5 @@
 #include "AnimationEvaluator.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace animation
@@ -14,7 +14,7 @@ namespace animation
 
         if (skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
         {
-            loggerError("Animation '{}' - skeleton has no bones or inverse bind poses",
+            vfLogError("Animation '{}' - skeleton has no bones or inverse bind poses",
                         animationData->name);
             return;
         }

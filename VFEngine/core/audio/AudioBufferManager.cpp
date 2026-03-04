@@ -1,7 +1,7 @@
 #include "AudioBufferManager.hpp"
 #include "AudioSystem.hpp"
 #include "resource/ResourceManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core::audio
 {
@@ -24,7 +24,7 @@ namespace core::audio
 
         if (!audioData || audioData->data.empty())
         {
-            loggerError("Failed to load audio data from: {}", path);
+            vfLogError("Failed to load audio data from: {}", path);
             return 0;
         }
 
@@ -37,7 +37,7 @@ namespace core::audio
 
         if (bufferId == 0)
         {
-            loggerError("Failed to create OpenAL buffer for: {}", path);
+            vfLogError("Failed to create OpenAL buffer for: {}", path);
             return 0;
         }
 
@@ -141,7 +141,7 @@ namespace core::audio
         }
         else
         {
-            loggerError("Unsupported audio channel count: {}", channels);
+            vfLogError("Unsupported audio channel count: {}", channels);
             alDeleteBuffers(1, &bufferId);
             return 0;
         }

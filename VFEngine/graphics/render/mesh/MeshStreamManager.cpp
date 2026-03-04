@@ -5,7 +5,7 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "resource/MeshletTypes.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace render::mesh
@@ -59,7 +59,7 @@ namespace render::mesh
         state.handle = resource::MeshStreamResource::openStream(meshPath);
         if (!state.handle)
         {
-            loggerError("MeshStreamManager: Failed to open stream for {}", meshPath);
+            vfLogError("MeshStreamManager: Failed to open stream for {}", meshPath);
             return;
         }
 
@@ -69,7 +69,7 @@ namespace render::mesh
         auto* meshInfo = mergedBuffer.reserveMesh(meshPath, header);
         if (!meshInfo)
         {
-            loggerError("MeshStreamManager: Failed to reserve space for {}", meshPath);
+            vfLogError("MeshStreamManager: Failed to reserve space for {}", meshPath);
             state.handle.reset();
             state.headerParsed = false;
             return;
@@ -99,7 +99,7 @@ namespace render::mesh
             }
             else
             {
-                loggerWarning(
+                vfLogWarning(
                     "MeshStreamManager: Failed to reserve meshlet space for {}, mesh shader rendering will use fallback",
                     meshPath);
             }
@@ -304,7 +304,7 @@ namespace render::mesh
                 }
                 else
                 {
-                    loggerError("MeshStreamManager: Failed to read LOD {} for {}:{}",
+                    vfLogError("MeshStreamManager: Failed to read LOD {} for {}:{}",
                                 result.lodLevel, result.meshPath, result.submeshName);
                 }
 

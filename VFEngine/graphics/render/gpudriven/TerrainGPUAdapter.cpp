@@ -1,6 +1,6 @@
+#include "print/Log.hpp"
 #include "TerrainGPUAdapter.hpp"
 #include "terrain/TerrainTile.hpp"
-#include "print/EditorLogger.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace render::gpudriven

@@ -1,30 +1,56 @@
 #include "MainMenuBar.hpp"
-#include "IBLWindow.hpp"
-#include "EditorCameraWindow.hpp"
-#include "CullingStatsWindow.hpp"
-#include "ImportModalDialog.hpp"
-#include "PhysicsConfigWindow.hpp"
-#include "AudioConfigWindow.hpp"
-#include "RenderConfigWindow.hpp"
-#include "ProjectSettingsWindow.hpp"
-#include "TerrainCreationWindow.hpp"
+#include "lighting/IBLWindow.hpp"
+#include "config/EditorCameraWindow.hpp"
+#include "config/CullingStatsWindow.hpp"
+#include "import/ImportModalDialog.hpp"
+#include "config/PhysicsConfigWindow.hpp"
+#include "config/AudioConfigWindow.hpp"
+#include "config/RenderConfigWindow.hpp"
+#include "config/ProjectSettingsWindow.hpp"
+#include "terrain/TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
-#include "PostProcessConfigWindow.hpp"
-#include "NavmeshWindow.hpp"
-#include "LightBakeWindow.hpp"
+#include "config/PostProcessConfigWindow.hpp"
+#include "config/NavmeshWindow.hpp"
+#include "lighting/LightBakeWindow.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/RenderEvents.hpp"
-#include "events/NavmeshEvents.hpp"
-#include "events/ApplicationEvents.hpp"
-#include "events/EditorModeEvents.hpp"
-#include "events/ScriptingEvents.hpp"
-#include "events/SculptModeEvents.hpp"
-#include "events/ExportEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/render/RenderEvents.hpp"
+#include "events/navmesh/NavmeshEvents.hpp"
+#include "events/project/ApplicationEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
+#include "events/editor/SculptModeEvents.hpp"
+#include "events/project/ExportEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows
 {
+    MainMenuBar::MainMenuBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification& n) {
+                currentSceneName = std::filesystem::path(n.scenePath).stem().string();
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&) {
+                currentSceneName.clear();
+            });
+    }
+
+    MainMenuBar::~MainMenuBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
+        if (sceneClearedToken.isValid())
+            dispatcher.unsubscribe(sceneClearedToken);
+    }
+
     void MainMenuBar::draw()
     {
         if (importDialog)
@@ -370,6 +396,14 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopStyleColor(3);
+        }
+
+        if (!currentSceneName.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            ImGui::Text("%s", currentSceneName.c_str());
         }
     }
 }

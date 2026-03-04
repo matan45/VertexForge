@@ -1,14 +1,14 @@
 #include "Window.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/PathResolver.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 
 namespace window {
 	void Window::initWindow()
 	{
 		if (!glfwInit()) {
-			loggerError("Unable to initialize GLFW");
+			vfLogError("Unable to initialize GLFW");
 		}
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -18,7 +18,7 @@ namespace window {
 		window = glfwCreateWindow(width, height, "VertexForge", nullptr, nullptr);
 
 		if (window == nullptr) {
-			loggerError("Failed to create GLFW window");
+			vfLogError("Failed to create GLFW window");
 		}
 
 		glfwSetWindowUserPointer(window, this); // Set the user pointer to access the class
@@ -55,7 +55,7 @@ namespace window {
 	{
 		VkSurfaceKHR rawSurface;
 		VkResult result = glfwCreateWindowSurface(*instance, window, nullptr, &rawSurface);
-		loggerAssert(result != VK_SUCCESS,
+		vfLogAssert(result != VK_SUCCESS,
 			"failed to create window surface!");
 
 		return vk::SurfaceKHR(rawSurface);

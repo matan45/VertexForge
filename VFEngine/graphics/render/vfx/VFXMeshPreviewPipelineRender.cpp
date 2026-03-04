@@ -3,7 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Texture.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -56,7 +56,7 @@ namespace render::vfx
         {
             if (!texturePath.empty())
             {
-                loggerWarning("VFX mesh preview texture not found: {}", texturePath);
+                vfLogWarning("VFX mesh preview texture not found: {}", texturePath);
             }
             updateDescriptorSet();
             return;
@@ -70,7 +70,7 @@ namespace render::vfx
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX mesh preview texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX mesh preview texture '{}': {}", texturePath, e.what());
             customTexture.reset();
             currentTexturePath.clear();
         }
@@ -101,21 +101,21 @@ namespace render::vfx
         std::string meshId = meshCache.loadMesh(meshPath);
         if (meshId.empty())
         {
-            loggerWarning("VFXMeshPreviewPipeline: Failed to load mesh: {}", meshPath);
+            vfLogWarning("VFXMeshPreviewPipeline: Failed to load mesh: {}", meshPath);
             return;
         }
 
         const auto* meshData = meshCache.getMesh(meshId);
         if (!meshData || meshData->subMeshes.empty())
         {
-            loggerWarning("VFXMeshPreviewPipeline: No submeshes in mesh: {}", meshPath);
+            vfLogWarning("VFXMeshPreviewPipeline: No submeshes in mesh: {}", meshPath);
             return;
         }
 
         const auto& lod0 = meshData->subMeshes[0].getLOD(0);
         if (!lod0.isValid())
         {
-            loggerWarning("VFXMeshPreviewPipeline: Invalid LOD 0 for mesh: {}", meshPath);
+            vfLogWarning("VFXMeshPreviewPipeline: Invalid LOD 0 for mesh: {}", meshPath);
             return;
         }
 
@@ -124,7 +124,7 @@ namespace render::vfx
         meshIndexBuffer = lod0.indexBuffer;
         meshIndexCount = lod0.indexCount;
 
-        loggerInfo("VFXMeshPreviewPipeline: Mesh set: {} ({} indices)", meshPath, meshIndexCount);
+        vfLogInfo("VFXMeshPreviewPipeline: Mesh set: {} ({} indices)", meshPath, meshIndexCount);
     }
 
     void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,

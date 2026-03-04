@@ -12,7 +12,7 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 #include <thread>
 #include <cstdarg>
@@ -26,14 +26,14 @@ namespace core::physics
         char buffer[1024];
         vsnprintf(buffer, sizeof(buffer), inFMT, list);
         va_end(list);
-        loggerInfo("Jolt: {}", buffer);
+        vfLogInfo("Jolt: {}", buffer);
     }
 
 #ifdef JPH_ENABLE_ASSERTS
     static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile,
                                      unsigned int inLine)
     {
-        loggerError("Jolt Assertion Failed: {} - {} ({}:{})", inExpression, inMessage ? inMessage : "", inFile, inLine);
+        vfLogError("Jolt Assertion Failed: {} - {} ({}:{})", inExpression, inMessage ? inMessage : "", inFile, inLine);
         return true;
     }
 #endif
@@ -72,7 +72,7 @@ namespace core::physics
             else
             {
                 clampedLayer = static_cast<uint8_t>(Layers::DYNAMIC);
-                loggerWarning("Entity {}: Invalid collision layer {} (max: {}), defaulting to DYNAMIC ({})",
+                vfLogWarning("Entity {}: Invalid collision layer {} (max: {}), defaulting to DYNAMIC ({})",
                               entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
             }
 
@@ -103,7 +103,7 @@ namespace core::physics
                 }
                 else
                 {
-                    loggerWarning("Entity {}: Invalid mass {} for dynamic body, using shape-calculated mass",
+                    vfLogWarning("Entity {}: Invalid mass {} for dynamic body, using shape-calculated mass",
                                   entityId, bodyInfo.mass);
                 }
             }
@@ -154,7 +154,7 @@ namespace core::physics
         physicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
         initialized = true;
-        loggerInfo("Physics system initialized with {} threads", numThreads);
+        vfLogInfo("Physics system initialized with {} threads", numThreads);
         return true;
     }
 
@@ -488,7 +488,7 @@ namespace core::physics
         auto shapeResult = shapeSettings.Create();
         if (!shapeResult.IsValid())
         {
-            loggerError("Failed to create HeightFieldShape for terrain tile ({}, {}): {}",
+            vfLogError("Failed to create HeightFieldShape for terrain tile ({}, {}): {}",
                         tileX, tileZ, shapeResult.GetError().c_str());
             return JPH::BodyID();
         }
@@ -600,7 +600,7 @@ namespace core::physics
         entityCharacters[entityId] = character;
         entityCharacterLayers[entityId] = info.collisionLayer;
 
-        loggerInfo("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
+        vfLogInfo("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
                    entityId, info.position.x, info.position.y, info.position.z);
         return true;
     }

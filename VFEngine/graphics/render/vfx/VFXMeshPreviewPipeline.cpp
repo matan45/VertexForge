@@ -8,7 +8,7 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::vfx
 {
@@ -39,14 +39,14 @@ namespace render::vfx
             loadShader();
             if (!meshShader || meshShader->getShaderStages().empty())
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to load shader");
+                vfLogError("VFXMeshPreviewPipeline: Failed to load shader");
                 return;
             }
 
             createRenderPass();
             if (!renderPass)
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to create render pass");
+                vfLogError("VFXMeshPreviewPipeline: Failed to create render pass");
                 cleanUp();
                 return;
             }
@@ -54,7 +54,7 @@ namespace render::vfx
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to create descriptor set layout");
+                vfLogError("VFXMeshPreviewPipeline: Failed to create descriptor set layout");
                 cleanUp();
                 return;
             }
@@ -62,7 +62,7 @@ namespace render::vfx
             createDescriptorPool();
             if (!descriptorPool)
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to create descriptor pool");
+                vfLogError("VFXMeshPreviewPipeline: Failed to create descriptor pool");
                 cleanUp();
                 return;
             }
@@ -70,7 +70,7 @@ namespace render::vfx
             createBuffers();
             if (!cameraUBO || !instanceBuffer)
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to create buffers");
+                vfLogError("VFXMeshPreviewPipeline: Failed to create buffers");
                 cleanUp();
                 return;
             }
@@ -82,7 +82,7 @@ namespace render::vfx
             createPipeline();
             if (!graphicsPipeline || !pipelineLayout)
             {
-                loggerError("VFXMeshPreviewPipeline: Failed to create graphics pipeline");
+                vfLogError("VFXMeshPreviewPipeline: Failed to create graphics pipeline");
                 cleanUp();
                 return;
             }
@@ -90,16 +90,15 @@ namespace render::vfx
             createFramebuffers();
 
             initialized = true;
-            loggerInfo("VFXMeshPreviewPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("VFXMeshPreviewPipeline: Vulkan error during init - {}", e.what());
+            vfLogError("VFXMeshPreviewPipeline: Vulkan error during init - {}", e.what());
             cleanUp();
         }
         catch (const std::exception& e)
         {
-            loggerError("VFXMeshPreviewPipeline: Exception during init - {}", e.what());
+            vfLogError("VFXMeshPreviewPipeline: Exception during init - {}", e.what());
             cleanUp();
         }
     }

@@ -1,9 +1,9 @@
+#include "print/Log.hpp"
 #include "OrmPackingDialog.hpp"
 #include <texture/OrmTexturePacker.hpp>
 #include <nfd/FileDialog.hpp>
 #include <events/EventDispatcher.hpp>
-#include <events/ResourceEvents.hpp>
-#include "print/EditorLogger.hpp"
+#include <events/project/ResourceEvents.hpp>
 #include "imgui.h"
 #include <filesystem>
 

@@ -1,7 +1,7 @@
+#include "print/Log.hpp"
 #include "AnimationEventWriter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/AnimationResource.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <vector>
 #include <filesystem>

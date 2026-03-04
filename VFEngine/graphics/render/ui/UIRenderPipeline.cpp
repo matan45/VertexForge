@@ -6,7 +6,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <string_view>
@@ -287,14 +287,14 @@ namespace render::ui
 
         if (textureCache.size() >= MAX_UI_TEXTURES)
         {
-            loggerWarning("UI texture limit reached ({}), cannot load: {}",
+            vfLogWarning("UI texture limit reached ({}), cannot load: {}",
                           MAX_UI_TEXTURES, texturePath);
             return false;
         }
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("UI texture file not found: {}", texturePath);
+            vfLogWarning("UI texture file not found: {}", texturePath);
             return false;
         }
 
@@ -303,7 +303,7 @@ namespace render::ui
 
         if (!texture->getImageView())
         {
-            loggerError("Failed to load UI texture: {}", texturePath);
+            vfLogError("Failed to load UI texture: {}", texturePath);
             return false;
         }
 

@@ -4,7 +4,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUVFXTypes.hpp"
 #include <filesystem>
 
@@ -165,21 +165,21 @@ namespace render::vfx
         std::string meshId = meshCache.loadMesh(meshPath);
         if (meshId.empty())
         {
-            loggerWarning("VFXMeshGPUPipeline: Failed to load mesh: {}", meshPath);
+            vfLogWarning("VFXMeshGPUPipeline: Failed to load mesh: {}", meshPath);
             return;
         }
 
         const auto* meshData = meshCache.getMesh(meshId);
         if (!meshData || meshData->subMeshes.empty())
         {
-            loggerWarning("VFXMeshGPUPipeline: No submeshes in mesh: {}", meshPath);
+            vfLogWarning("VFXMeshGPUPipeline: No submeshes in mesh: {}", meshPath);
             return;
         }
 
         const auto& lod0 = meshData->subMeshes[0].getLOD(0);
         if (!lod0.isValid())
         {
-            loggerWarning("VFXMeshGPUPipeline: Invalid LOD 0 for mesh: {}", meshPath);
+            vfLogWarning("VFXMeshGPUPipeline: Invalid LOD 0 for mesh: {}", meshPath);
             return;
         }
 
@@ -190,7 +190,7 @@ namespace render::vfx
         emMesh.indexBuffer = lod0.indexBuffer;
         emMesh.indexCount = lod0.indexCount;
 
-        loggerInfo("VFXMeshGPUPipeline: Mesh set for emitter {}: {} ({} indices)",
+        vfLogInfo("VFXMeshGPUPipeline: Mesh set for emitter {}: {} ({} indices)",
                    emitterIndex, meshPath, lod0.indexCount);
     }
 
@@ -233,14 +233,14 @@ namespace render::vfx
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("VFX mesh texture not found: {}", texturePath);
+            vfLogWarning("VFX mesh texture not found: {}", texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
 
         if (textureEntries.size() >= MAX_TEXTURE_SLOTS)
         {
-            loggerWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
+            vfLogWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
                           MAX_TEXTURE_SLOTS, emitterIndex);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
@@ -268,11 +268,11 @@ namespace render::vfx
                 descriptorsNeedUpdate = true;
             }
 
-            loggerInfo("VFX mesh texture loaded: {}", texturePath);
+            vfLogInfo("VFX mesh texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX mesh texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX mesh texture '{}': {}", texturePath, e.what());
             textureEntries.erase(texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
         }

@@ -1,9 +1,9 @@
+#include "print/Log.hpp"
 #include "MeshDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <fstream>
 

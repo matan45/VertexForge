@@ -4,7 +4,7 @@
 #include "NavmeshAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/NavmeshEvents.hpp"
+#include "../../../services/events/navmesh/NavmeshEvents.hpp"
 
 namespace core::api
 {

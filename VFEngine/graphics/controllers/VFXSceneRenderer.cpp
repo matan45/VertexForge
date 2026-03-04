@@ -11,7 +11,7 @@
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace controllers
 {
@@ -40,13 +40,13 @@ namespace controllers
         {
             if (!initGPUMode(sceneRenderPass))
             {
-                loggerWarning("GPU-driven VFX initialization failed, falling back to CPU mode");
+                vfLogWarning("GPU-driven VFX initialization failed, falling back to CPU mode");
                 gpuDrivenEnabled = false;
             }
         }
 
         initialized = true;
-        loggerInfo("VFX Scene Renderer initialized (GPU mode: {})", gpuDrivenEnabled ? "enabled" : "disabled");
+        vfLogInfo("VFX Scene Renderer initialized (GPU mode: {})", gpuDrivenEnabled ? "enabled" : "disabled");
     }
 
     void VFXSceneRenderer::recreate(vk::RenderPass sceneRenderPass)
@@ -97,7 +97,6 @@ namespace controllers
         }
 
         initialized = false;
-        loggerInfo("VFX Scene Renderer cleaned up");
     }
 
     void VFXSceneRenderer::setGPUDrivenEnabled(bool enabled)
@@ -109,12 +108,12 @@ namespace controllers
 
         if (enabled && !gpuBufferManager)
         {
-            loggerWarning("Cannot enable GPU mode - GPU resources not initialized");
+            vfLogWarning("Cannot enable GPU mode - GPU resources not initialized");
             return;
         }
 
         gpuDrivenEnabled = enabled;
-        loggerInfo("VFX GPU mode: {}", enabled ? "enabled" : "disabled");
+        vfLogInfo("VFX GPU mode: {}", enabled ? "enabled" : "disabled");
     }
 
     VFXInstanceId VFXSceneRenderer::createInstance(const VFXRuntimeParams& params)
@@ -134,7 +133,7 @@ namespace controllers
         }
         else
         {
-            loggerWarning("Failed to load VFX asset: {}, using default config", params.vfxAssetPath);
+            vfLogWarning("Failed to load VFX asset: {}, using default config", params.vfxAssetPath);
         }
 
         if (gpuDrivenEnabled && gpuBufferManager)
@@ -150,12 +149,12 @@ namespace controllers
                 instance.gpuParticleCount = allocation.particleCount;
                 instance.active = false;
 
-                loggerInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
+                vfLogInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
             }
             else
             {
-                loggerWarning("GPU allocation failed for VFX instance {}, using CPU fallback", id);
+                vfLogWarning("GPU allocation failed for VFX instance {}, using CPU fallback", id);
             }
         }
 
@@ -224,7 +223,7 @@ namespace controllers
                                                           glowColor);
         }
 
-        loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
+        vfLogInfo("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
     }
@@ -246,7 +245,6 @@ namespace controllers
                     gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
             }
 
-            loggerInfo("Destroyed VFX instance {}", id);
             instances.erase(it);
 
             // Destroy any sub-emitters owned by this instance
@@ -297,7 +295,6 @@ namespace controllers
             gpuBufferManager->resetAllocator();
         }
 
-        loggerInfo("Destroyed all VFX instances");
     }
 
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)

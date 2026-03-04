@@ -1,9 +1,9 @@
 #include "TerrainDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/TerrainEvents.hpp"
-#include "events/PhysicsEvents.hpp"
-#include "events/PhysicsSettingsEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
+#include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 #include <filesystem>

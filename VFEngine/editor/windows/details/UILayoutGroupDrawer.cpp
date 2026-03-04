@@ -1,7 +1,7 @@
 #include "UILayoutGroupDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/UIEvents.hpp"
+#include "events/ui/UIEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details

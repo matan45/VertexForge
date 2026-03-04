@@ -6,7 +6,7 @@
 #include "Utilities.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
 #include <vector>
 
@@ -106,7 +106,7 @@ namespace core
 
         if (!texturePtr || texturePtr->pixels.empty())
         {
-            loggerError("Failed to load HDR texture from: {}", filePath);
+            vfLogError("Failed to load HDR texture from: {}", filePath);
             return;
         }
 
@@ -130,7 +130,7 @@ namespace core
         if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, dataSize, {}, &data);
             result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
@@ -210,7 +210,7 @@ namespace core
     {
         if (hdrData.pixels.empty())
         {
-            loggerError("HDR data is empty");
+            vfLogError("HDR data is empty");
             return;
         }
 
@@ -234,7 +234,7 @@ namespace core
         if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, dataSize, {}, &data);
             result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
@@ -316,7 +316,7 @@ namespace core
 
         if (!texturePtr || texturePtr->mipData.empty())
         {
-            loggerError("Failed to load texture from: {}", filePath);
+            vfLogError("Failed to load texture from: {}", filePath);
             return;
         }
 
@@ -346,7 +346,7 @@ namespace core
         if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data);
             result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
@@ -450,7 +450,7 @@ namespace core
     {
         if (textureData.mipData.empty())
         {
-            loggerError("Texture data is empty");
+            vfLogError("Texture data is empty");
             return;
         }
 
@@ -480,7 +480,7 @@ namespace core
         if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data);
             result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;

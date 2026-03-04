@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include <glm/glm.hpp>
 #include <imgui.h>

@@ -1,7 +1,7 @@
 #include "AnimationTimelinePanel.hpp"
 #include "AnimationEventWriter.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AnimationPreviewEvents.hpp"
+#include "events/animation/AnimationPreviewEvents.hpp"
 #include "imgui.h"
 #include "ImSequencer.h"
 #include <glm/glm.hpp>

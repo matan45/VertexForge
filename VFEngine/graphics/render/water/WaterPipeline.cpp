@@ -7,7 +7,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -43,7 +43,6 @@ namespace render::water
         createGraphicsPipeline(config);
 
         initialized = true;
-        loggerInfo("WaterPipeline: Initialized");
     }
 
     void WaterPipeline::recreate(const WaterPipelineLayoutConfig& config)
@@ -73,7 +72,7 @@ namespace render::water
         }
 
         createGraphicsPipeline(config);
-        loggerInfo("WaterPipeline: Recreated after resize");
+        vfLogInfo("WaterPipeline: Recreated after resize");
     }
 
     void WaterPipeline::cleanup()
@@ -358,7 +357,7 @@ namespace render::water
 
         dudvSampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        loggerInfo("WaterPipeline: Procedural DuDv texture created ({}x{})", texSize, texSize);
+        vfLogInfo("WaterPipeline: Procedural DuDv texture created ({}x{})", texSize, texSize);
     }
 
     void WaterPipeline::createDuDvDescriptor()

@@ -9,7 +9,7 @@
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
 
 namespace render

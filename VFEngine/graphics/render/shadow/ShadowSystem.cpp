@@ -3,7 +3,7 @@
 #include "../../core/Utilities.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::shadow
 {
@@ -21,7 +21,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowSystem::init() called when already initialized");
             return;
         }
 
@@ -131,13 +130,12 @@ namespace render::shadow
     {
         if (!initialized)
         {
-            loggerError("ShadowSystem::initShadowPass() called before init()");
+            vfLogError("ShadowSystem::initShadowPass() called before init()");
             return;
         }
 
         if (shadowPassPipeline)
         {
-            loggerWarning("ShadowSystem::initShadowPass() called when already initialized");
             return;
         }
 
@@ -175,19 +173,18 @@ namespace render::shadow
     {
         if (!initialized)
         {
-            loggerError("ShadowSystem::initTerrainShadowPass() called before init()");
+            vfLogError("ShadowSystem::initTerrainShadowPass() called before init()");
             return;
         }
 
         if (!shadowPassPipeline || !shadowPassPipeline->isInitialized())
         {
-            loggerError("ShadowSystem::initTerrainShadowPass() called before initShadowPass()");
+            vfLogError("ShadowSystem::initTerrainShadowPass() called before initShadowPass()");
             return;
         }
 
         if (terrainShadowPipeline)
         {
-            loggerWarning("ShadowSystem::initTerrainShadowPass() called when already initialized");
             return;
         }
 
@@ -195,7 +192,6 @@ namespace render::shadow
         terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
                                      shadowPassPipeline->getRenderPass());
 
-        loggerInfo("ShadowSystem: Terrain shadow pass initialized");
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
@@ -236,7 +232,7 @@ namespace render::shadow
 
         if (!allocateShadowMaps(data))
         {
-            loggerError("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
+            vfLogError("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
             return false;
         }
 
@@ -251,7 +247,7 @@ namespace render::shadow
         auto it = lightShadowData.find(entityId);
         if (it == lightShadowData.end())
         {
-            loggerWarning("ShadowSystem: Attempted to unregister unknown light {}", entityId);
+            vfLogWarning("ShadowSystem: Attempted to unregister unknown light {}", entityId);
             return;
         }
 
@@ -324,7 +320,7 @@ namespace render::shadow
             {
                 if (!atlasManager || !atlasManager->isInitialized())
                 {
-                    loggerError("ShadowSystem: Atlas manager not available for CSM allocation");
+                    vfLogError("ShadowSystem: Atlas manager not available for CSM allocation");
                     return false;
                 }
 
@@ -346,7 +342,7 @@ namespace render::shadow
                             atlasManager->free(data.views[j].handle);
                             data.views[j].handle.invalidate();
                         }
-                        loggerError("ShadowSystem: Failed to allocate CSM cascade {} in atlas", i);
+                        vfLogError("ShadowSystem: Failed to allocate CSM cascade {} in atlas", i);
                         return false;
                     }
 
@@ -367,7 +363,7 @@ namespace render::shadow
 
                 if (!handle.isValid())
                 {
-                    loggerError("ShadowSystem: Failed to allocate point cube map {}x{}", resolution, resolution);
+                    vfLogError("ShadowSystem: Failed to allocate point cube map {}x{}", resolution, resolution);
                     return false;
                 }
 

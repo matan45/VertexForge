@@ -1,6 +1,6 @@
 #include "AnimationSocketPanel.hpp"
 #include "MeshSocketWriter.hpp"
-#include "../../../services/events/SocketEvents.hpp"
+#include "../../../services/events/physics/SocketEvents.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "imgui.h"
 #include <algorithm>

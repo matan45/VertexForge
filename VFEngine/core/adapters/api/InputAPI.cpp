@@ -4,7 +4,7 @@
 #include "InputAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/InputEvents.hpp"
+#include "../../../services/events/input/InputEvents.hpp"
 
 namespace core::api
 {

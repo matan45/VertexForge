@@ -4,12 +4,12 @@
 #include "EntityComponentAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/SceneEvents.hpp"
+#include "../../../services/events/project/SceneEvents.hpp"
 #include "../../../services/events/scene/ComponentPhysicsLightEvents.hpp"
-#include "../../../services/events/MaterialEvents.hpp"
-#include "../../../services/events/ScriptingEvents.hpp"
-#include "../../../services/events/UIEvents.hpp"
-#include "../../../services/events/SocketEvents.hpp"
+#include "../../../services/events/render/MaterialEvents.hpp"
+#include "../../../services/events/scripting/ScriptingEvents.hpp"
+#include "../../../services/events/ui/UIEvents.hpp"
+#include "../../../services/events/physics/SocketEvents.hpp"
 
 namespace core::api
 {

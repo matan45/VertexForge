@@ -1,9 +1,13 @@
 #include "../handlers/RuntimeHandler.hpp"
+#include "print/Log.hpp"
 #include <iostream>
 #include <filesystem>
 
 int main(int argc, char* argv[])
 {
+    // Disable info/warning logs for shipped games
+    util::loggingEnabled = false;
+
     handlers::RuntimeHandler runtime;
 
     try

@@ -12,9 +12,9 @@
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
-#include "../../services/events/VFXEventNotifications.hpp"
+#include "../../services/events/vfx/VFXEventNotifications.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <random>
 #include <type_traits>
 #include <algorithm>
@@ -29,7 +29,7 @@ namespace controllers
             gpuBufferManager = std::make_unique<render::vfx::GPUVFXBufferManager>(device);
             if (!gpuBufferManager->init())
             {
-                loggerError("Failed to initialize GPU VFX buffer manager");
+                vfLogError("Failed to initialize GPU VFX buffer manager");
                 return false;
             }
 
@@ -37,7 +37,7 @@ namespace controllers
             gpuComputePipeline->init();
             if (!gpuComputePipeline->isInitialized())
             {
-                loggerError("Failed to initialize GPU VFX compute pipeline");
+                vfLogError("Failed to initialize GPU VFX compute pipeline");
                 return false;
             }
 
@@ -45,7 +45,7 @@ namespace controllers
             gpuRenderPipeline->init(renderPass);
             if (!gpuRenderPipeline->isInitialized())
             {
-                loggerError("Failed to initialize GPU VFX render pipeline");
+                vfLogError("Failed to initialize GPU VFX render pipeline");
                 return false;
             }
             gpuRenderPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
@@ -55,7 +55,7 @@ namespace controllers
             gpuMeshPipeline->init(renderPass);
             if (!gpuMeshPipeline->isInitialized())
             {
-                loggerError("Failed to initialize GPU VFX mesh pipeline");
+                vfLogError("Failed to initialize GPU VFX mesh pipeline");
                 return false;
             }
             gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
@@ -64,7 +64,7 @@ namespace controllers
             gpuRibbonPipeline->init(renderPass);
             if (!gpuRibbonPipeline->isInitialized())
             {
-                loggerError("Failed to initialize GPU VFX ribbon pipeline");
+                vfLogError("Failed to initialize GPU VFX ribbon pipeline");
                 return false;
             }
             gpuRibbonPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
@@ -108,14 +108,14 @@ namespace controllers
                 gpuBufferManager->getRibbonHeadBufferSize()
             );
 
-            loggerInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
+            vfLogInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
                        gpuBufferManager->getMaxParticles(),
                        gpuBufferManager->getMaxEmitters());
             return true;
         }
         catch (const std::exception& e)
         {
-            loggerError("Exception during GPU VFX initialization: {}", e.what());
+            vfLogError("Exception during GPU VFX initialization: {}", e.what());
             cleanupGPUMode();
             return false;
         }

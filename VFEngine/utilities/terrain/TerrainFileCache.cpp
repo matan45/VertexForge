@@ -1,7 +1,7 @@
 #include "TerrainFileCache.hpp"
+#include "../print/Log.hpp"
 #include "TerrainTile.hpp"
 #include "../resource/Types.hpp"
-#include "../print/EditorLogger.hpp"
 
 namespace terrain
 {

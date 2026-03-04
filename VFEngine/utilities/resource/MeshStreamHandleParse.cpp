@@ -1,5 +1,5 @@
 #include "MeshStreamHandle.hpp"
-#include "../print/EditorLogger.hpp"
+#include "../print/Log.hpp"
 #include "EndianUtils.hpp"
 #include <filesystem>
 

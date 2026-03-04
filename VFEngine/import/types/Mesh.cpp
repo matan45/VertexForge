@@ -1,7 +1,7 @@
+#include "print/Log.hpp"
 #include "Mesh.hpp"
 #include "MeshLODGenerator.hpp"
 #include "MeshSerializer.hpp"
-#include "print/EditorLogger.hpp"
 #include "resource/EndianUtils.hpp"
 
 #include <vector>

@@ -1,8 +1,8 @@
+#include "print/Log.hpp"
 #include "BRDFLUTExporter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/Types.hpp"
 #include "config/Config.hpp"
-#include "print/EditorLogger.hpp"
 #include "threading/JobSystem.hpp"
 
 #include <glm/glm.hpp>

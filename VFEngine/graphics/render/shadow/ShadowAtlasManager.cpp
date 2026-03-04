@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace render::shadow
@@ -21,7 +21,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowAtlasManager::init() called when already initialized");
             return;
         }
 
@@ -306,7 +305,7 @@ namespace render::shadow
 
         if (!found)
         {
-            loggerWarning("ShadowAtlasManager: Failed to allocate {}x{} tile - atlas full", width, height);
+            vfLogWarning("ShadowAtlasManager: Failed to allocate {}x{} tile - atlas full", width, height);
             handle.invalidate();
             return handle;
         }
@@ -357,7 +356,7 @@ namespace render::shadow
         auto it = handleToTileIndex.find(handle.atlasIndex);
         if (it == handleToTileIndex.end())
         {
-            loggerWarning("ShadowAtlasManager: Attempted to free unknown handle {}", handle.atlasIndex);
+            vfLogWarning("ShadowAtlasManager: Attempted to free unknown handle {}", handle.atlasIndex);
             return;
         }
 
@@ -453,7 +452,7 @@ namespace render::shadow
                 for (const auto& h : handles)
                     free(h);
                 handles.clear();
-                loggerError("ShadowAtlasManager: Failed to allocate cascade {} for entity {}", i, lightEntityId);
+                vfLogError("ShadowAtlasManager: Failed to allocate cascade {} for entity {}", i, lightEntityId);
                 return handles;
             }
 
@@ -500,7 +499,7 @@ namespace render::shadow
 
         if (!initialized)
         {
-            loggerWarning("ShadowAtlasManager::resize() called when not initialized");
+            vfLogWarning("ShadowAtlasManager::resize() called when not initialized");
             return result;
         }
 
@@ -580,7 +579,7 @@ namespace render::shadow
             }
             else
             {
-                loggerWarning("ShadowAtlasManager: Failed to reallocate tile {}x{} after resize",
+                vfLogWarning("ShadowAtlasManager: Failed to reallocate tile {}x{} after resize",
                              info.width, info.height);
             }
         }
@@ -589,7 +588,7 @@ namespace render::shadow
 
         if (!result.allReallocated())
         {
-            loggerWarning("ShadowAtlasManager: Resize complete with partial failure - {}/{} tiles reallocated",
+            vfLogWarning("ShadowAtlasManager: Resize complete with partial failure - {}/{} tiles reallocated",
                          result.reallocatedCount, result.requestedCount);
         }
 

@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Texture.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -55,7 +55,7 @@ namespace render::vfx
         {
             if (!texturePath.empty())
             {
-                loggerWarning("VFX ribbon preview texture not found: {}", texturePath);
+                vfLogWarning("VFX ribbon preview texture not found: {}", texturePath);
             }
             updateDescriptorSet();
             return;
@@ -69,7 +69,7 @@ namespace render::vfx
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX ribbon preview texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX ribbon preview texture '{}': {}", texturePath, e.what());
             customTexture.reset();
             currentTexturePath.clear();
         }

@@ -1,8 +1,8 @@
 #include "ColliderDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/PhysicsSettingsEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 

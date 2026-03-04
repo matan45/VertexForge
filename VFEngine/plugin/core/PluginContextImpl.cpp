@@ -1,10 +1,10 @@
+#include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/ScriptingEvents.hpp"
-#include "events/RenderHookEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
+#include "events/render/RenderHookEvents.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "Pipeline.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <algorithm>

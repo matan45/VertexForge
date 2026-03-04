@@ -1,5 +1,5 @@
 #include "AudioSourceManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace core::audio {
@@ -32,7 +32,7 @@ namespace core::audio {
                 sourcePool.push_back(std::move(source));
                 freeIndices.push_back(startIndex + i);
             } else {
-                loggerWarning("Failed to create audio source in pool");
+                vfLogWarning("Failed to create audio source in pool");
             }
         }
     }
@@ -47,7 +47,7 @@ namespace core::audio {
         }
 
         if (freeIndices.empty()) {
-            loggerError("Failed to acquire audio source - pool exhausted");
+            vfLogError("Failed to acquire audio source - pool exhausted");
             return InvalidAudioHandle;
         }
 

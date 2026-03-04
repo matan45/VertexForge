@@ -5,7 +5,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 #include <algorithm>
 
@@ -310,14 +310,14 @@ namespace render::billboard
 
         if (customTextureCache.size() >= MAX_CUSTOM_TEXTURES)
         {
-            loggerWarning("Billboard custom texture limit reached ({}), cannot load: {}",
+            vfLogWarning("Billboard custom texture limit reached ({}), cannot load: {}",
                           MAX_CUSTOM_TEXTURES, texturePath);
             return false;
         }
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("Billboard texture file not found: {}", texturePath);
+            vfLogWarning("Billboard texture file not found: {}", texturePath);
             return false;
         }
 
@@ -326,7 +326,7 @@ namespace render::billboard
 
         if (!texture->getImageView())
         {
-            loggerError("Failed to load billboard texture: {}", texturePath);
+            vfLogError("Failed to load billboard texture: {}", texturePath);
             return false;
         }
 
@@ -343,7 +343,7 @@ namespace render::billboard
         entry.descriptorSet = newDescSet;
         customTextureCache.emplace(texturePath, std::move(entry));
 
-        loggerInfo("Billboard custom texture loaded: {}", texturePath);
+        vfLogInfo("Billboard custom texture loaded: {}", texturePath);
         return true;
     }
 

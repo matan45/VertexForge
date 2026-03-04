@@ -139,9 +139,8 @@
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="physics\PhysicsAnimationAsset.hpp" />
     <ClInclude Include="postprocess\PostProcessTypes.hpp" />
-    <ClInclude Include="print\EditorLogger.hpp" />
+    <ClInclude Include="print\Log.hpp" />
     <ClInclude Include="print\LogEntry.hpp" />
-    <ClInclude Include="print\Logger.hpp" />
     <ClInclude Include="rendertexture\RenderTextureTypes.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />

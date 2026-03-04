@@ -8,7 +8,7 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 
 namespace render::vfx
@@ -38,14 +38,14 @@ namespace render::vfx
             loadShader();
             if (!ribbonShader || ribbonShader->getShaderStages().empty())
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to load shader");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to load shader");
                 return;
             }
 
             createRenderPass();
             if (!renderPass)
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to create render pass");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to create render pass");
                 cleanUp();
                 return;
             }
@@ -53,7 +53,7 @@ namespace render::vfx
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to create descriptor set layout");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to create descriptor set layout");
                 cleanUp();
                 return;
             }
@@ -61,7 +61,7 @@ namespace render::vfx
             createDescriptorPool();
             if (!descriptorPool)
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to create descriptor pool");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to create descriptor pool");
                 cleanUp();
                 return;
             }
@@ -69,7 +69,7 @@ namespace render::vfx
             createBuffers();
             if (!cameraUBO || !instanceBuffer)
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to create buffers");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to create buffers");
                 cleanUp();
                 return;
             }
@@ -81,7 +81,7 @@ namespace render::vfx
 
             if (!graphicsPipeline || !pipelineLayout)
             {
-                loggerError("VFXRibbonPreviewPipeline: Failed to create graphics pipeline");
+                vfLogError("VFXRibbonPreviewPipeline: Failed to create graphics pipeline");
                 cleanUp();
                 return;
             }
@@ -89,16 +89,15 @@ namespace render::vfx
             createFramebuffers();
 
             initialized = true;
-            loggerInfo("VFXRibbonPreviewPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("VFXRibbonPreviewPipeline: Vulkan error during init - {}", e.what());
+            vfLogError("VFXRibbonPreviewPipeline: Vulkan error during init - {}", e.what());
             cleanUp();
         }
         catch (const std::exception& e)
         {
-            loggerError("VFXRibbonPreviewPipeline: Exception during init - {}", e.what());
+            vfLogError("VFXRibbonPreviewPipeline: Exception during init - {}", e.what());
             cleanUp();
         }
     }

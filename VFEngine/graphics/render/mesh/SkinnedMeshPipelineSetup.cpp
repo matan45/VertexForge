@@ -5,7 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::mesh
 {
@@ -185,7 +185,7 @@ namespace render::mesh
         vk::Result result = device.getLogicalDevice().mapMemory(boneSSBOMemory, 0, bufferSize, {}, &boneSSBOMapped);
         if (result != vk::Result::eSuccess)
         {
-            loggerError("Failed to map bone SSBO memory");
+            vfLogError("Failed to map bone SSBO memory");
             boneSSBOMapped = nullptr;
         }
         else

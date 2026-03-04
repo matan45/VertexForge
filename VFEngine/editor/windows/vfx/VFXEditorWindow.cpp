@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "VFXEditorWindow.hpp"
 #include "VFXPreviewPanel.hpp"
 #include "../../graph/VFXGraphEditor.hpp"
@@ -6,9 +7,8 @@
 #include <vfx/VFXModifierConfigLoader.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
 #include <vfx/VFXShapeConfigLoader.hpp>
-#include <providers/IVFXPreviewProvider.hpp>
+#include <providers/vfx/IVFXPreviewProvider.hpp>
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 #include <algorithm>
 

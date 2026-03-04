@@ -4,7 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::text
 {
@@ -160,7 +160,7 @@ namespace render::text
 
         if (fontDescriptorSets.size() >= MAX_FONT_DESCRIPTORS)
         {
-            loggerWarning("Text font descriptor limit reached ({})", MAX_FONT_DESCRIPTORS);
+            vfLogWarning("Text font descriptor limit reached ({})", MAX_FONT_DESCRIPTORS);
             return defaultDescriptorSet;
         }
 

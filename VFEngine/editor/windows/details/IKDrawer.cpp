@@ -1,6 +1,6 @@
 #include "IKDrawer.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/IKEvents.hpp"
+#include "events/physics/IKEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "components/Components.hpp"

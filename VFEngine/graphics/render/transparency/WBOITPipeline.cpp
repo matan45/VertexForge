@@ -4,7 +4,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::transparency
 {
@@ -31,11 +31,10 @@ namespace render::transparency
         createCompositePipeline();
         if (!compositePipeline)
         {
-            loggerError("WBOITPipeline: Initialization failed - composite pipeline not created");
+            vfLogError("WBOITPipeline: Initialization failed - composite pipeline not created");
             return;
         }
         initialized = true;
-        loggerInfo("WBOITPipeline: Initialized");
     }
 
     void WBOITPipeline::cleanup()
@@ -419,7 +418,7 @@ namespace render::transparency
         const auto& stages = shader.getShaderStages();
         if (stages.size() < 2)
         {
-            loggerError("WBOITPipeline: Failed to load composite shader");
+            vfLogError("WBOITPipeline: Failed to load composite shader");
             return;
         }
 
@@ -489,7 +488,7 @@ namespace render::transparency
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("WBOITPipeline: Failed to create composite pipeline");
+            vfLogError("WBOITPipeline: Failed to create composite pipeline");
             return;
         }
         compositePipeline = result.value;

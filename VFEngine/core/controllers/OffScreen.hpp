@@ -6,7 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
-#include "providers/IOffScreenProvider.hpp"
+#include "providers/render/IOffScreenProvider.hpp"
 #include "types/CameraTypes.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"

@@ -2,8 +2,8 @@
 #include "physics/PhysicsAnimationAsset.hpp"
 #include "nfd/FileDialog.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/PhysicsSettingsEvents.hpp"
-#include "events/ResourceEvents.hpp"
+#include "events/physics/PhysicsSettingsEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>

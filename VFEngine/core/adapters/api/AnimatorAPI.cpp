@@ -3,7 +3,7 @@
 #include "AnimatorAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AnimatorEvents.hpp"
+#include "events/animation/AnimatorEvents.hpp"
 
 namespace core::api
 {

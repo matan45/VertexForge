@@ -1,7 +1,7 @@
 #include "LightBVHManager.hpp"
-#include "../../../services/events/SceneEvents.hpp"
-#include "../../../services/events/LightCullingEvents.hpp"
-#include "../../../services/events/EditorModeEvents.hpp"
+#include "../../../services/events/project/SceneEvents.hpp"
+#include "../../../services/events/render/LightCullingEvents.hpp"
+#include "../../../services/events/editor/EditorModeEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 

@@ -4,7 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "material/MaterialTypes.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <functional>
 
 namespace render::mesh
@@ -85,7 +85,7 @@ namespace render::mesh
         if (!success || outData.shader->getShaderStages().empty())
         {
             lastCompilationError = outData.shader->getLastCompilationError();
-            loggerError("Failed to compile material shader: {}", materialPath);
+            vfLogError("Failed to compile material shader: {}", materialPath);
             return false;
         }
         
@@ -96,12 +96,12 @@ namespace render::mesh
         
         if (!createPipelines(outData))
         {
-            loggerError("Failed to create pipeline for material: {}", materialPath);
+            vfLogError("Failed to create pipeline for material: {}", materialPath);
             return false;
         }
 
         outData.valid = true;
-        loggerInfo("Compiled and cached material shader: {}", materialPath);
+        vfLogInfo("Compiled and cached material shader: {}", materialPath);
         return true;
     }
 
@@ -137,7 +137,7 @@ namespace render::mesh
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to create material pipeline: {}", e.what());
+            vfLogError("Failed to create material pipeline: {}", e.what());
             return false;
         }
     }
@@ -158,7 +158,7 @@ namespace render::mesh
                 it->second.shader->cleanUp();
 
             cache.erase(it);
-            loggerInfo("Invalidated material shader cache: {}", materialPath);
+            vfLogInfo("Invalidated material shader cache: {}", materialPath);
         }
     }
 
@@ -180,7 +180,7 @@ namespace render::mesh
         }
 
         cache.clear();
-        loggerInfo("Invalidated all material shader caches");
+        vfLogInfo("Invalidated all material shader caches");
     }
 
     void MaterialShaderCache::cleanUp()

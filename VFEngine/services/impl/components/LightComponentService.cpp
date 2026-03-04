@@ -4,8 +4,8 @@
 #include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/SceneEvents.hpp"
-#include "../../events/LightCullingEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
+#include "../../events/render/LightCullingEvents.hpp"
 #include <algorithm>
 
 namespace services {

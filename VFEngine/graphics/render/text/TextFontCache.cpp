@@ -5,7 +5,7 @@
 #include "../../core/Utilities.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::text
 {
@@ -185,16 +185,16 @@ namespace render::text
                 {
                     if (uploadFontAtlas(path, fontData))
                     {
-                        loggerInfo("Text font loaded: {}", path);
+                        vfLogInfo("Text font loaded: {}", path);
                     }
                     else
                     {
-                        loggerError("Failed to upload font atlas: {}", path);
+                        vfLogError("Failed to upload font atlas: {}", path);
                     }
                 }
                 else
                 {
-                    loggerError("Failed to load font: {}", path);
+                    vfLogError("Failed to load font: {}", path);
                 }
                 completed.push_back(path);
             }

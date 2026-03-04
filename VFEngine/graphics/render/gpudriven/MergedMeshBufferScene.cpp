@@ -1,7 +1,7 @@
 #include "MergedMeshBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "resource/ResourceManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <glm/gtc/packing.hpp>
 #include <cmath>
@@ -282,7 +282,7 @@ namespace render::gpudriven
 
                 if (currentObjectCount >= maxObjectCount)
                 {
-                    loggerWarning("MergedMeshBuffer: max object count reached");
+                    vfLogWarning("MergedMeshBuffer: max object count reached");
                     return;
                 }
 

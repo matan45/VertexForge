@@ -1,5 +1,7 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
+#include "events/EventDispatcher.hpp"
+#include <string>
 
 namespace windows
 {
@@ -21,6 +23,9 @@ namespace windows
     {
     private:
         nfd::FileDialog fileDialog;
+        std::string currentSceneName;
+        events::SubscriptionToken sceneLoadedToken;
+        events::SubscriptionToken sceneClearedToken;
 
         IBLWindow* iblWindow = nullptr;
         EditorCameraWindow* editorCameraWindow = nullptr;
@@ -37,6 +42,8 @@ namespace windows
         LightBakeWindow* lightBakeWindow = nullptr;
 
     public:
+        MainMenuBar();
+        ~MainMenuBar();
         void draw();
 
         void setWindows(IBLWindow* ibl, EditorCameraWindow* camera,

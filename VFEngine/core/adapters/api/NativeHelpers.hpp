@@ -6,7 +6,7 @@
 #include "../../../services/data/EntityHandle.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "print/EditorLogger.hpp"
+#include "print/Log.hpp"
 
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>

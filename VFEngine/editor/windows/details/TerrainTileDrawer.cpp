@@ -1,7 +1,7 @@
 #include "TerrainTileDrawer.hpp"
-#include "../EntityDetailsPanel.hpp"
+#include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/TerrainEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details {

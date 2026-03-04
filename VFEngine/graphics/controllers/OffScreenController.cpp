@@ -12,9 +12,9 @@
 #include "offscreen/FramePreparationSystem.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/MaterialEvents.hpp"
-#include "../../services/events/TerrainEvents.hpp"
-#include "../../services/events/WaterEvents.hpp"
+#include "../../services/events/render/MaterialEvents.hpp"
+#include "../../services/events/terrain/TerrainEvents.hpp"
+#include "../../services/events/terrain/WaterEvents.hpp"
 
 namespace controllers
 {

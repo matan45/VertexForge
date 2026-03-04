@@ -4,8 +4,7 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/AnimationPreviewEvents.hpp"
-#include "print/EditorLogger.hpp"
+#include "events/animation/AnimationPreviewEvents.hpp"
 #include <filesystem>
 #include <cmath>
 

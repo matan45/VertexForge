@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 #include <optional>
-#include "../../../services/providers/IOffScreenProvider.hpp"
+#include "../../../services/providers/render/IOffScreenProvider.hpp"
 
 namespace render
 {

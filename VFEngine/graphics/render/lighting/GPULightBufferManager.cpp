@@ -1,7 +1,7 @@
 #include "GPULightBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cstring>
 
 namespace render::lighting
@@ -27,7 +27,7 @@ namespace render::lighting
         cpuPointLights.resize(LightConstants::MAX_POINT_LIGHTS);
         cpuSpotLights.resize(LightConstants::MAX_SPOT_LIGHTS);
 
-        loggerInfo("GPULightBufferManager: Initializing with max {} directional, {} point, {} spot lights",
+        vfLogInfo("GPULightBufferManager: Initializing with max {} directional, {} point, {} spot lights",
                    LightConstants::MAX_DIRECTIONAL_LIGHTS,
                    LightConstants::MAX_POINT_LIGHTS,
                    LightConstants::MAX_SPOT_LIGHTS);
@@ -39,7 +39,6 @@ namespace render::lighting
         updateDescriptors();
 
         initialized = true;
-        loggerInfo("GPULightBufferManager: Initialized successfully");
     }
 
     void GPULightBufferManager::cleanup()
@@ -71,7 +70,6 @@ namespace render::lighting
         cpuSpotLights.clear();
 
         initialized = false;
-        loggerInfo("GPULightBufferManager: Cleaned up");
     }
 
     void GPULightBufferManager::createBuffers()
@@ -142,7 +140,6 @@ namespace render::lighting
             std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
         }
 
-        loggerInfo("GPULightBufferManager: Created light buffers");
     }
 
     void GPULightBufferManager::destroyBuffers()
@@ -222,7 +219,6 @@ namespace render::lighting
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        loggerInfo("GPULightBufferManager: Created descriptor set layout");
     }
 
     void GPULightBufferManager::createDescriptorPool()
@@ -241,7 +237,6 @@ namespace render::lighting
         poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        loggerInfo("GPULightBufferManager: Created descriptor pool");
     }
 
     void GPULightBufferManager::allocateDescriptorSet()
@@ -256,7 +251,6 @@ namespace render::lighting
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        loggerInfo("GPULightBufferManager: Allocated descriptor set");
     }
 
     void GPULightBufferManager::updateDescriptors()

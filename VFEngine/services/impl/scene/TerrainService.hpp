@@ -1,12 +1,12 @@
 #pragma once
-#include "../../interfaces/ITerrainService.hpp"
+#include "../../interfaces/terrain/ITerrainService.hpp"
 #include "../../data/EntityHandle.hpp"
-#include "../../events/TerrainEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "math/Frustum.hpp"
-#include "../../providers/ITerrainBrushComputeProvider.hpp"
-#include "../../providers/IPhysicsProvider.hpp"
+#include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include <glm/glm.hpp>

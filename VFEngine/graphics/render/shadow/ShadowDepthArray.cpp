@@ -1,7 +1,7 @@
 #include "ShadowDepthArray.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <stdexcept>
 
 namespace render::shadow
@@ -62,7 +62,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowDepthArray::init() called when already initialized");
             return;
         }
 

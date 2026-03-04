@@ -1,7 +1,6 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
-#include "../print/EditorLogger.hpp"
 
 // Helper to clean null terminators from strings
 static void cleanNullTerminators(std::string& str)

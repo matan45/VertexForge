@@ -1,5 +1,4 @@
 #include "TerrainTileGenerator.hpp"
-#include "../print/EditorLogger.hpp"
 #include <algorithm>
 #include <cmath>
 #include <meshoptimizer.h>

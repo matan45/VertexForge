@@ -1,0 +1,66 @@
+#include "RuntimeBootstrap.hpp"
+#include "../../controllers/CoreInterface.hpp"
+#include "../../controllers/OffScreen.hpp"
+#include "../../adapters/audio/AudioAdapter.hpp"
+#include "../../adapters/scripting/ScriptingAdapter.hpp"
+#include "../../adapters/physics/PhysicsAdapter.hpp"
+#include "../../adapters/navmesh/NavmeshAdapter.hpp"
+#include "../../adapters/render/OffScreenAdapter.hpp"
+#include "../../adapters/physics/SocketAdapter.hpp"
+#include "../../adapters/animation/AnimatorAdapter.hpp"
+#include "../../adapters/physics/IKAdapter.hpp"
+#include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
+#include "../../adapters/render/PostProcessAdapter.hpp"
+#include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/render/RenderTextureAdapter.hpp"
+#include "../../adapters/render/DebugDrawAdapter.hpp"
+
+namespace core
+{
+    void RuntimeBootstrap::cleanUp()
+    {
+        if (offScreen)
+        {
+            offScreen->cleanUp();
+        }
+
+        if (audioAdapter)
+        {
+            audioAdapter->cleanUp();
+        }
+
+        if (scriptingAdapter)
+        {
+            scriptingAdapter->cleanUp();
+        }
+
+        if (physicsAdapter)
+        {
+            physicsAdapter->cleanUp();
+        }
+
+        if (navmeshAdapter)
+        {
+            navmeshAdapter->cleanUp();
+        }
+
+        renderTextureAdapter.reset();
+        debugDrawAdapter.reset();
+        postProcessAdapter.reset();
+        waterRenderAdapter.reset();
+        vfxRuntimeAdapter.reset();
+        offScreenAdapter.reset();
+        audioAdapter.reset();
+        scriptingAdapter.reset();
+        physicsAdapter.reset();
+        navmeshAdapter.reset();
+        socketAdapter.reset();
+        animatorAdapter.reset();
+        ikAdapter.reset();
+
+        if (coreInterface)
+        {
+            coreInterface->cleanUp();
+        }
+    }
+}

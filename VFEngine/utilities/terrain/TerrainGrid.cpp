@@ -1,6 +1,6 @@
+#include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../threading/JobSystem.hpp"
-#include "../print/EditorLogger.hpp"
 #include <algorithm>
 
 namespace terrain

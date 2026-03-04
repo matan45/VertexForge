@@ -1,5 +1,5 @@
 #include "PathResolver.hpp"
-#include "../print/EditorLogger.hpp"
+#include "../print/Log.hpp"
 
 namespace resource
 {

@@ -1,7 +1,7 @@
 #include "BoneMatrixManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUDrivenTypes.hpp"
 #include <algorithm>
 
@@ -29,7 +29,7 @@ namespace render::gpudriven
         cpuBoneMatrices.resize(maxBoneMatrices, glm::mat4(1.0f));
         boneAllocator.reset(maxBoneMatrices);
 
-        loggerInfo("BoneMatrixManager: Initializing with {} max bone matrices ({} MB)",
+        vfLogInfo("BoneMatrixManager: Initializing with {} max bone matrices ({} MB)",
                    maxBoneMatrices, (maxBoneMatrices * sizeof(glm::mat4)) / (1024 * 1024));
 
         createBuffers();
@@ -44,7 +44,6 @@ namespace render::gpudriven
         initializeGPUBuffer();
 
         initialized = true;
-        loggerInfo("BoneMatrixManager: Initialized successfully, allocator starts at usedCount=0");
     }
 
     void BoneMatrixManager::cleanup()
@@ -76,7 +75,6 @@ namespace render::gpudriven
         cpuBoneMatrices.clear();
 
         initialized = false;
-        loggerInfo("BoneMatrixManager: Cleaned up");
     }
 
     void BoneMatrixManager::createBuffers()
@@ -106,7 +104,7 @@ namespace render::gpudriven
             stagingMapped = logicalDevice.mapMemory(stagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        loggerInfo("BoneMatrixManager: Created bone buffers ({} MB each)",
+        vfLogInfo("BoneMatrixManager: Created bone buffers ({} MB each)",
                    bufferSize / (1024 * 1024));
     }
 
@@ -161,7 +159,6 @@ namespace render::gpudriven
 
         vkDevice.freeCommandBuffers(cmdPool, 1, &commandBuffer);
 
-        loggerInfo("BoneMatrixManager: Initialized GPU buffer with identity matrices");
     }
 
     void BoneMatrixManager::createDescriptorSetLayout()
@@ -182,7 +179,6 @@ namespace render::gpudriven
         layoutInfo.pBindings = &boneBinding;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        loggerInfo("BoneMatrixManager: Created descriptor set layout");
     }
 
     void BoneMatrixManager::createDescriptorPool()
@@ -199,7 +195,6 @@ namespace render::gpudriven
         poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        loggerInfo("BoneMatrixManager: Created descriptor pool");
     }
 
     void BoneMatrixManager::allocateDescriptorSet()
@@ -214,7 +209,6 @@ namespace render::gpudriven
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        loggerInfo("BoneMatrixManager: Allocated descriptor set");
     }
 
     void BoneMatrixManager::updateDescriptor()
@@ -241,7 +235,7 @@ namespace render::gpudriven
     {
         if (!initialized)
         {
-            loggerError("BoneMatrixManager: Cannot allocate before initialization");
+            vfLogError("BoneMatrixManager: Cannot allocate before initialization");
             return INVALID_BONE_OFFSET;
         }
 
@@ -257,7 +251,7 @@ namespace render::gpudriven
 
         if (boneCount == 0 || boneCount > MAX_BONES_PER_OBJECT)
         {
-            loggerWarning("BoneMatrixManager: Invalid bone count {} (max {})",
+            vfLogWarning("BoneMatrixManager: Invalid bone count {} (max {})",
                           boneCount, MAX_BONES_PER_OBJECT);
             return INVALID_BONE_OFFSET;
         }
@@ -265,7 +259,7 @@ namespace render::gpudriven
         uint32_t offset = boneAllocator.allocate(boneCount);
         if (offset == FreeListAllocator::ALLOCATION_FAILED)
         {
-            loggerError("BoneMatrixManager: Failed to allocate {} bone matrices", boneCount);
+            vfLogError("BoneMatrixManager: Failed to allocate {} bone matrices", boneCount);
             return INVALID_BONE_OFFSET;
         }
 
@@ -278,7 +272,7 @@ namespace render::gpudriven
 
         allocations[entity] = data;
 
-        loggerInfo("BoneMatrixManager: Allocated {} bones at offset {} for entity {}",
+        vfLogInfo("BoneMatrixManager: Allocated {} bones at offset {} for entity {}",
                    boneCount, offset, static_cast<uint32_t>(entity));
 
         return offset;
@@ -301,7 +295,7 @@ namespace render::gpudriven
             dirtyEntities.erase(dirtyIt);
         }
 
-        loggerInfo("BoneMatrixManager: Freed bone allocation for entity {}",
+        vfLogInfo("BoneMatrixManager: Freed bone allocation for entity {}",
                    static_cast<uint32_t>(entity));
     }
 
@@ -325,7 +319,7 @@ namespace render::gpudriven
         auto it = allocations.find(entity);
         if (it == allocations.end())
         {
-            loggerWarning("BoneMatrixManager: No allocation for entity {}", static_cast<uint32_t>(entity));
+            vfLogWarning("BoneMatrixManager: No allocation for entity {}", static_cast<uint32_t>(entity));
             return;
         }
 
@@ -333,7 +327,7 @@ namespace render::gpudriven
 
         if (matrices.size() > data.boneCount)
         {
-            loggerWarning("BoneMatrixManager: Matrix count {} exceeds allocation {} for entity {}",
+            vfLogWarning("BoneMatrixManager: Matrix count {} exceeds allocation {} for entity {}",
                           matrices.size(), data.boneCount, static_cast<uint32_t>(entity));
             return;
         }

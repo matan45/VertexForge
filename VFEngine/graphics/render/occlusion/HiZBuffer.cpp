@@ -3,7 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -35,7 +35,7 @@ namespace render::occlusion
         createDescriptorSets();
 
         initialized = true;
-        loggerInfo("Hi-Z buffer initialized: {}x{} with {} mip levels", width, height, mipLevels);
+        vfLogInfo("Hi-Z buffer initialized: {}x{} with {} mip levels", width, height, mipLevels);
     }
 
     void HiZBuffer::createHiZImage()
@@ -159,7 +159,7 @@ namespace render::occlusion
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("Failed to load Hi-Z compute shader: {}", shader->getLastCompilationError());
+            vfLogError("Failed to load Hi-Z compute shader: {}", shader->getLastCompilationError());
             return;
         }
 

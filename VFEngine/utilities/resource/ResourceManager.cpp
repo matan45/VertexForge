@@ -1,4 +1,5 @@
 #include "ResourceManager.hpp"
+#include "../print/Log.hpp"
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
 #include "FontResource.hpp"

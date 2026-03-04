@@ -3,7 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace render::mesh
@@ -12,14 +12,14 @@ namespace render::mesh
     {
         if (meshPath.empty())
         {
-            loggerError("Empty mesh path");
+            vfLogError("Empty mesh path");
             return false;
         }
 
         auto meshData = resource::MeshStreamResource::loadAll(meshPath);
         if (meshData.meshes.empty())
         {
-            loggerError("Failed to load mesh from: {}", meshPath);
+            vfLogError("Failed to load mesh from: {}", meshPath);
             return false;
         }
 
@@ -52,7 +52,7 @@ namespace render::mesh
             }
         }
 
-        loggerInfo("Loaded mesh from file '{}': {} vertices, {} indices, {} bones",
+        vfLogInfo("Loaded mesh from file '{}': {} vertices, {} indices, {} bones",
                    meshPath, totalVertices, totalIndices, meshData.skeleton.bones.size());
 
         return true;
@@ -76,7 +76,7 @@ namespace render::mesh
         {
             if (meshData.lodLevels.empty() || meshData.lodLevels[0].vertices.empty())
             {
-                loggerWarning("Skipping empty submesh in skinned mesh");
+                vfLogWarning("Skipping empty submesh in skinned mesh");
                 continue;
             }
 
@@ -275,7 +275,7 @@ namespace render::mesh
     {
         if (!boneSSBOMapped)
         {
-            loggerError("updateBoneMatrices: boneSSBOMapped is null!");
+            vfLogError("updateBoneMatrices: boneSSBOMapped is null!");
             return;
         }
 
@@ -284,7 +284,7 @@ namespace render::mesh
             static bool warnedOnce = false;
             if (!warnedOnce)
             {
-                loggerWarning("Bone count ({}) exceeds MAX_BONES ({}). Excess bones will be ignored. "
+                vfLogWarning("Bone count ({}) exceeds MAX_BONES ({}). Excess bones will be ignored. "
                               "Consider increasing MAX_BONES or simplifying the skeleton.",
                               boneMatrices.size(), MAX_BONES);
                 warnedOnce = true;

@@ -1,5 +1,5 @@
+#include "print/Log.hpp"
 #include "AnimatorStateMachine.hpp"
-#include "print/EditorLogger.hpp"
 #include <algorithm>
 
 namespace animation

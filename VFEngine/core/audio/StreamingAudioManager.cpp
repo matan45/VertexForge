@@ -1,5 +1,5 @@
 #include "StreamingAudioManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace core::audio {
@@ -19,7 +19,7 @@ namespace core::audio {
         auto source = std::make_unique<StreamingAudioSource>();
 
         if (!source->open(path, streamConfig)) {
-            loggerError("Failed to open streaming audio: {}", path);
+            vfLogError("Failed to open streaming audio: {}", path);
             return InvalidAudioHandle;
         }
 

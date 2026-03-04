@@ -1,6 +1,6 @@
 #include "MainImguiWindow.hpp"
-#include "events/SceneEvents.hpp"
-#include "events/ApplicationEvents.hpp"
+#include "events/project/SceneEvents.hpp"
+#include "events/project/ApplicationEvents.hpp"
 #include <imgui.h>
 
 namespace windows

@@ -5,7 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace
@@ -140,7 +140,7 @@ namespace render::gpudriven
 
         if (!emptyDescriptorSet5)
         {
-            loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor set!");
+            vfLogError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor set!");
         }
     }
 
@@ -246,7 +246,6 @@ namespace render::gpudriven
                                       shadowDataLayout, shadowTextureLayout, renderPass);
 
         initialized = true;
-        loggerInfo("TerrainMeshShaderPipeline: Initialized successfully");
     }
 
     void TerrainMeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
@@ -293,7 +292,7 @@ namespace render::gpudriven
                                       cullingOutputLayout, shadowDataLayout,
                                       shadowTextureLayout, renderPass);
 
-        loggerInfo("TerrainMeshShaderPipeline: Recreated pipeline with updated viewport");
+        vfLogInfo("TerrainMeshShaderPipeline: Recreated pipeline with updated viewport");
     }
 
     void TerrainMeshShaderPipeline::cleanupDescriptorResources()
@@ -401,7 +400,7 @@ namespace render::gpudriven
         tileDataBufferMapped = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
         std::memset(tileDataBufferMapped, 0, bufferSize);
 
-        loggerInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
+        vfLogInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
                    maxTileCount, bufferSize);
     }
 
@@ -420,7 +419,6 @@ namespace render::gpudriven
         std::memset(data, 0, sizeof(TerrainCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);
 
-        loggerInfo("TerrainMeshShaderPipeline: Created culling stats buffer");
     }
 
     void TerrainMeshShaderPipeline::createTerrainDataDescriptor()
@@ -462,7 +460,6 @@ namespace render::gpudriven
 
         writeTerrainDataDescriptors(vkDevice, terrainDataDescriptorSet, tileDataBuffer, statsBuffer);
 
-        loggerInfo("TerrainMeshShaderPipeline: Created terrain data descriptor");
     }
 
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
@@ -474,7 +471,7 @@ namespace render::gpudriven
         const auto& stages = terrainShader->getShaderStages();
         if (stages.size() < 3)
         {
-            loggerError("TerrainMeshShaderPipeline: Failed to load shaders (need Task + Mesh + Fragment): {}",
+            vfLogError("TerrainMeshShaderPipeline: Failed to load shaders (need Task + Mesh + Fragment): {}",
                         terrainShader->getLastCompilationError());
             return false;
         }
@@ -489,7 +486,7 @@ namespace render::gpudriven
 
         if (!hasTask || !hasMesh || !hasFrag)
         {
-            loggerError("TerrainMeshShaderPipeline: Missing shader stages (Task={}, Mesh={}, Fragment={})",
+            vfLogError("TerrainMeshShaderPipeline: Missing shader stages (Task={}, Mesh={}, Fragment={})",
                         hasTask, hasMesh, hasFrag);
             return false;
         }
@@ -562,11 +559,10 @@ namespace render::gpudriven
         {
             auto result = core::PipelineUtilities::createMeshShaderPipeline(config);
             graphicsPipeline = result.pipeline;
-            loggerInfo("TerrainMeshShaderPipeline: Created graphics pipeline successfully");
         }
         catch (const std::exception& e)
         {
-            loggerError("TerrainMeshShaderPipeline: Failed to create pipeline - {}", e.what());
+            vfLogError("TerrainMeshShaderPipeline: Failed to create pipeline - {}", e.what());
         }
     }
 
@@ -580,7 +576,7 @@ namespace render::gpudriven
 
         if (tiles.size() > maxTileCount)
         {
-            loggerWarning("TerrainMeshShaderPipeline: Tile count {} exceeds max {}, truncating",
+            vfLogWarning("TerrainMeshShaderPipeline: Tile count {} exceeds max {}, truncating",
                           tiles.size(), maxTileCount);
         }
 
@@ -708,7 +704,7 @@ namespace render::gpudriven
                 hasCriticalMissing = true;
                 if (!warnedMissing)
                 {
-                    loggerWarning("TerrainMeshShaderPipeline: {} is NULL!", name);
+                    vfLogWarning("TerrainMeshShaderPipeline: {} is NULL!", name);
                 }
             }
         }
@@ -719,7 +715,7 @@ namespace render::gpudriven
             static bool warnedAbort = false;
             if (!warnedAbort)
             {
-                loggerWarning("TerrainMeshShaderPipeline: Aborting dispatch - missing critical descriptor sets.");
+                vfLogWarning("TerrainMeshShaderPipeline: Aborting dispatch - missing critical descriptor sets.");
                 warnedAbort = true;
             }
         }

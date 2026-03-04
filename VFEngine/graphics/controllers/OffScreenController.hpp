@@ -1,6 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
-#include "../../services/providers/IOffScreenProvider.hpp"
+#include "../../services/providers/render/IOffScreenProvider.hpp"
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "terrain/TerrainHitResult.hpp"

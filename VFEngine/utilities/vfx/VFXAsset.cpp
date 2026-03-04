@@ -1,5 +1,5 @@
+#include "../print/Log.hpp"
 #include "VFXAsset.hpp"
-#include "../print/EditorLogger.hpp"
 #include "../uuid/UUID.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>

@@ -1,6 +1,6 @@
+#include "print/Log.hpp"
 #include "Pipeline.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace pipeline
 {

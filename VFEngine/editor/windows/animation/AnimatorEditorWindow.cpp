@@ -1,6 +1,6 @@
+#include "print/Log.hpp"
 #include "AnimatorEditorWindow.hpp"
 #include "animator/AnimatorAsset.hpp"
-#include "print/EditorLogger.hpp"
 #include "imgui.h"
 #include <filesystem>
 

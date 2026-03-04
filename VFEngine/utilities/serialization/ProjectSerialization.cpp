@@ -1,6 +1,6 @@
 #include "ProjectSerialization.hpp"
+#include "../print/Log.hpp"
 #include "../config/Config.hpp"
-#include "../print/EditorLogger.hpp"
 #include <fstream>
 #include <chrono>
 #include <iomanip>

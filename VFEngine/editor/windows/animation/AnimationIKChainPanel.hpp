@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "animator/IKTypes.hpp"
 #include <vector>
 #include <string>

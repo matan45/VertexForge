@@ -3,7 +3,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/GroupFilterTable.h>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core::physics
 {
@@ -25,7 +25,7 @@ namespace core::physics
 
         if (entityRagdolls.find(entityId) != entityRagdolls.end())
         {
-            loggerWarning("Entity {}: Ragdoll already exists, destroying first", entityId);
+            vfLogWarning("Entity {}: Ragdoll already exists, destroying first", entityId);
             destroyRagdoll(entityId);
         }
 
@@ -33,7 +33,7 @@ namespace core::physics
         JPH::Ragdoll* ragdoll = buildResult.settings->CreateRagdoll(groupId, entityId, physicsSystem.get());
         if (!ragdoll)
         {
-            loggerError("Entity {}: Failed to create ragdoll instance", entityId);
+            vfLogError("Entity {}: Failed to create ragdoll instance", entityId);
             return false;
         }
 
@@ -202,7 +202,7 @@ namespace core::physics
             }
             else
             {
-                loggerWarning("Entity {}: Failed to create kinematic bone body {}", entityId, i);
+                vfLogWarning("Entity {}: Failed to create kinematic bone body {}", entityId, i);
                 boneBodies.push_back(JPH::BodyID());
             }
         }

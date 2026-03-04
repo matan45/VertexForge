@@ -4,7 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::vfx
 {
@@ -33,21 +33,21 @@ namespace render::vfx
             loadShader();
             if (!gpuShader)
             {
-                loggerError("VFXSceneGPUPipeline: Failed to load shader");
+                vfLogError("VFXSceneGPUPipeline: Failed to load shader");
                 return;
             }
 
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
-                loggerError("VFXSceneGPUPipeline: Failed to create descriptor set layout");
+                vfLogError("VFXSceneGPUPipeline: Failed to create descriptor set layout");
                 return;
             }
 
             createDescriptorPool();
             if (!descriptorPool)
             {
-                loggerError("VFXSceneGPUPipeline: Failed to create descriptor pool");
+                vfLogError("VFXSceneGPUPipeline: Failed to create descriptor pool");
                 cleanup();
                 return;
             }
@@ -55,7 +55,7 @@ namespace render::vfx
             createBuffers();
             if (!cameraUBO || !quadVertexBuffer || !quadIndexBuffer)
             {
-                loggerError("VFXSceneGPUPipeline: Failed to create buffers");
+                vfLogError("VFXSceneGPUPipeline: Failed to create buffers");
                 cleanup();
                 return;
             }
@@ -68,22 +68,21 @@ namespace render::vfx
             createPipeline();
             if (!graphicsPipeline || !pipelineLayout)
             {
-                loggerError("VFXSceneGPUPipeline: Failed to create graphics pipeline");
+                vfLogError("VFXSceneGPUPipeline: Failed to create graphics pipeline");
                 cleanup();
                 return;
             }
 
             initialized = true;
-            loggerInfo("VFXSceneGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("VFXSceneGPUPipeline: Vulkan error during init - {}", e.what());
+            vfLogError("VFXSceneGPUPipeline: Vulkan error during init - {}", e.what());
             cleanup();
         }
         catch (const std::exception& e)
         {
-            loggerError("VFXSceneGPUPipeline: Exception during init - {}", e.what());
+            vfLogError("VFXSceneGPUPipeline: Exception during init - {}", e.what());
             cleanup();
         }
     }
@@ -183,6 +182,5 @@ namespace render::vfx
         descriptorsNeedUpdate = true;
         initialized = false;
 
-        loggerInfo("VFXSceneGPUPipeline cleaned up");
     }
 }

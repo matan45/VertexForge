@@ -1,7 +1,7 @@
 #include "ShadowPassPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace render::shadow
@@ -24,7 +24,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowPassPipeline::init() called when already initialized");
             return;
         }
 
@@ -154,7 +153,7 @@ namespace render::shadow
         const auto& stages = shadowShader->getShaderStages();
         if (stages.size() < 2)
         {
-            loggerError("ShadowPassPipeline: Failed to load shadow shaders: {}",
+            vfLogError("ShadowPassPipeline: Failed to load shadow shaders: {}",
                         shadowShader->getLastCompilationError());
             return;
         }
@@ -168,7 +167,7 @@ namespace render::shadow
 
         if (!hasTask || !hasMesh)
         {
-            loggerError("ShadowPassPipeline: Missing shader stages (Task={}, Mesh={})", hasTask, hasMesh);
+            vfLogError("ShadowPassPipeline: Missing shader stages (Task={}, Mesh={})", hasTask, hasMesh);
             return;
         }
 
@@ -255,7 +254,7 @@ namespace render::shadow
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("ShadowPassPipeline: Failed to create pipeline");
+            vfLogError("ShadowPassPipeline: Failed to create pipeline");
             return;
         }
 

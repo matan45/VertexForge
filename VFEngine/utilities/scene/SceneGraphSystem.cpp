@@ -1,4 +1,5 @@
 #include "SceneGraphSystem.hpp"
+#include "../print/Log.hpp"
 #include "../components/MediaComponents.hpp"
 #include "../threading/JobSystem.hpp"
 

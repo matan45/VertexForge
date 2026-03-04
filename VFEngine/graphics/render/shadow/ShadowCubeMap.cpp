@@ -1,7 +1,7 @@
 #include "ShadowCubeMap.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::shadow
 {
@@ -71,7 +71,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowCubeMap::init() called when already initialized");
             return;
         }
 
@@ -212,7 +211,7 @@ namespace render::shadow
     {
         if (face >= ShadowConstants::CUBE_FACE_COUNT)
         {
-            loggerError("ShadowCubeMap::getOrCreateFramebuffer() - face {} out of range", face);
+            vfLogError("ShadowCubeMap::getOrCreateFramebuffer() - face {} out of range", face);
             return nullptr;
         }
 
@@ -310,7 +309,7 @@ namespace render::shadow
         }
         else
         {
-            loggerError("ShadowCubeMap: Unsupported layout transition from {} to {}",
+            vfLogError("ShadowCubeMap: Unsupported layout transition from {} to {}",
                         static_cast<int>(oldLayout), static_cast<int>(newLayout));
             return;
         }

@@ -4,7 +4,7 @@
 #include "PostProcessAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/PostProcessEvents.hpp"
+#include "../../../services/events/render/PostProcessEvents.hpp"
 #include "PostProcessAPIHelpers.hpp"
 
 using core::api::detail::modifySettings;

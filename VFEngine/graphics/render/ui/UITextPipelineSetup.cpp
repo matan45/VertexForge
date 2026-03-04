@@ -6,7 +6,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::ui
 {
@@ -126,7 +126,7 @@ namespace render::ui
 
         if (fontDescriptorSets.size() >= MAX_FONT_DESCRIPTORS)
         {
-            loggerWarning("UI text font descriptor limit reached ({})", MAX_FONT_DESCRIPTORS);
+            vfLogWarning("UI text font descriptor limit reached ({})", MAX_FONT_DESCRIPTORS);
             return defaultDescriptorSet;
         }
 

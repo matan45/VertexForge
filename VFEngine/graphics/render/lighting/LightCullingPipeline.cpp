@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -29,19 +29,19 @@ namespace render::lighting
     {
         if (initialized)
         {
-            loggerWarning("LightCullingPipeline: Already initialized");
+            vfLogWarning("LightCullingPipeline: Already initialized");
             return;
         }
 
         if (clusterCount == 0)
         {
-            loggerError("LightCullingPipeline: Cannot initialize with 0 clusters");
+            vfLogError("LightCullingPipeline: Cannot initialize with 0 clusters");
             return;
         }
 
         if (!clusterGridDescLayout || !lightBufferDescLayout)
         {
-            loggerError("LightCullingPipeline: Invalid external descriptor set layouts");
+            vfLogError("LightCullingPipeline: Invalid external descriptor set layouts");
             return;
         }
 
@@ -49,7 +49,7 @@ namespace render::lighting
         clusterGridLayout = clusterGridDescLayout;
         lightBufferLayout = lightBufferDescLayout;
 
-        loggerInfo("LightCullingPipeline: Initializing for {} clusters", totalClusters);
+        vfLogInfo("LightCullingPipeline: Initializing for {} clusters", totalClusters);
 
         createBuffers();
         createDescriptorSetLayout();
@@ -60,7 +60,6 @@ namespace render::lighting
         writeDescriptors();
 
         initialized = true;
-        loggerInfo("LightCullingPipeline: Initialized successfully");
     }
 
     void LightCullingPipeline::cleanup()
@@ -106,7 +105,6 @@ namespace render::lighting
         destroyBuffers();
 
         initialized = false;
-        loggerInfo("LightCullingPipeline: Cleaned up");
     }
 
     void LightCullingPipeline::createBuffers()
@@ -124,9 +122,6 @@ namespace render::lighting
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, clusterLightGridBuffer, clusterLightGridMemory);
-
-            loggerInfo("LightCullingPipeline: Created ClusterLightGrid buffer ({} KB)",
-                       bufferSize / 1024);
         }
 
         // ClusterLightIndexList buffer (DEVICE_LOCAL)
@@ -141,8 +136,6 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, clusterLightIndexListBuffer, clusterLightIndexListMemory);
 
-            loggerInfo("LightCullingPipeline: Created ClusterLightIndexList buffer ({} KB, {} clusters x {} lights)",
-                       bufferSize / 1024, totalClusters, LightCullingConstants::MAX_LIGHTS_PER_CLUSTER);
         }
 
         // Globals buffer (DEVICE_LOCAL, for atomic operations)
@@ -155,7 +148,6 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, globalsBuffer, globalsMemory);
 
-            loggerInfo("LightCullingPipeline: Created Globals buffer ({} bytes)", bufferSize);
         }
     }
 
@@ -210,7 +202,6 @@ namespace render::lighting
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        loggerInfo("LightCullingPipeline: Created descriptor set layout");
     }
 
     void LightCullingPipeline::createPipelineLayout()
@@ -240,8 +231,6 @@ namespace render::lighting
         layoutInfo.pPushConstantRanges = &pushConstantRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
-        loggerInfo("LightCullingPipeline: Created pipeline layout with 3 descriptor sets and push constants ({} bytes)",
-                   sizeof(LightCullingPushConstants));
     }
 
     void LightCullingPipeline::createComputePipeline()
@@ -254,7 +243,7 @@ namespace render::lighting
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("LightCullingPipeline: Failed to load shader: {}", shader->getLastCompilationError());
+            vfLogError("LightCullingPipeline: Failed to load shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -265,12 +254,11 @@ namespace render::lighting
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("LightCullingPipeline: Failed to create compute pipeline");
+            vfLogError("LightCullingPipeline: Failed to create compute pipeline");
             return;
         }
 
         computePipeline = result.value;
-        loggerInfo("LightCullingPipeline: Created compute pipeline");
     }
 
     void LightCullingPipeline::createDescriptorPool()
@@ -287,7 +275,6 @@ namespace render::lighting
         poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        loggerInfo("LightCullingPipeline: Created descriptor pool");
     }
 
     void LightCullingPipeline::allocateDescriptorSet()
@@ -302,7 +289,6 @@ namespace render::lighting
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        loggerInfo("LightCullingPipeline: Allocated descriptor set");
     }
 
     void LightCullingPipeline::writeDescriptors()
@@ -347,7 +333,6 @@ namespace render::lighting
         descriptorWrites[2].pBufferInfo = &bufferInfos[2];
 
         vkDevice.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-        loggerInfo("LightCullingPipeline: Updated output buffer descriptors");
     }
 
     void LightCullingPipeline::updateExternalDescriptors(
@@ -356,7 +341,7 @@ namespace render::lighting
     {
         if (!clusterGridDescSet || !lightBufferDescSet)
         {
-            loggerWarning("LightCullingPipeline: Invalid external descriptor sets");
+            vfLogWarning("LightCullingPipeline: Invalid external descriptor sets");
             return;
         }
 
@@ -378,7 +363,7 @@ namespace render::lighting
 
         if (!cachedClusterGridDescSet || !cachedLightBufferDescSet)
         {
-            loggerWarning("LightCullingPipeline: External descriptor sets not set, skipping dispatch");
+            vfLogWarning("LightCullingPipeline: External descriptor sets not set, skipping dispatch");
             return;
         }
 

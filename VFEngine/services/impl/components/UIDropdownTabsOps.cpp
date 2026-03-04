@@ -4,7 +4,7 @@
 #include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/UIEvents.hpp"
+#include "../../events/ui/UIEvents.hpp"
 
 namespace services {
 

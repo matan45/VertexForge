@@ -4,7 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "material/MaterialTypes.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::mesh
 {
@@ -40,7 +40,7 @@ namespace render::mesh
             }
             else
             {
-                loggerWarning("MaterialTextureCache: commandPool not set, cannot create default texture");
+                vfLogWarning("MaterialTextureCache: commandPool not set, cannot create default texture");
             }
         }
     }
@@ -59,14 +59,13 @@ namespace render::mesh
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
         descriptorPoolCreated = true;
-        loggerInfo("Created material descriptor pool (max {} materials)", MAX_MATERIAL_DESCRIPTOR_SETS);
     }
 
     vk::DescriptorSet MaterialTextureCache::allocateDescriptorSet()
     {
         if (!descriptorPoolCreated || !descriptorSetLayout)
         {
-            loggerError("Cannot allocate descriptor set: pool or layout not initialized");
+            vfLogError("Cannot allocate descriptor set: pool or layout not initialized");
             return nullptr;
         }
 
@@ -88,7 +87,7 @@ namespace render::mesh
         
         if (!defaultTextureCreated || !defaultTexture.view || !defaultTexture.sampler)
         {
-            loggerError("Cannot update material descriptor set: default texture not available");
+            vfLogError("Cannot update material descriptor set: default texture not available");
             return;
         }
 
@@ -133,7 +132,7 @@ namespace render::mesh
     {
         if (!descriptorPoolCreated)
         {
-            loggerWarning("Descriptor pool not initialized, cannot create material descriptor set");
+            vfLogWarning("Descriptor pool not initialized, cannot create material descriptor set");
             return nullptr;
         }
 
@@ -156,14 +155,13 @@ namespace render::mesh
         vk::DescriptorSet set = allocateDescriptorSet();
         if (!set)
         {
-            loggerError("Failed to allocate descriptor set for material: {}", materialPath);
+            vfLogError("Failed to allocate descriptor set for material: {}", materialPath);
             return nullptr;
         }
 
         updateMaterialDescriptorSet(set, textures);
         materialDescriptorSets[materialPath] = set;
 
-        loggerInfo("Created descriptor set for material: {}", materialPath);
         return set;
     }
 
@@ -177,7 +175,7 @@ namespace render::mesh
                 device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
             }
             materialDescriptorSets.erase(it);
-            loggerInfo("Invalidated descriptor set for material: {}", materialPath);
+            vfLogInfo("Invalidated descriptor set for material: {}", materialPath);
         }
     }
 
@@ -201,7 +199,7 @@ namespace render::mesh
         // Reset state so initDescriptorResources will recreate
         descriptorPoolCreated = false;
         descriptorSetLayout = nullptr;
-        loggerInfo("Reset MaterialTextureCache descriptor resources");
+        vfLogInfo("Reset MaterialTextureCache descriptor resources");
     }
 
     vk::ImageView MaterialTextureCache::getViewForPath(const std::string& path) const
@@ -368,7 +366,6 @@ namespace render::mesh
         defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
         defaultTextureCreated = true;
-        loggerInfo("Created default 1x1 white texture for material slots");
     }
     
     bool MaterialTextureCache::loadTexture(const std::string& path)
@@ -388,12 +385,12 @@ namespace render::mesh
         }
         catch (const std::exception& e)
         {
-            loggerWarning("Failed to load texture '{}': {}", path, e.what());
+            vfLogWarning("Failed to load texture '{}': {}", path, e.what());
             return false;
         }
 
         const auto& imgData = texture->getImageData();
-        loggerInfo("Loaded material texture: {} ({}x{}, {} mip levels)", path,
+        vfLogInfo("Loaded material texture: {} ({}x{}, {} mip levels)", path,
                    imgData.width, imgData.height, imgData.mipLevels);
 
         textureCache[path] = std::move(texture);

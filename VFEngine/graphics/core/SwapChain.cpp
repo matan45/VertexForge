@@ -2,7 +2,7 @@
 #include "Device.hpp"
 #include "MemoryUtilities.hpp"
 #include "Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core {
 
@@ -44,7 +44,7 @@ namespace core {
 	void SwapChain::recreate(uint32_t width, uint32_t height)
 	{
 		if (width == 0 || height == 0) {
-			loggerWarning("Window is minimized. Waiting for valid dimensions...");
+			vfLogWarning("Window is minimized. Waiting for valid dimensions...");
 			return;  // Don't recreate the swapchain if the window is minimized
 		}
 		cleanUp();
@@ -97,9 +97,9 @@ namespace core {
 		swapchainImageFormat = surfaceFormat.format;
 		swapchainExtent = extent;
 		if (debug) {
-			loggerInfo("Creating swapchain with extent: {}x{}", extent.width, extent.height);
-			loggerInfo("Swapchain image format: {}", vk::to_string(swapchainImageFormat));
-			loggerInfo("Swapchain image count: {}", swapchainImages.size());
+			vfLogInfo("Creating swapchain with extent: {}x{}", extent.width, extent.height);
+			vfLogInfo("Swapchain image format: {}", vk::to_string(swapchainImageFormat));
+			vfLogInfo("Swapchain image count: {}", swapchainImages.size());
 		}
 
 	}
@@ -149,7 +149,7 @@ namespace core {
 			swapchainDepthStencil.depthStencilImage = device.getLogicalDevice().createImageUnique(imageInfo);
 		}
 		catch (vk::SystemError& err) {
-			loggerError("Failed to create depth stencil image: {}", err.what());
+			vfLogError("Failed to create depth stencil image: {}", err.what());
 		}
 
 		vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(swapchainDepthStencil.depthStencilImage.get());
@@ -163,7 +163,7 @@ namespace core {
 			device.getLogicalDevice().bindImageMemory(swapchainDepthStencil.depthStencilImage.get(), swapchainDepthStencil.depthStencilMemory.get(), 0);
 		}
 		catch (vk::SystemError& err) {
-			loggerError("Failed to allocate depth stencil memory: {}", err.what());
+			vfLogError("Failed to allocate depth stencil memory: {}", err.what());
 		}
 
 		vk::ImageViewCreateInfo viewInfo{};
@@ -184,11 +184,11 @@ namespace core {
 			swapchainDepthStencil.depthStencilView = device.getLogicalDevice().createImageViewUnique(viewInfo);
 		}
 		catch (vk::SystemError& err) {
-			loggerError("Failed to create depth stencil image view: {}", err.what());
+			vfLogError("Failed to create depth stencil image view: {}", err.what());
 		}
 
 		if (debug) {
-			loggerInfo("Swapchain depthStencilFormat format: {}", vk::to_string(swapchainDepthStencilFormat));
+			vfLogInfo("Swapchain depthStencilFormat format: {}", vk::to_string(swapchainDepthStencilFormat));
 		}
 	}
 
@@ -210,7 +210,7 @@ namespace core {
 			}
 		}
 
-		loggerError("Failed to find a supported format for depth stencil attachment!");
+		vfLogError("Failed to find a supported format for depth stencil attachment!");
 		return vk::Format();
 	}
 

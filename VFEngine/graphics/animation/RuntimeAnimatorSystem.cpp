@@ -5,11 +5,10 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
-#include "../../services/events/SceneEvents.hpp"
-#include "../../services/events/EditorModeEvents.hpp"
-#include "../../services/events/AnimationEventEvents.hpp"
-#include "../../services/events/SocketEvents.hpp"
+#include "../../services/events/project/SceneEvents.hpp"
+#include "../../services/events/editor/EditorModeEvents.hpp"
+#include "../../services/events/animation/AnimationEventEvents.hpp"
+#include "../../services/events/physics/SocketEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
@@ -66,9 +65,6 @@ namespace animation
                 {
                     reg.get<components::SocketAttachmentComponent>(entity).needsParentResolution = true;
                 }
-
-                vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
-                          notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
             });
 
         socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
@@ -82,10 +78,8 @@ namespace animation
                     auto& attachment = registry.get<components::SocketAttachmentComponent>(entity);
                     attachment.cachedSocketIndex = -1;
                 }
-                vfLogInfo("[RuntimeAnimatorSystem] Skeleton cache invalidated for: {}", notification.meshPath);
             });
 
-        vfLogInfo("[RuntimeAnimatorSystem] Initialized");
     }
 
     void RuntimeAnimatorSystem::shutdown()
@@ -112,7 +106,6 @@ namespace animation
 
         clearAll();
         initialized = false;
-        vfLogInfo("[RuntimeAnimatorSystem] Shutdown");
     }
 
     void RuntimeAnimatorSystem::updateAll(float deltaTime)
@@ -608,8 +601,6 @@ namespace animation
         for (auto entity : toRemove)
         {
             animators.erase(entity);
-            vfLogInfo("[RuntimeAnimatorSystem] Cleaned up animator for removed entity {}",
-                      static_cast<uint32_t>(entity));
         }
 
         if (pendingCacheCleanup)
@@ -636,7 +627,6 @@ namespace animation
         animatorDataCache.clear();
         animationDataCache.clear();
         skeletonDataCache.clear();
-        vfLogInfo("[RuntimeAnimatorSystem] Cleared all animators");
     }
 
     void RuntimeAnimatorSystem::clearAnimatorInstances()
@@ -653,7 +643,6 @@ namespace animation
         }
 
         animators.clear();
-        vfLogInfo("[RuntimeAnimatorSystem] Cleared animator instances (caches preserved)");
     }
 
     void RuntimeAnimatorSystem::cleanupUnusedCaches()
@@ -746,7 +735,7 @@ namespace animation
 
         if (removedAnimators > 0 || removedAnimations > 0 || removedSkeletons > 0)
         {
-            vfLogInfo("[RuntimeAnimatorSystem] Cache cleanup: removed {} animators, {} animations, {} skeletons",
+            vfLogInfo("Cleaned up {} animators, {} animations, {} skeletons",
                       removedAnimators, removedAnimations, removedSkeletons);
         }
     }

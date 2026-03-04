@@ -8,7 +8,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -432,7 +432,7 @@ namespace render::vfx
         {
             if (!texturePath.empty())
             {
-                loggerWarning("VFX scene texture not found: {}", texturePath);
+                vfLogWarning("VFX scene texture not found: {}", texturePath);
             }
             updateDescriptorSet();
             return;
@@ -443,11 +443,11 @@ namespace render::vfx
             customTexture = std::make_unique<core::Texture>(device);
             customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
             currentTexturePath = texturePath;
-            loggerInfo("VFX scene texture loaded: {}", texturePath);
+            vfLogInfo("VFX scene texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX scene texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX scene texture '{}': {}", texturePath, e.what());
             customTexture.reset();
             currentTexturePath.clear();
         }

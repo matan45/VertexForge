@@ -1,6 +1,6 @@
 #pragma once
 
-#include "providers/IAnimationPreviewProvider.hpp"
+#include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include "ColliderOverlayRenderer.hpp"
 #include "types/PhysicsAnimationTypes.hpp"

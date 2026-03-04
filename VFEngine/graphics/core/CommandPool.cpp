@@ -1,7 +1,7 @@
 #include "CommandPool.hpp"
 #include "Device.hpp"
 #include "SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core {
 
@@ -20,7 +20,7 @@ namespace core {
 			commandBuffers = device.getLogicalDevice().allocateCommandBuffersUnique(allocInfo);
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to allocate command buffers: {}", err.what());
+			vfLogError("Failed to allocate command buffers: {}", err.what());
 		}
 	}
 
@@ -33,7 +33,7 @@ namespace core {
 			commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to create command pool: {}", err.what());
+			vfLogError("Failed to create command pool: {}", err.what());
 		}
 	}
 
@@ -58,7 +58,7 @@ namespace core {
 			commandBuffers[index].get().reset(vk::CommandBufferResetFlagBits::eReleaseResources);  // Reset with resource release
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to reset command buffer: {}", err.what());
+			vfLogError("Failed to reset command buffer: {}", err.what());
 		}
 	}
 

@@ -12,7 +12,7 @@
 #include "offscreen/LightBVHManager.hpp"
 #include "offscreen/FramePreparationSystem.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/InputEvents.hpp"
+#include "../../services/events/input/InputEvents.hpp"
 #include "time/Timer.hpp"
 
 namespace controllers

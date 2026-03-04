@@ -1,7 +1,7 @@
 #pragma once
 #include "Device.hpp"
 #include "SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 #include <memory>
 
@@ -21,15 +21,15 @@ namespace core {
 		static void cleanup();
 
 		static std::unique_ptr<Device>& getDevice() {
-			loggerAssert(device == nullptr || device.get() == nullptr, "device is not initiated");
+			vfLogAssert(device == nullptr || device.get() == nullptr, "device is not initiated");
 			return device; }
 
 		static std::unique_ptr<SwapChain>& getSwapChain() {
-			loggerAssert(swapChain == nullptr || swapChain.get() == nullptr, "swapChain is not initiated");
+			vfLogAssert(swapChain == nullptr || swapChain.get() == nullptr, "swapChain is not initiated");
 			return swapChain; }
 
 		static const window::Window* getWindow() {
-			loggerAssert(window == nullptr, "window is not initiated");
+			vfLogAssert(window == nullptr, "window is not initiated");
 			return window;
 		}
 

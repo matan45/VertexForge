@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "Import.hpp"
 #include <future>
 #include <algorithm>
@@ -5,7 +6,6 @@
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
 #include "../pipeline/stages/FileProcessingStage.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace controllers
 {
@@ -133,7 +133,6 @@ namespace controllers
         importPipeline->addStage(std::make_unique<pipeline::stages::FileTypeDetectionStage>());
         importPipeline->addStage(std::make_unique<pipeline::stages::FileProcessingStage>());
 
-        vfLogInfo("Import pipeline initialized with {} stages", 4);
     }
 
     ImportResult Import::waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,

@@ -1,7 +1,7 @@
 #include "VFXPreviewPanel.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include <events/EventDispatcher.hpp>
-#include <events/VFXPreviewEvents.hpp>
+#include <events/vfx/VFXPreviewEvents.hpp>
 #include <time/Timer.hpp>
 #include "imgui.h"
 #include <algorithm>

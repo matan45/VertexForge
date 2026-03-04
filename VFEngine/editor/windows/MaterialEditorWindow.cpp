@@ -10,10 +10,9 @@
 #include <material/MaterialInstanceTypes.hpp>
 #include <resource/ResourceManager.hpp>
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
-#include "events/MaterialEvents.hpp"
-#include "events/ResourceEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <filesystem>
 
 namespace windows
