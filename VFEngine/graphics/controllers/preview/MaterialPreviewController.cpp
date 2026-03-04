@@ -1,12 +1,12 @@
 #include "MaterialPreviewController.hpp"
-#include "../core/Device.hpp"
-#include "../core/BufferUtilities.hpp"
-#include "../core/ImageUtilities.hpp"
-#include "../core/Utilities.hpp"
-#include "../render/OffScreenViewPort.hpp"
-#include "../render/RenderPassHandler.hpp"
-#include "../render/mesh/StaticMeshPipeline.hpp"
-#include "../render/mesh/MeshTypes.hpp"
+#include "../../core/Device.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
+#include "../../render/preview/PreviewViewPort.hpp"
+#include "../../render/preview/PreviewRenderHandler.hpp"
+#include "../../render/mesh/StaticMeshPipeline.hpp"
+#include "../../render/mesh/MeshTypes.hpp"
 #include "geometry/SphereGenerator.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Log.hpp"
@@ -114,7 +114,7 @@ namespace controllers
     MaterialPreviewController::MaterialPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
-          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
+          , offScreen{std::make_unique<render::preview::PreviewViewPort>(device, swapChain)}
           , textureManager{std::make_unique<TextureManagerImpl>()}
     {
     }
@@ -276,15 +276,15 @@ namespace controllers
         // Recreate offScreen if it was cleaned up (supports re-initialization)
         if (!offScreen)
         {
-            offScreen = std::make_unique<render::OffScreenViewPort>(device, swapChain);
+            offScreen = std::make_unique<render::preview::PreviewViewPort>(device, swapChain);
         }
 
         offScreen->init();
 
         // Initialize mesh pipeline with default IBL textures
         // Disable GPU-driven rendering to allow custom per-material shaders
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        renderHandler->initMeshPipeline(false);
+        auto* renderHandler = offScreen->getRenderHandler();
+        renderHandler->initMeshPipeline();
 
         auto* meshPipeline = renderHandler->getMeshPipeline();
         if (meshPipeline)
@@ -340,7 +340,7 @@ namespace controllers
         // Only inject when useCustomShader is true (after explicit compile)
         if (params.useCustomShader && !params.materialPath.empty() && params.materialData)
         {
-            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+            auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
             if (meshPipeline)
             {
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
@@ -411,7 +411,7 @@ namespace controllers
             return;
         }
 
-        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
         if (!meshPipeline)
         {
             return;
@@ -449,7 +449,7 @@ namespace controllers
 
         if (initialized && sphereLoaded)
         {
-            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+            auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
             if (meshPipeline)
             {
                 meshPipeline->unloadMesh(SPHERE_MESH_ID);
@@ -494,7 +494,7 @@ namespace controllers
         // Store time for dynamic graph evaluation
         currentTime = time;
 
-        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* renderHandler = offScreen->getRenderHandler();
         if (!renderHandler)
         {
             return;
@@ -516,7 +516,7 @@ namespace controllers
             return nullptr;
         }
 
-        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* renderHandler = offScreen->getRenderHandler();
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
 
@@ -567,7 +567,7 @@ namespace controllers
     {
         if (!initialized || !offScreen) return "";
 
-        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
         if (meshPipeline)
         {
             return meshPipeline->getLastShaderCompilationError();

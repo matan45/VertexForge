@@ -106,16 +106,12 @@
     <ClInclude Include="animation\IKPostProcess.hpp" />
     <ClInclude Include="animation\IKSolver.hpp" />
     <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
-    <ClInclude Include="controllers\AnimatedMeshPreviewController.hpp" />
     <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
-    <ClInclude Include="controllers\MaterialPreviewController.hpp" />
-    <ClInclude Include="controllers\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
     <ClInclude Include="controllers\RenderTextureController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
-    <ClInclude Include="controllers\VFXPreviewController.hpp" />
     <ClInclude Include="controllers\VFXSceneRenderer.hpp" />
     <ClInclude Include="controllers\offscreen\CameraController.hpp" />
     <ClInclude Include="controllers\offscreen\CullingStatsCollector.hpp" />
@@ -129,6 +125,10 @@
     <ClInclude Include="controllers\offscreen\UIFrameBuilder.hpp" />
     <ClInclude Include="controllers\offscreen\UIInteractionSystem.hpp" />
     <ClInclude Include="controllers\offscreen\UIScreenSpaceScroll.hpp" />
+    <ClInclude Include="controllers\preview\AnimatedMeshPreviewController.hpp" />
+    <ClInclude Include="controllers\preview\MaterialPreviewController.hpp" />
+    <ClInclude Include="controllers\preview\MeshPreviewController.hpp" />
+    <ClInclude Include="controllers\preview\VFXPreviewController.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
@@ -215,6 +215,8 @@
     <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
+    <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
+    <ClInclude Include="render\preview\PreviewViewPort.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ShadowAtlasManager.hpp" />
@@ -288,11 +290,8 @@
     <ClCompile Include="animation\IKPostProcess.cpp" />
     <ClCompile Include="animation\IKSolver.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
-    <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
-    <ClCompile Include="controllers\MaterialPreviewController.cpp" />
-    <ClCompile Include="controllers\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\OffScreenControllerDebug.cpp" />
     <ClCompile Include="controllers\OffScreenControllerFrame.cpp" />
@@ -300,7 +299,6 @@
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\RenderTextureController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
-    <ClCompile Include="controllers\VFXPreviewController.cpp" />
     <ClCompile Include="controllers\VFXSceneRenderer.cpp" />
     <ClCompile Include="controllers\VFXSceneRendererGPU.cpp" />
     <ClCompile Include="controllers\offscreen\CameraController.cpp" />
@@ -318,6 +316,10 @@
     <ClCompile Include="controllers\offscreen\UIInteractionSystemWidgets.cpp" />
     <ClCompile Include="controllers\offscreen\UIScreenSpaceScroll.cpp" />
     <ClCompile Include="controllers\offscreen\UIScreenSpaceWidgets.cpp" />
+    <ClCompile Include="controllers\preview\AnimatedMeshPreviewController.cpp" />
+    <ClCompile Include="controllers\preview\MaterialPreviewController.cpp" />
+    <ClCompile Include="controllers\preview\MeshPreviewController.cpp" />
+    <ClCompile Include="controllers\preview\VFXPreviewController.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\DeferredDeletionQueue.cpp" />
@@ -406,6 +408,8 @@
     <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
+    <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
+    <ClCompile Include="render\preview\PreviewViewPort.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ShadowAtlasManager.cpp" />

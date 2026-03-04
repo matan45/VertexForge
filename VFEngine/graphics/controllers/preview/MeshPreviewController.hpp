@@ -1,8 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
-#include "../../services/data/DTOs.hpp"
-#include "../../services/data/AsyncLoadingTypes.hpp"
+#include "../../../services/data/DTOs.hpp"
+#include "../../../services/data/AsyncLoadingTypes.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,9 +13,9 @@ namespace core
     class SwapChain;
 }
 
-namespace render
+namespace render::preview
 {
-    class OffScreenViewPort;
+    class PreviewViewPort;
 }
 
 namespace loaders
@@ -30,7 +30,7 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        std::unique_ptr<render::OffScreenViewPort> offScreen;
+        std::unique_ptr<render::preview::PreviewViewPort> offScreen;
 
         std::string loadedMeshPath;
         math::AABB meshBounds;

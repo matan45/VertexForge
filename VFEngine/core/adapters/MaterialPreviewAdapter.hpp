@@ -1,6 +1,6 @@
 #pragma once
 #include "../../services/providers/IMaterialPreviewProvider.hpp"
-#include "../../graphics/controllers/MaterialPreviewController.hpp"
+#include "../../graphics/controllers/preview/MaterialPreviewController.hpp"
 #include <memory>
 #include <unordered_map>
 

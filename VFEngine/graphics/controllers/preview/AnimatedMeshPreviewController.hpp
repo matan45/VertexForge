@@ -2,8 +2,8 @@
 
 #include <glm/glm.hpp>
 #include <math/Frustum.hpp>
-#include "../animation/AnimationEvaluator.hpp"
-#include "../render/mesh/SkinnedMeshTypes.hpp"
+#include "../../animation/AnimationEvaluator.hpp"
+#include "../../render/mesh/SkinnedMeshTypes.hpp"
 #include "resource/Types.hpp"
 #include <memory>
 #include <string>

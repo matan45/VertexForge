@@ -1,5 +1,5 @@
 #include "AnimationPreviewAdapter.hpp"
-#include "AnimatedMeshPreviewController.hpp"
+#include "../../graphics/controllers/preview/AnimatedMeshPreviewController.hpp"
 
 namespace core
 {

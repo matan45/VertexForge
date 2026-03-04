@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include "material/MaterialTypes.hpp"
-#include "../core/VulkanContext.hpp"
+#include "../../core/VulkanContext.hpp"
 #include <memory>
 #include <string>
 
@@ -13,9 +13,9 @@ namespace core
     class SwapChain;
 }
 
-namespace render
+namespace render::preview
 {
-    class OffScreenViewPort;
+    class PreviewViewPort;
 }
 
 namespace controllers
@@ -79,7 +79,7 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        std::unique_ptr<render::OffScreenViewPort> offScreen;
+        std::unique_ptr<render::preview::PreviewViewPort> offScreen;
 
         math::Frustum currentFrustum;
         PreviewMaterialParams materialParams;

@@ -1,10 +1,10 @@
 #include "MeshPreviewController.hpp"
-#include "../core/VulkanContext.hpp"
-#include "../render/OffScreenViewPort.hpp"
-#include "../render/RenderPassHandler.hpp"
-#include "../render/mesh/StaticMeshPipeline.hpp"
-#include "../render/mesh/MeshTypes.hpp"
-#include "../loaders/AsyncMeshLoader.hpp"
+#include "../../core/VulkanContext.hpp"
+#include "../../render/preview/PreviewViewPort.hpp"
+#include "../../render/preview/PreviewRenderHandler.hpp"
+#include "../../render/mesh/StaticMeshPipeline.hpp"
+#include "../../render/mesh/MeshTypes.hpp"
+#include "../../loaders/AsyncMeshLoader.hpp"
 #include "resource/Types.hpp"
 #include "print/Log.hpp"
 
@@ -13,7 +13,7 @@ namespace controllers
     MeshPreviewController::MeshPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
-          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
+          , offScreen{std::make_unique<render::preview::PreviewViewPort>(device, swapChain)}
           , asyncLoader{std::make_unique<loaders::AsyncMeshLoader>()}
     {
     }
@@ -35,8 +35,8 @@ namespace controllers
 
         // Initialize mesh pipeline with default IBL textures
         // Disable GPU-driven rendering for mesh preview to support submesh highlighting
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        renderHandler->initMeshPipeline(false);
+        auto* renderHandler = offScreen->getRenderHandler();
+        renderHandler->initMeshPipeline();
 
         initialized = true;
     }
@@ -64,7 +64,7 @@ namespace controllers
             return;
         }
 
-        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
         if (meshPipeline)
         {
             meshPipeline->unloadMesh(loadedMeshPath);
@@ -135,7 +135,7 @@ namespace controllers
             return false; // Still loading from disk or no work ready
         }
 
-        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* renderHandler = offScreen->getRenderHandler();
         auto* meshPipeline = renderHandler->getMeshPipeline();
 
         if (!meshPipeline)
@@ -173,7 +173,7 @@ namespace controllers
             return result;
         }
 
-        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
         if (!meshPipeline)
         {
             return result;
@@ -207,7 +207,7 @@ namespace controllers
             return result;
         }
 
-        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        auto* meshPipeline = offScreen->getRenderHandler()->getMeshPipeline();
         if (!meshPipeline)
         {
             return result;
@@ -245,7 +245,7 @@ namespace controllers
     void MeshPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos)
     {
-        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* renderHandler = offScreen->getRenderHandler();
 
         if (renderHandler->isMeshPipelineInitialized())
         {
@@ -262,7 +262,7 @@ namespace controllers
             return nullptr;
         }
 
-        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* renderHandler = offScreen->getRenderHandler();
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
 
