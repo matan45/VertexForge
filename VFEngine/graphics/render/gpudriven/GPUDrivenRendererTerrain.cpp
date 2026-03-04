@@ -7,7 +7,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
 #include "lightbake/LightmapAtlas.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <glm/gtc/packing.hpp>
 #include <chrono>
 
@@ -46,14 +46,14 @@ namespace render::gpudriven
             shadowSystem->getShadowTextureLayout(),
             renderPass
         );
-        loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
+        vfLogInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
 
         shadowSystem->initTerrainShadowPass(
             terrain.pipeline->getTerrainDataLayout(),
             terrain.pipeline->getCachedMeshletLayout(),
             terrain.pipeline->getCachedVertexLayout()
         );
-        loggerInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
+        vfLogInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
     }
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
@@ -132,7 +132,7 @@ namespace render::gpudriven
 
         terrain.currentMaterialPath = materialPath;
         terrain.layerDataDirty = false;
-        loggerInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
+        vfLogInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
                    materialData->activeLayerCount, materialPath);
     }
 

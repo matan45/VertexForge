@@ -1,6 +1,5 @@
 #include "ClipboardManager.hpp"
 #include "../fileops/AsyncFileOperations.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace windows
 {

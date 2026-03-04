@@ -11,7 +11,7 @@
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
 
 namespace controllers
@@ -119,7 +119,7 @@ namespace controllers
 
         lastExtent = swapChain.getSwapchainExtent();
         initialized = true;
-        loggerInfo("VFX Preview Controller initialized");
+        vfLogInfo("VFX Preview Controller initialized");
     }
 
     void VFXPreviewController::cleanUp()
@@ -183,7 +183,6 @@ namespace controllers
         cleanupOffscreenResources();
 
         initialized = false;
-        loggerInfo("VFX Preview Controller cleaned up");
     }
 
     void VFXPreviewController::setParams(const VFXPreviewParams& params)

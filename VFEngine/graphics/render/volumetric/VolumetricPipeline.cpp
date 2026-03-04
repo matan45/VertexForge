@@ -1,6 +1,6 @@
 #include "VolumetricPipeline.hpp"
 #include "../../core/Device.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -29,7 +29,7 @@ namespace render::volumetric
     {
         if (initialized)
         {
-            loggerWarning("VolumetricPipeline: Already initialized");
+            vfLogWarning("VolumetricPipeline: Already initialized");
             return;
         }
 
@@ -50,7 +50,7 @@ namespace render::volumetric
         rayMarch->init(dims, gridDescLayout);
 
         initialized = true;
-        loggerInfo("VolumetricPipeline: Initialized with quality {} ({}x{}x{})",
+        vfLogInfo("VolumetricPipeline: Initialized with quality {} ({}x{}x{})",
                    static_cast<int>(quality), dims.width, dims.height, dims.depth);
     }
 
@@ -86,7 +86,6 @@ namespace render::volumetric
         initialized = false;
         frameIndex = 0;
         prevViewProjection = glm::mat4{1.0f};
-        loggerInfo("VolumetricPipeline: Cleaned up");
     }
 
     void VolumetricPipeline::recreate(

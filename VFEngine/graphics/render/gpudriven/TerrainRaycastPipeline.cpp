@@ -3,7 +3,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/MappedMemoryGuard.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 #include <cstring>
 
@@ -37,7 +37,7 @@ namespace render::gpudriven
         createDepthSampler();
 
         initialized = true;
-        loggerInfo("TerrainRaycastPipeline initialized");
+        vfLogInfo("TerrainRaycastPipeline initialized");
     }
 
     void TerrainRaycastPipeline::cleanup()
@@ -110,7 +110,6 @@ namespace render::gpudriven
         descriptorsNeedUpdate = true;
         cachedDepthImageView = nullptr;
 
-        loggerInfo("TerrainRaycastPipeline cleaned up");
     }
 
     void TerrainRaycastPipeline::setCursorUV(const glm::vec2& uv)
@@ -184,7 +183,7 @@ namespace render::gpudriven
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("TerrainRaycastPipeline: Failed to load shader: {}",
+            vfLogError("TerrainRaycastPipeline: Failed to load shader: {}",
                         shader->getLastCompilationError());
             return;
         }
@@ -196,7 +195,7 @@ namespace render::gpudriven
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("TerrainRaycastPipeline: Failed to create compute pipeline");
+            vfLogError("TerrainRaycastPipeline: Failed to create compute pipeline");
             return;
         }
 

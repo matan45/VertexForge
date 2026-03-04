@@ -6,7 +6,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "material/MaterialTypes.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::mesh
 {
@@ -273,7 +273,7 @@ namespace render::mesh
 
         if (!textureCache->hasDefaultTexture())
         {
-            loggerWarning("Default texture not available, skipping default descriptor set creation");
+            vfLogWarning("Default texture not available, skipping default descriptor set creation");
             textureDescriptorsInitialized = false;
             return;
         }

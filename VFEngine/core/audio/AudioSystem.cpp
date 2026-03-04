@@ -1,6 +1,6 @@
 #include "AudioSystem.hpp"
 #include <AL/al.h>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core::audio {
 
@@ -12,26 +12,25 @@ namespace core::audio {
 
     bool AudioSystem::init() {
         if (initialized) {
-            loggerWarning("AudioSystem already initialized");
             return true;
         }
 
         device = alcOpenDevice(nullptr);
         if (!device) {
-            loggerError("Failed to open default OpenAL device");
+            vfLogError("Failed to open default OpenAL device");
             return false;
         }
 
         context = alcCreateContext(device, nullptr);
         if (!context) {
-            loggerError("Failed to create OpenAL context");
+            vfLogError("Failed to create OpenAL context");
             alcCloseDevice(device);
             device = nullptr;
             return false;
         }
 
         if (!alcMakeContextCurrent(context)) {
-            loggerError("Failed to make OpenAL context current");
+            vfLogError("Failed to make OpenAL context current");
             alcDestroyContext(context);
             alcCloseDevice(device);
             context = nullptr;
@@ -45,11 +44,7 @@ namespace core::audio {
 
         initialized = true;
 
-        loggerInfo("AudioSystem initialized successfully");
-        loggerInfo("  Device: {}", getDeviceName());
-        loggerInfo("  Vendor: {}", getVendor());
-        loggerInfo("  Version: {}", getVersion());
-        loggerInfo("  Renderer: {}", getRenderer());
+        vfLogInfo("AudioSystem initialized: {}", getDeviceName());
 
         return true;
     }
@@ -72,7 +67,6 @@ namespace core::audio {
         }
 
         initialized = false;
-        loggerInfo("AudioSystem cleaned up");
     }
 
     std::string AudioSystem::getDeviceName() const {
@@ -123,7 +117,7 @@ namespace core::audio {
                     errorStr = "Unknown error";
                     break;
             }
-            loggerError("OpenAL error in {}: {} (0x{:X})", operation, errorStr, error);
+            vfLogError("OpenAL error in {}: {} (0x{:X})", operation, errorStr, error);
             return true;
         }
         return false;
@@ -131,7 +125,7 @@ namespace core::audio {
 
     void AudioSystem::setMasterVolume(float volume) {
         if (!initialized) {
-            loggerWarning("AudioSystem::setMasterVolume called but system not initialized");
+            vfLogWarning("AudioSystem::setMasterVolume called but system not initialized");
             return;
         }
         alListenerf(AL_GAIN, volume);
@@ -141,7 +135,7 @@ namespace core::audio {
 
     void AudioSystem::setDopplerFactor(float factor) {
         if (!initialized) {
-            loggerWarning("AudioSystem::setDopplerFactor called but system not initialized");
+            vfLogWarning("AudioSystem::setDopplerFactor called but system not initialized");
             return;
         }
         alDopplerFactor(factor);
@@ -151,7 +145,7 @@ namespace core::audio {
 
     void AudioSystem::setSpeedOfSound(float speed) {
         if (!initialized) {
-            loggerWarning("AudioSystem::setSpeedOfSound called but system not initialized");
+            vfLogWarning("AudioSystem::setSpeedOfSound called but system not initialized");
             return;
         }
         alSpeedOfSound(speed);
@@ -161,7 +155,7 @@ namespace core::audio {
 
     void AudioSystem::setDistanceModel(types::AudioDistanceModel model) {
         if (!initialized) {
-            loggerWarning("AudioSystem::setDistanceModel called but system not initialized");
+            vfLogWarning("AudioSystem::setDistanceModel called but system not initialized");
             return;
         }
         ALenum alModel;
@@ -198,7 +192,7 @@ namespace core::audio {
 
     void AudioSystem::applySettings(const types::AudioSettings& settings) {
         if (!initialized) {
-            loggerWarning("AudioSystem::applySettings called but system not initialized");
+            vfLogWarning("AudioSystem::applySettings called but system not initialized");
             return;
         }
 
@@ -208,7 +202,7 @@ namespace core::audio {
         setDistanceModel(settings.distanceModel);
         currentSettings.defaultRolloffFactor = settings.defaultRolloffFactor;
 
-        loggerInfo("Audio settings applied - Master Volume: {}, Doppler: {}, Speed of Sound: {}",
+        vfLogInfo("Audio settings applied - Master Volume: {}, Doppler: {}, Speed of Sound: {}",
             settings.masterVolume, settings.dopplerFactor, settings.speedOfSound);
     }
 

@@ -1,6 +1,6 @@
 #include "StreamingAudioSource.hpp"
 #include "AudioSystem.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace core::audio
@@ -58,7 +58,7 @@ namespace core::audio
         streamHandle = resource::AudioResource::openStream(path);
         if (!streamHandle || !streamHandle->isOpen())
         {
-            loggerError("Failed to open audio stream: {}", path);
+            vfLogError("Failed to open audio stream: {}", path);
             return false;
         }
 

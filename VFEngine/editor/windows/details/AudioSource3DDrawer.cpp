@@ -4,7 +4,6 @@
 #include "events/SceneEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "nfd/FileDialog.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <fstream>
 

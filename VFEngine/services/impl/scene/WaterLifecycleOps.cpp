@@ -10,7 +10,6 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/WaterEvents.hpp"
 #include "../../providers/IPhysicsProvider.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {

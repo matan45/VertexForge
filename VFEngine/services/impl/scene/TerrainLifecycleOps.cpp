@@ -11,7 +11,6 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {

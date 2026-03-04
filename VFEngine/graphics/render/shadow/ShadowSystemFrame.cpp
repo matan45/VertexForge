@@ -4,7 +4,7 @@
 #include "SpotShadowCalculator.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
 #include <future>
@@ -121,7 +121,7 @@ namespace render::shadow
         if (!registry.valid(entity) ||
             !registry.all_of<components::WorldTransformComponent>(entity))
         {
-            loggerWarning("ShadowSystem: DirectionalCSM light {} missing WorldTransformComponent", entityId);
+            vfLogWarning("ShadowSystem: DirectionalCSM light {} missing WorldTransformComponent", entityId);
             return;
         }
 
@@ -229,7 +229,7 @@ namespace render::shadow
                         const auto& view = data.views[i];
                         if (!view.handle.isValid())
                         {
-                            loggerWarning("ShadowSystem: CSM cascade {} has invalid handle", i);
+                            vfLogWarning("ShadowSystem: CSM cascade {} has invalid handle", i);
                             continue;
                         }
 
@@ -476,7 +476,7 @@ namespace render::shadow
         auto resizeResult = atlasManager->applyQualitySettings(atlasConfig);
         if (!resizeResult.success)
         {
-            loggerError("ShadowSystem: Atlas resize failed");
+            vfLogError("ShadowSystem: Atlas resize failed");
             return;
         }
 
@@ -524,13 +524,13 @@ namespace render::shadow
             else
             {
                 ++failedCount;
-                loggerWarning("ShadowSystem: Failed to re-register light {} after resize", info.entityId);
+                vfLogWarning("ShadowSystem: Failed to re-register light {} after resize", info.entityId);
             }
         }
 
         if (failedCount > 0)
         {
-            loggerWarning("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
+            vfLogWarning("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
                          registeredCount, existingLights.size(), failedCount);
         }
 
@@ -538,7 +538,7 @@ namespace render::shadow
         float resizeMs = std::chrono::duration<float, std::milli>(resizeEndTime - resizeStartTime).count();
         if (resizeMs > FRAME_BUDGET_WARNING_MS)
         {
-            loggerWarning("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
+            vfLogWarning("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
                          resizeMs, FRAME_BUDGET_WARNING_MS);
         }
     }
@@ -547,7 +547,7 @@ namespace render::shadow
     {
         if (!initialized)
         {
-            loggerWarning("ShadowSystem::applyRenderSettings() called when not initialized");
+            vfLogWarning("ShadowSystem::applyRenderSettings() called when not initialized");
             return;
         }
 
@@ -603,7 +603,7 @@ namespace render::shadow
                         count();
                     if (cascadeMs > FRAME_BUDGET_WARNING_MS)
                     {
-                        loggerWarning(
+                        vfLogWarning(
                             "ShadowSystem: Cascade reallocation for light {} took {:.1f}ms (exceeds frame budget)",
                             entityId, cascadeMs);
                     }

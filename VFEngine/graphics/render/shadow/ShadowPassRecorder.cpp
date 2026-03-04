@@ -4,7 +4,7 @@
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::shadow
 {
@@ -28,7 +28,7 @@ namespace render::shadow
     {
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
         {
-            loggerWarning("ShadowPassRecorder::recordShadowPass: Not ready (enabled={}, pipeline={}, init={})",
+            vfLogWarning("ShadowPassRecorder::recordShadowPass: Not ready (enabled={}, pipeline={}, init={})",
                          shadowsEnabled, shadowPassPipeline != nullptr,
                          shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
             return;
@@ -148,7 +148,7 @@ namespace render::shadow
             {
                 if (!view->handle.isValid())
                 {
-                    loggerWarning("ShadowPassRecorder: Skipping view with invalid handle");
+                    vfLogWarning("ShadowPassRecorder: Skipping view with invalid handle");
                     continue;
                 }
 

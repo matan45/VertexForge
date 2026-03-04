@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cstring>
 
 namespace render::gpudriven
@@ -38,17 +38,12 @@ namespace render::gpudriven
     {
         if (initialized)
         {
-            loggerWarning("IndirectBatchManager already initialized");
             return true;
         }
 
         // Query available VRAM
         auto memInfo = device.getDeviceMemoryInfo();
         vk::DeviceSize availableVRAM = memInfo.deviceLocalHeapSize;
-
-        loggerInfo("IndirectBatchManager: Detected {} MB device-local VRAM{}",
-                   availableVRAM / (1024 * 1024),
-                   memInfo.hasUnifiedMemory ? " (unified memory)" : "");
 
         // Select configuration based on available VRAM
         // Reserve ~25% of VRAM budget for indirect buffers (rest for textures, meshes, etc.)
@@ -63,34 +58,22 @@ namespace render::gpudriven
 
         if (availableVRAM < 4 * GB)
         {
-            // Low-end: < 4GB VRAM
             selectedBatchCount = 2;
             selectedCommands = 100000;
             selectedGroups = 8;
-            loggerInfo("IndirectBatchManager: Using LOW-END configuration (< 4GB VRAM)");
         }
         else if (availableVRAM < 8 * GB)
         {
-            // Mid-range: 4-8GB VRAM
             selectedBatchCount = 4;
             selectedCommands = 300000;
             selectedGroups = 16;
-            loggerInfo("IndirectBatchManager: Using MID-RANGE configuration (4-8GB VRAM)");
-        }
-        else
-        {
-            // High-end: >= 8GB VRAM
-            selectedBatchCount = DEFAULT_BATCH_COUNT;
-            selectedCommands = MAX_DRAW_COMMANDS;
-            selectedGroups = MAX_SHADER_GROUPS;
-            loggerInfo("IndirectBatchManager: Using HIGH-END configuration (>= 8GB VRAM)");
         }
 
         // Verify the selected config fits in budget
         vk::DeviceSize requiredMemory = calculateRequiredMemory(selectedBatchCount, selectedCommands, selectedGroups);
         if (requiredMemory > budgetForIndirect)
         {
-            loggerWarning("IndirectBatchManager: Selected config requires {} MB but budget is {} MB, reducing further",
+            vfLogWarning("IndirectBatchManager: Selected config requires {} MB but budget is {} MB, reducing further",
                           requiredMemory / (1024 * 1024), budgetForIndirect / (1024 * 1024));
 
             // Scale down commands proportionally
@@ -99,9 +82,6 @@ namespace render::gpudriven
             selectedCommands = std::max(selectedCommands, 10000u); // Minimum viable
         }
 
-        loggerInfo("IndirectBatchManager: Allocating {} MB for indirect buffers",
-                   calculateRequiredMemory(selectedBatchCount, selectedCommands, selectedGroups) / (1024 * 1024));
-
         return init(selectedBatchCount, selectedCommands, selectedGroups);
     }
 
@@ -109,21 +89,20 @@ namespace render::gpudriven
     {
         if (initialized)
         {
-            loggerWarning("IndirectBatchManager already initialized");
             return true;
         }
 
         // Validate batch count
         if (batchCount == 0 || batchCount > MAX_BATCH_COUNT)
         {
-            loggerError("Invalid batch count: {}. Must be 1-{}", batchCount, MAX_BATCH_COUNT);
+            vfLogError("Invalid batch count: {}. Must be 1-{}", batchCount, MAX_BATCH_COUNT);
             batchCount = DEFAULT_BATCH_COUNT;
         }
 
         // Validate shader group count
         if (shaderGroupCount == 0 || shaderGroupCount > MAX_SHADER_GROUPS)
         {
-            loggerError("Invalid shader group count: {}. Must be 1-{}", shaderGroupCount, MAX_SHADER_GROUPS);
+            vfLogError("Invalid shader group count: {}. Must be 1-{}", shaderGroupCount, MAX_SHADER_GROUPS);
             shaderGroupCount = MAX_SHADER_GROUPS;
         }
 
@@ -135,20 +114,14 @@ namespace render::gpudriven
 
         if (!createBuffers())
         {
-            loggerError("IndirectBatchManager: Failed to allocate GPU buffers");
+            vfLogError("IndirectBatchManager: Failed to allocate GPU buffers");
             return false;
         }
 
         initialized = true;
 
-        loggerInfo(
-            "IndirectBatchManager initialized: {} batches x {} shader groups x {} commands/section = {} total capacity",
-            this->batchCount, this->shaderGroupCount, this->commandsPerSection, getTotalCapacity());
-        loggerInfo("  Sections (batch*group pairs): {}", getSectionCount());
-        loggerInfo("  Draw command buffer: {:.1f} MB", getCombinedDrawCommandBufferSize() / (1024.0f * 1024.0f));
-        loggerInfo("  Draw count buffer: {:.1f} KB", getCombinedDrawCountBufferSize() / 1024.0f);
-        loggerInfo("  Per-draw data buffer: {:.1f} MB", getCombinedPerDrawDataBufferSize() / (1024.0f * 1024.0f));
-        loggerInfo("  Total GPU memory: {:.1f} MB",
+        vfLogInfo("IndirectBatchManager initialized: {} batches, {} groups, {:.1f} MB GPU memory",
+                   this->batchCount, this->shaderGroupCount,
                    (getCombinedDrawCommandBufferSize() + getCombinedDrawCountBufferSize() +
                        getCombinedPerDrawDataBufferSize()) / (1024.0f * 1024.0f));
 
@@ -163,7 +136,6 @@ namespace render::gpudriven
         destroyBuffers();
         initialized = false;
 
-        loggerInfo("IndirectBatchManager cleaned up");
     }
 
     bool IndirectBatchManager::createBuffers()
@@ -230,19 +202,19 @@ namespace render::gpudriven
         }
         catch (const vk::OutOfDeviceMemoryError& e)
         {
-            loggerError("IndirectBatchManager: Out of device memory - {}", e.what());
+            vfLogError("IndirectBatchManager: Out of device memory - {}", e.what());
             destroyBuffers();
             return false;
         }
         catch (const vk::OutOfHostMemoryError& e)
         {
-            loggerError("IndirectBatchManager: Out of host memory - {}", e.what());
+            vfLogError("IndirectBatchManager: Out of host memory - {}", e.what());
             destroyBuffers();
             return false;
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("IndirectBatchManager: Vulkan error during buffer creation - {}", e.what());
+            vfLogError("IndirectBatchManager: Vulkan error during buffer creation - {}", e.what());
             destroyBuffers();
             return false;
         }

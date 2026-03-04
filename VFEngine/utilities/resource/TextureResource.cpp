@@ -1,5 +1,4 @@
 #include "TextureResource.hpp"
-#include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
 
 #include <fstream>

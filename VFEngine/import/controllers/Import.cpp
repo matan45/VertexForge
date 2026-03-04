@@ -5,7 +5,6 @@
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
 #include "../pipeline/stages/FileProcessingStage.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace controllers
 {

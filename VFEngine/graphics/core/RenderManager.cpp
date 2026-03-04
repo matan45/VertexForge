@@ -3,7 +3,7 @@
 #include "SwapChain.hpp"
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
 
@@ -61,7 +61,7 @@ namespace core {
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		if (result != vk::Result::eSuccess) {
-			loggerError("failed to wait for in-flight fence");
+			vfLogError("failed to wait for in-flight fence");
 		}
 		
 		result = device.getLogicalDevice().acquireNextImageKHR(
@@ -82,7 +82,7 @@ namespace core {
 			result = device.getLogicalDevice().waitForFences(
 				1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
 			if (result != vk::Result::eSuccess) {
-				loggerError("failed to wait for image in flight fence");
+				vfLogError("failed to wait for image in flight fence");
 			}
 		}
 		// Mark this image as now being in use by this frame
@@ -91,7 +91,7 @@ namespace core {
 		// Reset the fence only after we know we will submit work
 		result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
 		if (result != vk::Result::eSuccess) {
-			loggerError("failed to reset fence");
+			vfLogError("failed to reset fence");
 		}
 
 		commandPool->resetCommandBuffer(imageIndex);

@@ -11,7 +11,6 @@
 #include "../../events/WaterEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {

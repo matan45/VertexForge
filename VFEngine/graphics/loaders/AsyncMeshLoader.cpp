@@ -2,7 +2,7 @@
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "resource/ResourceManager.hpp"
 #include "math/Frustum.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <chrono>
 
 namespace loaders
@@ -13,7 +13,7 @@ namespace loaders
         
         if (pendingLoads.find(meshPath) != pendingLoads.end())
         {
-            loggerInfo("Mesh already being loaded: {}", meshPath);
+            vfLogInfo("Mesh already being loaded: {}", meshPath);
             return;
         }
 
@@ -27,7 +27,7 @@ namespace loaders
 
         pendingLoads[meshPath] = std::move(pending);
 
-        loggerInfo("Started async mesh load: {}", meshPath);
+        vfLogInfo("Started async mesh load: {}", meshPath);
     }
 
     void AsyncMeshLoader::cancelLoad(const std::string& meshPath)
@@ -40,7 +40,7 @@ namespace loaders
             it->second->cancelled = true;
             it->second->state = services::LoadingState::Cancelled;
             it->second->statusMessage = "Cancelled";
-            loggerInfo("Cancelled mesh load: {}", meshPath);
+            vfLogInfo("Cancelled mesh load: {}", meshPath);
         }
     }
 
@@ -74,14 +74,14 @@ namespace loaders
                                 pending->progress = 0.5f;
                                 pending->statusMessage = "Uploading to GPU...";
                                 gpuUploadReadyPath = path;
-                                loggerInfo("Mesh loaded from disk, ready for GPU upload: {}", path);
+                                vfLogInfo("Mesh loaded from disk, ready for GPU upload: {}", path);
                             }
                             else
                             {
                                 pending->state = services::LoadingState::Error;
                                 pending->errorMessage = "Failed to load mesh data from file";
                                 pending->statusMessage = "Error: Failed to load";
-                                loggerError("Failed to load mesh data: {}", path);
+                                vfLogError("Failed to load mesh data: {}", path);
                             }
                         }
                         catch (const std::exception& e)
@@ -89,7 +89,7 @@ namespace loaders
                             pending->state = services::LoadingState::Error;
                             pending->errorMessage = e.what();
                             pending->statusMessage = "Error: " + std::string(e.what());
-                            loggerError("Exception loading mesh {}: {}", path, e.what());
+                            vfLogError("Exception loading mesh {}: {}", path, e.what());
                         }
                     }
                     else
@@ -169,7 +169,7 @@ namespace loaders
             result.errorMessage = "Load was cancelled during GPU upload";
             pending->state = services::LoadingState::Cancelled;
             gpuUploadReadyPath.clear();
-            loggerInfo("Mesh load cancelled during GPU upload: {}", meshPath);
+            vfLogInfo("Mesh load cancelled during GPU upload: {}", meshPath);
             return result;
         }
 
@@ -201,7 +201,7 @@ namespace loaders
         pendingLoads.erase(it);
         gpuUploadReadyPath.clear();
 
-        loggerInfo("Mesh GPU upload complete: {}", meshPath);
+        vfLogInfo("Mesh GPU upload complete: {}", meshPath);
 
         return result;
     }

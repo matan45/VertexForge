@@ -2,7 +2,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/AudioSettingsEvents.hpp"
 #include "events/SceneEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 
 namespace windows

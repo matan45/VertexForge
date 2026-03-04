@@ -5,7 +5,7 @@
 #include "../../core/RenderManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "material/MaterialManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace render::gpudriven
@@ -27,8 +27,6 @@ namespace render::gpudriven
             return;
         }
 
-        loggerInfo("GPUDrivenRenderer: Initializing...");
-
         cachedIBLLayout = iblDescriptorSetLayout;
         cachedRenderPass = renderPass;
 
@@ -38,16 +36,15 @@ namespace render::gpudriven
         if (meshStreamingEnabled)
         {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
-            loggerInfo("GPUDrivenRenderer: Mesh streaming enabled by default");
         }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
         if (!batchManager->initWithAutoConfig())
         {
-            loggerError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
+            vfLogError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
             if (!batchManager->init(2, 50000, 8))
             {
-                loggerError(
+                vfLogError(
                     "GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
                 batchManager.reset();
             }
@@ -69,7 +66,7 @@ namespace render::gpudriven
             (MESHLET_MAX_VERTICES > meshCaps.maxMeshOutputVertices ||
                 MESHLET_MAX_PRIMITIVES > meshCaps.maxMeshOutputPrimitives))
         {
-            loggerError(
+            vfLogError(
                 "GPUDrivenRenderer: Meshlet constants ({} vertices, {} primitives) exceed device limits ({}, {})",
                 MESHLET_MAX_VERTICES, MESHLET_MAX_PRIMITIVES,
                 meshCaps.maxMeshOutputVertices, meshCaps.maxMeshOutputPrimitives);
@@ -78,8 +75,6 @@ namespace render::gpudriven
 
         if (meshShaderSupported)
         {
-            loggerInfo("GPUDrivenRenderer: Mesh shader supported - using Task+Mesh shader pipeline");
-
             meshletBuffer = std::make_unique<MeshletBuffer>(device);
             meshletBuffer->init();
 
@@ -105,7 +100,7 @@ namespace render::gpudriven
 
             if (!shadowSystem || !shadowSystem->isInitialized())
             {
-                loggerError("GPUDrivenRenderer: Shadow system initialization failed");
+                vfLogError("GPUDrivenRenderer: Shadow system initialization failed");
                 return;
             }
 
@@ -145,7 +140,6 @@ namespace render::gpudriven
             if (meshStreamManager)
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
-                loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
             }
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
@@ -153,9 +147,9 @@ namespace render::gpudriven
         }
         else
         {
-            loggerError(
+            vfLogError(
                 "GPUDrivenRenderer: Mesh shaders not supported - GPU-driven rendering requires mesh shader support");
-            loggerError("GPUDrivenRenderer: The VK_EXT_mesh_shader extension with task shader support is required");
+            vfLogError("GPUDrivenRenderer: The VK_EXT_mesh_shader extension with task shader support is required");
             return;
         }
 
@@ -179,7 +173,6 @@ namespace render::gpudriven
         }
 
         initialized = true;
-        loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
 
     void GPUDrivenRenderer::initWBOITPipeline(vk::RenderPass wboitRenderPass)
@@ -202,7 +195,7 @@ namespace render::gpudriven
             .wboitMode = true
         });
 
-        loggerInfo("GPUDrivenRenderer: WBOIT mesh shader pipeline initialized");
+        vfLogInfo("GPUDrivenRenderer: WBOIT mesh shader pipeline initialized");
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -272,7 +265,6 @@ namespace render::gpudriven
         mergedBuffer.reset();
 
         initialized = false;
-        loggerInfo("GPUDrivenRenderer: Cleaned up");
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
@@ -284,7 +276,7 @@ namespace render::gpudriven
 
         if (!renderPassChanged && !iblLayoutChanged) return;
 
-        loggerInfo("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
+        vfLogInfo("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
 
         cachedRenderPass = newRenderPass;
         if (newIBLLayout)
@@ -295,32 +287,32 @@ namespace render::gpudriven
         bool canRecreate = true;
         if (!meshShaderPipeline)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: meshShaderPipeline is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: meshShaderPipeline is null");
             canRecreate = false;
         }
         if (!boneMatrixManager)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: boneMatrixManager is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: boneMatrixManager is null");
             canRecreate = false;
         }
         if (!lightBufferManager)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: lightBufferManager is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: lightBufferManager is null");
             canRecreate = false;
         }
         if (!clusterGridManager)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: clusterGridManager is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: clusterGridManager is null");
             canRecreate = false;
         }
         if (!lightCullingPipeline)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: lightCullingPipeline is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: lightCullingPipeline is null");
             canRecreate = false;
         }
         if (!bindlessTextures)
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: bindlessTextures is null");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: bindlessTextures is null");
             canRecreate = false;
         }
 
@@ -383,7 +375,7 @@ namespace render::gpudriven
         }
         else
         {
-            loggerError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
+            vfLogError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
         }
     }
 

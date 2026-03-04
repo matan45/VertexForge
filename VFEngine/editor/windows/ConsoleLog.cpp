@@ -1,5 +1,4 @@
 #include "ConsoleLog.hpp"
-#include "print/EditorLogger.hpp"
 #include "time/Timer.hpp"
 #include "imgui.h"
 #include <algorithm>

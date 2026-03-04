@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "GPUDrivenTypes.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace render::gpudriven
@@ -24,7 +24,7 @@ namespace render::gpudriven
             return;
         }
 
-        loggerInfo("GPUCullLODPipeline: Initializing...");
+        vfLogInfo("GPUCullLODPipeline: Initializing...");
 
         createDescriptorSetLayout();
         createPipelineLayout();
@@ -33,7 +33,6 @@ namespace render::gpudriven
         allocateDescriptorSet();
 
         initialized = true;
-        loggerInfo("GPUCullLODPipeline: Initialized successfully");
     }
 
     void GPUCullLODPipeline::cleanup()
@@ -77,7 +76,6 @@ namespace render::gpudriven
         }
 
         initialized = false;
-        loggerInfo("GPUCullLODPipeline: Cleaned up");
     }
 
     void GPUCullLODPipeline::createDescriptorSetLayout()
@@ -135,7 +133,7 @@ namespace render::gpudriven
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        loggerWarning("GPUCullLODPipeline: Created descriptor set layout");
+        vfLogWarning("GPUCullLODPipeline: Created descriptor set layout");
     }
 
     void GPUCullLODPipeline::createPipelineLayout()
@@ -149,7 +147,7 @@ namespace render::gpudriven
         layoutInfo.pPushConstantRanges = nullptr;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
-        loggerWarning("GPUCullLODPipeline: Created pipeline layout");
+        vfLogWarning("GPUCullLODPipeline: Created pipeline layout");
     }
 
     void GPUCullLODPipeline::createComputePipeline()
@@ -162,7 +160,7 @@ namespace render::gpudriven
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("GPUCullLODPipeline: Failed to load shader: {}", shader->getLastCompilationError());
+            vfLogError("GPUCullLODPipeline: Failed to load shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -173,12 +171,12 @@ namespace render::gpudriven
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("GPUCullLODPipeline: Failed to create compute pipeline");
+            vfLogError("GPUCullLODPipeline: Failed to create compute pipeline");
             return;
         }
 
         computePipeline = result.value;
-        loggerWarning("GPUCullLODPipeline: Created compute pipeline");
+        vfLogWarning("GPUCullLODPipeline: Created compute pipeline");
     }
 
     void GPUCullLODPipeline::createDescriptorPool()
@@ -202,7 +200,7 @@ namespace render::gpudriven
         poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        loggerWarning("GPUCullLODPipeline: Created descriptor pool");
+        vfLogWarning("GPUCullLODPipeline: Created descriptor pool");
     }
 
     void GPUCullLODPipeline::allocateDescriptorSet()
@@ -217,7 +215,7 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        loggerWarning("GPUCullLODPipeline: Allocated descriptor set");
+        vfLogWarning("GPUCullLODPipeline: Allocated descriptor set");
     }
 
     void GPUCullLODPipeline::updateDescriptors(
@@ -365,7 +363,7 @@ namespace render::gpudriven
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
-        loggerWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
+        vfLogWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)

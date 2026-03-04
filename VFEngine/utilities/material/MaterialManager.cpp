@@ -1,7 +1,6 @@
 #include "MaterialManager.hpp"
 #include "MaterialAsset.hpp"
 #include "MaterialInstanceAsset.hpp"
-#include "../print/EditorLogger.hpp"
 #include "../resource/ResourceManager.hpp"
 #include <algorithm>
 

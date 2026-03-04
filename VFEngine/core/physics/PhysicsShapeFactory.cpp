@@ -7,7 +7,7 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 namespace core::physics
@@ -31,7 +31,7 @@ namespace core::physics
                 glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
                 if (safeExtents != info.halfExtents)
                 {
-                    loggerWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
+                    vfLogWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
                                   info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
                                   safeExtents.x, safeExtents.y, safeExtents.z);
                 }
@@ -45,7 +45,7 @@ namespace core::physics
                 float safeRadius = std::max(info.radius, MIN_DIMENSION);
                 if (safeRadius != info.radius)
                 {
-                    loggerWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
+                    vfLogWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
                 }
                 return new JPH::SphereShape(safeRadius);
             }
@@ -59,7 +59,7 @@ namespace core::physics
                     // Radius exceeds half-height: shrink radius to fit a valid capsule
                     halfHeight = MIN_DIMENSION;
                     safeRadius = std::max(MIN_DIMENSION, info.height * 0.5f - MIN_DIMENSION);
-                    loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
+                    vfLogWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
                                   info.radius, safeRadius, halfHeight, info.height);
                 }
                 return new JPH::CapsuleShape(halfHeight, safeRadius);
@@ -72,7 +72,7 @@ namespace core::physics
             return createTriangleMeshShape(info);
 
         default:
-            loggerWarning("Unknown collider shape type {}, defaulting to unit box", static_cast<int>(info.shape));
+            vfLogWarning("Unknown collider shape type {}, defaulting to unit box", static_cast<int>(info.shape));
             return new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
         }
     }
@@ -81,7 +81,7 @@ namespace core::physics
     {
         if (info.meshPath.empty())
         {
-            loggerWarning("ConvexMesh collider has no mesh path, using box fallback");
+            vfLogWarning("ConvexMesh collider has no mesh path, using box fallback");
             return makeBoxFallback(info.halfExtents);
         }
 
@@ -117,7 +117,7 @@ namespace core::physics
                 auto result = compoundSettings.Create();
                 if (!result.HasError())
                 {
-                    loggerInfo("Created ConvexMesh compound collider with {} hulls from: {}",
+                    vfLogInfo("Created ConvexMesh compound collider with {} hulls from: {}",
                                compoundSettings.mSubShapes.size(), info.meshPath);
                     return result.Get();
                 }
@@ -127,7 +127,7 @@ namespace core::physics
         auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
         if (!meshData || meshData->vertices.empty())
         {
-            loggerWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+            vfLogWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
             return makeBoxFallback(info.halfExtents);
         }
 
@@ -144,12 +144,12 @@ namespace core::physics
         auto result = settings.Create();
         if (result.HasError())
         {
-            loggerWarning("ConvexMesh collider creation failed: {}, using box fallback",
+            vfLogWarning("ConvexMesh collider creation failed: {}, using box fallback",
                           result.GetError().c_str());
             return makeBoxFallback(info.halfExtents);
         }
 
-        loggerInfo("Created ConvexMesh collider with {} vertices from: {}",
+        vfLogInfo("Created ConvexMesh collider with {} vertices from: {}",
                    meshData->vertices.size(), info.meshPath);
         return result.Get();
     }
@@ -158,14 +158,14 @@ namespace core::physics
     {
         if (info.meshPath.empty())
         {
-            loggerWarning("TriangleMesh collider has no mesh path, using box fallback");
+            vfLogWarning("TriangleMesh collider has no mesh path, using box fallback");
             return makeBoxFallback(info.halfExtents);
         }
 
         auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
         if (!meshData || meshData->vertices.empty() || meshData->indices.empty())
         {
-            loggerWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+            vfLogWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
             return makeBoxFallback(info.halfExtents);
         }
 
@@ -190,12 +190,12 @@ namespace core::physics
         auto result = settings.Create();
         if (result.HasError())
         {
-            loggerWarning("TriangleMesh collider creation failed: {}, using box fallback",
+            vfLogWarning("TriangleMesh collider creation failed: {}, using box fallback",
                           result.GetError().c_str());
             return makeBoxFallback(info.halfExtents);
         }
 
-        loggerInfo("Created TriangleMesh collider with {} triangles from: {}",
+        vfLogInfo("Created TriangleMesh collider with {} triangles from: {}",
                    triangles.size(), info.meshPath);
         return result.Get();
     }

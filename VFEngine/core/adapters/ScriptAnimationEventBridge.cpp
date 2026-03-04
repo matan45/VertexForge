@@ -6,7 +6,6 @@
 #include "../../services/events/AnimationEventEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

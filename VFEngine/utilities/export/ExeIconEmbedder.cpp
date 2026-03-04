@@ -1,5 +1,4 @@
 #include "ExeIconEmbedder.hpp"
-#include "../print/EditorLogger.hpp"
 
 #ifdef _WIN32
 #include <Windows.h>

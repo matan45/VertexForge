@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUVFXTypes.hpp"
 #include <filesystem>
 
@@ -228,14 +228,14 @@ namespace render::vfx
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("VFX ribbon texture not found: {}", texturePath);
+            vfLogWarning("VFX ribbon texture not found: {}", texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
 
         if (textureEntries.size() >= MAX_TEXTURE_SLOTS)
         {
-            loggerWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
+            vfLogWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
                           MAX_TEXTURE_SLOTS, emitterIndex);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
@@ -264,11 +264,11 @@ namespace render::vfx
                 descriptorsNeedUpdate = true;
             }
 
-            loggerInfo("VFX ribbon texture loaded: {}", texturePath);
+            vfLogInfo("VFX ribbon texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to load VFX ribbon texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX ribbon texture '{}': {}", texturePath, e.what());
             textureEntries.erase(texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
         }

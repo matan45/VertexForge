@@ -2,7 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 #include <cstring>
 
@@ -33,7 +33,7 @@ namespace render::gpudriven
         createCommandPool();
 
         initialized = true;
-        loggerInfo("BrushComputePipeline initialized");
+        vfLogInfo("BrushComputePipeline initialized");
     }
 
     void BrushComputePipeline::cleanup()
@@ -80,7 +80,6 @@ namespace render::gpudriven
         shader.reset();
 
         initialized = false;
-        loggerInfo("BrushComputePipeline cleaned up");
     }
 
     void BrushComputePipeline::createDescriptorSetLayout()
@@ -136,7 +135,7 @@ namespace render::gpudriven
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("BrushComputePipeline: Failed to load shader: {}",
+            vfLogError("BrushComputePipeline: Failed to load shader: {}",
                         shader->getLastCompilationError());
             return;
         }
@@ -148,7 +147,7 @@ namespace render::gpudriven
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("BrushComputePipeline: Failed to create compute pipeline");
+            vfLogError("BrushComputePipeline: Failed to create compute pipeline");
             return;
         }
 
@@ -415,7 +414,7 @@ namespace render::gpudriven
 
         if (waitResult != vk::Result::eSuccess)
         {
-            loggerError("BrushComputePipeline: Failed to wait for compute fence");
+            vfLogError("BrushComputePipeline: Failed to wait for compute fence");
             return false;
         }
 

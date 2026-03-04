@@ -2,7 +2,6 @@
 #include "../resource/MeshStreamHandle.hpp"
 #include "../components/CoreComponents.hpp"
 #include "../scene/EntityRegistry.hpp"
-#include "../print/EditorLogger.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
 
 namespace lightbake

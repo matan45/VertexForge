@@ -1,6 +1,5 @@
 #include "WaterMeshBuffer.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/EditorLogger.hpp"
 #include <cstring>
 
 namespace render::water

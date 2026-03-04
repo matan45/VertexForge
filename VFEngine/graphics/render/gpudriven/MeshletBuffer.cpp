@@ -4,7 +4,6 @@
 #include "../../core/TransferManager.hpp"
 #include "resource/MeshletTypes.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/EditorLogger.hpp"
 #include <cassert>
 
 namespace render::gpudriven

@@ -1,7 +1,7 @@
 #include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace render::shadow
@@ -23,7 +23,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("TerrainShadowPipeline::init() called when already initialized");
             return;
         }
 
@@ -75,7 +74,7 @@ namespace render::shadow
         const auto& stages = terrainShadowShader->getShaderStages();
         if (stages.size() < 2)
         {
-            loggerError("TerrainShadowPipeline: Failed to load terrain shadow shaders: {}",
+            vfLogError("TerrainShadowPipeline: Failed to load terrain shadow shaders: {}",
                         terrainShadowShader->getLastCompilationError());
             return;
         }
@@ -89,7 +88,7 @@ namespace render::shadow
 
         if (!hasTask || !hasMesh)
         {
-            loggerError("TerrainShadowPipeline: Missing shader stages (Task={}, Mesh={})", hasTask, hasMesh);
+            vfLogError("TerrainShadowPipeline: Missing shader stages (Task={}, Mesh={})", hasTask, hasMesh);
             return;
         }
 
@@ -180,12 +179,12 @@ namespace render::shadow
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("TerrainShadowPipeline: Failed to create pipeline");
+            vfLogError("TerrainShadowPipeline: Failed to create pipeline");
             return;
         }
 
         terrainShadowPipeline = result.value;
-        loggerInfo("TerrainShadowPipeline: Successfully created terrain shadow pipeline");
+        vfLogInfo("TerrainShadowPipeline: Successfully created terrain shadow pipeline");
     }
 
     void TerrainShadowPipeline::dispatch(vk::CommandBuffer cmd,

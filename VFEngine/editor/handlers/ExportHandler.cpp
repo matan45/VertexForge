@@ -1,7 +1,6 @@
 #include "ExportHandler.hpp"
 #include "events/ProjectEvents.hpp"
 #include "export/GameExporter.hpp"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace handlers

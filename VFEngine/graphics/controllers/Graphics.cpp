@@ -1,6 +1,6 @@
 #include "Graphics.hpp"
 #include "../window/Window.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "../core/VulkanContext.hpp"
 
 

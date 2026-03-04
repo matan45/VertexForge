@@ -10,7 +10,7 @@
 #include "../render/mesh/SkinnedMeshPipeline.hpp"
 #include "resource/AnimationResource.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
 
 namespace controllers
@@ -58,7 +58,7 @@ namespace controllers
         }
         catch (const std::exception& e)
         {
-            loggerError("Failed to initialize AnimatedMeshPreviewController: {}", e.what());
+            vfLogError("Failed to initialize AnimatedMeshPreviewController: {}", e.what());
             cleanUp();
         }
     }
@@ -250,25 +250,25 @@ namespace controllers
         resource::MeshStreamHandle meshHandle;
         if (!meshHandle.openStream(meshPath))
         {
-            loggerError("Failed to open mesh file: {}", meshPath);
+            vfLogError("Failed to open mesh file: {}", meshPath);
             return false;
         }
 
         if (!meshHandle.hasSkeletonData())
         {
-            loggerError("Mesh file has no skeleton data: {}", meshPath);
+            vfLogError("Mesh file has no skeleton data: {}", meshPath);
             return false;
         }
 
         if (!meshHandle.readSkeleton(skeletonData))
         {
-            loggerError("Failed to read skeleton from mesh: {}", meshPath);
+            vfLogError("Failed to read skeleton from mesh: {}", meshPath);
             return false;
         }
 
         if (!skinnedPipeline->loadMeshFromFile(meshPath))
         {
-            loggerError("Failed to load mesh into pipeline: {}", meshPath);
+            vfLogError("Failed to load mesh into pipeline: {}", meshPath);
             skeletonData = resource::SkeletonData{};
             return false;
         }
@@ -276,7 +276,7 @@ namespace controllers
         loadedMeshPath = meshPath;
         meshLoaded = true;
 
-        loggerInfo("Loaded mesh with {} bones from: {}", skeletonData.bones.size(), meshPath);
+        vfLogInfo("Loaded mesh with {} bones from: {}", skeletonData.bones.size(), meshPath);
 
         if (animationLoaded && !animationData.channels.empty())
         {
@@ -302,7 +302,7 @@ namespace controllers
         animationData = resource::AnimationResource::loadAnimation(animationPath);
         if (animationData.channels.empty())
         {
-            loggerError("Failed to load animation: {}", animationPath);
+            vfLogError("Failed to load animation: {}", animationPath);
             return false;
         }
 
@@ -325,7 +325,7 @@ namespace controllers
         }
         else
         {
-            loggerInfo("Animation loaded, waiting for mesh with skeleton to be loaded");
+            vfLogInfo("Animation loaded, waiting for mesh with skeleton to be loaded");
         }
 
         return true;

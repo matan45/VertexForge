@@ -22,7 +22,6 @@
 #include "../../services/providers/IWaterRenderProvider.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace
 {

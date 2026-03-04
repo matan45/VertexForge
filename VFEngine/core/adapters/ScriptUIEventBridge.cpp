@@ -4,7 +4,6 @@
 #include "ScriptUIEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "events/UIEvents.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

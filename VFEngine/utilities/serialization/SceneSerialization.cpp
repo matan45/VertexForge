@@ -3,7 +3,6 @@
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
 #include "../threading/JobSystem.hpp"
-#include "../print/EditorLogger.hpp"
 #include <fstream>
 #include <algorithm>
 

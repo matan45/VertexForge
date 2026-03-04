@@ -2,7 +2,6 @@
 #include <Windows.h>
 #include <stdexcept>
 #include <algorithm>
-#include "../print/EditorLogger.hpp"
 
 std::string StringUtil::wstringToUtf8(std::wstring_view wstr)
 {

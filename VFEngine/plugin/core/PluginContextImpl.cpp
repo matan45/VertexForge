@@ -4,7 +4,6 @@
 #include "events/RenderHookEvents.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "Pipeline.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <algorithm>

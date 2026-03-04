@@ -3,7 +3,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <cstring>
 #include <fstream>

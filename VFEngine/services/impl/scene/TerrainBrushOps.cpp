@@ -17,7 +17,6 @@
 #include "../../events/SculptModeEvents.hpp"
 #include "../../events/PaintModeEvents.hpp"
 #include "../../events/HoleModeEvents.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {

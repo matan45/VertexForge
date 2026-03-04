@@ -8,7 +8,6 @@
 #include "components/ControllerComponents.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
 #include <glm/gtc/quaternion.hpp>
 
 namespace services

@@ -1,7 +1,7 @@
 #include "GPUVFXBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::vfx
 {
@@ -19,7 +19,6 @@ namespace render::vfx
     {
         if (initialized)
         {
-            loggerWarning("GPUVFXBufferManager already initialized");
             return true;
         }
 
@@ -34,68 +33,68 @@ namespace render::vfx
         {
             if (!createParticleBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create particle buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create particle buffer");
                 return false;
             }
 
             if (!createConfigBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create config buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create config buffer");
                 destroyBuffers();
                 return false;
             }
 
             if (!createStateBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create state buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create state buffer");
                 destroyBuffers();
                 return false;
             }
 
             if (!createDrawCommandBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create draw command buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create draw command buffer");
                 destroyBuffers();
                 return false;
             }
 
             if (!createLUTBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create LUT buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create LUT buffer");
                 destroyBuffers();
                 return false;
             }
 
             if (!createRibbonBuffers())
             {
-                loggerError("GPUVFXBufferManager: Failed to create ribbon buffers");
+                vfLogError("GPUVFXBufferManager: Failed to create ribbon buffers");
                 destroyBuffers();
                 return false;
             }
 
             if (!createEventBuffers())
             {
-                loggerError("GPUVFXBufferManager: Failed to create event buffers");
+                vfLogError("GPUVFXBufferManager: Failed to create event buffers");
                 destroyBuffers();
                 return false;
             }
 
             if (!createColliderBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create collider buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create collider buffer");
                 destroyBuffers();
                 return false;
             }
 
             if (!createTerrainBuffer())
             {
-                loggerError("GPUVFXBufferManager: Failed to create terrain buffer");
+                vfLogError("GPUVFXBufferManager: Failed to create terrain buffer");
                 destroyBuffers();
                 return false;
             }
 
             initialized = true;
-            loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
+            vfLogInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
                            getStateBufferSize() + getDrawCommandBufferSize() +
@@ -106,13 +105,13 @@ namespace render::vfx
         }
         catch (const vk::OutOfDeviceMemoryError& e)
         {
-            loggerError("GPUVFXBufferManager: Out of device memory - {}", e.what());
+            vfLogError("GPUVFXBufferManager: Out of device memory - {}", e.what());
             destroyBuffers();
             return false;
         }
         catch (const std::exception& e)
         {
-            loggerError("GPUVFXBufferManager: Exception during init - {}", e.what());
+            vfLogError("GPUVFXBufferManager: Exception during init - {}", e.what());
             destroyBuffers();
             return false;
         }
@@ -140,7 +139,6 @@ namespace render::vfx
         initialized = false;
         particleBufferCleared = false;
 
-        loggerInfo("GPUVFXBufferManager cleaned up");
     }
 
     void GPUVFXBufferManager::destroyBuffers()

@@ -12,7 +12,6 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
 #include <cassert>
 
 namespace services

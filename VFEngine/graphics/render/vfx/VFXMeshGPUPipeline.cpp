@@ -8,7 +8,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUVFXTypes.hpp"
 
 
@@ -41,21 +41,21 @@ namespace render::vfx
             loadShader();
             if (!gpuShader)
             {
-                loggerError("VFXMeshGPUPipeline: Failed to load shader");
+                vfLogError("VFXMeshGPUPipeline: Failed to load shader");
                 return;
             }
 
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
-                loggerError("VFXMeshGPUPipeline: Failed to create descriptor set layout");
+                vfLogError("VFXMeshGPUPipeline: Failed to create descriptor set layout");
                 return;
             }
 
             createDescriptorPool();
             if (!descriptorPool)
             {
-                loggerError("VFXMeshGPUPipeline: Failed to create descriptor pool");
+                vfLogError("VFXMeshGPUPipeline: Failed to create descriptor pool");
                 cleanup();
                 return;
             }
@@ -63,7 +63,7 @@ namespace render::vfx
             createBuffers();
             if (!cameraUBO)
             {
-                loggerError("VFXMeshGPUPipeline: Failed to create buffers");
+                vfLogError("VFXMeshGPUPipeline: Failed to create buffers");
                 cleanup();
                 return;
             }
@@ -76,22 +76,22 @@ namespace render::vfx
             createPipeline();
             if (!graphicsPipeline || !pipelineLayout)
             {
-                loggerError("VFXMeshGPUPipeline: Failed to create graphics pipeline");
+                vfLogError("VFXMeshGPUPipeline: Failed to create graphics pipeline");
                 cleanup();
                 return;
             }
 
             initialized = true;
-            loggerInfo("VFXMeshGPUPipeline initialized");
+            vfLogInfo("VFXMeshGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("VFXMeshGPUPipeline: Vulkan error during init - {}", e.what());
+            vfLogError("VFXMeshGPUPipeline: Vulkan error during init - {}", e.what());
             cleanup();
         }
         catch (const std::exception& e)
         {
-            loggerError("VFXMeshGPUPipeline: Exception during init - {}", e.what());
+            vfLogError("VFXMeshGPUPipeline: Exception during init - {}", e.what());
             cleanup();
         }
     }
@@ -190,7 +190,6 @@ namespace render::vfx
         descriptorsNeedUpdate = true;
         initialized = false;
 
-        loggerInfo("VFXMeshGPUPipeline cleaned up");
     }
 
     void VFXMeshGPUPipeline::loadShader()
@@ -200,7 +199,7 @@ namespace render::vfx
 
         if (gpuShader->getShaderStages().empty())
         {
-            loggerError("VFXMeshGPUPipeline: Failed to load shader: {}",
+            vfLogError("VFXMeshGPUPipeline: Failed to load shader: {}",
                         gpuShader->getLastCompilationError());
         }
     }

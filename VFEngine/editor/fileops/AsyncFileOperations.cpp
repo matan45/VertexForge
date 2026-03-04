@@ -3,7 +3,6 @@
 #include "events/FileOperationsEvents.hpp"
 #include "events/UndoRedoEvents.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace fs = std::filesystem;

@@ -4,7 +4,6 @@
 #include "ScriptVFXEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "../../services/events/VFXEventNotifications.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

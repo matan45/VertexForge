@@ -3,7 +3,6 @@
 #include <nfd/FileDialog.hpp>
 #include <events/EventDispatcher.hpp>
 #include <events/ResourceEvents.hpp>
-#include "print/EditorLogger.hpp"
 #include "imgui.h"
 #include <filesystem>
 

@@ -2,7 +2,7 @@
 #include "../occlusion/HiZBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::gpudriven
 {
@@ -130,7 +130,7 @@ namespace render::gpudriven
     {
         if (!hiZBuffer)
         {
-            loggerWarning("GPUDrivenRenderer: Cannot init light occlusion culling - HiZBuffer is null");
+            vfLogWarning("GPUDrivenRenderer: Cannot init light occlusion culling - HiZBuffer is null");
             return;
         }
 
@@ -138,7 +138,7 @@ namespace render::gpudriven
         lightOcclusionCulling->init(hiZBuffer);
         lightCulling.useOcclusion = true;
 
-        loggerInfo("GPUDrivenRenderer: Light occlusion culling initialized");
+        vfLogInfo("GPUDrivenRenderer: Light occlusion culling initialized");
     }
 
     void GPUDrivenRenderer::readBackLightOcclusionResults()
@@ -177,7 +177,7 @@ namespace render::gpudriven
     {
         if (!initialized || !clusterGridManager || !lightBufferManager || !lightCullingPipeline)
         {
-            loggerWarning("GPUDrivenRenderer: Cannot init volumetric fog - lighting subsystems not ready");
+            vfLogWarning("GPUDrivenRenderer: Cannot init volumetric fog - lighting subsystems not ready");
             return;
         }
 
@@ -198,7 +198,7 @@ namespace render::gpudriven
             shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
             shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
 
-        loggerInfo("GPUDrivenRenderer: Volumetric fog initialized");
+        vfLogInfo("GPUDrivenRenderer: Volumetric fog initialized");
     }
 
     void GPUDrivenRenderer::setVolumetricFogEnabled(bool value)

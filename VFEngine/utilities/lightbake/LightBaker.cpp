@@ -1,5 +1,4 @@
 #include "LightBaker.hpp"
-#include "../print/EditorLogger.hpp"
 #include "../threading/JobSystem.hpp"
 #include <thread>
 #include <algorithm>

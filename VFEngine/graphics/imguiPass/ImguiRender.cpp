@@ -7,7 +7,7 @@
 #include "../core/SwapChain.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace imguiPass {
 
@@ -234,7 +234,7 @@ namespace imguiPass {
 		}
 		catch (vk::SystemError& err)
 		{
-			loggerError("failed to create DescriptorPool {}", err.what());
+			vfLogError("failed to create DescriptorPool {}", err.what());
 		}
 	}
 

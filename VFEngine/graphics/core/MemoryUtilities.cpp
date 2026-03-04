@@ -1,5 +1,5 @@
 #include "MemoryUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -13,7 +13,7 @@ namespace core
 			}
 		}
 
-		loggerError("Failed to find suitable memory type.");
+		vfLogError("Failed to find suitable memory type.");
 		return 0;
 	}
 }

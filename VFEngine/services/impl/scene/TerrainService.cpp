@@ -13,7 +13,6 @@
 #include "../../events/PaintBrushEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/PhysicsEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <algorithm>
 #include <cstring>
 

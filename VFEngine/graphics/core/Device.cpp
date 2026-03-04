@@ -1,6 +1,6 @@
 
 #include "Device.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "../window/Window.hpp"
 
 #include <cassert>
@@ -16,13 +16,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	void* pUserData) {
 
 	if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-		loggerWarning("Validation layer warning: {}", pCallbackData->pMessage);
+		vfLogWarning("Validation layer warning: {}", pCallbackData->pMessage);
 	}
 	else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-		loggerError("Validation layer error: {}", pCallbackData->pMessage);
+		vfLogError("Validation layer error: {}", pCallbackData->pMessage);
 	}
 	else {
-		loggerInfo("Validation layer message: {}", pCallbackData->pMessage);
+		vfLogInfo("Validation layer message: {}", pCallbackData->pMessage);
 	}
 	return VK_FALSE;
 }
@@ -89,34 +89,24 @@ namespace core {
 			VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to create Vulkan instance: {}", err.what());
+			vfLogError("Failed to create Vulkan instance: {}", err.what());
 			throw;
-		}
-
-		if (debug) {
-			for (const auto& extension : vk::enumerateInstanceExtensionProperties()) {
-				loggerInfo("Available extension: {}", extension.extensionName);
-			}
 		}
 
 		if (debug) {
 			uint32_t version{ 0 };
 			if (vk::Result result = vk::enumerateInstanceVersion(&version); result == vk::Result::eSuccess) {
-				loggerInfo("Vulkan API version: {}.{}.{}",
+				vfLogInfo("Vulkan API version: {}.{}.{}",
 					VK_API_VERSION_MAJOR(version),
 					VK_API_VERSION_MINOR(version),
 					VK_API_VERSION_PATCH(version));
 			}
 			else {
-				loggerError("Failed to enumerate Vulkan instance version. Error code: {}", vk::to_string(result));
+				vfLogError("Failed to enumerate Vulkan instance version. Error code: {}", vk::to_string(result));
 			}
 
-
-			loggerInfo("Vulkan API version: {}.{}.{}",
-				VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version), VK_API_VERSION_PATCH(version));
-
 			if (!checkValidationLayerSupport()) {
-				loggerError("Validation layers requested, but not available!");
+				vfLogError("Validation layers requested, but not available!");
 			}
 		}
 
@@ -153,7 +143,7 @@ namespace core {
 			debugMessenger = instance->createDebugUtilsMessengerEXT(createInfo, nullptr, dldi);
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to set up debug messenger: {}", err.what());
+			vfLogError("Failed to set up debug messenger: {}", err.what());
 			throw;
 		}
 	}
@@ -163,21 +153,21 @@ namespace core {
 		const std::vector<vk::PhysicalDevice> devices = instance->enumeratePhysicalDevices();
 
 		if (debug) {
-			loggerInfo("Found {} devices with Vulkan support.", devices.size());
+			vfLogInfo("Found {} devices with Vulkan support.", devices.size());
 		}
 
 		for (const vk::PhysicalDevice& device : devices) {
 			if (isDeviceSuitable(device)) {
 				physicalDevice = device;
 				if (debug) {
-					loggerInfo("Selected physical device: {}", physicalDevice.getProperties().deviceName);
+					vfLogInfo("Selected physical device: {}", physicalDevice.getProperties().deviceName);
 				}
 				break;
 			}
 		}
 
 		if (!physicalDevice) {
-			loggerError("Failed to find a suitable GPU!");
+			vfLogError("Failed to find a suitable GPU!");
 		}
 
 	}
@@ -201,15 +191,6 @@ namespace core {
 			uniqueQueueFamilies.insert(queueFamilyIndices.transferFamily.value());
 		}
 
-		if (debug) {
-			loggerInfo("Creating {} unique queue families:", uniqueQueueFamilies.size());
-			loggerInfo("  Graphics/Compute family: {}", queueFamilyIndices.graphicsAndComputeFamily.value());
-			loggerInfo("  Present family: {}", queueFamilyIndices.presentFamily.value());
-			if (queueFamilyIndices.hasDedicatedTransferQueue()) {
-				loggerInfo("  Dedicated Transfer family: {}", queueFamilyIndices.transferFamily.value());
-			}
-		}
-
 		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
 		for (uint32_t queueFamily : uniqueQueueFamilies) {
 			vk::DeviceQueueCreateInfo queueCreateInfo{};
@@ -217,9 +198,6 @@ namespace core {
 			queueCreateInfo.queueCount = 1;
 			queueCreateInfo.pQueuePriorities = &queuePriority;
 			queueCreateInfos.push_back(queueCreateInfo);
-			if (debug) {
-				loggerInfo("  Creating queue for family {}", queueFamily);
-			}
 		}
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
@@ -269,20 +247,12 @@ namespace core {
 			// Get transfer queue (dedicated if available, otherwise use graphics queue)
 			if (queueFamilyIndices.hasDedicatedTransferQueue()) {
 				transferQueue = logicalDevice.get().getQueue(queueFamilyIndices.transferFamily.value(), 0);
-				if (debug) {
-					loggerInfo("Using dedicated transfer queue (family {}) for async transfers",
-					           queueFamilyIndices.transferFamily.value());
-				}
 			} else {
-				// Fall back to graphics queue for transfers
 				transferQueue = graphicsAndComputeQueue;
-				if (debug) {
-					loggerInfo("Using graphics queue for transfers (no dedicated transfer queue available)");
-				}
 			}
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to create logical device: {}", err.what());
+			vfLogError("Failed to create logical device: {}", err.what());
 			throw;
 		}
 	}
@@ -295,12 +265,9 @@ namespace core {
 
 		try {
 			stagingCommandPool = logicalDevice->createCommandPoolUnique(poolInfo);
-			if (debug) {
-				loggerInfo("Created shared staging command pool");
-			}
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to create staging command pool: {}", err.what());
+			vfLogError("Failed to create staging command pool: {}", err.what());
 			throw;
 		}
 	}
@@ -309,17 +276,14 @@ namespace core {
 	{
 		if (uint32_t layerCount = 0; vk::enumerateInstanceLayerProperties(&layerCount, nullptr) == vk::Result::eSuccess) {
 			std::vector<vk::LayerProperties> availableLayers(layerCount);
-			if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) == vk::Result::eSuccess) {
-				for (const auto& layer : availableLayers) {
-					loggerInfo("Available validation layer: {}", layer.layerName);
-				}
-			}
-			else {
-				loggerError("Failed to retrieve Vulkan instance layers.");
+			if (vk::enumerateInstanceLayerProperties(&layerCount, availableLayers.data()) != vk::Result::eSuccess) {
+				vfLogError("Failed to retrieve Vulkan instance layers.");
+				return false;
 			}
 		}
 		else {
-			loggerError("Failed to count Vulkan instance layers.");
+			vfLogError("Failed to count Vulkan instance layers.");
+			return false;
 		}
 
 		return true;
@@ -335,16 +299,16 @@ namespace core {
 		if (debug) {
 			const std::string deviceName = deviceProperties.deviceName;
 			if (!indices.isComplete()) {
-				loggerInfo("Device '{}' rejected: incomplete queue families", deviceName);
+				vfLogInfo("Device '{}' rejected: incomplete queue families", deviceName);
 			}
 			if (!extensionsSupported) {
-				loggerInfo("Device '{}' rejected: missing required extensions (including VK_EXT_mesh_shader)", deviceName);
+				vfLogInfo("Device '{}' rejected: missing required extensions (including VK_EXT_mesh_shader)", deviceName);
 			}
 			if (!supportedFeatures.samplerAnisotropy) {
-				loggerInfo("Device '{}' rejected: no sampler anisotropy support", deviceName);
+				vfLogInfo("Device '{}' rejected: no sampler anisotropy support", deviceName);
 			}
 			if (deviceProperties.deviceType != vk::PhysicalDeviceType::eDiscreteGpu) {
-				loggerInfo("Device '{}' rejected: not a discrete GPU (type: {})",
+				vfLogInfo("Device '{}' rejected: not a discrete GPU (type: {})",
 				           deviceName, vk::to_string(deviceProperties.deviceType));
 			}
 		}
@@ -361,17 +325,9 @@ namespace core {
 		
 		std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
-		if (debug) {
-			loggerInfo("Found {} available device extensions.", availableExtensions.size());
-		}
-		
 		for (const vk::ExtensionProperties& extension : availableExtensions) {
 			requiredExtensions.erase(extension.extensionName);
-			
-			if (debug) {
-				loggerInfo("Available device extension: {}", extension.extensionName);
-			}
-			
+
 			if (requiredExtensions.empty()) {
 				return true;
 			}
@@ -380,7 +336,7 @@ namespace core {
 		if (!requiredExtensions.empty()) {
 			if (debug) {
 				for (const auto& ext : requiredExtensions) {
-					loggerError("Required device extension not found: {}", ext);
+					vfLogError("Required device extension not found: {}", ext);
 				}
 			}
 			return false;
@@ -400,7 +356,7 @@ namespace core {
 		}
 
 		if (!meshShaderExtensionFound) {
-			loggerWarning("VK_EXT_mesh_shader not available - mesh shader capabilities will be zero");
+			vfLogWarning("VK_EXT_mesh_shader not available - mesh shader capabilities will be zero");
 			return;
 		}
 		
@@ -441,18 +397,11 @@ namespace core {
 		meshShaderCapabilities.maxPreferredTaskWorkGroupInvocations = meshProps.maxPreferredTaskWorkGroupInvocations;
 
 		if (debug) {
-			loggerInfo("Mesh Shader Capabilities:");
-			loggerInfo("  Mesh shader supported: {}", meshShaderCapabilities.meshShaderSupported);
-			loggerInfo("  Task shader supported: {}", meshShaderCapabilities.taskShaderSupported);
-			loggerInfo("  Max mesh output vertices: {}", meshShaderCapabilities.maxMeshOutputVertices);
-			loggerInfo("  Max mesh output primitives: {}", meshShaderCapabilities.maxMeshOutputPrimitives);
-			loggerInfo("  Max mesh workgroup invocations: {}", meshShaderCapabilities.maxMeshWorkGroupInvocations);
-			loggerInfo("  Max mesh workgroup size: [{}, {}, {}]",
-				meshShaderCapabilities.maxMeshWorkGroupSize[0],
-				meshShaderCapabilities.maxMeshWorkGroupSize[1],
-				meshShaderCapabilities.maxMeshWorkGroupSize[2]);
-			loggerInfo("  Max task workgroup invocations: {}", meshShaderCapabilities.maxTaskWorkGroupInvocations);
-			loggerInfo("  Preferred mesh workgroup invocations: {}", meshShaderCapabilities.maxPreferredMeshWorkGroupInvocations);
+			vfLogInfo("Mesh shader: mesh={}, task={}, maxVerts={}, maxPrims={}",
+				meshShaderCapabilities.meshShaderSupported,
+				meshShaderCapabilities.taskShaderSupported,
+				meshShaderCapabilities.maxMeshOutputVertices,
+				meshShaderCapabilities.maxMeshOutputPrimitives);
 		}
 	}
 

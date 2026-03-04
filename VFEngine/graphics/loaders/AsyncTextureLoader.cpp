@@ -2,7 +2,7 @@
 #include "resource/TextureResource.hpp"
 #include "../../core/controllers/EditorTextureController.hpp"
 #include "../../core/controllers/texture/EditorTexture.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <vector>
 
 namespace loaders
@@ -14,7 +14,7 @@ namespace loaders
         // Check if already loading for this instance
         if (pendingLoads.find(instanceId) != pendingLoads.end())
         {
-            loggerWarning("AsyncTextureLoader: Already loading texture for instance {:p}", instanceId);
+            vfLogWarning("AsyncTextureLoader: Already loading texture for instance {:p}", instanceId);
             return;
         }
 
@@ -39,7 +39,7 @@ namespace loaders
         });
 
         pendingLoads[instanceId] = std::move(pending);
-        loggerInfo("AsyncTextureLoader: Started async load for {} (HDR: {})", texturePath, isHDR);
+        vfLogInfo("AsyncTextureLoader: Started async load for {} (HDR: {})", texturePath, isHDR);
     }
 
     void AsyncTextureLoader::cancelLoad(void* instanceId)
@@ -110,7 +110,7 @@ namespace loaders
                         pending->state = services::LoadingState::Error;
                         pending->errorMessage = e.what();
                         pending->statusMessage = "Failed to load texture";
-                        loggerError("AsyncTextureLoader: Failed to load {}: {}", pending->texturePath, e.what());
+                        vfLogError("AsyncTextureLoader: Failed to load {}: {}", pending->texturePath, e.what());
                     }
                 }
             }
@@ -207,7 +207,7 @@ namespace loaders
         it = pendingLoads.find(instanceId);
         if (it == pendingLoads.end())
         {
-            loggerWarning("AsyncTextureLoader: Load was removed during GPU upload for {}", texturePath);
+            vfLogWarning("AsyncTextureLoader: Load was removed during GPU upload for {}", texturePath);
             return false;
         }
 
@@ -221,7 +221,7 @@ namespace loaders
                 gpuUploadReadyInstance = nullptr;
             }
             pendingLoads.erase(it);
-            loggerInfo("AsyncTextureLoader: Load was cancelled during GPU upload for {}", texturePath);
+            vfLogInfo("AsyncTextureLoader: Load was cancelled during GPU upload for {}", texturePath);
             return false;
         }
 
@@ -230,7 +230,7 @@ namespace loaders
             pending->state = services::LoadingState::Error;
             pending->errorMessage = errorMessage;
             pending->statusMessage = "GPU upload failed";
-            loggerError("AsyncTextureLoader: GPU upload failed for {}: {}", texturePath, errorMessage);
+            vfLogError("AsyncTextureLoader: GPU upload failed for {}: {}", texturePath, errorMessage);
 
             if (gpuUploadReadyInstance == instanceId)
             {
@@ -244,7 +244,7 @@ namespace loaders
             pending->state = services::LoadingState::Error;
             pending->errorMessage = "Failed to create GPU texture";
             pending->statusMessage = "GPU texture creation failed";
-            loggerError("AsyncTextureLoader: Failed to create GPU texture for {}", texturePath);
+            vfLogError("AsyncTextureLoader: Failed to create GPU texture for {}", texturePath);
 
             if (gpuUploadReadyInstance == instanceId)
             {
@@ -266,7 +266,7 @@ namespace loaders
             gpuUploadReadyInstance = nullptr;
         }
 
-        loggerInfo("AsyncTextureLoader: GPU upload complete for {}", texturePath);
+        vfLogInfo("AsyncTextureLoader: GPU upload complete for {}", texturePath);
         return true;
     }
 

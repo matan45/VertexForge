@@ -10,7 +10,6 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-#include "../print/EditorLogger.hpp"
 #include "../material/MaterialTypes.hpp"
 #include "../material/MaterialInstanceTypes.hpp"
 #include "../animator/AnimatorTypes.hpp"

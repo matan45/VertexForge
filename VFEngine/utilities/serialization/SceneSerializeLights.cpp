@@ -1,7 +1,6 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
-#include "../print/EditorLogger.hpp"
 
 namespace serialization
 {

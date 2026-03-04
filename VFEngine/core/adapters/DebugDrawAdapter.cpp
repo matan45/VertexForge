@@ -1,5 +1,4 @@
 #include "DebugDrawAdapter.hpp"
-#include "print/EditorLogger.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 

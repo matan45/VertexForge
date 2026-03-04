@@ -5,7 +5,6 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {

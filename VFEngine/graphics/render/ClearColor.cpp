@@ -2,7 +2,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render
 {

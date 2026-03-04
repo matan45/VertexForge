@@ -4,7 +4,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::occlusion
 {
@@ -27,7 +27,7 @@ namespace render::occlusion
         createDescriptorSets();
 
         initialized = true;
-        loggerInfo("Occlusion culling manager initialized with max {} objects", INITIAL_MAX_OBJECTS);
+        vfLogInfo("Occlusion culling manager initialized with max {} objects", INITIAL_MAX_OBJECTS);
     }
 
     void OcclusionCullingManager::createBuffers(uint32_t maxObjects)
@@ -81,7 +81,7 @@ namespace render::occlusion
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("Failed to load occlusion culling shader: {}", shader->getLastCompilationError());
+            vfLogError("Failed to load occlusion culling shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -163,7 +163,7 @@ namespace render::occlusion
 
         createBuffers(newMaxObjects);
 
-        loggerInfo("Occlusion culling buffers resized to {} objects", newMaxObjects);
+        vfLogInfo("Occlusion culling buffers resized to {} objects", newMaxObjects);
     }
 
     void OcclusionCullingManager::updateObjects(const std::vector<GPUObjectData>& objects)

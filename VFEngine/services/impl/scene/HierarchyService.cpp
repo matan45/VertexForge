@@ -8,7 +8,6 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/ScriptingEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <functional>
 
 namespace services

@@ -1,6 +1,5 @@
 #include "PrefabPreviewWindow.hpp"
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>

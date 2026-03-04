@@ -3,7 +3,6 @@
 #include "../events/EditorModeEvents.hpp"
 #include "../events/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace services

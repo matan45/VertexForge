@@ -6,7 +6,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace render::gpudriven
@@ -54,7 +54,6 @@ namespace render::gpudriven
         std::memset(data, 0, sizeof(MeshletCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);
 
-        loggerInfo("MeshShaderPipeline: Created culling stats buffer");
     }
 
     void MeshShaderPipeline::cleanup()
@@ -228,7 +227,7 @@ namespace render::gpudriven
     {
         if (!shadowDataDescSet || !shadowTextureDescSet)
         {
-            loggerWarning("Invalid shadow descriptor sets provided");
+            vfLogWarning("Invalid shadow descriptor sets provided");
             return;
         }
         shadowDataDescriptorSet = shadowDataDescSet;
@@ -273,7 +272,6 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         perDrawDataDescriptorSet = sets[0];
 
-        loggerInfo("MeshShaderPipeline: Created per-draw data descriptor");
     }
 
     void MeshShaderPipeline::createMeshletDataDescriptor()
@@ -342,7 +340,6 @@ namespace render::gpudriven
 
         vkDevice.updateDescriptorSets(statsWrite, {});
 
-        loggerInfo("MeshShaderPipeline: Created meshlet data descriptor");
     }
 
     void MeshShaderPipeline::createVertexDataDescriptor()
@@ -380,7 +377,6 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         vertexDataDescriptorSet = sets[0];
 
-        loggerInfo("MeshShaderPipeline: Created vertex data descriptor");
     }
 
     void MeshShaderPipeline::createMeshShaderGraphicsPipeline(const MeshPipelineInitInfo& info)
@@ -398,7 +394,7 @@ namespace render::gpudriven
         const auto& stages = meshShader->getShaderStages();
         if (stages.size() < 3)
         {
-            loggerError("MeshShaderPipeline: Failed to load shaders (need Task + Mesh + Fragment): {}",
+            vfLogError("MeshShaderPipeline: Failed to load shaders (need Task + Mesh + Fragment): {}",
                         meshShader->getLastCompilationError());
             return;
         }
@@ -413,7 +409,7 @@ namespace render::gpudriven
 
         if (!hasTask || !hasMesh || !hasFrag)
         {
-            loggerError("MeshShaderPipeline: Missing shader stages (Task={}, Mesh={}, Fragment={})",
+            vfLogError("MeshShaderPipeline: Missing shader stages (Task={}, Mesh={}, Fragment={})",
                         hasTask, hasMesh, hasFrag);
             return;
         }
@@ -503,7 +499,7 @@ namespace render::gpudriven
         }
         catch (const std::exception& e)
         {
-            loggerError("MeshShaderPipeline: Failed to create pipeline - {}", e.what());
+            vfLogError("MeshShaderPipeline: Failed to create pipeline - {}", e.what());
         }
     }
 

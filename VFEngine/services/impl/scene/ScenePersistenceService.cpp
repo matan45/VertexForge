@@ -16,7 +16,6 @@
 #include "../../events/AudioSettingsEvents.hpp"
 #include "../../events/PostProcessEvents.hpp"
 #include "../../events/NavmeshEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <functional>
 
 namespace services

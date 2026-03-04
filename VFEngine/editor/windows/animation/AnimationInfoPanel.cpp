@@ -2,7 +2,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "providers/PreviewInstanceId.hpp"
-#include "print/EditorLogger.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
 #include <filesystem>

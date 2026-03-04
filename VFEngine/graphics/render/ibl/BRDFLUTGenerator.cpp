@@ -6,7 +6,7 @@
 #include "../../core/Utilities.hpp"
 #include "resource/TextureResource.hpp"
 #include "resource/PathResolver.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 #include <filesystem>
 
@@ -63,7 +63,7 @@ namespace render::ibl
 
         brdfLUTImage.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        loggerInfo("BRDF LUT loaded from file: {}", filePath);
+        vfLogInfo("BRDF LUT loaded from file: {}", filePath);
         return true;
     }
 
@@ -176,7 +176,7 @@ namespace render::ibl
         if (vk::Result result = device.getLogicalDevice().mapMemory(quadVertexBufferMemory, 0, quadBufferInfo.size, {},
             &data); result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
         }
         memcpy(data, quad.data(), quadBufferInfo.size);
         device.getLogicalDevice().unmapMemory(quadVertexBufferMemory);
@@ -278,7 +278,7 @@ namespace render::ibl
         if (vk::Result result = device.getLogicalDevice().waitForFences(renderFence, VK_TRUE, UINT64_MAX); result !=
             vk::Result::eSuccess)
         {
-            loggerError("Failed to to wait for Fence BRDFLUT:");
+            vfLogError("Failed to to wait for Fence BRDFLUT:");
         }
 
         vk::UniqueCommandBuffer transitionCommandBuffer = core::Utilities::beginSingleTimeCommands(

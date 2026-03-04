@@ -1,7 +1,6 @@
 #include "ContentBrowserModals.hpp"
 #include "imgui.h"
 #include "string/StringUtil.hpp"
-#include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/FileOperationsEvents.hpp"

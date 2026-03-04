@@ -6,7 +6,6 @@
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/EditorLogger.hpp"
 #include <cassert>
 #include <filesystem>
 

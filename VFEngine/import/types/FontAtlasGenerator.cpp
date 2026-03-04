@@ -1,6 +1,5 @@
 #include "FontAtlasGenerator.hpp"
 #include "SDFGenerator.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <algorithm>
 #include <cmath>

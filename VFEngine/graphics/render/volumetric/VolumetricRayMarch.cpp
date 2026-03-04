@@ -1,7 +1,7 @@
 #include "VolumetricRayMarch.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::volumetric
 {
@@ -21,7 +21,7 @@ namespace render::volumetric
     {
         if (initialized)
         {
-            loggerWarning("VolumetricRayMarch: Already initialized");
+            vfLogWarning("VolumetricRayMarch: Already initialized");
             return;
         }
 
@@ -32,7 +32,7 @@ namespace render::volumetric
         createComputePipeline();
 
         initialized = true;
-        loggerInfo("VolumetricRayMarch: Initialized ({}x{}x{})", dims.width, dims.height, dims.depth);
+        vfLogInfo("VolumetricRayMarch: Initialized ({}x{}x{})", dims.width, dims.height, dims.depth);
     }
 
     void VolumetricRayMarch::cleanup()
@@ -62,7 +62,6 @@ namespace render::volumetric
         }
 
         initialized = false;
-        loggerInfo("VolumetricRayMarch: Cleaned up");
     }
 
     void VolumetricRayMarch::createPipelineLayout()
@@ -82,7 +81,7 @@ namespace render::volumetric
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("VolumetricRayMarch: Failed to load shader: {}", shader->getLastCompilationError());
+            vfLogError("VolumetricRayMarch: Failed to load shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -93,7 +92,7 @@ namespace render::volumetric
         auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("VolumetricRayMarch: Failed to create compute pipeline");
+            vfLogError("VolumetricRayMarch: Failed to create compute pipeline");
             return;
         }
 

@@ -5,7 +5,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::ibl
 {
@@ -132,7 +132,7 @@ namespace render::ibl
             vertexCubeVerticesBufferRequest.size, {},
             &data); result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
         }
         memcpy(data, cubeVertices.data(), vertexCubeVerticesBufferRequest.size);
         device.getLogicalDevice().unmapMemory(vertexBufferMemory);
@@ -415,7 +415,7 @@ namespace render::ibl
             if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
                 vk::Result::eSuccess)
             {
-                loggerError("Failed to wait for Fence IBL face {}:", face);
+                vfLogError("Failed to wait for Fence IBL face {}:", face);
             }
             device.getLogicalDevice().destroyFence(faceFence);
         }

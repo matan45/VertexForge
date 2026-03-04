@@ -1,7 +1,7 @@
 #include "CameraOcclusionManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::occlusion
 {
@@ -20,7 +20,7 @@ namespace render::occlusion
     {
         if (cameras.find(id) != cameras.end())
         {
-            loggerWarning("Camera {} already exists", id);
+            vfLogWarning("Camera {} already exists", id);
             return cameras[id].get();
         }
 
@@ -30,7 +30,7 @@ namespace render::occlusion
         CameraRenderData* ptr = cameraData.get();
         cameras[id] = std::move(cameraData);
 
-        loggerInfo("Created camera {} with occlusion culling {}", id, enableOcclusion ? "enabled" : "disabled");
+        vfLogInfo("Created camera {} with occlusion culling {}", id, enableOcclusion ? "enabled" : "disabled");
         return ptr;
     }
 
@@ -44,7 +44,7 @@ namespace render::occlusion
     {
         if (id == MAIN_CAMERA_ID)
         {
-            loggerWarning("Cannot remove main camera");
+            vfLogWarning("Cannot remove main camera");
             return;
         }
 
@@ -52,7 +52,7 @@ namespace render::occlusion
         if (it != cameras.end())
         {
             cameras.erase(it);
-            loggerInfo("Removed camera {}", id);
+            vfLogInfo("Removed camera {}", id);
 
             if (activeCameraId == id)
             {
@@ -74,7 +74,7 @@ namespace render::occlusion
         }
         else
         {
-            loggerWarning("Cannot set active camera to non-existent camera {}", id);
+            vfLogWarning("Cannot set active camera to non-existent camera {}", id);
         }
     }
 
@@ -84,19 +84,18 @@ namespace render::occlusion
         auto* camera = getCamera(id);
         if (!camera)
         {
-            loggerError("Cannot init Hi-Z for non-existent camera {}", id);
+            vfLogError("Cannot init Hi-Z for non-existent camera {}", id);
             return;
         }
 
         if (!camera->useOcclusionCulling)
         {
-            loggerInfo("Skipping Hi-Z init for camera {} (occlusion culling disabled)", id);
+            vfLogInfo("Skipping Hi-Z init for camera {} (occlusion culling disabled)", id);
             return;
         }
 
         if (camera->hiZInitialized)
         {
-            loggerWarning("Hi-Z already initialized for camera {}", id);
             return;
         }
 
@@ -104,7 +103,7 @@ namespace render::occlusion
         camera->hiZBuffer->init(depthImage, depthView, depthFormat);
         camera->hiZInitialized = true;
 
-        loggerInfo("Initialized Hi-Z for camera {}", id);
+        vfLogInfo("Initialized Hi-Z for camera {}", id);
     }
 
     void CameraOcclusionManager::recreateCameraHiZ(CameraId id, vk::Image depthImage,
@@ -113,7 +112,7 @@ namespace render::occlusion
         auto* camera = getCamera(id);
         if (!camera)
         {
-            loggerError("Cannot recreate Hi-Z for non-existent camera {}", id);
+            vfLogError("Cannot recreate Hi-Z for non-existent camera {}", id);
             return;
         }
 
@@ -150,7 +149,7 @@ namespace render::occlusion
         camera->occlusionManager->init(camera->hiZBuffer.get());
         camera->occlusionInitialized = true;
 
-        loggerInfo("Recreated Hi-Z and occlusion culling for camera {}", id);
+        vfLogInfo("Recreated Hi-Z and occlusion culling for camera {}", id);
     }
 
     void CameraOcclusionManager::initCameraOcclusionCulling(CameraId id)
@@ -158,25 +157,24 @@ namespace render::occlusion
         auto* camera = getCamera(id);
         if (!camera)
         {
-            loggerError("Cannot init occlusion culling for non-existent camera {}", id);
+            vfLogError("Cannot init occlusion culling for non-existent camera {}", id);
             return;
         }
 
         if (!camera->useOcclusionCulling)
         {
-            loggerInfo("Skipping occlusion culling init for camera {} (disabled)", id);
+            vfLogInfo("Skipping occlusion culling init for camera {} (disabled)", id);
             return;
         }
 
         if (!camera->hiZInitialized)
         {
-            loggerError("Cannot init occlusion culling for camera {} - Hi-Z not initialized", id);
+            vfLogError("Cannot init occlusion culling for camera {} - Hi-Z not initialized", id);
             return;
         }
 
         if (camera->occlusionInitialized)
         {
-            loggerWarning("Occlusion culling already initialized for camera {}", id);
             return;
         }
 
@@ -184,7 +182,7 @@ namespace render::occlusion
         camera->occlusionManager->init(camera->hiZBuffer.get());
         camera->occlusionInitialized = true;
 
-        loggerInfo("Initialized occlusion culling for camera {}", id);
+        vfLogInfo("Initialized occlusion culling for camera {}", id);
     }
 
     void CameraOcclusionManager::updateCamera(CameraId id, const glm::mat4& viewProj, float nearPlane)

@@ -2,7 +2,6 @@
 
 #include <bit>
 #include "../string/StringUtil.hpp"
-#include "../print/EditorLogger.hpp"
 
 namespace nfd {
 

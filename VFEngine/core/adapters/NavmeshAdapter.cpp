@@ -1,5 +1,4 @@
 #include "NavmeshAdapter.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <DetourNavMesh.h>
 #include <DetourNavMeshQuery.h>

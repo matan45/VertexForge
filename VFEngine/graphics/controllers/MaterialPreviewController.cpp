@@ -9,7 +9,7 @@
 #include "../render/mesh/MeshTypes.hpp"
 #include "geometry/SphereGenerator.hpp"
 #include "resource/ResourceManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cmath>
 #include <optional>
 
@@ -219,7 +219,7 @@ namespace controllers
     {
         std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
         defaultTexture = uploadPixelsToGPU(device, whitePixel.data(), 1, 1);
-        loggerInfo("Created default white texture for material preview");
+        vfLogInfo("Created default white texture for material preview");
     }
 
     static PreviewTextureGPU loadTextureFromFileImpl(core::Device& device, const std::string& path)
@@ -233,18 +233,18 @@ namespace controllers
             auto texturePtr = textureData.get();
             if (!texturePtr || texturePtr->textureData().empty())
             {
-                loggerWarning("Failed to load texture: {}", path);
+                vfLogWarning("Failed to load texture: {}", path);
                 return {};
             }
 
             auto tex = uploadPixelsToGPU(device, texturePtr->textureData().data(),
                                           texturePtr->width, texturePtr->height, true);
-            loggerInfo("Loaded texture for preview: {}", path);
+            vfLogInfo("Loaded texture for preview: {}", path);
             return tex;
         }
         catch (const std::exception& e)
         {
-            loggerError("Exception loading texture {}: {}", path, e.what());
+            vfLogError("Exception loading texture {}: {}", path, e.what());
             return {};
         }
     }
@@ -301,11 +301,11 @@ namespace controllers
 
             if (sphereLoaded)
             {
-                loggerInfo("Material preview sphere created");
+                vfLogInfo("Material preview sphere created");
             }
             else
             {
-                loggerError("Failed to create material preview sphere");
+                vfLogError("Failed to create material preview sphere");
             }
         }
 

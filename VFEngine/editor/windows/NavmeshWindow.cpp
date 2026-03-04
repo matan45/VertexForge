@@ -2,7 +2,6 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/NavmeshEvents.hpp"
 #include "../../services/events/RenderEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 
 namespace windows

@@ -1,5 +1,5 @@
 #include "IKPostProcess.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -63,7 +63,7 @@ namespace animation
             int32_t idx = skeleton.getBoneIndex(boneName);
             if (idx < 0)
             {
-                loggerWarning("[IKPostProcessor] Bone '{}' not found in skeleton for chain '{}'",
+                vfLogWarning("[IKPostProcessor] Bone '{}' not found in skeleton for chain '{}'",
                               boneName, config.chainName);
                 state.resolvedBoneIndices.clear();
                 return;
@@ -74,7 +74,7 @@ namespace animation
         state.resolvedTipIndex = skeleton.getBoneIndex(config.tipBoneName);
         if (state.resolvedTipIndex < 0)
         {
-            loggerWarning("[IKPostProcessor] Tip bone '{}' not found in skeleton for chain '{}'",
+            vfLogWarning("[IKPostProcessor] Tip bone '{}' not found in skeleton for chain '{}'",
                           config.tipBoneName, config.chainName);
         }
 

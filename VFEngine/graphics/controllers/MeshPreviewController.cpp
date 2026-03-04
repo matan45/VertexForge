@@ -6,7 +6,7 @@
 #include "../render/mesh/MeshTypes.hpp"
 #include "../loaders/AsyncMeshLoader.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace controllers
 {

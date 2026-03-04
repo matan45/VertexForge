@@ -5,7 +5,7 @@
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <components/CoreComponents.hpp>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace services

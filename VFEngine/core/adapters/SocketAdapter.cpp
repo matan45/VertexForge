@@ -5,7 +5,6 @@
 #include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

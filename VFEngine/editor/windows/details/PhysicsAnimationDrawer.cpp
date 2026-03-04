@@ -5,7 +5,6 @@
 #include "types/PhysicsAnimationTypes.hpp"
 #include "nfd/FileDialog.hpp"
 #include "physics/PhysicsAnimationAsset.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 
 namespace windows::details

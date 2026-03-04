@@ -1,6 +1,5 @@
 #include "MeshLODGenerator.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <algorithm>
 #include <cfloat>

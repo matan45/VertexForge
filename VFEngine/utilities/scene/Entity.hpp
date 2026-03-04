@@ -1,7 +1,6 @@
 #pragma once
 #include "EntityRegistry.hpp"
 #include "../components/Components.hpp"
-#include "../print/EditorLogger.hpp"
 
 #include <entt/entt.hpp>
 #include <string>

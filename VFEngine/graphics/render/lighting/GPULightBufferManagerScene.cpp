@@ -3,7 +3,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../shadow/ShadowSystem.hpp"
 #include "../shadow/ShadowTypes.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
@@ -127,7 +127,7 @@ namespace render::lighting
 
         if (hitLimit && !warnedDirectionalLimit)
         {
-            loggerWarning("GPULightBufferManager: Exceeded max directional lights ({}). Additional lights will be ignored.",
+            vfLogWarning("GPULightBufferManager: Exceeded max directional lights ({}). Additional lights will be ignored.",
                           LightConstants::MAX_DIRECTIONAL_LIGHTS);
             warnedDirectionalLimit = true;
         }
@@ -211,7 +211,7 @@ namespace render::lighting
 
         if (hitLimit && !warnedPointLimit)
         {
-            loggerWarning("GPULightBufferManager: Exceeded max point lights ({}). Additional lights will be ignored.",
+            vfLogWarning("GPULightBufferManager: Exceeded max point lights ({}). Additional lights will be ignored.",
                           LightConstants::MAX_POINT_LIGHTS);
             warnedPointLimit = true;
         }
@@ -298,7 +298,7 @@ namespace render::lighting
 
         if (hitLimit && !warnedSpotLimit)
         {
-            loggerWarning("GPULightBufferManager: Exceeded max spot lights ({}). Additional lights will be ignored.",
+            vfLogWarning("GPULightBufferManager: Exceeded max spot lights ({}). Additional lights will be ignored.",
                           LightConstants::MAX_SPOT_LIGHTS);
             warnedSpotLimit = true;
         }

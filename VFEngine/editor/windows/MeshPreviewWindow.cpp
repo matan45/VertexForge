@@ -2,7 +2,6 @@
 #include "../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
 #include <filesystem>

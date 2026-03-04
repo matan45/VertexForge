@@ -1,7 +1,5 @@
 #include "Shader.hpp"
 #include "Device.hpp"
-#include "print/Logger.hpp"
-#include "print/EditorLogger.hpp"
 #include "resource/PathResolver.hpp"
 #include <filesystem>
 #include <fstream>
@@ -100,7 +98,7 @@ namespace core {
 
 		auto shaders = futureShaders.get();
 		if (!shaders) {
-			loggerError("Failed to load shaders from file: {}", path);
+			vfLogError("Failed to load shaders from file: {}", path);
 			return;
 		}
 
@@ -136,7 +134,7 @@ namespace core {
 		case eMeshEXT: kind = shaderc_mesh_shader; break;
 		case eTaskEXT: kind = shaderc_task_shader; break;
 		default:
-			loggerError("Unsupported shader stage");
+			vfLogError("Unsupported shader stage");
 			lastCompilationError = "Unsupported shader stage";
 			return {};
 		}
@@ -158,7 +156,7 @@ namespace core {
 
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 			lastCompilationError = result.GetErrorMessage();
-			loggerError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
+			vfLogError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
 			vfLogError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
 			return {};
 		}
@@ -205,7 +203,7 @@ namespace core {
 		case TASK:
 			return eTaskEXT;
 		default:
-			loggerError("Unsupported ShaderType.");
+			vfLogError("Unsupported ShaderType.");
 			return vk::ShaderStageFlagBits();
 		}
 	}
@@ -218,7 +216,7 @@ namespace core {
 
 		auto shaders = parseShaderSource(source);
 		if (shaders.empty()) {
-			loggerError("No shader types found in source: {}", shaderName);
+			vfLogError("No shader types found in source: {}", shaderName);
 			return false;
 		}
 

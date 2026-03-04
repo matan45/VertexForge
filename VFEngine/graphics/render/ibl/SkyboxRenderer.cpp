@@ -4,7 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::ibl
 {
@@ -88,7 +88,7 @@ namespace render::ibl
             vertexCubeVerticesBufferRequest.size, {},
             &data); result != vk::Result::eSuccess)
         {
-            loggerError("failed to map memory");
+            vfLogError("failed to map memory");
         }
         memcpy(data, skyboxVertices.data(), vertexCubeVerticesBufferRequest.size);
         device.getLogicalDevice().unmapMemory(vertexBufferMemory);

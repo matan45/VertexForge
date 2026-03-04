@@ -1,5 +1,5 @@
 #include "Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core {
 
@@ -9,13 +9,13 @@ namespace core {
 		const std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
 
 		if (debug) {
-			loggerInfo("Found {} queue families.", queueFamilies.size());
+			vfLogInfo("Found {} queue families.", queueFamilies.size());
 		}
 
 		int i = 0;
 		for (const vk::QueueFamilyProperties& queueFamily : queueFamilies) {
 			if (debug) {
-				loggerInfo("Queue Family {}: Graphics: {}, Compute: {}, Transfer: {}",
+				vfLogInfo("Queue Family {}: Graphics: {}, Compute: {}, Transfer: {}",
 					i,
 					(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) ? "Yes" : "No",
 					(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) ? "Yes" : "No",
@@ -48,12 +48,12 @@ namespace core {
 
 		if (!indices.isComplete()) {
 			if (debug) {
-				loggerWarning("Could not find complete queue family support.");
+				vfLogWarning("Could not find complete queue family support.");
 			}
 		}
 
 		if (debug && indices.hasDedicatedTransferQueue()) {
-			loggerInfo("Found dedicated transfer queue family: {}", indices.transferFamily.value());
+			vfLogInfo("Found dedicated transfer queue family: {}", indices.transferFamily.value());
 		}
 
 		return indices;
@@ -79,7 +79,7 @@ namespace core {
 			commandBuffer = std::move(device.allocateCommandBuffersUnique(allocInfo).front());
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to allocate command buffer: {}", err.what());
+			vfLogError("Failed to allocate command buffer: {}", err.what());
 			throw;
 		}
 
@@ -104,7 +104,7 @@ namespace core {
 			queue.waitIdle();
 		}
 		catch (const vk::SystemError& err) {
-			loggerError("Failed to submit command buffer: {}", err.what());
+			vfLogError("Failed to submit command buffer: {}", err.what());
 		}
 	}
 

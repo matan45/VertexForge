@@ -23,7 +23,6 @@
 #include "events/EditorModeEvents.hpp"
 #include "events/ProjectEvents.hpp"
 #include "events/SceneEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include "resource/PathResolver.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"

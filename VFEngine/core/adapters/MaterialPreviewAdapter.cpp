@@ -1,5 +1,5 @@
 #include "MaterialPreviewAdapter.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -76,7 +76,7 @@ namespace core
             }
             catch (const std::bad_any_cast& e)
             {
-                loggerError("Invalid materialDataHandle type: {}", e.what());
+                vfLogError("Invalid materialDataHandle type: {}", e.what());
             }
         }
 

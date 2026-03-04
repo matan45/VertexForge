@@ -41,7 +41,6 @@
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ProjectEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include "Import.hpp"
 #include "ExportHandler.hpp"
 #include "core/PluginManager.hpp"

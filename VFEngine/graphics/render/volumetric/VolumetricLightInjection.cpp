@@ -1,7 +1,7 @@
 #include "VolumetricLightInjection.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <array>
 
 namespace render::volumetric
@@ -27,7 +27,7 @@ namespace render::volumetric
     {
         if (initialized)
         {
-            loggerWarning("VolumetricLightInjection: Already initialized");
+            vfLogWarning("VolumetricLightInjection: Already initialized");
             return;
         }
 
@@ -43,7 +43,7 @@ namespace render::volumetric
         createComputePipeline();
 
         initialized = true;
-        loggerInfo("VolumetricLightInjection: Initialized ({}x{}x{})", dims.width, dims.height, dims.depth);
+        vfLogInfo("VolumetricLightInjection: Initialized ({}x{}x{})", dims.width, dims.height, dims.depth);
     }
 
     void VolumetricLightInjection::cleanup()
@@ -73,7 +73,6 @@ namespace render::volumetric
         }
 
         initialized = false;
-        loggerInfo("VolumetricLightInjection: Cleaned up");
     }
 
     void VolumetricLightInjection::createPipelineLayout()
@@ -109,7 +108,7 @@ namespace render::volumetric
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("VolumetricLightInjection: Failed to load shader: {}", shader->getLastCompilationError());
+            vfLogError("VolumetricLightInjection: Failed to load shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -120,7 +119,7 @@ namespace render::volumetric
         auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("VolumetricLightInjection: Failed to create compute pipeline");
+            vfLogError("VolumetricLightInjection: Failed to create compute pipeline");
             return;
         }
 

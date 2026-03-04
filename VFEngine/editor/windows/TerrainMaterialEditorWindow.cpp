@@ -6,7 +6,6 @@
 #include "events/TerrainEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 #include <fstream>
 #include <algorithm>

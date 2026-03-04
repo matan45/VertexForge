@@ -7,7 +7,7 @@
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cmath>
 
 namespace controllers::offscreen
@@ -32,7 +32,7 @@ namespace controllers::offscreen
         auto previousId = renderHandler.getActiveCameraId();
         if (previousId != id)
         {
-            loggerInfo("Switching active camera from {} to {}", previousId, id);
+            vfLogInfo("Switching active camera from {} to {}", previousId, id);
         }
         renderHandler.setActiveCamera(id);
     }

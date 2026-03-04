@@ -1,7 +1,7 @@
 #include "RuntimeRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/PostProcessEvents.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 
 namespace services
@@ -62,7 +62,7 @@ namespace services
         
         if (!std::filesystem::exists(hdrPath))
         {
-            loggerError("IBL file not found: {}", hdrPath);
+            vfLogError("IBL file not found: {}", hdrPath);
             return false;
         }
 

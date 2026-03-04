@@ -1,7 +1,6 @@
 #include "GameExporter.hpp"
 #include "ExeIconEmbedder.hpp"
 #include "../serialization/ProjectSerialization.hpp"
-#include "../print/EditorLogger.hpp"
 #include <fstream>
 #include <memory>
 #include <cstdlib>

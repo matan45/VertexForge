@@ -1,5 +1,4 @@
 #include "Texture.hpp"
-#include "print/EditorLogger.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"

@@ -11,7 +11,7 @@
 #include "../../services/events/BrushEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -66,7 +66,7 @@ namespace core
     {
         if (!renderer)
         {
-            loggerWarning("VFXRuntimeAdapter::createInstance called before init");
+            vfLogWarning("VFXRuntimeAdapter::createInstance called before init");
             return 0;
         }
 

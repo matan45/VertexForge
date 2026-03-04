@@ -1,5 +1,4 @@
 #include "MeshSerializer.hpp"
-#include "print/EditorLogger.hpp"
 #include "resource/EndianUtils.hpp"
 
 #include <algorithm>

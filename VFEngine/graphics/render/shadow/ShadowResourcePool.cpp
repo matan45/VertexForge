@@ -3,7 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::shadow
 {
@@ -21,7 +21,6 @@ namespace render::shadow
     {
         if (initialized)
         {
-            loggerWarning("ShadowResourcePool::init() called when already initialized");
             return;
         }
 

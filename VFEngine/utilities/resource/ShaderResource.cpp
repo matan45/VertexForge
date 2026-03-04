@@ -1,5 +1,4 @@
 #include "ShaderResource.hpp"
-#include "../print/EditorLogger.hpp"
 #include <fstream>
 #include <sstream>
 

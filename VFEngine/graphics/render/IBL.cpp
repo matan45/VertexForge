@@ -8,7 +8,7 @@
 #include "../core/SwapChain.hpp"
 #include "../core/Texture.hpp"
 #include "resource/Types.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render
 {

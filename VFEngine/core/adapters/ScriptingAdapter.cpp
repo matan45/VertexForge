@@ -15,7 +15,6 @@
 #include <regex>
 #include <array>
 
-#include "print/EditorLogger.hpp"
 
 namespace core
 {
@@ -107,7 +106,6 @@ namespace core
         interpreter.reset();
         initialized = false;
 
-        vfLogInfo("[ScriptingAdapter] Cleaned up scripting system");
     }
 
     bool ScriptingAdapter::isInitialized() const

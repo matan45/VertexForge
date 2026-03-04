@@ -2,7 +2,6 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/PhysicsSettingsEvents.hpp"
 #include "../../services/events/SceneEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <vector>
 #include <cstring>

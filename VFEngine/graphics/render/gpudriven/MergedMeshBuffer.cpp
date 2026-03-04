@@ -4,9 +4,8 @@
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <material/MaterialInstanceTypes.hpp>
-#include <unordered_set>
 
 static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for MergedMeshBuffer");
 
@@ -14,20 +13,6 @@ namespace render::gpudriven
 {
     namespace
     {
-        void logFirstVertexBoneData(const std::string& meshPath, const resource::Vertex* vertexData)
-        {
-            static std::unordered_set<std::string> loggedMeshes;
-            if (loggedMeshes.find(meshPath) == loggedMeshes.end())
-            {
-                const auto& v = vertexData[0];
-                loggerInfo("MergedMeshBuffer: First vertex bone data for {}: indices=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
-                    meshPath,
-                    v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
-                    v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
-                loggedMeshes.insert(meshPath);
-            }
-        }
-
         void computeSubmeshBounds(SubmeshLocation& loc, const resource::Vertex* vertexData, uint32_t vertexCount)
         {
             glm::vec3 minBounds(std::numeric_limits<float>::max());
@@ -66,7 +51,6 @@ namespace render::gpudriven
     {
         if (initialized)
         {
-            loggerWarning("MergedMeshBuffer already initialized");
             return;
         }
 
@@ -101,7 +85,7 @@ namespace render::gpudriven
 
         initialized = true;
 
-        loggerInfo("MergedMeshBuffer initialized: {} max vertices, {} max indices, {} max objects",
+        vfLogInfo("MergedMeshBuffer initialized: {} max vertices, {} max indices, {} max objects",
                    maxVertexCount, maxIndexCount, maxObjectCount);
     }
 
@@ -132,7 +116,6 @@ namespace render::gpudriven
         currentObjectCount = 0;
         initialized = false;
 
-        loggerInfo("MergedMeshBuffer cleaned up");
     }
 
     void MergedMeshBuffer::createBuffers()
@@ -205,7 +188,7 @@ namespace render::gpudriven
 
         if (currentObjectCount > maxObjectCount)
         {
-            loggerError("MergedMeshBuffer: object count {} exceeds max {}", currentObjectCount, maxObjectCount);
+            vfLogError("MergedMeshBuffer: object count {} exceeds max {}", currentObjectCount, maxObjectCount);
             return;
         }
 
@@ -292,7 +275,7 @@ namespace render::gpudriven
         uint32_t vertOffset = vertexAllocator.allocate(vertexCount);
         if (vertOffset == FreeListAllocator::ALLOCATION_FAILED)
         {
-            loggerError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
+            vfLogError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
                         vertexCount, meshPath, lodLevel);
             return false;
         }
@@ -301,7 +284,7 @@ namespace render::gpudriven
         if (idxOffset == FreeListAllocator::ALLOCATION_FAILED)
         {
             vertexAllocator.free(vertOffset, vertexCount);
-            loggerError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
+            vfLogError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
                         indexCount, meshPath, lodLevel);
             return false;
         }
@@ -320,7 +303,7 @@ namespace render::gpudriven
     {
         if (!initialized)
         {
-            loggerError("MergedMeshBuffer not initialized");
+            vfLogError("MergedMeshBuffer not initialized");
             return nullptr;
         }
 
@@ -366,7 +349,7 @@ namespace render::gpudriven
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
-        loggerInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
+        vfLogInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
                    meshPath, header.numSubmeshes);
         return &registeredMeshes.back();
     }
@@ -385,7 +368,7 @@ namespace render::gpudriven
         SubmeshLocation* loc = getSubmeshLocationMutable(meshPath, submeshName, submeshIndex);
         if (!loc)
         {
-            loggerError("MergedMeshBuffer::uploadLOD: Submesh not found: {}:{}#{}", meshPath, submeshName,
+            vfLogError("MergedMeshBuffer::uploadLOD: Submesh not found: {}:{}#{}", meshPath, submeshName,
                         submeshIndex);
             return false;
         }
@@ -394,7 +377,7 @@ namespace render::gpudriven
 
         if (lodInfo.vertexCount != data.vertexCount || lodInfo.indexCount != data.indexCount)
         {
-            loggerError("MergedMeshBuffer::uploadLOD: Count mismatch for {}:{} LOD{}: "
+            vfLogError("MergedMeshBuffer::uploadLOD: Count mismatch for {}:{} LOD{}: "
                         "expected {}v/{}i, got {}v/{}i",
                         meshPath, submeshName, lodLevel,
                         lodInfo.vertexCount, lodInfo.indexCount,
@@ -404,7 +387,6 @@ namespace render::gpudriven
 
         if (data.vertexData && data.vertexCount > 0)
         {
-            logFirstVertexBoneData(meshPath, data.vertexData);
             uploadVertexDataAt(lodInfo.vertexOffset, data.vertexData, data.vertexCount);
         }
 

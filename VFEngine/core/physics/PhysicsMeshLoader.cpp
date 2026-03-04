@@ -1,6 +1,6 @@
 #include "PhysicsMeshLoader.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core::physics
 {
@@ -11,21 +11,21 @@ namespace core::physics
     {
         if (meshPath.empty())
         {
-            loggerWarning("PhysicsMeshLoader: Empty mesh path provided");
+            vfLogWarning("PhysicsMeshLoader: Empty mesh path provided");
             return std::nullopt;
         }
 
         auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
         if (!streamHandle)
         {
-            loggerWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
             return std::nullopt;
         }
 
         const auto& header = streamHandle->getHeader();
         if (submeshIndex >= header.numSubmeshes)
         {
-            loggerWarning("PhysicsMeshLoader: Submesh index {} out of range (file has {} submeshes)",
+            vfLogWarning("PhysicsMeshLoader: Submesh index {} out of range (file has {} submeshes)",
                           submeshIndex, header.numSubmeshes);
             return std::nullopt;
         }
@@ -37,14 +37,14 @@ namespace core::physics
 
         if (!streamHandle->readLODLevel(submeshIndex, lodLevel, vertices, indices))
         {
-            loggerWarning("PhysicsMeshLoader: Failed to read LOD {} from mesh: {}",
+            vfLogWarning("PhysicsMeshLoader: Failed to read LOD {} from mesh: {}",
                           lodLevel, meshPath);
             return std::nullopt;
         }
 
         if (vertices.empty())
         {
-            loggerWarning("PhysicsMeshLoader: Mesh has no vertices: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Mesh has no vertices: {}", meshPath);
             return std::nullopt;
         }
 
@@ -56,7 +56,7 @@ namespace core::physics
         }
         result.indices = std::move(indices);
 
-        loggerInfo("PhysicsMeshLoader: Loaded {} vertices, {} indices from {} (LOD{})",
+        vfLogInfo("PhysicsMeshLoader: Loaded {} vertices, {} indices from {} (LOD{})",
                    result.vertices.size(), result.indices.size(), meshPath, lodLevel);
 
         return result;
@@ -68,21 +68,21 @@ namespace core::physics
     {
         if (meshPath.empty())
         {
-            loggerWarning("PhysicsMeshLoader: Empty mesh path provided");
+            vfLogWarning("PhysicsMeshLoader: Empty mesh path provided");
             return std::nullopt;
         }
 
         auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
         if (!streamHandle)
         {
-            loggerWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
             return std::nullopt;
         }
 
         const auto& header = streamHandle->getHeader();
         if (header.numSubmeshes == 0)
         {
-            loggerWarning("PhysicsMeshLoader: Mesh has no submeshes: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Mesh has no submeshes: {}", meshPath);
             return std::nullopt;
         }
 
@@ -98,7 +98,7 @@ namespace core::physics
 
             if (!streamHandle->readLODLevel(i, lodLevel, vertices, indices))
             {
-                loggerWarning("PhysicsMeshLoader: Failed to read submesh {} LOD {} from: {}",
+                vfLogWarning("PhysicsMeshLoader: Failed to read submesh {} LOD {} from: {}",
                               i, lodLevel, meshPath);
                 continue;
             }
@@ -118,11 +118,11 @@ namespace core::physics
 
         if (result.vertices.empty())
         {
-            loggerWarning("PhysicsMeshLoader: No vertex data loaded from: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: No vertex data loaded from: {}", meshPath);
             return std::nullopt;
         }
 
-        loggerInfo("PhysicsMeshLoader: Loaded {} total vertices, {} indices from {} submeshes (LOD{})",
+        vfLogInfo("PhysicsMeshLoader: Loaded {} total vertices, {} indices from {} submeshes (LOD{})",
                    result.vertices.size(), result.indices.size(), header.numSubmeshes, lodLevel);
 
         return result;
@@ -134,14 +134,14 @@ namespace core::physics
     {
         if (meshPath.empty())
         {
-            loggerWarning("PhysicsMeshLoader: Empty mesh path provided");
+            vfLogWarning("PhysicsMeshLoader: Empty mesh path provided");
             return std::nullopt;
         }
 
         auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
         if (!streamHandle)
         {
-            loggerWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
             return std::nullopt;
         }
 
@@ -154,7 +154,7 @@ namespace core::physics
         const auto& header = streamHandle->getHeader();
         if (submeshIndex >= header.numSubmeshes)
         {
-            loggerWarning("PhysicsMeshLoader: Submesh index {} out of range (file has {} submeshes)",
+            vfLogWarning("PhysicsMeshLoader: Submesh index {} out of range (file has {} submeshes)",
                           submeshIndex, header.numSubmeshes);
             return std::nullopt;
         }
@@ -162,7 +162,7 @@ namespace core::physics
         resource::ConvexDecompositionData result;
         if (!streamHandle->readConvexDecomposition(submeshIndex, result))
         {
-            loggerWarning("PhysicsMeshLoader: Failed to read convex decomposition from: {}", meshPath);
+            vfLogWarning("PhysicsMeshLoader: Failed to read convex decomposition from: {}", meshPath);
             return std::nullopt;
         }
 
@@ -172,7 +172,7 @@ namespace core::physics
             return std::nullopt;
         }
 
-        loggerInfo("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
+        vfLogInfo("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
                    result.hulls.size(), meshPath);
 
         return result;

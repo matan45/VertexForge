@@ -4,7 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cstring>
 #include <filesystem>
 
@@ -162,7 +162,7 @@ namespace render::billboard
     {
         if (!std::filesystem::exists(atlasPath))
         {
-            loggerWarning("Billboard atlas file not found: {}, using default atlas", atlasPath);
+            vfLogWarning("Billboard atlas file not found: {}, using default atlas", atlasPath);
             return false;
         }
 
@@ -175,7 +175,7 @@ namespace render::billboard
 
         atlasLoaded = true;
         const auto& imgData = atlasTexture->getImageData();
-        loggerInfo("Billboard atlas loaded successfully: {} ({}x{})", atlasPath, imgData.width, imgData.height);
+        vfLogInfo("Billboard atlas loaded successfully: {} ({}x{})", atlasPath, imgData.width, imgData.height);
         return true;
     }
 

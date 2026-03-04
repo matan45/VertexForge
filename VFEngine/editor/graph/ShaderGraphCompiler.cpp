@@ -1,6 +1,5 @@
 #include "ShaderGraphCompiler.hpp"
 #include "nodes/ShaderNode.hpp"
-#include "print/EditorLogger.hpp"
 #include <queue>
 #include <set>
 #include <filesystem>

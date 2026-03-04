@@ -3,7 +3,7 @@
 #include "components/Components.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "../../services/data/EntityConversion.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -42,7 +42,7 @@ namespace core
                     if (stream->readSkeleton(skeleton) && !skeleton.ikChains.empty())
                     {
                         ikComp.chains = skeleton.ikChains;
-                        loggerInfo("[IKAdapter] Auto-loaded {} IK chains from mesh: {}",
+                        vfLogInfo("[IKAdapter] Auto-loaded {} IK chains from mesh: {}",
                                    ikComp.chains.size(), meshComp.meshPath);
                     }
                 }
@@ -193,7 +193,7 @@ namespace core
             }
         }
 
-        loggerWarning("[IKAdapter] Chain '{}' not found on entity", chainName);
+        vfLogWarning("[IKAdapter] Chain '{}' not found on entity", chainName);
     }
 
     void IKAdapter::setChainWeight(services::EntityHandle entity, const std::string& chainName,

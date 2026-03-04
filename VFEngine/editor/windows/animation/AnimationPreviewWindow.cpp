@@ -5,7 +5,6 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 #include <cmath>
 

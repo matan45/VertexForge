@@ -1,6 +1,5 @@
 #include "UndoRedoServiceImpl.hpp"
 #include "../events/UndoRedoEvents.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace services
 {
@@ -46,7 +45,6 @@ namespace services
 
         if (inBatchMode && currentBatch)
         {
-            vfLogInfo("Adding to batch: {}", command->getDescription());
             currentBatch->addCommand(std::move(command));
             return;
         }
@@ -57,7 +55,6 @@ namespace services
 
         trimUndoStack();
 
-        vfLogInfo("Pushed undo command: {}", undoStack.back()->getDescription());
     }
 
     bool UndoRedoServiceImpl::undo()
@@ -78,7 +75,6 @@ namespace services
 
             redoStack.push_back(std::move(command));
 
-            vfLogInfo("Undo: {}", description);
             return true;
         }
         catch (const std::exception& e)
@@ -107,7 +103,6 @@ namespace services
 
             undoStack.push_back(std::move(command));
 
-            vfLogInfo("Redo: {}", description);
             return true;
         }
         catch (const std::exception& e)
@@ -122,7 +117,6 @@ namespace services
     {
         undoStack.clear();
         redoStack.clear();
-        vfLogInfo("Undo history cleared");
     }
 
     bool UndoRedoServiceImpl::canUndo() const
@@ -177,7 +171,6 @@ namespace services
         inBatchMode = true;
         batchDescription = description;
         currentBatch = std::make_unique<BatchUndoCommand>(description);
-        vfLogInfo("Started batch operation: {}", description);
     }
 
     void UndoRedoServiceImpl::endBatch()
@@ -192,7 +185,6 @@ namespace services
 
         if (currentBatch && currentBatch->hasCommands())
         {
-            vfLogInfo("Completed batch operation: {}", batchDescription);
             redoStack.clear();
             undoStack.push_back(std::move(currentBatch));
             trimUndoStack();

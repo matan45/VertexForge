@@ -8,7 +8,6 @@
 #include <vfx/VFXShapeConfigLoader.hpp>
 #include <providers/IVFXPreviewProvider.hpp>
 #include "imgui.h"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 #include <algorithm>
 

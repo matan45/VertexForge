@@ -8,7 +8,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUVFXTypes.hpp"
 
 
@@ -40,21 +40,21 @@ namespace render::vfx
             loadShader();
             if (!gpuShader)
             {
-                loggerError("VFXRibbonGPUPipeline: Failed to load shader");
+                vfLogError("VFXRibbonGPUPipeline: Failed to load shader");
                 return;
             }
 
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
-                loggerError("VFXRibbonGPUPipeline: Failed to create descriptor set layout");
+                vfLogError("VFXRibbonGPUPipeline: Failed to create descriptor set layout");
                 return;
             }
 
             createDescriptorPool();
             if (!descriptorPool)
             {
-                loggerError("VFXRibbonGPUPipeline: Failed to create descriptor pool");
+                vfLogError("VFXRibbonGPUPipeline: Failed to create descriptor pool");
                 cleanup();
                 return;
             }
@@ -62,7 +62,7 @@ namespace render::vfx
             createBuffers();
             if (!cameraUBO)
             {
-                loggerError("VFXRibbonGPUPipeline: Failed to create buffers");
+                vfLogError("VFXRibbonGPUPipeline: Failed to create buffers");
                 cleanup();
                 return;
             }
@@ -75,22 +75,22 @@ namespace render::vfx
             createPipeline();
             if (!graphicsPipeline || !pipelineLayout)
             {
-                loggerError("VFXRibbonGPUPipeline: Failed to create graphics pipeline");
+                vfLogError("VFXRibbonGPUPipeline: Failed to create graphics pipeline");
                 cleanup();
                 return;
             }
 
             initialized = true;
-            loggerInfo("VFXRibbonGPUPipeline initialized");
+            vfLogInfo("VFXRibbonGPUPipeline initialized");
         }
         catch (const vk::SystemError& e)
         {
-            loggerError("VFXRibbonGPUPipeline: Vulkan error during init - {}", e.what());
+            vfLogError("VFXRibbonGPUPipeline: Vulkan error during init - {}", e.what());
             cleanup();
         }
         catch (const std::exception& e)
         {
-            loggerError("VFXRibbonGPUPipeline: Exception during init - {}", e.what());
+            vfLogError("VFXRibbonGPUPipeline: Exception during init - {}", e.what());
             cleanup();
         }
     }
@@ -194,7 +194,6 @@ namespace render::vfx
         descriptorsNeedUpdate = true;
         initialized = false;
 
-        loggerInfo("VFXRibbonGPUPipeline cleaned up");
     }
 
     void VFXRibbonGPUPipeline::loadShader()
@@ -204,7 +203,7 @@ namespace render::vfx
 
         if (gpuShader->getShaderStages().empty())
         {
-            loggerError("VFXRibbonGPUPipeline: Failed to load shader: {}",
+            vfLogError("VFXRibbonGPUPipeline: Failed to load shader: {}",
                         gpuShader->getLastCompilationError());
         }
     }

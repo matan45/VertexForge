@@ -4,7 +4,7 @@
 #include "../core/VulkanContext.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace controllers
 {

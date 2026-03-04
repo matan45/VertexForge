@@ -3,7 +3,7 @@
 #include "ShadowResourcePool.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::shadow
 {
@@ -323,7 +323,7 @@ namespace render::shadow
 
             if (cubeIndex >= ShadowConstants::MAX_POINT_SHADOW_CASTERS)
             {
-                loggerWarning("ShadowGPUDataManager: Exceeded max point shadow casters ({}), skipping light {}",
+                vfLogWarning("ShadowGPUDataManager: Exceeded max point shadow casters ({}), skipping light {}",
                               ShadowConstants::MAX_POINT_SHADOW_CASTERS, entityId);
                 break;
             }

@@ -15,7 +15,8 @@
       "Bash(dir /b \"C:\\\\matan\\\\VertexForge\\\\dependencies\\\\assimp\\\\include\\\\assimp\")",
       "Bash(findstr:*)",
       "Bash(dir /b \"C:\\\\matan\\\\VertexForge\\\\VFEngine\\\\graphics\")",
-      "mcp__mcp-atlassian__jira_create_issue"
+      "mcp__mcp-atlassian__jira_create_issue",
+      "mcp__mcp-atlassian__jira_add_comment"
     ],
     "deny": [],
     "ask": []

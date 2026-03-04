@@ -5,7 +5,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <filesystem>
 
 namespace render::mesh
@@ -209,14 +209,14 @@ namespace render::mesh
 
         if (textureCache.size() >= MAX_TEXTURES)
         {
-            loggerWarning("UI canvas image texture limit reached ({}), cannot load: {}",
+            vfLogWarning("UI canvas image texture limit reached ({}), cannot load: {}",
                           MAX_TEXTURES, texturePath);
             return false;
         }
 
         if (!std::filesystem::exists(texturePath))
         {
-            loggerWarning("UI canvas image texture file not found: {}", texturePath);
+            vfLogWarning("UI canvas image texture file not found: {}", texturePath);
             return false;
         }
 
@@ -225,7 +225,7 @@ namespace render::mesh
 
         if (!texture->getImageView())
         {
-            loggerError("Failed to load UI canvas image texture: {}", texturePath);
+            vfLogError("Failed to load UI canvas image texture: {}", texturePath);
             return false;
         }
 

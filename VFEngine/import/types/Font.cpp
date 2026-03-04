@@ -1,7 +1,6 @@
 #include "Font.hpp"
 #include "FontAtlasGenerator.hpp"
 #include "FontSerializer.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <fstream>
 #include <algorithm>

@@ -2,7 +2,7 @@
 #include "../controllers/EditorTextureController.hpp"
 #include "../controllers/texture/EditorTexture.hpp"
 #include "../../graphics/loaders/AsyncTextureLoader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -70,14 +70,14 @@ namespace core
     {
         if (descriptorSet == nullptr)
         {
-            loggerWarning("EditorTextureAdapter::releaseTexture called with null descriptor");
+            vfLogWarning("EditorTextureAdapter::releaseTexture called with null descriptor");
             return;
         }
 
         auto it = loadedTextures.find(descriptorSet);
         if (it == loadedTextures.end())
         {
-            loggerWarning("EditorTextureAdapter::releaseTexture called with unknown descriptor {:p}", descriptorSet);
+            vfLogWarning("EditorTextureAdapter::releaseTexture called with unknown descriptor {:p}", descriptorSet);
             return;
         }
 
@@ -164,7 +164,7 @@ namespace core
             }
             else
             {
-                loggerWarning("EditorTextureAdapter: GPU upload failed for instance {:p}", readyInstance);
+                vfLogWarning("EditorTextureAdapter: GPU upload failed for instance {:p}", readyInstance);
             }
         }
 

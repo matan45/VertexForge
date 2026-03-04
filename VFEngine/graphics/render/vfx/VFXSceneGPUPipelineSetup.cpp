@@ -7,7 +7,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include "GPUVFXTypes.hpp"
 
 
@@ -20,7 +20,7 @@ namespace render::vfx
 
         if (gpuShader->getShaderStages().empty())
         {
-            loggerError("VFXSceneGPUPipeline: Failed to load shader: {}",
+            vfLogError("VFXSceneGPUPipeline: Failed to load shader: {}",
                         gpuShader->getLastCompilationError());
         }
     }

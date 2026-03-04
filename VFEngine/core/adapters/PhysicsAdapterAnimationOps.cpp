@@ -5,7 +5,6 @@
 #include "../../graphics/animation/AnimatorStateMachine.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

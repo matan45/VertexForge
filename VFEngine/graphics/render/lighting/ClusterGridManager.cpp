@@ -1,7 +1,7 @@
 #include "ClusterGridManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -22,7 +22,7 @@ namespace render::lighting
     {
         if (initialized)
         {
-            loggerWarning("ClusterGridManager: Already initialized");
+            vfLogWarning("ClusterGridManager: Already initialized");
             return;
         }
 
@@ -31,7 +31,7 @@ namespace render::lighting
         // Validate grid dimensions to prevent division by zero
         if (config.tilesX == 0 || config.tilesY == 0 || config.slicesZ == 0)
         {
-            loggerError("ClusterGridManager: Invalid grid dimensions ({}x{}x{}) - all must be > 0",
+            vfLogError("ClusterGridManager: Invalid grid dimensions ({}x{}x{}) - all must be > 0",
                         config.tilesX, config.tilesY, config.slicesZ);
             return;
         }
@@ -40,7 +40,7 @@ namespace render::lighting
 
         if (totalClusters > ClusterConstants::MAX_CLUSTERS)
         {
-            loggerWarning("ClusterGridManager: Requested {} clusters exceeds max {}. Clamping.",
+            vfLogWarning("ClusterGridManager: Requested {} clusters exceeds max {}. Clamping.",
                           totalClusters, ClusterConstants::MAX_CLUSTERS);
             // Reduce slicesZ to fit within limit
             config.slicesZ = ClusterConstants::MAX_CLUSTERS / (config.tilesX * config.tilesY);
@@ -49,7 +49,7 @@ namespace render::lighting
 
         cpuClusterAABBs.resize(totalClusters);
 
-        loggerInfo("ClusterGridManager: Initializing with {}x{}x{} = {} clusters",
+        vfLogInfo("ClusterGridManager: Initializing with {}x{}x{} = {} clusters",
                    config.tilesX, config.tilesY, config.slicesZ, totalClusters);
 
         createBuffers();
@@ -59,7 +59,6 @@ namespace render::lighting
         updateDescriptors();
 
         initialized = true;
-        loggerInfo("ClusterGridManager: Initialized successfully");
     }
 
     void ClusterGridManager::cleanup()
@@ -89,7 +88,6 @@ namespace render::lighting
         cpuClusterAABBs.clear();
 
         initialized = false;
-        loggerInfo("ClusterGridManager: Cleaned up");
     }
 
     void ClusterGridManager::createBuffers()
@@ -128,7 +126,7 @@ namespace render::lighting
             clusterAABBStagingMapped = logicalDevice.mapMemory(clusterAABBStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        loggerInfo("ClusterGridManager: Created cluster grid buffers (~{} KB)",
+        vfLogInfo("ClusterGridManager: Created cluster grid buffers (~{} KB)",
                    (sizeof(GPUClusterGridParams) + totalClusters * sizeof(GPUClusterAABB) * 2) / 1024);
     }
 
@@ -181,7 +179,6 @@ namespace render::lighting
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        loggerInfo("ClusterGridManager: Created descriptor set layout");
     }
 
     void ClusterGridManager::createDescriptorPool()
@@ -200,7 +197,6 @@ namespace render::lighting
         poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        loggerInfo("ClusterGridManager: Created descriptor pool");
     }
 
     void ClusterGridManager::allocateDescriptorSet()
@@ -215,7 +211,6 @@ namespace render::lighting
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        loggerInfo("ClusterGridManager: Allocated descriptor set");
     }
 
     void ClusterGridManager::updateDescriptors()
@@ -426,7 +421,7 @@ namespace render::lighting
         uint32_t totalClusters = config.getTotalClusters();
         if (cpuClusterAABBs.size() != totalClusters)
         {
-            loggerError("ClusterGridManager: AABB count mismatch ({} vs expected {})",
+            vfLogError("ClusterGridManager: AABB count mismatch ({} vs expected {})",
                         cpuClusterAABBs.size(), totalClusters);
             return;
         }

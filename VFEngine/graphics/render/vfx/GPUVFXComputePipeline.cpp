@@ -2,7 +2,7 @@
 #include "GPUVFXTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::vfx
 {
@@ -30,7 +30,7 @@ namespace render::vfx
         allocateDescriptorSet();
 
         initialized = true;
-        loggerInfo("GPUVFXComputePipeline initialized");
+        vfLogInfo("GPUVFXComputePipeline initialized");
     }
 
     void GPUVFXComputePipeline::cleanup()
@@ -69,7 +69,6 @@ namespace render::vfx
         shader.reset();
 
         initialized = false;
-        loggerInfo("GPUVFXComputePipeline cleaned up");
     }
 
     void GPUVFXComputePipeline::createDescriptorSetLayout()
@@ -163,7 +162,7 @@ namespace render::vfx
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("GPUVFXComputePipeline: Failed to load shader: {}",
+            vfLogError("GPUVFXComputePipeline: Failed to load shader: {}",
                         shader->getLastCompilationError());
             return;
         }
@@ -175,7 +174,7 @@ namespace render::vfx
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("GPUVFXComputePipeline: Failed to create compute pipeline");
+            vfLogError("GPUVFXComputePipeline: Failed to create compute pipeline");
             return;
         }
 

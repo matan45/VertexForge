@@ -5,7 +5,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/MappedMemoryGuard.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::occlusion
 {
@@ -30,7 +30,7 @@ namespace render::occlusion
         createDescriptorSets();
 
         initialized = true;
-        loggerInfo("Light occlusion culling initialized with max {} lights", INITIAL_MAX_LIGHTS);
+        vfLogInfo("Light occlusion culling initialized with max {} lights", INITIAL_MAX_LIGHTS);
     }
 
     void LightOcclusionCulling::createBuffers(uint32_t maxLights)
@@ -96,7 +96,7 @@ namespace render::occlusion
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            loggerError("Failed to load light occlusion culling shader: {}", shader->getLastCompilationError());
+            vfLogError("Failed to load light occlusion culling shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -186,7 +186,7 @@ namespace render::occlusion
 
         createBuffers(newMaxLights);
 
-        loggerInfo("Light occlusion culling buffers resized to {} lights", newMaxLights);
+        vfLogInfo("Light occlusion culling buffers resized to {} lights", newMaxLights);
     }
 
     void LightOcclusionCulling::updateLights(const std::vector<GPULightBounds>& lights)
@@ -413,7 +413,7 @@ namespace render::occlusion
 
         if (readbackState == ReadbackState::Pending)
         {
-            loggerWarning("LightOcclusionCulling::getVisibleLightIds() called while GPU readback is pending. "
+            vfLogWarning("LightOcclusionCulling::getVisibleLightIds() called while GPU readback is pending. "
                           "Call markResultsReady() after GPU sync (vkQueueWaitIdle/fence) before reading results. "
                           "Returning empty set to avoid undefined behavior.");
             return visibleLightIds;
@@ -481,6 +481,5 @@ namespace render::occlusion
         shader.reset();
         initialized = false;
 
-        loggerInfo("Light occlusion culling cleaned up");
     }
 }

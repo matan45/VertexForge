@@ -1,7 +1,6 @@
 #include "ProjectServiceImpl.hpp"
 #include "../events/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"
-#include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace services

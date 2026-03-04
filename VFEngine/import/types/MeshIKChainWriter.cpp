@@ -1,7 +1,6 @@
 #include "MeshIKChainWriter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/MeshStreamHandle.hpp"
-#include "print/EditorLogger.hpp"
 
 #include <filesystem>
 

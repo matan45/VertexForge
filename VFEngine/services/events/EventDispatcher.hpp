@@ -1,6 +1,5 @@
 #pragma once
 #include "EventTypes.hpp"
-#include "print/EditorLogger.hpp"
 #include <any>
 #include <atomic>
 #include <functional>

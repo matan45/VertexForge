@@ -3,7 +3,6 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace render::gpudriven
 {
@@ -30,7 +29,6 @@ namespace render::gpudriven
     {
         if (initialized_)
         {
-            vfLogWarning("TerrainMeshBuffer already initialized");
             return;
         }
 
@@ -69,7 +67,6 @@ namespace render::gpudriven
         destroyBuffers();
 
         initialized_ = false;
-        vfLogInfo("TerrainMeshBuffer cleaned up");
     }
 
     void TerrainMeshBuffer::createBuffers()

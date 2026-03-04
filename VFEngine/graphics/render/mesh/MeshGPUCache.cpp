@@ -3,7 +3,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/ResourceManager.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace render::mesh
 {
@@ -99,7 +99,7 @@ namespace render::mesh
         {
             if (meshData.lodLevels.empty() || meshData.lodLevels[0].vertices.empty())
             {
-                loggerWarning("Skipping empty submesh in: {}", meshId);
+                vfLogWarning("Skipping empty submesh in: {}", meshId);
                 continue;
             }
 
@@ -166,21 +166,21 @@ namespace render::mesh
 
         if (!meshesDataPtr || meshesDataPtr->meshes.empty())
         {
-            loggerError("Failed to load mesh from: {}", meshPath);
+            vfLogError("Failed to load mesh from: {}", meshPath);
             return "";
         }
 
         MeshGPUData gpuData{};
         if (!processMeshData(*meshesDataPtr, pathStr, gpuData))
         {
-            loggerError("Mesh has no valid submeshes: {}", meshPath);
+            vfLogError("Mesh has no valid submeshes: {}", meshPath);
             return "";
         }
 
         transferManager->waitAll();
 
         loadedMeshes[pathStr] = std::move(gpuData);
-        loggerInfo("Loaded mesh: {} ({} submeshes)", meshPath, loadedMeshes[pathStr].subMeshes.size());
+        vfLogInfo("Loaded mesh: {} ({} submeshes)", meshPath, loadedMeshes[pathStr].subMeshes.size());
 
         return pathStr;
     }
@@ -194,21 +194,21 @@ namespace render::mesh
 
         if (meshesData.meshes.empty())
         {
-            loggerError("Cannot upload empty mesh data for: {}", meshId);
+            vfLogError("Cannot upload empty mesh data for: {}", meshId);
             return "";
         }
 
         MeshGPUData gpuData{};
         if (!processMeshData(meshesData, meshId, gpuData))
         {
-            loggerError("Procedural mesh has no valid submeshes: {}", meshId);
+            vfLogError("Procedural mesh has no valid submeshes: {}", meshId);
             return "";
         }
 
         transferManager->waitAll();
 
         loadedMeshes[meshId] = std::move(gpuData);
-        loggerInfo("Uploaded procedural mesh: {} ({} submeshes)", meshId, loadedMeshes[meshId].subMeshes.size());
+        vfLogInfo("Uploaded procedural mesh: {} ({} submeshes)", meshId, loadedMeshes[meshId].subMeshes.size());
 
         return meshId;
     }
@@ -232,7 +232,7 @@ namespace render::mesh
         }
 
         loadedMeshes.erase(it);
-        loggerInfo("Unloaded mesh: {}", meshId);
+        vfLogInfo("Unloaded mesh: {}", meshId);
     }
 
     void MeshGPUCache::unloadAllMeshes()
@@ -256,7 +256,7 @@ namespace render::mesh
         }
 
         loadedMeshes.clear();
-        loggerInfo("Unloaded all meshes");
+        vfLogInfo("Unloaded all meshes");
     }
 
     const MeshGPUData* MeshGPUCache::getMesh(const std::string& meshId) const

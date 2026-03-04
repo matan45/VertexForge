@@ -20,7 +20,6 @@
 #include "api/HandIKAPI.hpp"
 #include "api/CameraAPI.hpp"
 #include "api/DebugDrawAPI.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace core
 {

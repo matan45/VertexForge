@@ -4,7 +4,6 @@
 #include "events/FileOperationsEvents.hpp"
 #include "events/ProjectEvents.hpp"
 #include "../dragdrop/DragDropManager.hpp"
-#include "print/EditorLogger.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
 

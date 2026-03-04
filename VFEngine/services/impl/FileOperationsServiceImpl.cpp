@@ -5,7 +5,6 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/FileOperationsEvents.hpp"
 #include "../events/ProjectEvents.hpp"
-#include "print/EditorLogger.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>

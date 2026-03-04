@@ -1,7 +1,6 @@
 #include "PluginManager.hpp"
 #include "../api/PluginVersion.hpp"
 #include "Pipeline.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace plugin {
 
@@ -112,7 +111,6 @@ namespace plugin {
 
             if (success) {
                 plugin.initialized = true;
-                vfLogInfo("Plugin '{}' initialized successfully", plugin.info.name);
             }
             else {
                 vfLogError("Plugin '{}' initialization failed", plugin.info.name);

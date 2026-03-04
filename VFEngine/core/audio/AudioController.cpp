@@ -1,5 +1,5 @@
 #include "AudioController.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 
 namespace core::audio
 {
@@ -24,20 +24,18 @@ namespace core::audio
     {
         if (initialized)
         {
-            loggerWarning("AudioController already initialized");
             return true;
         }
 
         if (!audioSystem->init())
         {
-            loggerError("Failed to initialize AudioSystem");
+            vfLogError("Failed to initialize AudioSystem");
             return false;
         }
 
         sourceManager->initPool(32);
 
         initialized = true;
-        loggerInfo("AudioController initialized successfully");
         return true;
     }
 
@@ -56,7 +54,6 @@ namespace core::audio
         audioSystem->cleanUp();
 
         initialized = false;
-        loggerInfo("AudioController cleaned up");
     }
 
     void AudioController::update()
@@ -78,14 +75,14 @@ namespace core::audio
         ALuint bufferId = bufferManager->loadBuffer(path);
         if (bufferId == 0)
         {
-            loggerError("Failed to load audio buffer: {}", path);
+            vfLogError("Failed to load audio buffer: {}", path);
             return InvalidAudioHandle;
         }
 
         AudioHandle handle = sourceManager->acquireSource();
         if (handle == InvalidAudioHandle)
         {
-            loggerError("Failed to acquire audio source");
+            vfLogError("Failed to acquire audio source");
             return InvalidAudioHandle;
         }
 

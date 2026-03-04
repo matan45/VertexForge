@@ -14,7 +14,7 @@
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "lightbake/LightmapAtlas.hpp"
-#include "print/Logger.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 #include <unordered_map>
 
@@ -225,7 +225,7 @@ namespace render::gpudriven
             auto lightmapData = lightbake::LightmapAtlas::load(meshRender.lightmapPath);
             if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
             {
-                loggerWarning("GPUDrivenRenderer: Failed to load lightmap: {}", meshRender.lightmapPath);
+                vfLogWarning("GPUDrivenRenderer: Failed to load lightmap: {}", meshRender.lightmapPath);
                 materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
                 continue;
             }
@@ -548,14 +548,14 @@ namespace render::gpudriven
             auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
             if (!instanceData || instanceData->parentMaterialPath.empty())
             {
-                loggerWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
+                vfLogWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
                 return false;
             }
 
             auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
             if (!parentMatData)
             {
-                loggerWarning("GPUDrivenRenderer: Failed to load parent material: {}",
+                vfLogWarning("GPUDrivenRenderer: Failed to load parent material: {}",
                               instanceData->parentMaterialPath);
                 return false;
             }
@@ -568,7 +568,7 @@ namespace render::gpudriven
             auto matData = resource::ResourceManager::loadMaterial(materialPath);
             if (!matData)
             {
-                loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
+                vfLogWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
                 return false;
             }
             materials.loaded[materialPath] = matData;

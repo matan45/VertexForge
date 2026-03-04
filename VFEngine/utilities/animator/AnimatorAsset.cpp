@@ -1,5 +1,4 @@
 #include "AnimatorAsset.hpp"
-#include "../print/EditorLogger.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
