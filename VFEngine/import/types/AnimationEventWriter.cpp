@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "AnimationEventWriter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/AnimationResource.hpp"

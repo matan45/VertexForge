@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "ClipboardManager.hpp"
 #include "../fileops/AsyncFileOperations.hpp"
 

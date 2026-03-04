@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include "../print/Log.hpp"
 #include <unordered_map>
 #include <string>
 #include <future>

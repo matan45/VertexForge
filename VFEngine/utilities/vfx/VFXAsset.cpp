@@ -1,3 +1,4 @@
+#include "../print/Log.hpp"
 #include "VFXAsset.hpp"
 #include "../uuid/UUID.hpp"
 #include <nlohmann/json.hpp>

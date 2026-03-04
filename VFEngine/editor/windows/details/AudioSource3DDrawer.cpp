@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "AudioSource3DDrawer.hpp"
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"

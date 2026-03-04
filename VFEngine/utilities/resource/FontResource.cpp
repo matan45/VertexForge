@@ -1,4 +1,5 @@
 #include "FontResource.hpp"
+#include "../print/Log.hpp"
 #include "../config/Config.hpp"
 #include "EndianUtils.hpp"
 

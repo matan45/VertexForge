@@ -1,3 +1,4 @@
+#include "../print/Log.hpp"
 #include "NavmeshSerializer.hpp"
 #include <fstream>
 

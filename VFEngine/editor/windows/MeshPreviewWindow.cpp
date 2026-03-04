@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "MeshPreviewWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"

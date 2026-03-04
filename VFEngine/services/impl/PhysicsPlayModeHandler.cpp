@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PhysicsPlayModeHandler.hpp"
 #include "scene/WaterService.hpp"
 #include "../events/EditorModeEvents.hpp"

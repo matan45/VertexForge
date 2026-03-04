@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "AnimationInfoPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PrefabPreviewWindow.hpp"
 #include "imgui.h"
 #include <nlohmann/json.hpp>

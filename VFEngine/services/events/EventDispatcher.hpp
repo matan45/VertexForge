@@ -1,4 +1,5 @@
 #pragma once
+#include "print/Log.hpp"
 #include "EventTypes.hpp"
 #include <any>
 #include <atomic>

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "RenderPassHandler.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"

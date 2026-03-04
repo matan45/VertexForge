@@ -1,4 +1,5 @@
 #include "FileDialog.hpp"
+#include "../print/Log.hpp"
 
 #include <bit>
 #include "../string/StringUtil.hpp"

@@ -1,4 +1,5 @@
 #include "BakeSceneMesh.hpp"
+#include "../print/Log.hpp"
 #include "../resource/MeshStreamHandle.hpp"
 #include "../components/CoreComponents.hpp"
 #include "../scene/EntityRegistry.hpp"

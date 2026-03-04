@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "MeshLODGenerator.hpp"
 #include "threading/JobSystem.hpp"
 

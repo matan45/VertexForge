@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 
 #include "HandIKAPI.hpp"

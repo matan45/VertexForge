@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ScriptingEvents.hpp"

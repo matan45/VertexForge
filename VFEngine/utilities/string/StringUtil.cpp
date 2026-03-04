@@ -1,4 +1,5 @@
 #include "StringUtil.hpp"
+#include "../print/Log.hpp"
 #include <Windows.h>
 #include <stdexcept>
 #include <algorithm>

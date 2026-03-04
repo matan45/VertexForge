@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "ContentBrowserModals.hpp"
 #include "imgui.h"
 #include "string/StringUtil.hpp"

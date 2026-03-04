@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "Audio.hpp"
 #include "resource/EndianUtils.hpp"
 

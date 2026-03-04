@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "AsyncFileOperations.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "Texture.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "config/Config.hpp"

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "AudioConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AudioSettingsEvents.hpp"

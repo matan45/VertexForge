@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "TerrainService.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"

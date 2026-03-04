@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "UndoRedoServiceImpl.hpp"
 #include "../events/UndoRedoEvents.hpp"
 

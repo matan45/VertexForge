@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "RuntimeHandler.hpp"
 #include "RuntimeBootstrap.hpp"
 #include "impl/SceneServiceImpl.hpp"

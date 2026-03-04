@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "MeshSerializer.hpp"
 #include "resource/EndianUtils.hpp"
 

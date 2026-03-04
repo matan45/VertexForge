@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "TerrainMeshBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "ShaderGraphCompiler.hpp"
 #include "nodes/ShaderNode.hpp"
 #include <queue>

@@ -1,4 +1,5 @@
 #include "ProjectSerialization.hpp"
+#include "../print/Log.hpp"
 #include "../config/Config.hpp"
 #include <fstream>
 #include <chrono>

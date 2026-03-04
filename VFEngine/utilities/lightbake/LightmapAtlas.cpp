@@ -1,4 +1,5 @@
 #include "LightmapAtlas.hpp"
+#include "../print/Log.hpp"
 #include "BakeSceneMesh.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <unordered_map>

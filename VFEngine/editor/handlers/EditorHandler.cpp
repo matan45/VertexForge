@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "EditorHandler.hpp"
 #include "EditorBootstrap.hpp"
 #include "../splash/SplashScreen.hpp"

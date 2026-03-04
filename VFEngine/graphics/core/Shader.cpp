@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "Shader.hpp"
 #include "Device.hpp"
 #include "resource/PathResolver.hpp"

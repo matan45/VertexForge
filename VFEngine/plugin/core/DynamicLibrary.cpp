@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "DynamicLibrary.hpp"
 
 #ifdef _WIN32

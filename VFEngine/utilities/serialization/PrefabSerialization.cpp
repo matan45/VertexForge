@@ -1,4 +1,5 @@
 #include "PrefabSerialization.hpp"
+#include "../print/Log.hpp"
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"

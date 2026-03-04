@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "FontSerializer.hpp"
 #include "resource/EndianUtils.hpp"
 #include "config/Config.hpp"

@@ -1,4 +1,5 @@
 #include "PathResolver.hpp"
+#include "../print/Log.hpp"
 
 namespace resource
 {

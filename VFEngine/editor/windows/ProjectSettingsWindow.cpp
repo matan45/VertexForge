@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ProjectEvents.hpp"

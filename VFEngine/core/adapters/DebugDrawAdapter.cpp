@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "DebugDrawAdapter.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>

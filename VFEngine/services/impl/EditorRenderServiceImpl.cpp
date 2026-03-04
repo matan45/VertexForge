@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "EditorRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/EditorModeEvents.hpp"

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "NavmeshAdapter.hpp"
 
 #include <Recast.h>

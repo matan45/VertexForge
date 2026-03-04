@@ -1,4 +1,5 @@
 #include "MaterialManager.hpp"
+#include "../print/Log.hpp"
 #include "MaterialAsset.hpp"
 #include "MaterialInstanceAsset.hpp"
 #include "../resource/ResourceManager.hpp"

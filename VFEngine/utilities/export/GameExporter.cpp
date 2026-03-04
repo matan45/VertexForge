@@ -1,3 +1,4 @@
+#include "../print/Log.hpp"
 #include "GameExporter.hpp"
 #include "ExeIconEmbedder.hpp"
 #include "../serialization/ProjectSerialization.hpp"

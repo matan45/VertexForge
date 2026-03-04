@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "OrmPackingDialog.hpp"
 #include <texture/OrmTexturePacker.hpp>
 #include <nfd/FileDialog.hpp>

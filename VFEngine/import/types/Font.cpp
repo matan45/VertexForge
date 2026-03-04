@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "Font.hpp"
 #include "FontAtlasGenerator.hpp"
 #include "FontSerializer.hpp"

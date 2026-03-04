@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "api/LogAPI.hpp"
 #include "api/EntityAPI.hpp"

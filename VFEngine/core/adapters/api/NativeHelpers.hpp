@@ -1,5 +1,6 @@
 #pragma once
 
+#include "print/Log.hpp"
 #include <value/ValueType.hpp>
 #include <value/NativeArray.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>

@@ -1,4 +1,5 @@
 #include "TerrainSerializer.hpp"
+#include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <fstream>

@@ -1,3 +1,4 @@
+#include "../print/Log.hpp"
 #include "AnimationResource.hpp"
 #include "EndianUtils.hpp"
 

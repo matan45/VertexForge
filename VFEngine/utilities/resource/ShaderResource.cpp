@@ -1,4 +1,5 @@
 #include "ShaderResource.hpp"
+#include "../print/Log.hpp"
 #include <fstream>
 #include <sstream>
 

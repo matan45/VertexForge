@@ -1,3 +1,4 @@
+#include "../print/Log.hpp"
 #include "TextureResource.hpp"
 #include "EndianUtils.hpp"
 

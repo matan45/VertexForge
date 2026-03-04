@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "MeshSocketWriter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/MeshStreamHandle.hpp"

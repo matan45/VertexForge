@@ -1,4 +1,5 @@
 #include "MaterialAsset.hpp"
+#include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>

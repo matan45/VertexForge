@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "ProjectServiceImpl.hpp"
 #include "../events/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"

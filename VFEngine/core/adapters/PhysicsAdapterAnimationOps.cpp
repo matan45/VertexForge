@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PhysicsAdapter.hpp"
 #include "../physics/PhysicsSkeletonConverter.hpp"
 #include "../physics/RagdollSettingsBuilder.hpp"

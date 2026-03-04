@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PluginManager.hpp"
 #include "../api/PluginVersion.hpp"
 #include "Pipeline.hpp"

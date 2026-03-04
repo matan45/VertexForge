@@ -1,4 +1,5 @@
 #include "TerrainWeightMapAsset.hpp"
+#include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <fstream>
 #include <filesystem>

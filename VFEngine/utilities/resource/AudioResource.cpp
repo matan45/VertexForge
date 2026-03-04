@@ -1,4 +1,5 @@
 #include "AudioResource.hpp"
+#include "../print/Log.hpp"
 #include "EndianUtils.hpp"
 
 #include <fstream>

@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "VFXPlayModeHandler.hpp"
 #include "../providers/IVFXRuntimeProvider.hpp"
 #include "../events/EditorModeEvents.hpp"

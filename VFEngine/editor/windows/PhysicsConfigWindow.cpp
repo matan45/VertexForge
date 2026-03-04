@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "PhysicsConfigWindow.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/PhysicsSettingsEvents.hpp"

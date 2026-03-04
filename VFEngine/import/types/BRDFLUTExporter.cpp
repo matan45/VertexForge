@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "BRDFLUTExporter.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/Types.hpp"

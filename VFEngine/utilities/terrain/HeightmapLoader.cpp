@@ -1,4 +1,5 @@
 #include "HeightmapLoader.hpp"
+#include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
 
 #include <fstream>

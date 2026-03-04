@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "VFXEditorWindow.hpp"
 #include "VFXPreviewPanel.hpp"
 #include "../../graph/VFXGraphEditor.hpp"

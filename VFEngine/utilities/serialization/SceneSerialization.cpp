@@ -1,4 +1,5 @@
 #include "SceneSerialization.hpp"
+#include "../print/Log.hpp"
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"

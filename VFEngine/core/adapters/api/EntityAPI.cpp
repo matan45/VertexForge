@@ -1,4 +1,5 @@
 // mType headers must come first to avoid Windows macro conflicts
+#include "print/Log.hpp"
 #include <services/ScriptInterpreter.hpp>
 
 #include "EntityAPI.hpp"

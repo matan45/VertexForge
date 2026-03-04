@@ -1,3 +1,4 @@
+#include "print/Log.hpp"
 #include "SocketAdapter.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "../../services/events/SocketEvents.hpp"
