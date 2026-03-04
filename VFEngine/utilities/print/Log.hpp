@@ -26,6 +26,9 @@
 
 namespace util {
 
+	// When true, only errors and asserts are logged (for exported/shipped games)
+	inline bool loggingEnabled = true;
+
 	inline std::string getCurrentTime() {
 		auto now = std::chrono::system_clock::now();
 		std::time_t now_time = std::chrono::system_clock::to_time_t(now);
@@ -60,6 +63,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logInfo(format_string_t<Args...> fmt, Args&&... args) {
+		if (!loggingEnabled) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
 		std::string fullMessage = fmt::format("{}INFO: {}", currentTime, formattedMessage);
@@ -74,6 +78,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logWarning(format_string_t<Args...> fmt, Args&&... args) {
+		if (!loggingEnabled) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
 		std::string fullMessage = fmt::format("{}WARNING: {}", currentTime, formattedMessage);
