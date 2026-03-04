@@ -21,10 +21,36 @@
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/project/ExportEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows
 {
+    MainMenuBar::MainMenuBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification& n) {
+                currentSceneName = std::filesystem::path(n.scenePath).stem().string();
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&) {
+                currentSceneName.clear();
+            });
+    }
+
+    MainMenuBar::~MainMenuBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
+        if (sceneClearedToken.isValid())
+            dispatcher.unsubscribe(sceneClearedToken);
+    }
+
     void MainMenuBar::draw()
     {
         if (importDialog)
@@ -370,6 +396,14 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopStyleColor(3);
+        }
+
+        if (!currentSceneName.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            ImGui::Text("%s", currentSceneName.c_str());
         }
     }
 }
