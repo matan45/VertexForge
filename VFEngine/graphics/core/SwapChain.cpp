@@ -96,11 +96,6 @@ namespace core {
 		swapchainImages = device.getLogicalDevice().getSwapchainImagesKHR(swapchain.get());
 		swapchainImageFormat = surfaceFormat.format;
 		swapchainExtent = extent;
-		if (debug) {
-			vfLogInfo("Creating swapchain with extent: {}x{}", extent.width, extent.height);
-			vfLogInfo("Swapchain image format: {}", vk::to_string(swapchainImageFormat));
-			vfLogInfo("Swapchain image count: {}", swapchainImages.size());
-		}
 
 	}
 
@@ -185,10 +180,6 @@ namespace core {
 		}
 		catch (vk::SystemError& err) {
 			vfLogError("Failed to create depth stencil image view: {}", err.what());
-		}
-
-		if (debug) {
-			vfLogInfo("Swapchain depthStencilFormat format: {}", vk::to_string(swapchainDepthStencilFormat));
 		}
 	}
 
