@@ -28,9 +28,10 @@ namespace gameExport
 									const std::filesystem::path& dst,
 									ExportResult& result) const;
 
-		// Copies directory but skips .mt source files (only .mtcLib compiled bytecode is needed at runtime)
+		// Copies directory but skips .mt/.vfproj source files and the export output directory
 		void copyDirectoryFilteredRecursive(const std::filesystem::path& src,
 											const std::filesystem::path& dst,
-											ExportResult& result) const;
+											ExportResult& result,
+											const std::filesystem::path& excludeDir = {}) const;
 	};
 }

@@ -1,13 +1,12 @@
 #include "../handlers/RuntimeHandler.hpp"
-#include "print/Log.hpp"
+#include <iostream>
 #include <filesystem>
-
 
 
 int main(int argc, char* argv[])
 {
     handlers::RuntimeHandler runtime;
-    util::loggingEnabled = false;
+
     try
     {
         runtime.init();
@@ -34,7 +33,7 @@ int main(int argc, char* argv[])
         {
             if (!runtime.loadProject(projectPath))
             {
-                vfLogError("Failed to load project: {}", projectPath);
+                std::cerr << "Failed to load project: " << projectPath << std::endl;
             }
         }
 
@@ -43,7 +42,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        vfLogError("FATAL: {}", e.what());
+        std::cerr << "FATAL: " << e.what() << std::endl;
         return 1;
     }
 

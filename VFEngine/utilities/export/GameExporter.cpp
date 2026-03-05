@@ -230,7 +230,7 @@ namespace gameExport
 	bool GameExporter::copyAssets(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path assetsDst = config.outputDirectory / "Assets";
-		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result);
+		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result, config.outputDirectory);
 		return true;
 	}
 
@@ -428,13 +428,36 @@ namespace gameExport
 		}
 	}
 
-	void GameExporter::copyDirectoryFilteredRecursive(const fs::path& src, const fs::path& dst, ExportResult& result) const
+	void GameExporter::copyDirectoryFilteredRecursive(const fs::path& src, const fs::path& dst,
+													ExportResult& result, const fs::path& excludeDir) const
 	{
 		std::error_code ec;
 		fs::create_directories(dst, ec);
 
-		for (const auto& entry : fs::recursive_directory_iterator(src, ec))
+		// Resolve the exclude directory (the export output root) so we can skip it
+		// when the user exports into a subfolder of the working directory.
+		fs::path excludeAbsolute;
+		if (!excludeDir.empty())
 		{
+			excludeAbsolute = fs::weakly_canonical(excludeDir, ec);
+		}
+
+		for (auto it = fs::recursive_directory_iterator(src, ec); it != fs::recursive_directory_iterator(); ++it)
+		{
+			const auto& entry = *it;
+
+			// Skip the export output directory to prevent infinite recursion
+			if (entry.is_directory() && !excludeAbsolute.empty())
+			{
+				std::error_code cmpEc;
+				fs::path entryAbs = fs::weakly_canonical(entry.path(), cmpEc);
+				if (!cmpEc && entryAbs == excludeAbsolute)
+				{
+					it.disable_recursion_pending();
+					continue;
+				}
+			}
+
 			fs::path relativePath = fs::relative(entry.path(), src, ec);
 			fs::path destPath = dst / relativePath;
 
@@ -445,8 +468,9 @@ namespace gameExport
 			}
 
 			// Skip .mt source files (keep .mtcLib compiled bytecode)
+			// Skip .vfproj files (a new one is generated in the export root)
 			auto ext = entry.path().extension().string();
-			if (ext == ".mt")
+			if (ext == ".mt" || ext == ".vfproj")
 			{
 				continue;
 			}
