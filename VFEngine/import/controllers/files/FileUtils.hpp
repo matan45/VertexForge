@@ -1,10 +1,11 @@
 ﻿#pragma once
 #include <string>
+#include "../../ImportExport.hpp"
 
 namespace files
 {
     //change the utill lib name to commons
-    class FileUtils
+    class VF_IMPORT_API FileUtils
     {
     public:
         static std::string getFileExtension(std::string_view filePath, bool lowerCase = true);

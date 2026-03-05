@@ -133,7 +133,7 @@ namespace render::gpudriven
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        vfLogWarning("GPUCullLODPipeline: Created descriptor set layout");
+        vfLogInfo("GPUCullLODPipeline: Created descriptor set layout");
     }
 
     void GPUCullLODPipeline::createPipelineLayout()
@@ -200,7 +200,7 @@ namespace render::gpudriven
         poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        vfLogWarning("GPUCullLODPipeline: Created descriptor pool");
+        vfLogInfo("GPUCullLODPipeline: Created descriptor pool");
     }
 
     void GPUCullLODPipeline::allocateDescriptorSet()

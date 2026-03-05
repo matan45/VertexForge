@@ -1,5 +1,6 @@
 #include "LightmapAtlas.hpp"
 #include "../print/Log.hpp"
+#include "../config/Config.hpp"
 #include "BakeSceneMesh.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <unordered_map>
@@ -437,6 +438,14 @@ namespace lightbake
         data.version.major = resource::endian::readLE<uint32_t>(file);
         data.version.minor = resource::endian::readLE<uint32_t>(file);
         data.version.patch = resource::endian::readLE<uint32_t>(file);
+
+        if (data.version.major != Version::major || data.version.minor != Version::minor || data.version.patch != Version::patch)
+        {
+            vfLogError("[LightBake] Incompatible lightmap file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       data.version.major, data.version.minor, data.version.patch,
+                       Version::major, Version::minor, Version::patch);
+            return data;
+        }
 
         // Dimensions
         data.width = resource::endian::readLE<uint32_t>(file);

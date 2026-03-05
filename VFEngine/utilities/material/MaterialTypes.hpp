@@ -9,7 +9,7 @@
 
 namespace material
 {
-    constexpr const char* MATERIAL_FORMAT_VERSION = "1.1";
+    constexpr const char* MATERIAL_FORMAT_VERSION = "1.0";
 
     constexpr int MAX_MATERIAL_TEXTURES = 16;
 

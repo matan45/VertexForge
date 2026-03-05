@@ -18,6 +18,7 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/terrain/TerrainRaycastAdapter.hpp"
+#include "../../adapters/terrain/TerrainBrushComputeAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -70,6 +71,7 @@ namespace core
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
         terrainRaycastAdapter.reset();
+        terrainBrushComputeAdapter.reset();
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
         debugDrawAdapter.reset();

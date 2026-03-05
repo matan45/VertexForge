@@ -31,13 +31,11 @@ namespace resource
         std::string name;
         std::array<LODFileInfo, LOD_LEVEL_COUNT> lods;
 
-        // Meshlet info per LOD (v0.0.4+)
         std::array<LODMeshletFileInfo, LOD_LEVEL_COUNT> meshletLods{};
-        std::streampos meshletDataOffset = 0; // File position where meshlet data starts
+        std::streampos meshletDataOffset = 0;
         bool hasMeshletData = false;
 
-        // Convex decomposition (v0.0.5+)
-        std::streampos convexDataOffset = 0; // File position where convex data starts
+        std::streampos convexDataOffset = 0;
         bool hasConvexData = false;
     };
 

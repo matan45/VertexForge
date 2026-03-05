@@ -37,7 +37,7 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp","resources/editor/**.vfImage" }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
 
    includedirs {
 	  "dependencies/imgui",
@@ -81,6 +81,8 @@ project "Editor"
       }
 
    filter "configurations:Release"
+      kind "WindowedApp"
+      entrypoint "mainCRTStartup"
       defines { "NDEBUG" }
       optimize "On"
       -- Copy OpenAL DLL to Editor output directory
@@ -120,7 +122,7 @@ project "Core"
    }
 
    links { "Graphics", "mType", "jolt", "recast" }  -- Link against Graphics, mType, jolt, recast (Services is a higher layer, no link needed)
-   defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
    filter "configurations:Debug"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
@@ -136,7 +138,7 @@ project "Core"
 	  
 	  
 project "Import"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/import"
@@ -158,7 +160,7 @@ project "Import"
 	  "dependencies/freetype/include"    -- FreeType headers
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
    links { "Utilities", "meshoptimizer" }
 
@@ -169,10 +171,12 @@ project "Import"
       libdirs { "dependencies/assimp/build/lib/Debug", "dependencies/freetype/build/Debug" }
       links { "assimp-vc145-mtd.lib", "freetyped.lib" }
 
-    -- Copy the DLL to the Editor's output directory after the build
-   postbuildcommands {
-      "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/"
-   }
+      -- Copy DLLs to Editor output directory (Import is Editor-only)
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Import/Debug/x64/Import.dll ../../bin/Editor/Debug/x64/"
+      }
 
    -- Release configuration
    filter "configurations:Release"
@@ -181,9 +185,11 @@ project "Import"
       libdirs { "dependencies/assimp/build/lib/Release", "dependencies/freetype/build/Release" }
       links { "assimp-vc145-mt.lib", "freetype.lib" }
 
-      -- Copy the DLL to the output directory after the build
+      -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
-         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/"
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Import/Release/x64/Import.dll ../../bin/Editor/Release/x64/"
       }
 
 
@@ -292,6 +298,8 @@ project "Utilities"
    }
 
    links { "spdLog", "meshoptimizer", "enkiTS" }
+
+   defines { "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
    buildoptions { "/bigobj" }
 
@@ -519,7 +527,7 @@ project "imgui"
 
 -- Project: JoltPhysics (Moved under libs group)
 project "jolt"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
@@ -535,16 +543,30 @@ project "jolt"
 
    -- Jolt Physics configuration defines
    defines {
-      "JPH_OBJECT_STREAM"  -- Enable object serialization
+      "JPH_OBJECT_STREAM",          -- Enable object serialization
+      "JPH_SHARED_LIBRARY",         -- Enable DLL export/import macros
+      "JPH_BUILD_SHARED_LIBRARY"    -- Building the DLL: JPH_EXPORT = __declspec(dllexport)
    }
 
    filter "configurations:Debug"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../bin/Editor/Debug/x64",
+         "{MKDIR} ../bin/Runtime/Debug/x64",
+         "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Editor/Debug/x64/",
+         "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../bin/Editor/Release/x64",
+         "{MKDIR} ../bin/Runtime/Release/x64",
+         "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Editor/Release/x64/",
+         "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Runtime/Release/x64/"
+      }
 
 
 -- Project: mType (Scripting language interpreter)
@@ -595,7 +617,7 @@ project "mType"
 
 -- Project: meshoptimizer (Mesh simplification for LOD generation)
 project "meshoptimizer"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++17"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
@@ -626,15 +648,27 @@ project "meshoptimizer"
       "dependencies/meshoptimizer/src"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllexport)" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../bin/Editor/Debug/x64",
+         "{MKDIR} ../bin/Runtime/Debug/x64",
+         "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Editor/Debug/x64/",
+         "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../bin/Editor/Release/x64",
+         "{MKDIR} ../bin/Runtime/Release/x64",
+         "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Editor/Release/x64/",
+         "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Runtime/Release/x64/"
+      }
 
 
 -- Project: Recast Navigation (Navmesh generation + pathfinding)

@@ -8,21 +8,9 @@ namespace core {
 		QueueFamilyIndices indices;
 		const std::vector<vk::QueueFamilyProperties> queueFamilies = device.getQueueFamilyProperties();
 
-		if (debug) {
-			vfLogInfo("Found {} queue families.", queueFamilies.size());
-		}
-
 		int i = 0;
 		for (const vk::QueueFamilyProperties& queueFamily : queueFamilies) {
-			if (debug) {
-				vfLogInfo("Queue Family {}: Graphics: {}, Compute: {}, Transfer: {}",
-					i,
-					(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) ? "Yes" : "No",
-					(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) ? "Yes" : "No",
-					(queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) ? "Yes" : "No"
-				);
-			}
-
+			
 			if (device.getSurfaceSupportKHR(i, surface)) {
 				indices.presentFamily = i;
 			}
@@ -44,16 +32,6 @@ namespace core {
 		// If no dedicated transfer queue found, fall back to graphics queue for transfers
 		if (!indices.transferFamily.has_value() && indices.graphicsAndComputeFamily.has_value()) {
 			indices.transferFamily = indices.graphicsAndComputeFamily;
-		}
-
-		if (!indices.isComplete()) {
-			if (debug) {
-				vfLogWarning("Could not find complete queue family support.");
-			}
-		}
-
-		if (debug && indices.hasDedicatedTransferQueue()) {
-			vfLogInfo("Found dedicated transfer queue family: {}", indices.transferFamily.value());
 		}
 
 		return indices;

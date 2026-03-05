@@ -84,9 +84,8 @@ namespace terrain
             std::string fileVersion = j.value("version", TERRAIN_MATERIAL_FORMAT_VERSION);
             if (fileVersion != TERRAIN_MATERIAL_FORMAT_VERSION)
             {
-                logWarningLimited(std::format(
-                    "Terrain material file '{}' has version {} (current is {}). Will migrate on save.",
-                    std::string(path), fileVersion, TERRAIN_MATERIAL_FORMAT_VERSION));
+                vfLogError("Incompatible terrain material file version: {}, expected {}. Re-import required. path: {}",
+                           fileVersion, TERRAIN_MATERIAL_FORMAT_VERSION, std::string(path));
             }
 
             material.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));

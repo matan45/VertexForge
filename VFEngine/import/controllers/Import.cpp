@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "Import.hpp"
+#include "threading/JobSystem.hpp"
 #include <future>
 #include <algorithm>
 #include "../pipeline/stages/FileValidationStage.hpp"
@@ -89,7 +90,16 @@ namespace controllers
 
     void Import::initialize()
     {
+        // Import DLL has its own copy of Utilities (static lib), so its
+        // JobSystem singleton needs separate initialization.
+        threading::JobSystem::instance().init();
         setupPipeline();
+    }
+
+    void Import::shutdown()
+    {
+        importPipeline.reset();
+        threading::JobSystem::instance().shutdown();
     }
 
     void Import::addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage)

@@ -2,7 +2,6 @@
 #include <optional>
 
 #include <vulkan/vulkan.hpp>
-
 #ifdef NDEBUG
 constexpr bool debug = false;
 #else

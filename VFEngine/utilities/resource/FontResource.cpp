@@ -57,10 +57,11 @@ namespace resource
         fontData.version.minor = minorVersion;
         fontData.version.patch = patchVersion;
 
-        if (majorVersion != Version::major)
+        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
         {
-            vfLogError("Incompatible font file major version: {}.{}.{}, expected {}.x.x",
-                       majorVersion, minorVersion, patchVersion, Version::major);
+            vfLogError("Incompatible font file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       majorVersion, minorVersion, patchVersion,
+                       Version::major, Version::minor, Version::patch);
             return {};
         }
 

@@ -5,7 +5,7 @@
 
 namespace terrain
 {
-    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.3";
+    constexpr const char* TERRAIN_MATERIAL_FORMAT_VERSION = "1.0";
     constexpr int MAX_TERRAIN_LAYERS = 16;
 
     enum class TerrainLayerBlendMode : uint8_t

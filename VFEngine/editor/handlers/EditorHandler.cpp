@@ -218,6 +218,7 @@ namespace handlers
         windowStateService.reset();
         inputService.reset();
 
+        controllers::Import::shutdown();
         bootstrap->cleanUp();
     }
 

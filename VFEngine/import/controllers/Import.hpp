@@ -6,6 +6,7 @@
 #include <atomic>
 #include "config/Config.hpp"
 #include "../pipeline/Pipeline.hpp"
+#include "../ImportExport.hpp"
 
 namespace controllers
 {
@@ -35,7 +36,9 @@ namespace controllers
         size_t failureCount = 0;
     };
 
-    class Import
+#pragma warning(push)
+#pragma warning(disable: 4251) // private static members don't need dll-interface
+    class VF_IMPORT_API Import
     {
     private:
         inline static std::string location;
@@ -47,6 +50,7 @@ namespace controllers
                                         ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
+        static void shutdown();
 
         // Add a custom pipeline stage (appended after built-in stages).
         static void addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage);
@@ -64,4 +68,5 @@ namespace controllers
                                               uint32_t totalFiles,
                                               const std::vector<importConfig::ImportFiles>& originalPaths);
     };
+#pragma warning(pop)
 }

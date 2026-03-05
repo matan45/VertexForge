@@ -19,13 +19,13 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
@@ -41,22 +41,24 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)..\bin\jolt\Debug\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Debug\jolt\</IntDir>
     <TargetName>jolt</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\bin\jolt\Release\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Release\jolt\</IntDir>
     <TargetName>jolt</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;JPH_OBJECT_STREAM;DEBUG;JPH_ENABLE_ASSERTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;JPH_OBJECT_STREAM;JPH_SHARED_LIBRARY;JPH_BUILD_SHARED_LIBRARY;DEBUG;JPH_ENABLE_ASSERTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\dependencies\JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -67,13 +69,20 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ImportLibrary>..\bin\jolt\Debug\x64\jolt.lib</ImportLibrary>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\bin\Editor\Debug\x64 (mkdir ..\bin\Editor\Debug\x64)
+IF NOT EXIST ..\bin\Runtime\Debug\x64 (mkdir ..\bin\Runtime\Debug\x64)
+IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul)
+IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Runtime\Debug\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;JPH_OBJECT_STREAM;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;JPH_OBJECT_STREAM;JPH_SHARED_LIBRARY;JPH_BUILD_SHARED_LIBRARY;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\dependencies\JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -88,7 +97,14 @@
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <ImportLibrary>..\bin\jolt\Release\x64\jolt.lib</ImportLibrary>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\bin\Editor\Release\x64 (mkdir ..\bin\Editor\Release\x64)
+IF NOT EXIST ..\bin\Runtime\Release\x64 (mkdir ..\bin\Runtime\Release\x64)
+IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul)
+IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Runtime\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Runtime\Release\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\AABBTree\AABBTreeBuilder.h" />

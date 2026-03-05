@@ -57,6 +57,8 @@ namespace resource
         if (ext == ".vfaudio") return FileType::AUDIO;
         if (ext == ".vfanim") return FileType::ANIMATION;
         if (ext == ".vffont") return FileType::FONT;
+        if (ext == ".vfterrain") return FileType::TERRAIN;
+        if (ext == ".vflightmap") return FileType::LIGHTMAP;
         return FileType::UNKNOWN;
     }
 
@@ -70,8 +72,31 @@ namespace resource
             case FileType::ANIMATION: return "ANIMATION";
             case FileType::SCENE: return "SCENE";
             case FileType::FONT: return "FONT";
+            case FileType::SKELETON: return "SKELETON";
             case FileType::ANIMATOR: return "ANIMATOR";
+            case FileType::TERRAIN: return "TERRAIN";
+            case FileType::LIGHTMAP: return "LIGHTMAP";
             default: return "UNKNOWN";
+        }
+    }
+
+    static bool isValidFileType(uint8_t typeByte)
+    {
+        switch (static_cast<FileType>(typeByte)) {
+            case FileType::TEXTURE:
+            case FileType::MESH:
+            case FileType::ANIMATION:
+            case FileType::HDR:
+            case FileType::AUDIO:
+            case FileType::SCENE:
+            case FileType::FONT:
+            case FileType::SKELETON:
+            case FileType::ANIMATOR:
+            case FileType::TERRAIN:
+            case FileType::LIGHTMAP:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -116,7 +141,7 @@ namespace resource
             return FileType::UNKNOWN;
         }
 
-        if (typeByte >= static_cast<uint8_t>(FileType::UNKNOWN))
+        if (!isValidFileType(typeByte))
         {
             vfLogError("Invalid file type header {} in file: {}", typeByte, filePath.string());
             return FileType::UNKNOWN;
@@ -129,9 +154,6 @@ namespace resource
         {
             vfLogWarning("File header/extension mismatch: {} has header {} but extension expects {} - using extension type",
                        filePath.string(), getFileTypeName(headerType), getFileTypeName(expectedType));
-            // TODO: Fix corrupted files - the FileType enum order changed, causing old files to have wrong headers.
-            // Old files need to be re-imported or a migration tool should be created.
-            // For now, trust the extension over the header.
             return expectedType;
         }
 

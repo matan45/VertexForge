@@ -29,18 +29,18 @@ namespace resource
 
     enum class FileType : uint8_t
     {
-        TEXTURE,
-        MESH,
-        ANIMATION,
-        HDR,
-        AUDIO,
-        SCENE,
-        FONT,
-        SKELETON,
-        ANIMATOR,
-        TERRAIN,
-        LIGHTMAP,
-        UNKNOWN
+        TEXTURE   = 0,
+        MESH      = 1,
+        ANIMATION = 2,
+        HDR       = 3,
+        AUDIO     = 4,
+        SCENE     = 5,
+        FONT      = 6,
+        SKELETON  = 7,
+        ANIMATOR  = 8,
+        TERRAIN   = 9,
+        LIGHTMAP  = 10,
+        UNKNOWN   = 255
     };
 
     struct MipLevelData
