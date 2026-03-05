@@ -15,7 +15,6 @@
 #include "../../services/events/render/MaterialEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
 #include "../../services/events/terrain/WaterEvents.hpp"
-#include "print/RuntimeDebugLog.hpp"
 
 namespace controllers
 {
@@ -44,13 +43,10 @@ namespace controllers
 
     void OffScreenController::init()
     {
-        util::runtimeDebugLog("          OffScreenController::init() - offScreen->init()...");
         offScreen->init();
-        util::runtimeDebugLog("          OffScreenController::init() - offScreen done.");
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
-        util::runtimeDebugLog("          OffScreenController::init() - creating sub-controllers...");
         iblController = std::make_unique<offscreen::IBLController>(*renderHandler);
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
         cameraController = std::make_unique<offscreen::CameraController>(*renderHandler);
@@ -59,10 +55,8 @@ namespace controllers
         framePreparation = std::make_unique<offscreen::FramePreparationSystem>();
         statsCollector = std::make_unique<offscreen::CullingStatsCollector>();
 
-        util::runtimeDebugLog("          OffScreenController::init() - bvhManager->init()...");
         bvhManager->init(renderHandler);
         lightBvhManager->init();
-        util::runtimeDebugLog("          OffScreenController::init() - done.");
 
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification)

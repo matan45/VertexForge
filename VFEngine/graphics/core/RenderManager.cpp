@@ -4,7 +4,6 @@
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
-#include "print/RuntimeDebugLog.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
 
@@ -210,16 +209,6 @@ namespace core {
 
 	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
 	{
-		static int debugFrameCount = 0;
-		if (debugFrameCount < 5)
-		{
-			util::runtimeDebugLog("  RenderManager::draw() frame=" + std::to_string(debugFrameCount)
-				+ " imguiEnabled=" + std::to_string(imguiEnabled)
-				+ " hasBlitSource=" + std::to_string(blitSourceProvider != nullptr)
-				+ " imageIndex=" + std::to_string(imageIndex));
-			debugFrameCount++;
-		}
-
 		if (imguiEnabled)
 		{
 			imguiRender->render(commandBuffer, imageIndex);

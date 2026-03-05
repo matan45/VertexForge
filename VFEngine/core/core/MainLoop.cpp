@@ -8,7 +8,6 @@
 #include "resource/ResourceManager.hpp"
 #include "scene/LevelHandler.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/RuntimeDebugLog.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -20,18 +19,12 @@ namespace core {
 	MainLoop::MainLoop(bool imguiEnabled)
 		: imguiEnabled{ imguiEnabled }
 	{
-		util::runtimeDebugLog("        MainLoop ctor - JobSystem::init()...");
 		threading::JobSystem::instance().init();
-		util::runtimeDebugLog("        MainLoop ctor - ResourceManager::init()...");
 		resource::ResourceManager::init();
-		util::runtimeDebugLog("        MainLoop ctor - WindowController::init()...");
 		controllers::WindowController::init(imguiEnabled);
 		mainWindow = controllers::WindowController::getWindow();
-		util::runtimeDebugLog("        MainLoop ctor - Graphics::createContext()...");
 		controllers::Graphics::createContext(mainWindow);
-		util::runtimeDebugLog("        MainLoop ctor - RenderController()...");
 		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);
-		util::runtimeDebugLog("        MainLoop ctor - done.");
 	}
 
 	void MainLoop::init()

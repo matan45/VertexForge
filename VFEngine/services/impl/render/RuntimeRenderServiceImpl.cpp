@@ -2,7 +2,6 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "print/Log.hpp"
-#include "print/RuntimeDebugLog.hpp"
 #include <filesystem>
 
 namespace services
@@ -18,7 +17,6 @@ namespace services
     {
         if (!offScreenProvider)
         {
-            util::runtimeDebugLog("  getViewportTexture: no offScreenProvider!");
             return ViewportTextureHandle{};
         }
 
@@ -27,12 +25,6 @@ namespace services
         prepareFrameMeshes();
         prepareFrameText();
         prepareFrameUIImages();
-
-        static int renderLogCount = 0;
-        if (renderLogCount < 3) {
-            util::runtimeDebugLog("  getViewportTexture: frame=" + std::to_string(frameCounter) + " hasIBL=" + std::to_string(hasIBL()));
-            renderLogCount++;
-        }
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -63,16 +55,13 @@ namespace services
 
     bool RuntimeRenderServiceImpl::setIBL(const std::string& hdrPath)
     {
-        util::runtimeDebugLog("  setIBL: path=" + hdrPath);
         if (!offScreenProvider)
         {
-            util::runtimeDebugLog("  setIBL: no offScreenProvider!");
             return false;
         }
 
         if (!std::filesystem::exists(hdrPath))
         {
-            util::runtimeDebugLog("  setIBL: FILE NOT FOUND: " + hdrPath);
             vfLogError("IBL file not found: {}", hdrPath);
             return false;
         }
@@ -221,7 +210,6 @@ namespace services
 
     std::string RuntimeRenderServiceImpl::loadMesh(const std::string& meshPath)
     {
-        util::runtimeDebugLog("  loadMesh: " + meshPath);
         if (!offScreenProvider)
         {
             return "";

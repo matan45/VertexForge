@@ -1,7 +1,6 @@
 #include "CoreInterface.hpp"
 #include "../core/MainLoop.hpp"
 #include "AnimatorSystemController.hpp"
-#include "print/RuntimeDebugLog.hpp"
 
 namespace controllers {
 
@@ -9,16 +8,12 @@ namespace controllers {
 		: mainLoop{ std::make_unique<core::MainLoop>(imguiEnabled) }
 		, animatorSystem{ std::make_unique<AnimatorSystemController>() }
 	{
-		util::runtimeDebugLog("      CoreInterface constructed (imguiEnabled=" + std::string(imguiEnabled ? "true" : "false") + ")");
 	}
 
 	void CoreInterface::init()
 	{
-		util::runtimeDebugLog("      CoreInterface::init() - mainLoop->init()...");
 		mainLoop->init();
-		util::runtimeDebugLog("      CoreInterface::init() - mainLoop done, animatorSystem->init()...");
 		animatorSystem->init();
-		util::runtimeDebugLog("      CoreInterface::init() - done.");
 	}
 
 	void CoreInterface::run() const

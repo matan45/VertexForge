@@ -7,7 +7,6 @@
 #include "../core/RenderManager.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "types/CameraTypes.hpp"
-#include "print/RuntimeDebugLog.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 
@@ -29,12 +28,9 @@ namespace render
 
     void OffScreenViewPort::init()
     {
-        util::runtimeDebugLog("            OffScreenViewPort::init() - createSampler()...");
         createSampler();
-        util::runtimeDebugLog("            OffScreenViewPort::init() - createOffscreenResources()...");
         createOffscreenResources();
 
-        util::runtimeDebugLog("            OffScreenViewPort::init() - creating fences...");
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
         for (auto& fence : inFlightFences)
@@ -42,17 +38,13 @@ namespace render
             fence = device.getLogicalDevice().createFence(fenceInfo);
         }
 
-        util::runtimeDebugLog("            OffScreenViewPort::init() - creating RenderPassHandler...");
         renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
-        util::runtimeDebugLog("            OffScreenViewPort::init() - RenderPassHandler::init()...");
         renderPassHandler->init();
 
-        util::runtimeDebugLog("            OffScreenViewPort::init() - initHiZ()...");
         renderPassHandler->initHiZ(types::MAIN_CAMERA_ID,
                                    offscreenResources.depthImage.depthImage,
                                    offscreenResources.depthImage.depthImageView,
                                    swapChain.getSwapchainDepthStencilFormat());
-        util::runtimeDebugLog("            OffScreenViewPort::init() - done.");
     }
 
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
