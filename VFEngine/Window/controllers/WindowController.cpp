@@ -2,8 +2,8 @@
 #include "../window/WindowContext.hpp"
 
 namespace controllers {
-	void WindowController::init() {
-		window::WindowContext::init();
+	void WindowController::init(bool loadEditorIcon) {
+		window::WindowContext::init(loadEditorIcon);
 	}
 
 	void WindowController::cleanUp() {

@@ -10,7 +10,7 @@ namespace window {
 		inline static std::unique_ptr<Window> mainWindow;
 
 	public:
-		static void init();
+		static void init(bool loadEditorIcon = true);
 		static void cleanup();
 
 		static Window* getWindow() {

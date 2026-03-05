@@ -1,10 +1,14 @@
 #include "../handlers/RuntimeHandler.hpp"
 #include "print/Log.hpp"
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 
 int main(int argc, char* argv[])
 {
+    // Redirect crash/error info to a log file next to the executable
+    std::ofstream crashLog("runtime_crash.log", std::ios::trunc);
+
     // Disable info/warning logs for shipped games
     util::loggingEnabled = false;
 
@@ -12,7 +16,10 @@ int main(int argc, char* argv[])
 
     try
     {
+        crashLog << "Starting runtime..." << std::endl;
+
         runtime.init();
+        crashLog << "Init complete." << std::endl;
 
         std::string projectPath;
         if (argc > 1)
@@ -32,20 +39,32 @@ int main(int argc, char* argv[])
             }
         }
 
+        crashLog << "Project path: " << (projectPath.empty() ? "(none)" : projectPath) << std::endl;
+
         if (!projectPath.empty())
         {
             if (!runtime.loadProject(projectPath))
             {
-                std::cerr << "Failed to load project: " << projectPath << std::endl;
+                crashLog << "Failed to load project: " << projectPath << std::endl;
+            }
+            else
+            {
+                crashLog << "Project loaded successfully." << std::endl;
             }
         }
 
+        crashLog << "Entering main loop..." << std::endl;
+        crashLog.flush();
+
         runtime.run();
         runtime.cleanUp();
+
+        crashLog << "Clean shutdown." << std::endl;
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Runtime error: " << e.what() << std::endl;
+        crashLog << "FATAL: " << e.what() << std::endl;
+        crashLog.flush();
         return 1;
     }
 

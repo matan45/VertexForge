@@ -2,10 +2,11 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
+#include <filesystem>
 
 
 namespace window {
-	void Window::initWindow()
+	void Window::initWindow(bool loadEditorIcon)
 	{
 		if (!glfwInit()) {
 			vfLogError("Unable to initialize GLFW");
@@ -26,7 +27,10 @@ namespace window {
 		glfwSetWindowIconifyCallback(window, windowIconifyCallback);
 		glfwSetWindowFocusCallback(window, windowFocusCallback);
 
-		setWindowIcon(resource::PathResolver::resolveEnginePath("../../resources/editor/window-icon.vfImage"));
+		if (loadEditorIcon)
+		{
+			setWindowIcon(resource::PathResolver::resolveEnginePath("../../resources/editor/window-icon.vfImage"));
+		}
 	}
 
 	void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)

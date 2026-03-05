@@ -35,9 +35,7 @@ public class EditorLauncher {
         // 2. Check relative paths from launcher working directory
         Path launcherDir = Path.of(System.getProperty("user.dir"));
         Path[] relativePaths = {
-                launcherDir.resolve("../bin/Editor/Debug/x64/" + EDITOR_EXE_NAME),
                 launcherDir.resolve("../bin/Editor/Release/x64/" + EDITOR_EXE_NAME),
-                launcherDir.resolve("bin/Editor/Debug/x64/" + EDITOR_EXE_NAME),
                 launcherDir.resolve("bin/Editor/Release/x64/" + EDITOR_EXE_NAME)
         };
 

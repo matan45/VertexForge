@@ -145,20 +145,30 @@ namespace gameExport
 	{
 		fs::path runtimeDir = findRuntimeExe().parent_path();
 
-		fs::path openAlDll = runtimeDir / "OpenAL32.dll";
-		if (fs::exists(openAlDll))
+		// Copy DLLs from the runtime build directory
+		const std::vector<std::string> runtimeDlls = {
+			"OpenAL32.dll",
+			"jolt.dll",
+			"meshoptimizer.dll"
+		};
+
+		for (const auto& dllName : runtimeDlls)
 		{
-			std::error_code ec;
-			fs::copy_file(openAlDll, config.outputDirectory / "OpenAL32.dll",
-						  fs::copy_options::overwrite_existing, ec);
-			if (ec)
+			fs::path dllPath = runtimeDir / dllName;
+			if (fs::exists(dllPath))
 			{
-				result.warnings.push_back("Failed to copy OpenAL32.dll: " + ec.message());
+				std::error_code ec;
+				fs::copy_file(dllPath, config.outputDirectory / dllName,
+							  fs::copy_options::overwrite_existing, ec);
+				if (ec)
+				{
+					result.warnings.push_back("Failed to copy " + dllName + ": " + ec.message());
+				}
 			}
-		}
-		else
-		{
-			result.warnings.push_back("OpenAL32.dll not found in runtime build output");
+			else
+			{
+				result.warnings.push_back(dllName + " not found in runtime build output");
+			}
 		}
 
 		{
@@ -212,26 +222,6 @@ namespace gameExport
 			std::error_code ec;
 			fs::create_directories(iblDst, ec);
 			copyDirectoryRecursive(iblSrc, iblDst, result);
-		}
-
-		// Copy only the window icon for runtime (ImGui is disabled in runtime, no fonts needed)
-		fs::path editorSrc = findResourcesEditorDirectory();
-		if (fs::exists(editorSrc))
-		{
-			fs::path editorDst = config.outputDirectory / "resources" / "editor";
-			std::error_code ec;
-			fs::create_directories(editorDst, ec);
-
-			fs::path iconSrc = editorSrc / "window-icon.vfImage";
-			if (fs::exists(iconSrc))
-			{
-				fs::copy_file(iconSrc, editorDst / "window-icon.vfImage",
-							  fs::copy_options::overwrite_existing, ec);
-				if (ec)
-				{
-					result.warnings.push_back("Warning while copying window icon: " + ec.message());
-				}
-			}
 		}
 
 		return true;
@@ -427,24 +417,6 @@ namespace gameExport
 		return {};
 	}
 
-	fs::path GameExporter::findResourcesEditorDirectory() const
-	{
-		fs::path cwd = fs::current_path();
-
-		fs::path candidate = cwd / "../../resources/editor";
-		if (fs::exists(candidate))
-		{
-			return fs::canonical(candidate);
-		}
-
-		candidate = cwd / "resources/editor";
-		if (fs::exists(candidate))
-		{
-			return fs::canonical(candidate);
-		}
-
-		return {};
-	}
 
 	void GameExporter::copyDirectoryRecursive(const fs::path& src, const fs::path& dst, ExportResult& result) const
 	{

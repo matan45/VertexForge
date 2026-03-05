@@ -69,7 +69,7 @@ namespace core {
 
 		void render();
 
-		void recreate(uint32_t width, uint32_t height) const;
+		void recreate(uint32_t width, uint32_t height);
 
 		static uint32_t getImageIndex() { return imageIndex; }
 		static DeferredDeletionQueue* getGlobalDeletionQueue() { return globalDeletionQueue; }
@@ -84,7 +84,7 @@ namespace core {
 	private:
 		void draw(const vk::CommandBuffer& commandBuffer) const;
 
-		void present(uint32_t frameIndex) const;
+		void present(uint32_t frameIndex);
 	};
 }
 

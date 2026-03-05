@@ -44,6 +44,12 @@ namespace core
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
 
         offScreen->init();
+
+        // Disable editor-only visual aids in runtime
+        offScreen->setShowGrid(false);
+        offScreen->setShowDebugRendering(false);
+        offScreen->setShowBillboardIcons(false);
+
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();

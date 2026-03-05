@@ -32,7 +32,7 @@ namespace controllers
         void init();
         void cleanUp() const;
 
-        void reSize() const;
+        void reSize();
 
         void render();
 

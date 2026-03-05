@@ -21,7 +21,7 @@ namespace core {
 	{
 		threading::JobSystem::instance().init();
 		resource::ResourceManager::init();
-		controllers::WindowController::init();
+		controllers::WindowController::init(imguiEnabled);
 		mainWindow = controllers::WindowController::getWindow();
 		controllers::Graphics::createContext(mainWindow);
 		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);

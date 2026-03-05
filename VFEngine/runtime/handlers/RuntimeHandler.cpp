@@ -153,16 +153,29 @@ namespace handlers {
             return false;
         }
 
-        // Set window title and icon from project config
+        // Set window title from project config
         bootstrap->setWindowTitle(projectOpt->projectName);
 
+        // Try to load a window icon (.vfImage) from the assets folder (optional)
         if (!projectOpt->exeIconPath.empty())
         {
-            std::filesystem::path iconPath =
+            // Derive a .vfImage path from the icon path for GLFW window icon
+            std::filesystem::path iconBase =
                 std::filesystem::path(projectOpt->workingDirectory) / projectOpt->exeIconPath;
-            if (std::filesystem::exists(iconPath))
+            // Try the path as-is first (user may have set a .vfImage directly)
+            if (std::filesystem::exists(iconBase))
             {
-                bootstrap->setWindowIcon(iconPath.string());
+                bootstrap->setWindowIcon(iconBase.string());
+            }
+            else
+            {
+                // Try with .vfImage extension (in case the config stores an .ico path)
+                std::filesystem::path vfImageIcon = iconBase;
+                vfImageIcon.replace_extension(".vfImage");
+                if (std::filesystem::exists(vfImageIcon))
+                {
+                    bootstrap->setWindowIcon(vfImageIcon.string());
+                }
             }
         }
 

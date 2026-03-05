@@ -30,7 +30,7 @@ namespace window {
 
 		vk::SurfaceKHR createWindowSurface(const vk::UniqueInstance& instance) const;
 
-		void initWindow();
+		void initWindow(bool loadEditorIcon = true);
 		void cleanup();
 		void closeWindow();
 		void pollEvents() const;

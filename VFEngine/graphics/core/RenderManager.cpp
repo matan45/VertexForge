@@ -146,7 +146,7 @@ namespace core {
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
-	void RenderManager::recreate(uint32_t width, uint32_t height) const
+	void RenderManager::recreate(uint32_t width, uint32_t height)
 	{
 		if (width == 0 || height == 0) return;  // Skip if minimized
 
@@ -289,7 +289,7 @@ namespace core {
 		device.getLogicalDevice().destroyRenderPass(presentRenderPass);
 	}
 
-	void RenderManager::present(uint32_t frameIndex) const
+	void RenderManager::present(uint32_t frameIndex)
 	{
 		// Present the image to the screen
 		vk::PresentInfoKHR presentInfo{};

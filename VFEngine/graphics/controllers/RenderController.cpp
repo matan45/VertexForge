@@ -18,7 +18,7 @@ namespace controllers {
 		renderManager->render();
 	}
 
-	void RenderController::reSize() const
+	void RenderController::reSize()
 	{
 		//handle resize window
 		swapChain.recreate(window->getWidth(), window->getHeight());
