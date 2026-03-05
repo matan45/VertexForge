@@ -69,11 +69,6 @@ namespace controllers::offscreen
 
             // Store the current view matrix for cluster debug visualization
             currentViewMatrix = view;
-
-            if (!renderHandler.isDebugRendererInitialized())
-            {
-                renderHandler.initDebugRenderer();
-            }
         }
 
         // Update GPU-driven renderer camera data

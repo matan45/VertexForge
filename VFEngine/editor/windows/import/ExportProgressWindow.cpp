@@ -84,9 +84,9 @@ namespace windows
 			}
 		}
 
-		ImGui::SetNextWindowSize(ImVec2(450, 250), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(450, 250), ImGuiCond_FirstUseEver);
 
-		ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
 		if (ImGui::Begin("Exporting Game...", &windowOpen, flags))
 		{
 			ImGui::Text("Status: %s", step.c_str());

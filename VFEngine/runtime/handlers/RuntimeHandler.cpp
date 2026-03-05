@@ -53,6 +53,12 @@ namespace handlers {
         bootstrap->init();
         util::runtimeDebugLog("  bootstrap->init() done.");
 
+        // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)
+        if (auto* offScreen = bootstrap->getOffScreenProvider())
+        {
+            offScreen->setPlayMode(true);
+        }
+
         util::runtimeDebugLog("  initializeServices()...");
         initializeServices();
         util::runtimeDebugLog("  initializeServices() done.");
@@ -116,6 +122,12 @@ namespace handlers {
 
         // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
         bootstrap->setPostUpdateCallback([this]() {
+            // Ensure cameras are registered before updating them
+            // (updateCamera needs the camera to be registered in the occlusion manager)
+            if (auto* offScreen = bootstrap->getOffScreenProvider()) {
+                offScreen->prepareCameras();
+            }
+
             // Push primary camera matrices to the render system each frame
             {
                 static int camLogCount = 0;
