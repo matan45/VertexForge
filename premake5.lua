@@ -81,6 +81,8 @@ project "Editor"
       }
 
    filter "configurations:Release"
+      kind "WindowedApp"
+      entrypoint "mainCRTStartup"
       defines { "NDEBUG" }
       optimize "On"
       -- Copy OpenAL DLL to Editor output directory
