@@ -1,13 +1,14 @@
 #pragma once
 
 #include "animator/AnimationEventTypes.hpp"
+#include "../ImportExport.hpp"
 #include <fstream>
 #include <string>
 #include <vector>
 
 namespace types
 {
-    class AnimationEventWriter
+    class VF_IMPORT_API AnimationEventWriter
     {
     public:
         static bool saveEventsToAnimation(const std::string& animPath,

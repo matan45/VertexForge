@@ -1,13 +1,14 @@
 #pragma once
 
 #include "animator/IKTypes.hpp"
+#include "../ImportExport.hpp"
 #include <fstream>
 #include <string>
 #include <vector>
 
 namespace types
 {
-    class MeshIKChainWriter
+    class VF_IMPORT_API MeshIKChainWriter
     {
     public:
         static bool saveIKChainsToMesh(const std::string& meshPath,

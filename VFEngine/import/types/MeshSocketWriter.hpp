@@ -1,13 +1,14 @@
 #pragma once
 
 #include "animator/SocketTypes.hpp"
+#include "../ImportExport.hpp"
 #include <fstream>
 #include <string>
 #include <vector>
 
 namespace types
 {
-    class MeshSocketWriter
+    class VF_IMPORT_API MeshSocketWriter
     {
     public:
         static bool saveSocketsToMesh(const std::string& meshPath,

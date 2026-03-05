@@ -6,6 +6,7 @@
 #include <atomic>
 #include "config/Config.hpp"
 #include "../pipeline/Pipeline.hpp"
+#include "../ImportExport.hpp"
 
 namespace controllers
 {
@@ -35,7 +36,9 @@ namespace controllers
         size_t failureCount = 0;
     };
 
-    class Import
+#pragma warning(push)
+#pragma warning(disable: 4251) // private static members don't need dll-interface
+    class VF_IMPORT_API Import
     {
     private:
         inline static std::string location;
@@ -64,4 +67,5 @@ namespace controllers
                                               uint32_t totalFiles,
                                               const std::vector<importConfig::ImportFiles>& originalPaths);
     };
+#pragma warning(pop)
 }

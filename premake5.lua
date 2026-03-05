@@ -136,7 +136,7 @@ project "Core"
 	  
 	  
 project "Import"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/import"
@@ -158,7 +158,7 @@ project "Import"
 	  "dependencies/freetype/include"    -- FreeType headers
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
    links { "Utilities", "meshoptimizer" }
 
@@ -169,10 +169,12 @@ project "Import"
       libdirs { "dependencies/assimp/build/lib/Debug", "dependencies/freetype/build/Debug" }
       links { "assimp-vc145-mtd.lib", "freetyped.lib" }
 
-    -- Copy the DLL to the Editor's output directory after the build
-   postbuildcommands {
-      "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/"
-   }
+      -- Copy DLLs to Editor output directory (Import is Editor-only)
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Import/Debug/x64/Import.dll ../../bin/Editor/Debug/x64/"
+      }
 
    -- Release configuration
    filter "configurations:Release"
@@ -181,9 +183,11 @@ project "Import"
       libdirs { "dependencies/assimp/build/lib/Release", "dependencies/freetype/build/Release" }
       links { "assimp-vc145-mt.lib", "freetype.lib" }
 
-      -- Copy the DLL to the output directory after the build
+      -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
-         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/"
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Import/Release/x64/Import.dll ../../bin/Editor/Release/x64/"
       }
 
 
@@ -546,6 +550,8 @@ project "jolt"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
       postbuildcommands {
+         "{MKDIR} ../bin/Editor/Debug/x64",
+         "{MKDIR} ../bin/Runtime/Debug/x64",
          "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Editor/Debug/x64/",
          "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Runtime/Debug/x64/"
       }
@@ -554,6 +560,8 @@ project "jolt"
       defines { "NDEBUG" }
       optimize "On"
       postbuildcommands {
+         "{MKDIR} ../bin/Editor/Release/x64",
+         "{MKDIR} ../bin/Runtime/Release/x64",
          "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Editor/Release/x64/",
          "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Runtime/Release/x64/"
       }
@@ -644,6 +652,8 @@ project "meshoptimizer"
       defines { "DEBUG" }
       symbols "On"
       postbuildcommands {
+         "{MKDIR} ../bin/Editor/Debug/x64",
+         "{MKDIR} ../bin/Runtime/Debug/x64",
          "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Editor/Debug/x64/",
          "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Runtime/Debug/x64/"
       }
@@ -652,6 +662,8 @@ project "meshoptimizer"
       defines { "NDEBUG" }
       optimize "On"
       postbuildcommands {
+         "{MKDIR} ../bin/Editor/Release/x64",
+         "{MKDIR} ../bin/Runtime/Release/x64",
          "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Editor/Release/x64/",
          "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Runtime/Release/x64/"
       }

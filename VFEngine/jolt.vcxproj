@@ -72,7 +72,9 @@
       <ImportLibrary>..\bin\jolt\Debug\x64\jolt.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul)
+      <Command>IF NOT EXIST ..\bin\Editor\Debug\x64 (mkdir ..\bin\Editor\Debug\x64)
+IF NOT EXIST ..\bin\Runtime\Debug\x64 (mkdir ..\bin\Runtime\Debug\x64)
+IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Editor\Debug\x64 &gt; nul)
 IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Debug\x64\jolt.dll ..\bin\Runtime\Debug\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -98,7 +100,9 @@ IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x6
       <ImportLibrary>..\bin\jolt\Release\x64\jolt.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul)
+      <Command>IF NOT EXIST ..\bin\Editor\Release\x64 (mkdir ..\bin\Editor\Release\x64)
+IF NOT EXIST ..\bin\Runtime\Release\x64 (mkdir ..\bin\Runtime\Release\x64)
+IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Editor\Release\x64 &gt; nul)
 IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Runtime\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\jolt\Release\x64\jolt.dll ..\bin\Runtime\Release\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>

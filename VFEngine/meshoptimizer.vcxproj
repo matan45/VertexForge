@@ -72,7 +72,9 @@
       <ImportLibrary>..\bin\meshoptimizer\Debug\x64\meshoptimizer.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Editor\Debug\x64 &gt; nul)
+      <Command>IF NOT EXIST ..\bin\Editor\Debug\x64 (mkdir ..\bin\Editor\Debug\x64)
+IF NOT EXIST ..\bin\Runtime\Debug\x64 (mkdir ..\bin\Runtime\Debug\x64)
+IF EXIST ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Editor\Debug\x64 &gt; nul)
 IF EXIST ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\bin\Runtime\Debug\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -98,7 +100,9 @@ IF EXIST ..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..
       <ImportLibrary>..\bin\meshoptimizer\Release\x64\meshoptimizer.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Editor\Release\x64 &gt; nul)
+      <Command>IF NOT EXIST ..\bin\Editor\Release\x64 (mkdir ..\bin\Editor\Release\x64)
+IF NOT EXIST ..\bin\Runtime\Release\x64 (mkdir ..\bin\Runtime\Release\x64)
+IF EXIST ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Editor\Release\x64 &gt; nul)
 IF EXIST ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Runtime\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\bin\Runtime\Release\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
