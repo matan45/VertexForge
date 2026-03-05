@@ -47,6 +47,7 @@ namespace core
     class IKAdapter;
     class VFXRuntimeAdapter;
     class PostProcessAdapter;
+    class TerrainRenderAdapter;
     class WaterRenderAdapter;
     class RenderTextureAdapter;
     class DebugDrawAdapter;
@@ -67,6 +68,7 @@ namespace core
         std::unique_ptr<IKAdapter> ikAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
+        std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
@@ -111,7 +113,8 @@ namespace core
 
         services::IDebugDrawProvider* getDebugDrawProvider();
 
-        // For late binding - allows RuntimeHandler to connect WaterService
+        // For late binding - allows RuntimeHandler to connect services
+        TerrainRenderAdapter* getTerrainRenderAdapterInternal();
         WaterRenderAdapter* getWaterRenderAdapterInternal();
 
         // === Other Accessors ===

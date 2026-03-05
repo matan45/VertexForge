@@ -3,6 +3,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/lightbake/LightBakeEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
+#include "print/RuntimeDebugLog.hpp"
 
 namespace core
 {
@@ -61,7 +62,13 @@ namespace core
             return {};
         }
 
-        return terrainService->getRawVisibleTiles(frustum, cameraPosition);
+        auto tiles = terrainService->getRawVisibleTiles(frustum, cameraPosition);
+        static int logCount = 0;
+        if (logCount < 10) {
+            util::runtimeDebugLog("  TerrainRenderAdapter::getVisibleTiles() count=" + std::to_string(tiles.size()));
+            logCount++;
+        }
+        return tiles;
     }
 
     std::vector<terrain::TerrainTile*> TerrainRenderAdapter::queryVisibleTiles(
@@ -78,13 +85,25 @@ namespace core
 
     bool TerrainRenderAdapter::hasActiveTerrain() const
     {
-        return terrainService && terrainService->hasActiveTerrain();
+        static int logCount = 0;
+        bool result = terrainService && terrainService->hasActiveTerrain();
+        if (logCount < 10) {
+            util::runtimeDebugLog("  TerrainRenderAdapter::hasActiveTerrain() = " + std::to_string(result) + " terrainService=" + std::to_string(terrainService != nullptr));
+            logCount++;
+        }
+        return result;
     }
 
     std::string TerrainRenderAdapter::getTerrainMaterialPath() const
     {
         if (!terrainService) return {};
-        return terrainService->getTerrainMaterialPath();
+        auto path = terrainService->getTerrainMaterialPath();
+        static int logCount = 0;
+        if (logCount < 5) {
+            util::runtimeDebugLog("  TerrainRenderAdapter::getTerrainMaterialPath() = " + path);
+            logCount++;
+        }
+        return path;
     }
 
     void TerrainRenderAdapter::setDistanceCullingEnabled(bool enabled)

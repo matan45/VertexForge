@@ -11,6 +11,7 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 
 namespace core
 {
@@ -72,6 +73,11 @@ namespace core
     services::IDebugDrawProvider* RuntimeBootstrap::getDebugDrawProvider()
     {
         return debugDrawAdapter.get();
+    }
+
+    TerrainRenderAdapter* RuntimeBootstrap::getTerrainRenderAdapterInternal()
+    {
+        return terrainRenderAdapter.get();
     }
 
     WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()

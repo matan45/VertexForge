@@ -11,6 +11,7 @@
 #include "../../adapters/physics/IKAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
+#include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -44,6 +45,7 @@ namespace core
         ikAdapter = std::make_unique<IKAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
+        terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
@@ -67,6 +69,9 @@ namespace core
 
         // Wire VFX runtime provider to offscreen renderer
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
+
+        // Wire terrain render provider to offscreen renderer
+        offScreenAdapter->setTerrainRenderProvider(terrainRenderAdapter.get());
 
         // Wire water render provider to offscreen renderer
         offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());

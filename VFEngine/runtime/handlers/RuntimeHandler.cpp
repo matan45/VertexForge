@@ -16,6 +16,7 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
+#include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
@@ -32,6 +33,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "math/TransformUtils.hpp"
 
 #include "print/RuntimeDebugLog.hpp"
 
@@ -134,6 +136,9 @@ namespace handlers {
                     if (windowStateService) {
                         uint32_t w = windowStateService->getWidth();
                         uint32_t h = windowStateService->getHeight();
+                        if (camLogCount < 5) {
+                            util::runtimeDebugLog("  Window size: " + std::to_string(w) + "x" + std::to_string(h));
+                        }
                         if (w > 0 && h > 0) {
                             float newAspect = static_cast<float>(w) / static_cast<float>(h);
                             if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
@@ -143,14 +148,33 @@ namespace handlers {
                         }
                     }
 
-                    // Compute view matrix from world transform
-                    camComp.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+                    // Decompose world matrix into position/rotation (same as editor play mode)
+                    auto decomposed = math::decomposeMatrix(worldTransform.worldMatrix);
+                    camComp.updateViewMatrix(decomposed.position, decomposed.rotation);
 
-                    // Extract camera position from world matrix
-                    glm::vec3 cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
+                    // Extract camera position from decomposed transform
+                    glm::vec3 cameraPos = decomposed.position;
 
                     if (camLogCount < 5) {
                         util::runtimeDebugLog("  Camera found: pos=(" + std::to_string(cameraPos.x) + "," + std::to_string(cameraPos.y) + "," + std::to_string(cameraPos.z) + ") fov=" + std::to_string(camComp.fieldOfView) + " aspect=" + std::to_string(camComp.aspectRatio));
+                        // Log view matrix
+                        const auto& v = camComp.viewMatrix;
+                        util::runtimeDebugLog("  ViewMatrix row0=(" + std::to_string(v[0][0]) + "," + std::to_string(v[1][0]) + "," + std::to_string(v[2][0]) + "," + std::to_string(v[3][0]) + ")");
+                        util::runtimeDebugLog("  ViewMatrix row1=(" + std::to_string(v[0][1]) + "," + std::to_string(v[1][1]) + "," + std::to_string(v[2][1]) + "," + std::to_string(v[3][1]) + ")");
+                        util::runtimeDebugLog("  ViewMatrix row2=(" + std::to_string(v[0][2]) + "," + std::to_string(v[1][2]) + "," + std::to_string(v[2][2]) + "," + std::to_string(v[3][2]) + ")");
+                        util::runtimeDebugLog("  ViewMatrix row3=(" + std::to_string(v[0][3]) + "," + std::to_string(v[1][3]) + "," + std::to_string(v[2][3]) + "," + std::to_string(v[3][3]) + ")");
+                        // Log projection matrix
+                        const auto& p = camComp.projectionMatrix;
+                        util::runtimeDebugLog("  ProjMatrix row0=(" + std::to_string(p[0][0]) + "," + std::to_string(p[1][0]) + "," + std::to_string(p[2][0]) + "," + std::to_string(p[3][0]) + ")");
+                        util::runtimeDebugLog("  ProjMatrix row1=(" + std::to_string(p[0][1]) + "," + std::to_string(p[1][1]) + "," + std::to_string(p[2][1]) + "," + std::to_string(p[3][1]) + ")");
+                        util::runtimeDebugLog("  ProjMatrix row2=(" + std::to_string(p[0][2]) + "," + std::to_string(p[1][2]) + "," + std::to_string(p[2][2]) + "," + std::to_string(p[3][2]) + ")");
+                        util::runtimeDebugLog("  ProjMatrix row3=(" + std::to_string(p[0][3]) + "," + std::to_string(p[1][3]) + "," + std::to_string(p[2][3]) + "," + std::to_string(p[3][3]) + ")");
+                        // Log world matrix
+                        const auto& wm = worldTransform.worldMatrix;
+                        util::runtimeDebugLog("  WorldMatrix row0=(" + std::to_string(wm[0][0]) + "," + std::to_string(wm[1][0]) + "," + std::to_string(wm[2][0]) + "," + std::to_string(wm[3][0]) + ")");
+                        util::runtimeDebugLog("  WorldMatrix row1=(" + std::to_string(wm[0][1]) + "," + std::to_string(wm[1][1]) + "," + std::to_string(wm[2][1]) + "," + std::to_string(wm[3][1]) + ")");
+                        util::runtimeDebugLog("  WorldMatrix row2=(" + std::to_string(wm[0][2]) + "," + std::to_string(wm[1][2]) + "," + std::to_string(wm[2][2]) + "," + std::to_string(wm[3][2]) + ")");
+                        util::runtimeDebugLog("  WorldMatrix row3=(" + std::to_string(wm[0][3]) + "," + std::to_string(wm[1][3]) + "," + std::to_string(wm[2][3]) + "," + std::to_string(wm[3][3]) + ")");
                     }
 
                     // Push to render system
@@ -340,6 +364,10 @@ namespace handlers {
 
         auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
         terrainService = terrainServiceImpl;
+        if (auto* terrainAdapter = bootstrap->getTerrainRenderAdapterInternal())
+        {
+            terrainAdapter->setTerrainService(terrainServiceImpl.get());
+        }
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             terrainServiceImpl->setPhysicsProvider(physicsProvider);

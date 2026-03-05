@@ -74,6 +74,7 @@ namespace controllers::offscreen
         if (!meshPipeline)
         {
             renderHandler->setMeshDrawList({});
+            renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
             return;
         }
 
