@@ -36,11 +36,17 @@ namespace controllers {
 		// Set callback to be called each frame (for service updates)
 		void setFrameCallback(std::function<void()> callback);
 
+		// Set callback called after scene graph update (world transforms are valid)
+		void setPostUpdateCallback(std::function<void()> callback);
+
 		// Set callback to be called on resize (for offscreen resource recreation)
 		void setResizeCallback(std::function<void()> callback);
 
 		// Trigger window resize handling
 		void triggerResize();
+
+		// Set blit source provider for runtime (offscreen -> swapchain blit)
+		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);
 	};
 }
 

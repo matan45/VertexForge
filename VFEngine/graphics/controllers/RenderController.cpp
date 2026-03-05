@@ -43,4 +43,9 @@ namespace controllers {
 		renderManager->setResizeCallback(std::move(callback));
 	}
 
+	void RenderController::setBlitSourceProvider(core::BlitSourceProvider provider)
+	{
+		renderManager->setBlitSourceProvider(std::move(provider));
+	}
+
 }

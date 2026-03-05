@@ -15,6 +15,8 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 
+#include "print/RuntimeDebugLog.hpp"
+
 namespace core
 {
     RuntimeBootstrap::RuntimeBootstrap()
@@ -27,8 +29,11 @@ namespace core
 
     void RuntimeBootstrap::init()
     {
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - coreInterface->init()...");
         coreInterface->init();
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - coreInterface done.");
 
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - creating adapters...");
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
@@ -42,21 +47,25 @@ namespace core
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - adapters created.");
 
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - offScreen->init()...");
         offScreen->init();
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - offScreen done.");
 
         // Disable editor-only visual aids in runtime
         offScreen->setShowGrid(false);
         offScreen->setShowDebugRendering(false);
         offScreen->setShowBillboardIcons(false);
 
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - audio/scripting/physics/navmesh init...");
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
         navmeshAdapter->init();
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - subsystems done.");
 
         // Wire VFX runtime provider to offscreen renderer
-        // This allows VFX to be rendered as part of the scene
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
 
         // Wire water render provider to offscreen renderer
@@ -67,5 +76,13 @@ namespace core
         {
             offScreen->recreate();
         });
+
+        // Set up blit source provider so the swapchain present blits the offscreen result
+        coreInterface->setBlitSourceProvider([this](uint32_t imageIndex) -> void*
+        {
+            return offScreen->getColorImage(imageIndex);
+        });
+
+        util::runtimeDebugLog("    RuntimeBootstrap::init() - complete.");
     }
 }

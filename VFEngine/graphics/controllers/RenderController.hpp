@@ -1,4 +1,6 @@
 #pragma once
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+#include <vulkan/vulkan.hpp>
 #include <memory>
 #include <functional>
 
@@ -13,6 +15,7 @@ namespace core
     class Device;
     class RenderManager;
     using ResizeCallback = std::function<void()>;
+    using BlitSourceProvider = std::function<vk::Image(uint32_t imageIndex)>;
 }
 
 namespace controllers
@@ -37,5 +40,6 @@ namespace controllers
         void render();
 
         void setResizeCallback(core::ResizeCallback callback);
+        void setBlitSourceProvider(core::BlitSourceProvider provider);
     };
 }

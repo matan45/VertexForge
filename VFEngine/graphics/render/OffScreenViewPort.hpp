@@ -43,6 +43,9 @@ namespace render
         void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
 
+        // Get the offscreen color image for a given swapchain index (for runtime blit)
+        vk::Image getColorImage(uint32_t index) const;
+
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;

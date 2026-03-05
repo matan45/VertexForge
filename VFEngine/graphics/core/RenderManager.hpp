@@ -26,6 +26,8 @@ namespace core {
 	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 	using ResizeCallback = std::function<void()>;
+	// Returns the offscreen color image for the current frame (used to blit to swapchain in runtime)
+	using BlitSourceProvider = std::function<vk::Image(uint32_t imageIndex)>;
 
 	class RenderManager
 	{
@@ -38,8 +40,9 @@ namespace core {
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
 		std::unique_ptr<DeferredDeletionQueue> deletionQueue;
 		mutable ResizeCallback onResizeCallback;
+		BlitSourceProvider blitSourceProvider;
 
-		// Minimal present pass (used when ImGui is disabled)
+		// Minimal present pass (used when ImGui is disabled and no blit source)
 		vk::RenderPass presentRenderPass;
 		std::vector<vk::Framebuffer> presentFrameBuffers;
 
@@ -75,6 +78,7 @@ namespace core {
 		static DeferredDeletionQueue* getGlobalDeletionQueue() { return globalDeletionQueue; }
 
 		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
+		void setBlitSourceProvider(BlitSourceProvider provider) { blitSourceProvider = std::move(provider); }
 
 		// Access for systems that need deferred deletion
 		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }

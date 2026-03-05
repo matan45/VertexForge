@@ -128,6 +128,9 @@ namespace core
         // Set callback to be called each frame (for service updates)
         void setFrameCallback(std::function<void()> callback);
 
+        // Set callback called after scene graph update (world transforms are valid)
+        void setPostUpdateCallback(std::function<void()> callback);
+
         // Trigger window resize handling
         void triggerResize();
     };

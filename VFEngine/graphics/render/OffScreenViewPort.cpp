@@ -7,6 +7,8 @@
 #include "../core/RenderManager.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "types/CameraTypes.hpp"
+#include "print/RuntimeDebugLog.hpp"
+#include <imgui.h>
 #include <imgui_impl_vulkan.h>
 
 namespace render
@@ -27,9 +29,12 @@ namespace render
 
     void OffScreenViewPort::init()
     {
+        util::runtimeDebugLog("            OffScreenViewPort::init() - createSampler()...");
         createSampler();
+        util::runtimeDebugLog("            OffScreenViewPort::init() - createOffscreenResources()...");
         createOffscreenResources();
 
+        util::runtimeDebugLog("            OffScreenViewPort::init() - creating fences...");
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
         for (auto& fence : inFlightFences)
@@ -37,13 +42,17 @@ namespace render
             fence = device.getLogicalDevice().createFence(fenceInfo);
         }
 
+        util::runtimeDebugLog("            OffScreenViewPort::init() - creating RenderPassHandler...");
         renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
+        util::runtimeDebugLog("            OffScreenViewPort::init() - RenderPassHandler::init()...");
         renderPassHandler->init();
 
+        util::runtimeDebugLog("            OffScreenViewPort::init() - initHiZ()...");
         renderPassHandler->initHiZ(types::MAIN_CAMERA_ID,
                                    offscreenResources.depthImage.depthImage,
                                    offscreenResources.depthImage.depthImageView,
                                    swapChain.getSwapchainDepthStencilFormat());
+        util::runtimeDebugLog("            OffScreenViewPort::init() - done.");
     }
 
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
@@ -104,11 +113,14 @@ namespace render
         }
         inFlightFences.clear();
 
-        for (auto const& resources : offscreenResources.colorImages)
+        if (ImGui::GetCurrentContext())
         {
-            if (resources.descriptorSet)
+            for (auto const& resources : offscreenResources.colorImages)
             {
-                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                if (resources.descriptorSet)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                }
             }
         }
 
@@ -148,11 +160,14 @@ namespace render
     {
         device.getLogicalDevice().waitIdle();
 
-        for (auto const& resources : offscreenResources.colorImages)
+        if (ImGui::GetCurrentContext())
         {
-            if (resources.descriptorSet)
+            for (auto const& resources : offscreenResources.colorImages)
             {
-                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                if (resources.descriptorSet)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                }
             }
         }
 
@@ -160,6 +175,15 @@ namespace render
         createOffscreenResources();
 
         renderPassHandler->recreate();
+    }
+
+    vk::Image OffScreenViewPort::getColorImage(uint32_t index) const
+    {
+        if (index < offscreenResources.colorImages.size())
+        {
+            return offscreenResources.colorImages[index].colorImage;
+        }
+        return {};
     }
 
     void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer) const
@@ -177,7 +201,7 @@ namespace render
         imageColorInfo.height = swapChain.getSwapchainExtent().height;
         imageColorInfo.format = colorFormat;
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
-        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
@@ -230,7 +254,11 @@ namespace render
 
     void OffScreenViewPort::updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const
     {
-        descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // ImGui descriptor sets are only needed in editor mode (to display offscreen result via ImGui::Image)
+        if (ImGui::GetCurrentContext())
+        {
+            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
     }
 
     void OffScreenViewPort::createSampler()

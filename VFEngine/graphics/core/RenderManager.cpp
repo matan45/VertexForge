@@ -4,6 +4,7 @@
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
+#include "print/RuntimeDebugLog.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
 
@@ -209,14 +210,87 @@ namespace core {
 
 	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
 	{
+		static int debugFrameCount = 0;
+		if (debugFrameCount < 5)
+		{
+			util::runtimeDebugLog("  RenderManager::draw() frame=" + std::to_string(debugFrameCount)
+				+ " imguiEnabled=" + std::to_string(imguiEnabled)
+				+ " hasBlitSource=" + std::to_string(blitSourceProvider != nullptr)
+				+ " imageIndex=" + std::to_string(imageIndex));
+			debugFrameCount++;
+		}
+
 		if (imguiEnabled)
 		{
 			imguiRender->render(commandBuffer, imageIndex);
 		}
+		else if (blitSourceProvider)
+		{
+			// Blit offscreen color image to swapchain image
+			vk::Image srcImage = blitSourceProvider(imageIndex);
+			vk::Image dstImage = swapChain.getSwapchainImage(imageIndex);
+			auto extent = swapChain.getSwapchainExtent();
+
+			// Transition offscreen image: ShaderReadOnly -> TransferSrc
+			vk::ImageMemoryBarrier srcBarrier{};
+			srcBarrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+			srcBarrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+			srcBarrier.image = srcImage;
+			srcBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+
+			// Transition swapchain image: Undefined -> TransferDst
+			vk::ImageMemoryBarrier dstBarrier{};
+			dstBarrier.oldLayout = vk::ImageLayout::eUndefined;
+			dstBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+			dstBarrier.srcAccessMask = {};
+			dstBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+			dstBarrier.image = dstImage;
+			dstBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+
+			std::array<vk::ImageMemoryBarrier, 2> toTransferBarriers = { srcBarrier, dstBarrier };
+			commandBuffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::PipelineStageFlagBits::eTransfer,
+				{}, {}, {}, toTransferBarriers);
+
+			// Blit
+			vk::ImageBlit blitRegion{};
+			blitRegion.srcSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 };
+			blitRegion.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+			blitRegion.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
+			blitRegion.dstSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 };
+			blitRegion.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+			blitRegion.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
+
+			commandBuffer.blitImage(
+				srcImage, vk::ImageLayout::eTransferSrcOptimal,
+				dstImage, vk::ImageLayout::eTransferDstOptimal,
+				1, &blitRegion, vk::Filter::eLinear);
+
+			// Transition offscreen image back: TransferSrc -> ShaderReadOnly
+			srcBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+			srcBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+			// Transition swapchain image: TransferDst -> PresentSrc
+			dstBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+			dstBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+			dstBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+			dstBarrier.dstAccessMask = {};
+
+			std::array<vk::ImageMemoryBarrier, 2> toPresentBarriers = { srcBarrier, dstBarrier };
+			commandBuffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eBottomOfPipe,
+				{}, {}, {}, toPresentBarriers);
+		}
 		else
 		{
-			// Minimal present pass: clear swapchain image and transition to PresentSrcKHR
-			vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
+			// Fallback: clear swapchain image to magenta (debug: blit source not set)
+			vk::ClearValue clearColor = { std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f} };
 
 			vk::RenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.renderPass = presentRenderPass;

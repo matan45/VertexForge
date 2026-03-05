@@ -8,6 +8,7 @@
 #include "impl/audio/AudioServiceImpl.hpp"
 #include "impl/scripting/ScriptingServiceImpl.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
+#include "impl/scene/TerrainService.hpp"
 #include "impl/scene/WaterService.hpp"
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
@@ -28,6 +29,11 @@
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/CoreComponents.hpp"
+#include "events/render/RenderEvents.hpp"
+
+#include "print/RuntimeDebugLog.hpp"
 
 namespace handlers {
 
@@ -37,12 +43,19 @@ namespace handlers {
     RuntimeHandler::~RuntimeHandler() = default;
 
     void RuntimeHandler::init() {
+        util::runtimeDebugLog("  PathResolver::initialize()...");
         resource::PathResolver::initialize();
+        util::runtimeDebugLog("  PathResolver done.");
 
+        util::runtimeDebugLog("  bootstrap->init()...");
         bootstrap->init();
+        util::runtimeDebugLog("  bootstrap->init() done.");
 
+        util::runtimeDebugLog("  initializeServices()...");
         initializeServices();
+        util::runtimeDebugLog("  initializeServices() done.");
 
+        util::runtimeDebugLog("  Creating PluginManager...");
         pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
             std::string(plugin::capability::audio),
             std::string(plugin::capability::physics),
@@ -53,10 +66,17 @@ namespace handlers {
         if (!std::filesystem::exists(pluginsDir)) {
             pluginsDir = exePath / "../../plugins";
         }
+        util::runtimeDebugLog("  Loading plugins from: " + pluginsDir.string());
         pluginManager->loadAll(pluginsDir);
         pluginManager->initializeAll();
+        util::runtimeDebugLog("  Plugins loaded.");
 
         bootstrap->setFrameCallback([this]() {
+            // Process deferred scene loading before other updates
+            if (sceneService) {
+                sceneService->update();
+            }
+
             if (inputService) {
                 inputService->update();
             }
@@ -91,6 +111,76 @@ namespace handlers {
                 pluginManager->updateAll(deltaTime);
             }
         });
+
+        // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
+        bootstrap->setPostUpdateCallback([this]() {
+            // Push primary camera matrices to the render system each frame
+            {
+                static int camLogCount = 0;
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto cameraView = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+                bool foundPrimary = false;
+                int totalCameras = 0;
+                for (auto entity : cameraView) {
+                    totalCameras++;
+                    auto& camComp = cameraView.get<components::CameraComponent>(entity);
+                    if (!camComp.isPrimary) continue;
+                    foundPrimary = true;
+
+                    auto& worldTransform = cameraView.get<components::WorldTransformComponent>(entity);
+
+                    // Update aspect ratio to match window
+                    if (windowStateService) {
+                        uint32_t w = windowStateService->getWidth();
+                        uint32_t h = windowStateService->getHeight();
+                        if (w > 0 && h > 0) {
+                            float newAspect = static_cast<float>(w) / static_cast<float>(h);
+                            if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
+                                camComp.aspectRatio = newAspect;
+                                camComp.updateProjectionMatrix();
+                            }
+                        }
+                    }
+
+                    // Compute view matrix from world transform
+                    camComp.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+
+                    // Extract camera position from world matrix
+                    glm::vec3 cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
+
+                    if (camLogCount < 5) {
+                        util::runtimeDebugLog("  Camera found: pos=(" + std::to_string(cameraPos.x) + "," + std::to_string(cameraPos.y) + "," + std::to_string(cameraPos.z) + ") fov=" + std::to_string(camComp.fieldOfView) + " aspect=" + std::to_string(camComp.aspectRatio));
+                    }
+
+                    // Push to render system
+                    events::render::UpdateMeshCameraCommand meshCameraCmd;
+                    meshCameraCmd.viewMatrix = camComp.viewMatrix;
+                    meshCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                    meshCameraCmd.cameraPosition = cameraPos;
+                    meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+                    events::EventDispatcher::instance().execute(meshCameraCmd);
+
+                    // Push camera to IBL skybox renderer
+                    events::render::UpdateIBLCameraCommand iblCameraCmd;
+                    iblCameraCmd.viewMatrix = camComp.viewMatrix;
+                    iblCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                    events::EventDispatcher::instance().execute(iblCameraCmd);
+
+                    break; // Only use the first primary camera
+                }
+
+                if (camLogCount < 5) {
+                    util::runtimeDebugLog("  Camera query: total=" + std::to_string(totalCameras) + " foundPrimary=" + std::to_string(foundPrimary));
+                    camLogCount++;
+                }
+            }
+
+            // Trigger offscreen scene render (prepares cameras, meshes, then renders)
+            if (renderService) {
+                renderService->getViewportTexture();
+            }
+        });
         
         setupEventSubscriptions();
     }
@@ -121,6 +211,7 @@ namespace handlers {
         physicsService.reset();
         navmeshService.reset();
         waterService.reset();
+        terrainService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
@@ -136,22 +227,31 @@ namespace handlers {
     }
 
     bool RuntimeHandler::loadProject(const std::string& projectPath) {
+        util::runtimeDebugLog("  loadProject: " + projectPath);
         auto& dispatcher = events::EventDispatcher::instance();
 
         events::project::LoadProjectCommand loadCmd;
         loadCmd.filePath = projectPath;
+        util::runtimeDebugLog("  loadProject: executing LoadProjectCommand...");
         if (!dispatcher.execute(loadCmd)) {
+            util::runtimeDebugLog("  loadProject: FAILED to load project file");
             vfLogError("Failed to load project file: {}", projectPath);
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
+        util::runtimeDebugLog("  loadProject: project file loaded");
 
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
         if (!projectOpt) {
+            util::runtimeDebugLog("  loadProject: FAILED to get project configuration");
             vfLogError("Failed to get project configuration");
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
+
+        util::runtimeDebugLog("  loadProject: projectName=" + projectOpt->projectName);
+        util::runtimeDebugLog("  loadProject: workingDirectory=" + projectOpt->workingDirectory);
+        util::runtimeDebugLog("  loadProject: startupScene=" + projectOpt->startupScene);
 
         // Set window title from project config
         bootstrap->setWindowTitle(projectOpt->projectName);
@@ -162,6 +262,7 @@ namespace handlers {
             // Derive a .vfImage path from the icon path for GLFW window icon
             std::filesystem::path iconBase =
                 std::filesystem::path(projectOpt->workingDirectory) / projectOpt->exeIconPath;
+            util::runtimeDebugLog("  loadProject: trying icon at " + iconBase.string());
             // Try the path as-is first (user may have set a .vfImage directly)
             if (std::filesystem::exists(iconBase))
             {
@@ -181,32 +282,37 @@ namespace handlers {
 
         std::filesystem::path scenePath =
             std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
+        util::runtimeDebugLog("  loadProject: scenePath=" + scenePath.string());
 
         if (!std::filesystem::exists(scenePath)) {
+            util::runtimeDebugLog("  loadProject: startup scene NOT FOUND: " + scenePath.string());
             vfLogError("Startup scene not found: {}", scenePath.string());
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
 
+        util::runtimeDebugLog("  loadProject: loading scene...");
         events::scene::LoadSceneCommand sceneCmd;
         sceneCmd.filePath = scenePath.string();
-        // loadScene is deferred: returns false only for invalid arguments (null sceneGraph, empty path).
-        // Actual load success/failure is reported via SceneLoadingCompletedNotification.
         if (!dispatcher.execute(sceneCmd)) {
+            util::runtimeDebugLog("  loadProject: FAILED to queue scene load");
             vfLogError("Failed to queue startup scene load: {}", scenePath.string());
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
+        util::runtimeDebugLog("  loadProject: scene load queued successfully");
 
         // PhysicsPlayModeHandler listens for EditorModeChangedNotification
         if (physicsPlayModeHandler)
         {
+            util::runtimeDebugLog("  loadProject: entering play mode (physics)...");
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = services::EditorMode::Edit;
             notification.currentMode = services::EditorMode::Play;
             dispatcher.publish(notification);
         }
 
+        util::runtimeDebugLog("  loadProject: done");
         return true;
     }
 
@@ -231,6 +337,13 @@ namespace handlers {
         );
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
+
+        auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+        terrainService = terrainServiceImpl;
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            terrainServiceImpl->setPhysicsProvider(physicsProvider);
+        }
 
         auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
         waterService = waterServiceImpl;
@@ -282,6 +395,7 @@ namespace handlers {
         windowStateService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
+        terrainService->registerEventHandlers();
         waterService->registerEventHandlers();
         if (physicsService)
         {

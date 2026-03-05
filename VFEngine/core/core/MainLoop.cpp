@@ -8,6 +8,7 @@
 #include "resource/ResourceManager.hpp"
 #include "scene/LevelHandler.hpp"
 #include "threading/JobSystem.hpp"
+#include "print/RuntimeDebugLog.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -19,12 +20,18 @@ namespace core {
 	MainLoop::MainLoop(bool imguiEnabled)
 		: imguiEnabled{ imguiEnabled }
 	{
+		util::runtimeDebugLog("        MainLoop ctor - JobSystem::init()...");
 		threading::JobSystem::instance().init();
+		util::runtimeDebugLog("        MainLoop ctor - ResourceManager::init()...");
 		resource::ResourceManager::init();
+		util::runtimeDebugLog("        MainLoop ctor - WindowController::init()...");
 		controllers::WindowController::init(imguiEnabled);
 		mainWindow = controllers::WindowController::getWindow();
+		util::runtimeDebugLog("        MainLoop ctor - Graphics::createContext()...");
 		controllers::Graphics::createContext(mainWindow);
+		util::runtimeDebugLog("        MainLoop ctor - RenderController()...");
 		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);
+		util::runtimeDebugLog("        MainLoop ctor - done.");
 	}
 
 	void MainLoop::init()
@@ -46,6 +53,11 @@ namespace core {
 			}
 
 			scene::LevelHandler::update();
+
+			// Post-update callback runs after world transforms are computed
+			if (postUpdateCallback) {
+				postUpdateCallback();
+			}
 
 			if (imguiEnabled)
 			{
@@ -84,6 +96,15 @@ namespace core {
 	}
 
 	MainLoop::~MainLoop() = default;
+
+	void MainLoop::setBlitSourceProvider(std::function<void*(uint32_t)> provider)
+	{
+		renderController->setBlitSourceProvider([p = std::move(provider)](uint32_t idx) -> vk::Image
+		{
+			VkImage raw = static_cast<VkImage>(p(idx));
+			return vk::Image(raw);
+		});
+	}
 
 	void MainLoop::newFrame() const
 	{

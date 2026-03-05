@@ -16,6 +16,7 @@
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "print/RuntimeDebugLog.hpp"
 #include <functional>
 
 namespace services
@@ -204,6 +205,9 @@ namespace services
 
     void ScenePersistenceService::performDeferredLoad(const std::string& filePath)
     {
+        util::runtimeDebugLog("  performDeferredLoad: filePath=" + filePath);
+        util::runtimeDebugLog("  performDeferredLoad: cwd=" + std::filesystem::current_path().string());
+
         // Block render preparation from accessing registry during scene load
         scene::EntityRegistry::setSceneTransitioning(true);
 
@@ -255,12 +259,17 @@ namespace services
             if (root.hasComponent<components::IBLComponent>())
             {
                 const auto& ibl = root.getComponent<components::IBLComponent>();
+                util::runtimeDebugLog("  performDeferredLoad: IBL path=" + ibl.fileName);
                 if (!ibl.fileName.empty())
                 {
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.fileName;
                     dispatcher.execute(setIblCmd);
                 }
+            }
+            else
+            {
+                util::runtimeDebugLog("  performDeferredLoad: no IBL component on root");
             }
 
             if (root.hasComponent<components::NavmeshComponent>())
@@ -276,11 +285,14 @@ namespace services
 
             auto& registry = scene::EntityRegistry::getRegistry();
             auto meshView = registry.view<components::MeshComponent>();
+            int meshCount = 0;
             for (auto entity : meshView)
             {
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
                 if (!meshComp.meshPath.empty())
                 {
+                    util::runtimeDebugLog("  performDeferredLoad: mesh path=" + meshComp.meshPath);
+                    meshCount++;
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = internal::toHandle(entity);
                     meshNotif.meshPath = meshComp.meshPath;
@@ -288,6 +300,7 @@ namespace services
                     dispatcher.publish(meshNotif);
                 }
             }
+            util::runtimeDebugLog("  performDeferredLoad: total meshes=" + std::to_string(meshCount));
 
             {
                 std::vector<std::string> terrainPaths;
@@ -311,8 +324,10 @@ namespace services
                     dispatcher.execute(delCmd);
                 }
 
+                util::runtimeDebugLog("  performDeferredLoad: terrain paths count=" + std::to_string(terrainPaths.size()));
                 for (const auto& path : terrainPaths)
                 {
+                    util::runtimeDebugLog("  performDeferredLoad: terrain path=" + path);
                     events::terrain::LoadTerrainCommand loadCmd;
                     loadCmd.path = path;
                     dispatcher.execute(loadCmd);
