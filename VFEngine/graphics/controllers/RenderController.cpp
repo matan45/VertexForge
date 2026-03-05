@@ -5,11 +5,11 @@
 
 namespace controllers {
 
-	RenderController::RenderController()
+	RenderController::RenderController(bool imguiEnabled)
 		: window{ core::VulkanContext::getWindow() }
 		, swapChain{ *core::VulkanContext::getSwapChain() }
 		, device{ *core::VulkanContext::getDevice() }
-		, renderManager{ std::make_unique<core::RenderManager>(device, swapChain, window) }
+		, renderManager{ std::make_unique<core::RenderManager>(device, swapChain, window, imguiEnabled) }
 	{
 	}
 

@@ -89,17 +89,23 @@ namespace window {
 	}
 
 	void Window::setWindowIcon(std::string_view iconPath) {
-		auto iconData = resource::ResourceManager::loadTextureAsync(iconPath);
+		try {
+			auto iconData = resource::ResourceManager::loadTextureAsync(iconPath);
+			auto dataPtr = iconData.get();
+			if (!dataPtr || dataPtr->textureData().empty()) {
+				vfLogError("Failed to load window icon: {}", iconPath);
+				return;
+			}
 
-		auto dataPtr = iconData.get();
-		// Create GLFWimage and assign the loaded image data
-		GLFWimage icon;
-		icon.width = static_cast<int>(dataPtr->width);
-		icon.height = static_cast<int>(dataPtr->height);
-		icon.pixels = const_cast<unsigned char*>(dataPtr->textureData().data());
+			GLFWimage icon;
+			icon.width = static_cast<int>(dataPtr->width);
+			icon.height = static_cast<int>(dataPtr->height);
+			icon.pixels = const_cast<unsigned char*>(dataPtr->textureData().data());
 
-		// Set the icon for the GLFW window
-		glfwSetWindowIcon(window, 1, &icon);
+			glfwSetWindowIcon(window, 1, &icon);
+		} catch (const std::exception& e) {
+			vfLogError("Failed to set window icon from '{}': {}", iconPath, e.what());
+		}
 	}
 
 }

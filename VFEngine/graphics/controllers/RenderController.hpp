@@ -26,7 +26,7 @@ namespace controllers
         std::unique_ptr<core::RenderManager> renderManager;
 
     public:
-        explicit RenderController();
+        explicit RenderController(bool imguiEnabled = true);
         ~RenderController();
 
         void init();

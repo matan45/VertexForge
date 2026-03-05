@@ -214,14 +214,24 @@ namespace gameExport
 			copyDirectoryRecursive(iblSrc, iblDst, result);
 		}
 
-		// Copy editor resources (window icon fallback)
+		// Copy only the window icon for runtime (ImGui is disabled in runtime, no fonts needed)
 		fs::path editorSrc = findResourcesEditorDirectory();
 		if (fs::exists(editorSrc))
 		{
 			fs::path editorDst = config.outputDirectory / "resources" / "editor";
 			std::error_code ec;
 			fs::create_directories(editorDst, ec);
-			copyDirectoryRecursive(editorSrc, editorDst, result);
+
+			fs::path iconSrc = editorSrc / "window-icon.vfImage";
+			if (fs::exists(iconSrc))
+			{
+				fs::copy_file(iconSrc, editorDst / "window-icon.vfImage",
+							  fs::copy_options::overwrite_existing, ec);
+				if (ec)
+				{
+					result.warnings.push_back("Warning while copying window icon: " + ec.message());
+				}
+			}
 		}
 
 		return true;

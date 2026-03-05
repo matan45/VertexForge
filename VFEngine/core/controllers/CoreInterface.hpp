@@ -22,7 +22,7 @@ namespace controllers {
 		std::unique_ptr<AnimatorSystemController> animatorSystem;
 
 	public:
-		explicit CoreInterface();
+		explicit CoreInterface(bool imguiEnabled = true);
 		~CoreInterface();
 
 		void init();

@@ -4,8 +4,8 @@
 
 namespace controllers {
 
-	CoreInterface::CoreInterface()
-		: mainLoop{ std::make_unique<core::MainLoop>() }
+	CoreInterface::CoreInterface(bool imguiEnabled)
+		: mainLoop{ std::make_unique<core::MainLoop>(imguiEnabled) }
 		, animatorSystem{ std::make_unique<AnimatorSystemController>() }
 	{
 	}

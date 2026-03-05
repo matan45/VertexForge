@@ -10,8 +10,8 @@
 namespace core {
 
 
-	RenderManager::RenderManager(Device& device, SwapChain& swapChain,const window::Window* window) : device{ device },
-		swapChain{ swapChain }, window{ window }
+	RenderManager::RenderManager(Device& device, SwapChain& swapChain, const window::Window* window, bool imguiEnabled)
+		: device{ device }, swapChain{ swapChain }, window{ window }, imguiEnabled{ imguiEnabled }
 	{
 
 	}
@@ -25,8 +25,16 @@ namespace core {
 	{
 		commandPool = std::make_unique<CommandPool>(device, swapChain);
 
-		imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
-		imguiRender->init();
+		if (imguiEnabled)
+		{
+			imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
+			imguiRender->init();
+		}
+		else
+		{
+			createPresentPass();
+			createPresentFrameBuffers();
+		}
 
 		deletionQueue = std::make_unique<DeferredDeletionQueue>(device);
 		globalDeletionQueue = deletionQueue.get();
@@ -147,7 +155,20 @@ namespace core {
 
 		commandPool->recreate();  // Reallocate command buffers if needed
 
-		imguiRender->recreate();
+		if (imguiEnabled)
+		{
+			imguiRender->recreate();
+		}
+		else
+		{
+			for (auto fb : presentFrameBuffers)
+			{
+				device.getLogicalDevice().destroyFramebuffer(fb);
+			}
+			device.getLogicalDevice().destroyRenderPass(presentRenderPass);
+			createPresentPass();
+			createPresentFrameBuffers();
+		}
 
 		// Notify listeners (e.g., OffScreenViewPort for Hi-Z recreation)
 		if (onResizeCallback) {
@@ -167,7 +188,14 @@ namespace core {
 
 		commandPool->cleanUp();
 
-		imguiRender->cleanUp();
+		if (imguiEnabled)
+		{
+			imguiRender->cleanUp();
+		}
+		else
+		{
+			cleanUpPresentPass();
+		}
 
 		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			device.getLogicalDevice().destroySemaphore(imageAvailableSemaphores[i]);
@@ -181,9 +209,84 @@ namespace core {
 
 	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
 	{
-		//create a render pass class so we can use here and offscreen class
-		//here for now only use imgui render
-		imguiRender->render(commandBuffer, imageIndex);
+		if (imguiEnabled)
+		{
+			imguiRender->render(commandBuffer, imageIndex);
+		}
+		else
+		{
+			// Minimal present pass: clear swapchain image and transition to PresentSrcKHR
+			vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
+
+			vk::RenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.renderPass = presentRenderPass;
+			renderPassInfo.framebuffer = presentFrameBuffers[imageIndex];
+			renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+			renderPassInfo.clearValueCount = 1;
+			renderPassInfo.pClearValues = &clearColor;
+
+			commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+			commandBuffer.endRenderPass();
+		}
+	}
+
+	void RenderManager::createPresentPass()
+	{
+		vk::AttachmentDescription colorAttachment{};
+		colorAttachment.format = swapChain.getSwapchainImageFormat();
+		colorAttachment.samples = vk::SampleCountFlagBits::e1;
+		colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+		colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+		colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+		colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+		colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
+		colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+
+		vk::AttachmentReference colorAttachmentRef{};
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+		vk::SubpassDescription subpass{};
+		subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		vk::RenderPassCreateInfo renderPassCreateInfo{};
+		renderPassCreateInfo.attachmentCount = 1;
+		renderPassCreateInfo.pAttachments = &colorAttachment;
+		renderPassCreateInfo.subpassCount = 1;
+		renderPassCreateInfo.pSubpasses = &subpass;
+
+		presentRenderPass = device.getLogicalDevice().createRenderPass(renderPassCreateInfo);
+	}
+
+	void RenderManager::createPresentFrameBuffers()
+	{
+		presentFrameBuffers.resize(swapChain.getImageCount());
+
+		for (uint32_t i = 0; i < presentFrameBuffers.size(); i++)
+		{
+			vk::ImageView viewImage = swapChain.getSwapchainImageView(i);
+
+			vk::FramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.renderPass = presentRenderPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = &viewImage;
+			framebufferInfo.width = swapChain.getSwapchainExtent().width;
+			framebufferInfo.height = swapChain.getSwapchainExtent().height;
+			framebufferInfo.layers = 1;
+
+			presentFrameBuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+		}
+	}
+
+	void RenderManager::cleanUpPresentPass() const
+	{
+		for (auto fb : presentFrameBuffers)
+		{
+			device.getLogicalDevice().destroyFramebuffer(fb);
+		}
+		device.getLogicalDevice().destroyRenderPass(presentRenderPass);
 	}
 
 	void RenderManager::present(uint32_t frameIndex) const

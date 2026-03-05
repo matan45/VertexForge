@@ -33,10 +33,15 @@ namespace core {
 		Device& device;
 		SwapChain& swapChain;
 		const window::Window* window;  // Non-owning pointer
+		bool imguiEnabled;
 		std::unique_ptr<CommandPool> commandPool;
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
 		std::unique_ptr<DeferredDeletionQueue> deletionQueue;
 		mutable ResizeCallback onResizeCallback;
+
+		// Minimal present pass (used when ImGui is disabled)
+		vk::RenderPass presentRenderPass;
+		std::vector<vk::Framebuffer> presentFrameBuffers;
 
 		// Per-frame synchronization objects (indexed by currentFrame)
 		std::vector<vk::Semaphore> imageAvailableSemaphores;
@@ -52,8 +57,12 @@ namespace core {
 		inline static uint32_t imageIndex;
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
+		void createPresentPass();
+		void createPresentFrameBuffers();
+		void cleanUpPresentPass() const;
+
 	public:
-		explicit RenderManager(Device& device, SwapChain& swapChain,const window::Window* window);
+		explicit RenderManager(Device& device, SwapChain& swapChain, const window::Window* window, bool imguiEnabled = true);
 		~RenderManager();
 
 		void init();

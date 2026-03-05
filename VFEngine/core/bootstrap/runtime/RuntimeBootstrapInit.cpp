@@ -18,7 +18,7 @@
 namespace core
 {
     RuntimeBootstrap::RuntimeBootstrap()
-        : coreInterface(std::make_unique<::controllers::CoreInterface>())
+        : coreInterface(std::make_unique<::controllers::CoreInterface>(false))
           , offScreen(std::make_unique<::controllers::OffScreen>())
     {
     }

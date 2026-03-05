@@ -14,6 +14,7 @@ namespace core {
 	class MainLoop
 	{
 	private:
+		bool imguiEnabled;
 		std::unique_ptr<controllers::RenderController> renderController;
 		window::Window* mainWindow;  // Non-owning pointer (owned by WindowController)
 
@@ -21,7 +22,7 @@ namespace core {
 		std::function<void()> frameCallback;
 
 	public:
-		explicit MainLoop();
+		explicit MainLoop(bool imguiEnabled = true);
 		~MainLoop();
 
 		void init();

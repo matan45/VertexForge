@@ -16,14 +16,15 @@
 
 namespace core {
 
-	MainLoop::MainLoop()
+	MainLoop::MainLoop(bool imguiEnabled)
+		: imguiEnabled{ imguiEnabled }
 	{
 		threading::JobSystem::instance().init();
 		resource::ResourceManager::init();
 		controllers::WindowController::init();
 		mainWindow = controllers::WindowController::getWindow();
 		controllers::Graphics::createContext(mainWindow);
-		renderController = std::make_unique<controllers::RenderController>();
+		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);
 	}
 
 	void MainLoop::init()
@@ -46,9 +47,12 @@ namespace core {
 
 			scene::LevelHandler::update();
 
-			newFrame();
-			editorDraw();
-			endFrame();
+			if (imguiEnabled)
+			{
+				newFrame();
+				editorDraw();
+				endFrame();
+			}
 
 			renderController->render();
 		}
