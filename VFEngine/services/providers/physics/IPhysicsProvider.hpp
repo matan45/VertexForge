@@ -64,7 +64,9 @@ namespace services
         virtual void setRotation(EntityHandle entity, const glm::quat& rotation) = 0;
 
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                   float maxDistance) = 0;
+                                   float maxDistance, uint16_t layerMask = 0xFFFF) = 0;
+        virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                                   float maxDistance, uint16_t layerMask = 0xFFFF) = 0;
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
 
         virtual void applySettings(const types::PhysicsSettings& settings) = 0;

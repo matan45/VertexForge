@@ -61,7 +61,9 @@ namespace core
         void setRotation(services::EntityHandle entity, const glm::quat& rotation) override;
 
         services::RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                     float maxDistance) override;
+                                     float maxDistance, uint16_t layerMask = 0xFFFF) override;
+        std::vector<services::RaycastHit> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                                     float maxDistance, uint16_t layerMask = 0xFFFF) override;
         bool isOverlapping(services::EntityHandle entityA, services::EntityHandle entityB) const override;
 
         void applySettings(const types::PhysicsSettings& settings) override;

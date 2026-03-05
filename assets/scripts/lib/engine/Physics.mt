@@ -36,6 +36,7 @@
 
 import * from "../math/Vec3f.mt";
 import * from "../math/Quaternion.mt";
+import * from "RaycastHit.mt";
 
 public class Physics {
     // ============================================
@@ -279,6 +280,81 @@ public class Physics {
     // Returns [0] if no hit
     public static function raycast(Vec3f origin, Vec3f direction, float maxDistance): float[] {
         return _native_physics_raycast(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance);
+    }
+
+    // Cast a ray filtered by collision layer names (comma-separated, e.g. "Dynamic,Sensor")
+    public static function raycast(Vec3f origin, Vec3f direction, float maxDistance, string layers): float[] {
+        return _native_physics_raycast(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance, layers);
+    }
+
+    // Cast a ray and return a RaycastHit object
+    // Returns a RaycastHit with hit=false if nothing was hit
+    public static function raycastHit(Vec3f origin, Vec3f direction, float maxDistance): RaycastHit {
+        float[] raw = _native_physics_raycast(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance);
+        if (raw[0] < 0.5) {
+            return new RaycastHit();
+        }
+        return new RaycastHit(
+            true,
+            raw[1] as int,
+            new Vec3f(raw[2], raw[3], raw[4]),
+            new Vec3f(raw[5], raw[6], raw[7]),
+            raw[8]
+        );
+    }
+
+    // Cast a ray filtered by collision layer names and return a RaycastHit object
+    // layers: comma-separated layer names (e.g. "Dynamic,Kinematic")
+    public static function raycastHit(Vec3f origin, Vec3f direction, float maxDistance, string layers): RaycastHit {
+        float[] raw = _native_physics_raycast(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance, layers);
+        if (raw[0] < 0.5) {
+            return new RaycastHit();
+        }
+        return new RaycastHit(
+            true,
+            raw[1] as int,
+            new Vec3f(raw[2], raw[3], raw[4]),
+            new Vec3f(raw[5], raw[6], raw[7]),
+            raw[8]
+        );
+    }
+
+    // Cast a ray and return ALL hits along the ray, sorted by distance (nearest first)
+    // Returns empty array if nothing was hit
+    public static function raycastAll(Vec3f origin, Vec3f direction, float maxDistance): RaycastHit[] {
+        float[] raw = _native_physics_raycastAll(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance);
+        int count = raw[0] as int;
+        RaycastHit[] hits = new RaycastHit[count];
+        for (int i = 0; i < count; i = i + 1) {
+            int base = 1 + i * 8;
+            hits[i] = new RaycastHit(
+                true,
+                raw[base] as int,
+                new Vec3f(raw[base + 1], raw[base + 2], raw[base + 3]),
+                new Vec3f(raw[base + 4], raw[base + 5], raw[base + 6]),
+                raw[base + 7]
+            );
+        }
+        return hits;
+    }
+
+    // Cast a ray filtered by collision layer names and return ALL hits, sorted by distance
+    // layers: comma-separated layer names (e.g. "Dynamic,Sensor")
+    public static function raycastAll(Vec3f origin, Vec3f direction, float maxDistance, string layers): RaycastHit[] {
+        float[] raw = _native_physics_raycastAll(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance, layers);
+        int count = raw[0] as int;
+        RaycastHit[] hits = new RaycastHit[count];
+        for (int i = 0; i < count; i = i + 1) {
+            int base = 1 + i * 8;
+            hits[i] = new RaycastHit(
+                true,
+                raw[base] as int,
+                new Vec3f(raw[base + 1], raw[base + 2], raw[base + 3]),
+                new Vec3f(raw[base + 4], raw[base + 5], raw[base + 6]),
+                raw[base + 7]
+            );
+        }
+        return hits;
     }
 
     // Check if two entities are overlapping

@@ -125,7 +125,16 @@ namespace events::physics {
         glm::vec3 origin;
         glm::vec3 direction;
         float maxDistance;
+        uint16_t layerMask = 0xFFFF;
         std::string_view getName() const override { return "Raycast"; }
+    };
+
+    struct RaycastAllQuery : ::events::IQuery<std::vector<services::RaycastHit>> {
+        glm::vec3 origin;
+        glm::vec3 direction;
+        float maxDistance;
+        uint16_t layerMask = 0xFFFF;
+        std::string_view getName() const override { return "RaycastAll"; }
     };
 
     struct IsOverlappingQuery : ::events::IQuery<bool> {

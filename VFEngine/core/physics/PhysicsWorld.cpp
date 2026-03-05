@@ -12,6 +12,8 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include "print/Log.hpp"
 
 #include <thread>
@@ -403,8 +405,26 @@ namespace core::physics
         physicsSystem->GetBodyInterface().AddTorque(bodyId, toJolt(torque));
     }
 
+    namespace
+    {
+        class LayerMaskFilter final : public JPH::ObjectLayerFilter
+        {
+        public:
+            explicit LayerMaskFilter(uint16_t mask) : mMask(mask) {}
+
+            bool ShouldCollide(JPH::ObjectLayer inLayer) const override
+            {
+                if (inLayer >= 16) return false;
+                return (mMask & (1u << inLayer)) != 0;
+            }
+
+        private:
+            uint16_t mMask;
+        };
+    }
+
     RaycastResult PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                        float maxDistance) const
+                                        float maxDistance, uint16_t layerMask) const
     {
         RaycastResult result;
         if (!physicsSystem) return result;
@@ -413,7 +433,9 @@ namespace core::physics
         JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
         JPH::RayCastResult hit;
 
-        if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit))
+        LayerMaskFilter layerFilter(layerMask);
+
+        if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit, {}, layerFilter))
         {
             result.hit = true;
             result.distance = hit.mFraction * maxDistance;
@@ -436,6 +458,55 @@ namespace core::physics
         }
 
         return result;
+    }
+
+    std::vector<RaycastResult> PhysicsWorld::raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                                       float maxDistance, uint16_t layerMask) const
+    {
+        std::vector<RaycastResult> results;
+        if (!physicsSystem) return results;
+
+        glm::vec3 normalizedDir = glm::normalize(direction);
+        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
+
+        JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+        JPH::RayCastSettings settings;
+        LayerMaskFilter layerFilter(layerMask);
+
+        physicsSystem->GetNarrowPhaseQuery().CastRay(ray, settings, collector, {}, layerFilter);
+
+        if (!collector.HadHit())
+            return results;
+
+        collector.Sort();
+
+        results.reserve(collector.mHits.size());
+        for (const auto& hit : collector.mHits)
+        {
+            RaycastResult result;
+            result.hit = true;
+            result.distance = hit.mFraction * maxDistance;
+            result.point = origin + normalizedDir * result.distance;
+
+            auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
+            if (it != bodyToEntity.end())
+                result.entityId = it->second;
+
+            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
+            if (lock.Succeeded())
+            {
+                result.normal = toGlm(lock.GetBody().GetWorldSpaceSurfaceNormal(
+                    hit.mSubShapeID2, ray.GetPointOnRay(hit.mFraction)));
+            }
+            else
+            {
+                result.normal = -normalizedDir;
+            }
+
+            results.push_back(result);
+        }
+
+        return results;
     }
 
     bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const
