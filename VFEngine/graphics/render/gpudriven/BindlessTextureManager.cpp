@@ -87,7 +87,7 @@ namespace render::gpudriven {
         layoutInfo.pBindings = &textureBinding;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        vfLogWarning("BindlessTextureManager: Created descriptor set layout");
+        vfLogInfo("BindlessTextureManager: Created descriptor set layout");
     }
 
     void BindlessTextureManager::createDescriptorPool()
@@ -105,7 +105,7 @@ namespace render::gpudriven {
         poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        vfLogWarning("BindlessTextureManager: Created descriptor pool");
+        vfLogInfo("BindlessTextureManager: Created descriptor pool");
     }
 
     void BindlessTextureManager::allocateDescriptorSet()
