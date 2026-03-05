@@ -37,7 +37,7 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp","resources/editor/**.vfImage" }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
 
    includedirs {
 	  "dependencies/imgui",
