@@ -96,6 +96,12 @@ namespace controllers
         setupPipeline();
     }
 
+    void Import::shutdown()
+    {
+        importPipeline.reset();
+        threading::JobSystem::instance().shutdown();
+    }
+
     void Import::addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage)
     {
         if (!importPipeline)

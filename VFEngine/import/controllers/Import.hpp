@@ -50,6 +50,7 @@ namespace controllers
                                         ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
+        static void shutdown();
 
         // Add a custom pipeline stage (appended after built-in stages).
         static void addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage);
