@@ -474,10 +474,43 @@ namespace services
 
         auto cacheIt = fileCaches.find(terrainEntityId);
         if (cacheIt == fileCaches.end() || !cacheIt->second)
-            return true;
+            return prepareSave(terrainEntityId);
 
         auto& grid = *gridIt->second;
         auto& cache = *cacheIt->second;
+
+        // Detect conditions that force a full save BEFORE the background thread starts,
+        // because prepareSave() adds tiles to the grid (not thread-safe).
+        bool needsFullSave = cache.hasNewOrRemovedTiles();
+
+        // Check if header size would change (physics/streaming flags toggled)
+        if (!needsFullSave)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+            const auto& savedHeader = cache.getHeader();
+
+            bool hadPhysics = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_PHYSICS_DATA);
+            bool hasPhysicsNow = false;
+            if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+                hasPhysicsNow = registry.get<components::TerrainColliderComponent>(ent).hasCollider;
+
+            bool hadStreaming = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_STREAMING_CONFIG);
+            bool hasStreamingNow = false;
+            auto streamerIt = worldStreamers.find(terrainEntityId);
+            if (streamerIt != worldStreamers.end() && streamerIt->second)
+                hasStreamingNow = streamerIt->second->isEnabled();
+
+            if (hadPhysics != hasPhysicsNow || hadStreaming != hasStreamingNow)
+                needsFullSave = true;
+        }
+
+        if (needsFullSave)
+        {
+            vfLogInfo("TerrainService: Incremental save not possible, preparing full save");
+            return prepareSave(terrainEntityId);
+        }
+
         auto& generator = grid.getGenerator();
         auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
             return grid.getTile(coord);
@@ -517,17 +550,21 @@ namespace services
         auto& cache = *cacheIt->second;
 
         // If tiles were added/removed, tile count changed → fall back to full save
+        // Note: prepareSaveIncremental() on the main thread should have already detected this
+        // and called prepareSave(). We only call saveTerrain() here (no prepareSave — unsafe on bg thread).
         if (cache.hasNewOrRemovedTiles())
         {
             vfLogInfo("TerrainService: Tiles added/removed, falling back to full save");
-            prepareSave(terrainEntityId);
             return saveTerrain(terrainEntityId, path);
         }
 
         if (cache.getDirtyCount() == 0)
         {
-            vfLogInfo("TerrainService: No dirty tiles, skipping save");
-            return true;
+            // No dirty tiles — but prepareSaveIncremental() may have detected a header change
+            // (e.g. streaming/physics toggled) and called prepareSave() for a full save.
+            // Fall back to full save to persist those config changes.
+            vfLogInfo("TerrainService: No dirty tiles, falling back to full save for config changes");
+            return saveTerrain(terrainEntityId, path);
         }
 
         // Gather physics and streaming config from components
@@ -574,9 +611,9 @@ namespace services
 
         if (!result)
         {
-            // Fall back to full save
+            // Fall back to full save (no prepareSave — unsafe on background thread)
+            // saveTerrain() will save whatever tiles are currently in the grid
             vfLogWarning("TerrainService: Incremental save failed, falling back to full save");
-            prepareSave(terrainEntityId);
             return saveTerrain(terrainEntityId, path);
         }
 
