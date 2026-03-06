@@ -1,6 +1,7 @@
 #pragma once
 #include "data/EntityHandle.hpp"
 #include "nfd/FileDialog.hpp"
+#include "threading/JobSystem.hpp"
 #include <future>
 #include <string>
 

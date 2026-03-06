@@ -210,6 +210,12 @@ namespace services
                 return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
             });
 
+        dispatcher.registerCommandHandler<events::terrain::PrepareTerrainSaveCommand>(
+            [this](const events::terrain::PrepareTerrainSaveCommand& cmd)
+            {
+                return prepareSave(cmd.terrainEntity.id);
+            });
+
         dispatcher.registerCommandHandler<events::terrain::SaveTerrainCommand>(
             [this](const events::terrain::SaveTerrainCommand& cmd)
             {

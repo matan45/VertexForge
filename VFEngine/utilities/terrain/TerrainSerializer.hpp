@@ -26,6 +26,7 @@ namespace terrain
         HAS_PHYSICS_DATA  = 1 << 1,
         HAS_MESHLET_CACHE = 1 << 2,
         HAS_HOLE_MASK     = 1 << 3,
+        HAS_STREAMING_CONFIG = 1 << 4,
     };
 
     inline TerrainFormatFlags operator|(TerrainFormatFlags a, TerrainFormatFlags b)
@@ -45,6 +46,15 @@ namespace terrain
         uint8_t collisionLayer = 0;
         float friction = 0.5f;
         float restitution = 0.0f;
+    };
+
+    struct TerrainStreamingConfig
+    {
+        bool enabled = false;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int32_t maxLoadsPerFrame = 4;
+        int32_t maxUnloadsPerFrame = 4;
     };
 
     struct TerrainFileHeader
@@ -71,6 +81,7 @@ namespace terrain
         std::string materialPath;
 
         TerrainPhysicsConfig physicsConfig;
+        TerrainStreamingConfig streamingConfig;
     };
 
     struct TileIndexEntry
@@ -106,7 +117,8 @@ namespace terrain
             int32_t gridMinX, int32_t gridMinZ,
             int32_t gridMaxX, int32_t gridMaxZ,
             const std::string& materialPath,
-            const TerrainPhysicsConfig& physicsConfig = {});
+            const TerrainPhysicsConfig& physicsConfig = {},
+            const TerrainStreamingConfig& streamingConfig = {});
 
         static bool loadAll(
             std::string_view path,

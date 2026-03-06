@@ -98,6 +98,7 @@ namespace services
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
+        bool prepareSave(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 

@@ -250,9 +250,10 @@ namespace services
 
         for (auto& [entityId, grid] : terrainGrids)
         {
-            // Run world streaming before LOD updates
+            // Run world streaming before LOD updates (skip during save to avoid data races)
             auto streamerIt = worldStreamers.find(entityId);
-            if (streamerIt != worldStreamers.end() && streamerIt->second && streamerIt->second->isEnabled())
+            if (streamerIt != worldStreamers.end() && streamerIt->second && streamerIt->second->isEnabled()
+                && !saveInProgress.load(std::memory_order_acquire))
             {
                 auto cacheIt = fileCaches.find(entityId);
                 if (cacheIt != fileCaches.end() && cacheIt->second)

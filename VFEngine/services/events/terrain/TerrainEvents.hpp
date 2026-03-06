@@ -116,6 +116,13 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
     };
 
+    struct PrepareTerrainSaveCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "PrepareTerrainSave"; }
+    };
+
     struct TerrainSavedNotification : INotification
     {
         services::EntityHandle terrainEntity;

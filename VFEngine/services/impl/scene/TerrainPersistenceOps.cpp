@@ -428,6 +428,45 @@ namespace services
         return true;
     }
 
+    bool TerrainService::prepareSave(uint64_t terrainEntityId)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+            return true;
+
+        auto& grid = *gridIt->second;
+        auto& generator = grid.getGenerator();
+        auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+            return grid.getTile(coord);
+        };
+
+        // Stream in all tiles from file cache that aren't in the grid
+        // so they are included in the save (streaming may have unloaded them).
+        // This MUST run on the main thread to avoid racing with the render thread.
+        auto availableCoords = cacheIt->second->getAvailableCoords();
+        for (const auto& coord : availableCoords)
+        {
+            if (!grid.getTile(coord))
+            {
+                grid.addTileFromFile(coord);
+            }
+        }
+
+        for (auto* tile : grid.getAllTiles())
+        {
+            if (tile && !tile->hasHeightData())
+                cacheIt->second->ensureHeightsLoaded(*tile);
+            if (tile && !tile->hasAnyLODData())
+                cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
+        }
+
+        return true;
+    }
+
     bool TerrainService::saveTerrain(uint64_t terrainEntityId, const std::string& path)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
@@ -462,24 +501,6 @@ namespace services
         for (int i = 0; i < 4; ++i)
             tileConfig.lodDistances[i] = comp.lodDistances[i];
 
-        auto cacheIt = fileCaches.find(terrainEntityId);
-        if (cacheIt != fileCaches.end() && cacheIt->second)
-        {
-            auto& grid = *gridIt->second;
-            auto& generator = grid.getGenerator();
-            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
-                return grid.getTile(coord);
-            };
-
-            for (auto* tile : grid.getAllTiles())
-            {
-                if (tile && !tile->hasHeightData())
-                    cacheIt->second->ensureHeightsLoaded(*tile);
-                if (tile && !tile->hasAnyLODData())
-                    cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
-            }
-        }
-
         terrain::TerrainPhysicsConfig physicsConfig;
         if (registry.all_of<components::TerrainColliderComponent>(ent))
         {
@@ -490,6 +511,18 @@ namespace services
             physicsConfig.restitution = cc.restitution;
         }
 
+        terrain::TerrainStreamingConfig streamingConfig;
+        auto streamerIt = worldStreamers.find(terrainEntityId);
+        if (streamerIt != worldStreamers.end() && streamerIt->second)
+        {
+            streamingConfig.enabled = streamerIt->second->isEnabled();
+            const auto& cfg = streamerIt->second->getConfig();
+            streamingConfig.loadRadius = cfg.loadRadius;
+            streamingConfig.unloadRadius = cfg.unloadRadius;
+            streamingConfig.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+            streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+        }
+
         // Compute actual bounds from grid tiles (supports sparse/dynamic grids)
         int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
         gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
@@ -497,7 +530,7 @@ namespace services
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
             boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
-            comp.terrainMaterialPath, physicsConfig);
+            comp.terrainMaterialPath, physicsConfig, streamingConfig);
 
         if (result)
         {
@@ -598,7 +631,16 @@ namespace services
 
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
-        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
+        {
+            terrain::StreamingConfig stCfg;
+            stCfg.loadRadius = header.streamingConfig.loadRadius;
+            stCfg.unloadRadius = header.streamingConfig.unloadRadius;
+            stCfg.maxLoadsPerFrame = header.streamingConfig.maxLoadsPerFrame;
+            stCfg.maxUnloadsPerFrame = header.streamingConfig.maxUnloadsPerFrame;
+            auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
+            streamer->setEnabled(header.streamingConfig.enabled);
+            worldStreamers[parentHandle.id] = std::move(streamer);
+        }
 
         if (!header.materialPath.empty())
         {

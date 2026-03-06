@@ -463,6 +463,8 @@ namespace render::gpudriven
             gpuTile.coordX = key.coordX;
             gpuTile.coordZ = key.coordZ;
             gpuTile.flags = ObjectFlags::TerrainTile;
+            if (hasSelectedTile_ && key.coordX == selectedCoordX_ && key.coordZ == selectedCoordZ_)
+                gpuTile.flags |= ObjectFlags::Selected;
             gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
             auto lmIt = tileLightmapData_.find(key);
@@ -490,6 +492,26 @@ namespace render::gpudriven
         if (!tileLightmapData_.empty())
         {
             tileLightmapData_.clear();
+            gpuTileDataDirty_ = true;
+        }
+    }
+
+    void TerrainGPUAdapter::setSelectedTile(int32_t coordX, int32_t coordZ)
+    {
+        if (!hasSelectedTile_ || selectedCoordX_ != coordX || selectedCoordZ_ != coordZ)
+        {
+            selectedCoordX_ = coordX;
+            selectedCoordZ_ = coordZ;
+            hasSelectedTile_ = true;
+            gpuTileDataDirty_ = true;
+        }
+    }
+
+    void TerrainGPUAdapter::clearSelectedTile()
+    {
+        if (hasSelectedTile_)
+        {
+            hasSelectedTile_ = false;
             gpuTileDataDirty_ = true;
         }
     }

@@ -709,6 +709,13 @@ void main() {
         color = c;
     }
 
+    // Tile selection highlight
+    const uint FLAG_SELECTED = 1u << 13;
+    if ((currentTile.flags & FLAG_SELECTED) != 0u) {
+        vec3 highlightColor = vec3(1.0, 1.0, 0.0);
+        color = mix(color, highlightColor, 0.25);
+    }
+
     if (pc.brushWorldRadius > 0.0) {
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);
         vec2 delta = fragWorldPos.xz - brushPos;

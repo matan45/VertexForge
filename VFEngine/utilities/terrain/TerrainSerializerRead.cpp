@@ -89,6 +89,15 @@ namespace terrain
             outHeader.physicsConfig.restitution = readLE<float>(file);
         }
 
+        if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG))
+        {
+            outHeader.streamingConfig.enabled = readLE<uint8_t>(file) != 0;
+            outHeader.streamingConfig.loadRadius = readLE<float>(file);
+            outHeader.streamingConfig.unloadRadius = readLE<float>(file);
+            outHeader.streamingConfig.maxLoadsPerFrame = readLE<int32_t>(file);
+            outHeader.streamingConfig.maxUnloadsPerFrame = readLE<int32_t>(file);
+        }
+
         return file.good();
     }
 

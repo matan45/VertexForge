@@ -339,13 +339,19 @@ namespace windows::details {
         lockCmd.locked = true;
         dispatcher.execute(lockCmd);
 
-        pendingSave = std::async(std::launch::async, [handle, path]()
+        // Prepare save data on main thread: stream in all tiles from file cache
+        // so the background thread only does read-only serialization.
+        events::terrain::PrepareTerrainSaveCommand prepCmd;
+        prepCmd.terrainEntity = handle;
+        dispatcher.execute(prepCmd);
+
+        pendingSave = threading::JobSystem::instance().submit([handle, path]()
         {
             events::terrain::SaveTerrainCommand cmd;
             cmd.terrainEntity = handle;
             cmd.path = path;
             return events::EventDispatcher::instance().execute(cmd);
-        });
+        }, threading::JobPriority::LOW);
     }
 
     void TerrainDrawer::startSaveAs(services::EntityHandle handle)

@@ -341,6 +341,18 @@ namespace render::gpudriven
         terrain.adapter->markGPUTileDataDirty();
     }
 
+    void GPUDrivenRenderer::setSelectedTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (terrain.adapter)
+            terrain.adapter->setSelectedTile(coordX, coordZ);
+    }
+
+    void GPUDrivenRenderer::clearSelectedTerrainTile()
+    {
+        if (terrain.adapter)
+            terrain.adapter->clearSelectedTile();
+    }
+
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                               uint32_t screenWidth, uint32_t screenHeight)
     {
