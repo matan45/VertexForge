@@ -419,6 +419,21 @@ namespace core
         return physicsWorld && physicsWorld->hasTerrainBodies(entity.id);
     }
 
+    void PhysicsAdapter::addTerrainTileCollider(services::EntityHandle entity,
+                                                 const services::TerrainTileColliderInfo& tile)
+    {
+        if (!physicsWorld) return;
+        auto info = toTerrainCreateInfo(tile);
+        physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
+    }
+
+    void PhysicsAdapter::removeTerrainTileCollider(services::EntityHandle entity,
+                                                    int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
+    }
+
     void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
                                             const glm::vec3& position,
                                             const glm::vec3& halfExtents)

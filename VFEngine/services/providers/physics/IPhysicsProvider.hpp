@@ -79,6 +79,9 @@ namespace services
                                                  const TerrainTileColliderInfo& tile) = 0;
         virtual bool hasTerrainCollider(EntityHandle entity) const = 0;
 
+        virtual void addTerrainTileCollider(EntityHandle entity, const TerrainTileColliderInfo& tile) = 0;
+        virtual void removeTerrainTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
+
         virtual void addWaterSensorBody(EntityHandle entity, const glm::vec3& position,
                                         const glm::vec3& halfExtents) = 0;
         virtual void removeWaterSensorBody(EntityHandle entity) = 0;

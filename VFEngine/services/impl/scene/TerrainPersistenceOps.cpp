@@ -12,6 +12,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include <algorithm>
 #include <cfloat>
 
 namespace services
@@ -115,6 +116,40 @@ namespace services
         return true;
     }
 
+    TerrainTileColliderInfo TerrainService::buildTileColliderInfo(const terrain::TerrainTile& tile,
+                                                                     EntityHandle terrainEntity,
+                                                                     std::vector<float>& physicsHeightsOut) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        float friction = 0.5f;
+        float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
+        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            friction = cc.friction;
+            restitution = cc.restitution;
+            collisionLayer = cc.collisionLayer;
+        }
+
+        TerrainTileColliderInfo info;
+        info.tileX = tile.coord.x;
+        info.tileZ = tile.coord.z;
+        info.heightSamples = tile.heightData.data();
+        info.sampleCount = tile.config.getVertexCount();
+        info.worldOrigin = tile.worldOrigin;
+        info.vertexSpacing = tile.config.getVertexSpacing();
+        info.friction = friction;
+        info.restitution = restitution;
+        info.collisionLayer = collisionLayer;
+
+        if (applyHoleMaskToHeights(tile, physicsHeightsOut))
+            info.heightSamples = physicsHeightsOut.data();
+
+        return info;
+    }
+
     bool TerrainService::addTerrainCollider(EntityHandle terrainEntity)
     {
         if (!physicsProvider || !terrainEntity.isValid())
@@ -129,19 +164,6 @@ namespace services
 
         auto cacheIt = fileCaches.find(terrainEntity.id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(terrainEntity);
-        float friction = 0.5f;
-        float restitution = 0.0f;
-        uint8_t collisionLayer = 0;
-        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
-        {
-            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
-            friction = cc.friction;
-            restitution = cc.restitution;
-            collisionLayer = cc.collisionLayer;
-        }
 
         std::vector<TerrainTileColliderInfo> tileInfos;
         tileInfos.reserve(allTiles.size());
@@ -163,28 +185,8 @@ namespace services
             if (!tile->hasHeightData())
                 continue;
 
-            const float* heightSamples = tile->heightData.data();
-
-            // Apply FLT_MAX for hole vertices so Jolt excludes hole triangles
-            {
-                holeAdjustedHeights.emplace_back();
-                auto& physicsHeights = holeAdjustedHeights.back();
-                if (applyHoleMaskToHeights(*tile, physicsHeights))
-                    heightSamples = physicsHeights.data();
-            }
-
-            TerrainTileColliderInfo info;
-            info.tileX = tile->coord.x;
-            info.tileZ = tile->coord.z;
-            info.heightSamples = heightSamples;
-            info.sampleCount = tile->config.getVertexCount();
-            info.worldOrigin = tile->worldOrigin;
-            info.vertexSpacing = tile->config.getVertexSpacing();
-            info.friction = friction;
-            info.restitution = restitution;
-            info.collisionLayer = collisionLayer;
-
-            tileInfos.push_back(info);
+            holeAdjustedHeights.emplace_back();
+            tileInfos.push_back(buildTileColliderInfo(*tile, terrainEntity, holeAdjustedHeights.back()));
         }
 
         if (tileInfos.empty())
@@ -192,6 +194,8 @@ namespace services
 
         physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
 
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
         if (registry.valid(ent))
         {
             if (!registry.all_of<components::TerrainColliderComponent>(ent))
@@ -234,6 +238,11 @@ namespace services
                 }
             }
         }
+
+        pendingPhysicsTiles.erase(
+            std::remove_if(pendingPhysicsTiles.begin(), pendingPhysicsTiles.end(),
+                [&](const auto& p) { return p.first == terrainEntity.id; }),
+            pendingPhysicsTiles.end());
 
         vfLogInfo("TerrainService: Removed terrain collider");
     }
@@ -298,18 +307,7 @@ namespace services
             if (tile && tile->hasHeightData())
             {
                 std::vector<float> physicsHeights;
-                const float* heightSamples = tile->heightData.data();
-
-                if (applyHoleMaskToHeights(*tile, physicsHeights))
-                    heightSamples = physicsHeights.data();
-
-                TerrainTileColliderInfo info;
-                info.tileX = coord.x;
-                info.tileZ = coord.z;
-                info.heightSamples = heightSamples;
-                info.sampleCount = tile->config.getVertexCount();
-                info.worldOrigin = tile->worldOrigin;
-                info.vertexSpacing = tile->config.getVertexSpacing();
+                auto info = buildTileColliderInfo(*tile, targetEntity, physicsHeights);
                 physicsProvider->rebuildTerrainTileCollider(targetEntity, info);
 
                 if (registry.valid(terrainEnt) &&
