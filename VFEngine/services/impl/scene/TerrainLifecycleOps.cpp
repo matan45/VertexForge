@@ -11,6 +11,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include <algorithm>
 
 namespace services
 {
@@ -160,6 +161,11 @@ namespace services
         if (physicsProvider)
             physicsProvider->removeTerrainCollider(terrainEntity);
 
+        pendingPhysicsTiles.erase(
+            std::remove_if(pendingPhysicsTiles.begin(), pendingPhysicsTiles.end(),
+                [&](const auto& p) { return p.first == terrainEntity.id; }),
+            pendingPhysicsTiles.end());
+
         terrainGrids.erase(terrainEntity.id);
         fileCaches.erase(terrainEntity.id);
         worldStreamers.erase(terrainEntity.id);
@@ -263,6 +269,32 @@ namespace services
             (void)grid->updateLODs(cameraPosition);
 
             grid->regenerateDirtyTiles(cameraPosition);
+
+            // Create physics bodies for tiles that streamed in and now have height data
+            if (!pendingPhysicsTiles.empty() && physicsProvider)
+            {
+                auto it = pendingPhysicsTiles.begin();
+                while (it != pendingPhysicsTiles.end())
+                {
+                    if (it->first != entityId)
+                    {
+                        ++it;
+                        continue;
+                    }
+
+                    auto* tile = grid->getTile(it->second);
+                    if (!tile || !tile->hasHeightData())
+                    {
+                        ++it;
+                        continue;
+                    }
+
+                    std::vector<float> physicsHeights;
+                    auto info = buildTileColliderInfo(*tile, EntityHandle{entityId}, physicsHeights);
+                    physicsProvider->addTerrainTileCollider(EntityHandle{entityId}, info);
+                    it = pendingPhysicsTiles.erase(it);
+                }
+            }
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
@@ -434,6 +466,15 @@ namespace services
             comp.saveDirty = true;
         }
 
+        // Create physics body for the new tile if collider is active
+        if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity)
+            && tile->hasHeightData())
+        {
+            std::vector<float> physicsHeights;
+            auto info = buildTileColliderInfo(*tile, terrainEntity, physicsHeights);
+            physicsProvider->addTerrainTileCollider(terrainEntity, info);
+        }
+
         events::terrain::TerrainTileAddedNotification notification;
         notification.terrainEntity = terrainEntity;
         notification.tileX = tileX;
@@ -458,6 +499,10 @@ namespace services
 
         if (!grid.getTile(coord))
             return false;
+
+        // Remove single-tile physics body if collider is active
+        if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
+            physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
 
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
@@ -539,10 +584,22 @@ namespace services
 
         createTileEntity(terrainEntity, tile, tileX, tileZ);
 
+        // Queue physics body creation for after height data is loaded
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity parentEnt = internal::fromHandle(terrainEntity);
+        if (physicsProvider && registry.valid(parentEnt) &&
+            registry.all_of<components::TerrainColliderComponent>(parentEnt))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(parentEnt);
+            if (cc.hasCollider)
+                pendingPhysicsTiles.push_back({terrainEntity.id, {tileX, tileZ}});
+        }
+
         events::terrain::TerrainTileAddedNotification notification;
         notification.terrainEntity = terrainEntity;
         notification.tileX = tileX;
         notification.tileZ = tileZ;
+        notification.isStreamed = true;
         events::EventDispatcher::instance().publish(notification);
 
         return true;
@@ -562,6 +619,27 @@ namespace services
 
         if (!grid.getTile(coord))
             return false;
+
+        // Safety net: refuse to unload tiles with unsaved brush modifications
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second
+            && cacheIt->second->isTileDirty(coord))
+        {
+            vfLogWarning("streamOutTile: refusing to unload dirty tile ({}, {})", tileX, tileZ);
+            return false;
+        }
+
+        // Remove physics body for this tile
+        if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
+            physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
+
+        // Remove from pending queue if it was waiting for height data
+        pendingPhysicsTiles.erase(
+            std::remove_if(pendingPhysicsTiles.begin(), pendingPhysicsTiles.end(),
+                [&](const auto& p) {
+                    return p.first == terrainEntity.id && p.second.x == tileX && p.second.z == tileZ;
+                }),
+            pendingPhysicsTiles.end());
 
         grid.removeTile(coord);
 
@@ -594,6 +672,7 @@ namespace services
         notification.terrainEntity = terrainEntity;
         notification.tileX = tileX;
         notification.tileZ = tileZ;
+        notification.isStreamed = true;
         events::EventDispatcher::instance().publish(notification);
 
         return true;

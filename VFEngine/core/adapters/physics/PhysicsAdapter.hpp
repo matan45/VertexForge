@@ -76,6 +76,11 @@ namespace core
                                          const services::TerrainTileColliderInfo& tile) override;
         bool hasTerrainCollider(services::EntityHandle entity) const override;
 
+        void addTerrainTileCollider(services::EntityHandle entity,
+                                     const services::TerrainTileColliderInfo& tile) override;
+        void removeTerrainTileCollider(services::EntityHandle entity,
+                                        int32_t tileX, int32_t tileZ) override;
+
         void addWaterSensorBody(services::EntityHandle entity, const glm::vec3& position,
                                 const glm::vec3& halfExtents) override;
         void removeWaterSensorBody(services::EntityHandle entity) override;

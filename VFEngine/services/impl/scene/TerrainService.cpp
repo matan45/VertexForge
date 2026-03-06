@@ -252,6 +252,7 @@ namespace services
         terrainGrids.clear();
         fileCaches.clear();
         worldStreamers.clear();
+        pendingPhysicsTiles.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }

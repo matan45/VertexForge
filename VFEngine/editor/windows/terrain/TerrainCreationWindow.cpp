@@ -17,8 +17,8 @@ namespace windows
             ImGui::Separator();
 
             ImGui::Text("Grid Size (Tiles):");
-            ImGui::SliderInt("Tiles X", &tilesX, 1, 16);
-            ImGui::SliderInt("Tiles Z", &tilesZ, 1, 16);
+            ImGui::SliderInt("Tiles X", &tilesX, 1, 100);
+            ImGui::SliderInt("Tiles Z", &tilesZ, 1, 100);
 
             int totalTiles = tilesX * tilesZ;
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Total tiles: %d", totalTiles);

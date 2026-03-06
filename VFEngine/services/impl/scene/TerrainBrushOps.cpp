@@ -71,7 +71,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (fileCache && fileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (!brushComputeProvider)
                 continue;
@@ -162,7 +170,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (paintFileCache && paintFileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (paintFileCache && !tile->hasHeightData())
                 paintFileCache->ensureHeightsLoaded(*tile);
@@ -259,7 +275,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (fileCache && fileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (fileCache && !tile->hasHeightData())
             {

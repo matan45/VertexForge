@@ -98,6 +98,7 @@ namespace events::terrain
     {
         services::EntityHandle terrainEntity;
         std::string path;
+        bool incremental = false;
 
         std::string_view getName() const override { return "SaveTerrain"; }
     };
@@ -119,6 +120,7 @@ namespace events::terrain
     struct PrepareTerrainSaveCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;
+        bool incremental = false;
 
         std::string_view getName() const override { return "PrepareTerrainSave"; }
     };
@@ -251,6 +253,7 @@ namespace events::terrain
         services::EntityHandle terrainEntity;
         int32_t tileX = 0;
         int32_t tileZ = 0;
+        bool isStreamed = false; // true when added by streaming, false when user-initiated
 
         std::string_view getName() const override { return "TerrainTileAdded"; }
     };
@@ -260,6 +263,7 @@ namespace events::terrain
         services::EntityHandle terrainEntity;
         int32_t tileX = 0;
         int32_t tileZ = 0;
+        bool isStreamed = false; // true when removed by streaming, false when user-initiated
 
         std::string_view getName() const override { return "TerrainTileRemoved"; }
     };

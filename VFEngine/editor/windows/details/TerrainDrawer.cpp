@@ -339,17 +339,20 @@ namespace windows::details {
         lockCmd.locked = true;
         dispatcher.execute(lockCmd);
 
-        // Prepare save data on main thread: stream in all tiles from file cache
-        // so the background thread only does read-only serialization.
+        // Use incremental save when the file already exists on disk
+        bool useIncremental = std::filesystem::exists(path);
+
         events::terrain::PrepareTerrainSaveCommand prepCmd;
         prepCmd.terrainEntity = handle;
+        prepCmd.incremental = useIncremental;
         dispatcher.execute(prepCmd);
 
-        pendingSave = threading::JobSystem::instance().submit([handle, path]()
+        pendingSave = threading::JobSystem::instance().submit([handle, path, useIncremental]()
         {
             events::terrain::SaveTerrainCommand cmd;
             cmd.terrainEntity = handle;
             cmd.path = path;
+            cmd.incremental = useIncremental;
             return events::EventDispatcher::instance().execute(cmd);
         }, threading::JobPriority::LOW);
     }

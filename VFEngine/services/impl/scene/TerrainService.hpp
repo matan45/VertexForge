@@ -56,6 +56,7 @@ namespace services
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
+        std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -100,7 +101,9 @@ namespace services
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
         bool prepareSave(uint64_t terrainEntityId);
+        bool prepareSaveIncremental(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
+        bool saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 
         bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
@@ -130,9 +133,13 @@ namespace services
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
-                                       const std::string& path);
+                                       const std::string& path,
+                                       uint64_t indexTableOffset = 0);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
+        TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,
+                                                       EntityHandle terrainEntity,
+                                                       std::vector<float>& physicsHeightsOut) const;
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
