@@ -619,6 +619,15 @@ namespace services
         if (!grid.getTile(coord))
             return false;
 
+        // Safety net: refuse to unload tiles with unsaved brush modifications
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second
+            && cacheIt->second->isTileDirty(coord))
+        {
+            vfLogWarning("streamOutTile: refusing to unload dirty tile ({}, {})", tileX, tileZ);
+            return false;
+        }
+
         // Remove physics body for this tile
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);

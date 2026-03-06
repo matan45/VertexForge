@@ -36,6 +36,7 @@ namespace terrain
         [[nodiscard]] std::vector<TileCoord> getAvailableCoords() const;
         [[nodiscard]] std::vector<TileCoord> getSavedCoords() const;
         [[nodiscard]] bool hasCoord(const TileCoord& coord) const;
+        [[nodiscard]] bool isTileDirty(const TileCoord& coord) const;
 
         template<typename F>
         void forEachSavedCoord(F&& func) const

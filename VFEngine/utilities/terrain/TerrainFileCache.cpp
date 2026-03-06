@@ -246,6 +246,11 @@ namespace terrain
         return indexMap.find(coord) != indexMap.end();
     }
 
+    bool TerrainFileCache::isTileDirty(const TileCoord& coord) const
+    {
+        return dirtyCoords.count(coord) > 0;
+    }
+
     bool TerrainFileCache::hasMeshletCache() const
     {
         return hasFlag(header.flags, TerrainFormatFlags::HAS_MESHLET_CACHE);

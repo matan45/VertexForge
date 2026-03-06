@@ -47,9 +47,12 @@ namespace terrain
             }
         });
 
-        // Collect unload candidates: in grid, beyond unload radius
+        // Collect unload candidates: in grid, beyond unload radius, not dirty
         grid.forEachTile([&](const TerrainTile& tile)
         {
+            if (fileCache.isTileDirty(tile.coord))
+                return; // Never stream out tiles with unsaved modifications
+
             float distSq = tileDistanceSq(tile.coord, cameraPos, worldTileSize);
             if (distSq > unloadRadiusSq)
             {
