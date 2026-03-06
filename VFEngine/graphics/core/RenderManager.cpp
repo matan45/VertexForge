@@ -10,8 +10,8 @@
 namespace core {
 
 
-	RenderManager::RenderManager(Device& device, SwapChain& swapChain,const window::Window* window) : device{ device },
-		swapChain{ swapChain }, window{ window }
+	RenderManager::RenderManager(Device& device, SwapChain& swapChain, const window::Window* window, bool imguiEnabled)
+		: device{ device }, swapChain{ swapChain }, window{ window }, imguiEnabled{ imguiEnabled }
 	{
 
 	}
@@ -25,8 +25,16 @@ namespace core {
 	{
 		commandPool = std::make_unique<CommandPool>(device, swapChain);
 
-		imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
-		imguiRender->init();
+		if (imguiEnabled)
+		{
+			imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
+			imguiRender->init();
+		}
+		else
+		{
+			createPresentPass();
+			createPresentFrameBuffers();
+		}
 
 		deletionQueue = std::make_unique<DeferredDeletionQueue>(device);
 		globalDeletionQueue = deletionQueue.get();
@@ -138,7 +146,7 @@ namespace core {
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
-	void RenderManager::recreate(uint32_t width, uint32_t height) const
+	void RenderManager::recreate(uint32_t width, uint32_t height)
 	{
 		if (width == 0 || height == 0) return;  // Skip if minimized
 
@@ -147,7 +155,20 @@ namespace core {
 
 		commandPool->recreate();  // Reallocate command buffers if needed
 
-		imguiRender->recreate();
+		if (imguiEnabled)
+		{
+			imguiRender->recreate();
+		}
+		else
+		{
+			for (auto fb : presentFrameBuffers)
+			{
+				device.getLogicalDevice().destroyFramebuffer(fb);
+			}
+			device.getLogicalDevice().destroyRenderPass(presentRenderPass);
+			createPresentPass();
+			createPresentFrameBuffers();
+		}
 
 		// Notify listeners (e.g., OffScreenViewPort for Hi-Z recreation)
 		if (onResizeCallback) {
@@ -167,7 +188,14 @@ namespace core {
 
 		commandPool->cleanUp();
 
-		imguiRender->cleanUp();
+		if (imguiEnabled)
+		{
+			imguiRender->cleanUp();
+		}
+		else
+		{
+			cleanUpPresentPass();
+		}
 
 		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			device.getLogicalDevice().destroySemaphore(imageAvailableSemaphores[i]);
@@ -181,12 +209,150 @@ namespace core {
 
 	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
 	{
-		//create a render pass class so we can use here and offscreen class
-		//here for now only use imgui render
-		imguiRender->render(commandBuffer, imageIndex);
+		if (imguiEnabled)
+		{
+			imguiRender->render(commandBuffer, imageIndex);
+		}
+		else if (blitSourceProvider)
+		{
+			// Blit offscreen color image to swapchain image
+			vk::Image srcImage = blitSourceProvider(imageIndex);
+			vk::Image dstImage = swapChain.getSwapchainImage(imageIndex);
+			auto extent = swapChain.getSwapchainExtent();
+
+			// Transition offscreen image: ShaderReadOnly -> TransferSrc
+			vk::ImageMemoryBarrier srcBarrier{};
+			srcBarrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+			srcBarrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+			srcBarrier.image = srcImage;
+			srcBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+
+			// Transition swapchain image: Undefined -> TransferDst
+			vk::ImageMemoryBarrier dstBarrier{};
+			dstBarrier.oldLayout = vk::ImageLayout::eUndefined;
+			dstBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+			dstBarrier.srcAccessMask = {};
+			dstBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+			dstBarrier.image = dstImage;
+			dstBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+
+			std::array<vk::ImageMemoryBarrier, 2> toTransferBarriers = { srcBarrier, dstBarrier };
+			commandBuffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::PipelineStageFlagBits::eTransfer,
+				{}, {}, {}, toTransferBarriers);
+
+			// Blit
+			vk::ImageBlit blitRegion{};
+			blitRegion.srcSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 };
+			blitRegion.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+			blitRegion.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
+			blitRegion.dstSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 };
+			blitRegion.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+			blitRegion.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
+
+			commandBuffer.blitImage(
+				srcImage, vk::ImageLayout::eTransferSrcOptimal,
+				dstImage, vk::ImageLayout::eTransferDstOptimal,
+				1, &blitRegion, vk::Filter::eLinear);
+
+			// Transition offscreen image back: TransferSrc -> ShaderReadOnly
+			srcBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+			srcBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+			// Transition swapchain image: TransferDst -> PresentSrc
+			dstBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+			dstBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+			dstBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+			dstBarrier.dstAccessMask = {};
+
+			std::array<vk::ImageMemoryBarrier, 2> toPresentBarriers = { srcBarrier, dstBarrier };
+			commandBuffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eBottomOfPipe,
+				{}, {}, {}, toPresentBarriers);
+		}
+		else
+		{
+			// Fallback: clear swapchain image to magenta (debug: blit source not set)
+			vk::ClearValue clearColor = { std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f} };
+
+			vk::RenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.renderPass = presentRenderPass;
+			renderPassInfo.framebuffer = presentFrameBuffers[imageIndex];
+			renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+			renderPassInfo.clearValueCount = 1;
+			renderPassInfo.pClearValues = &clearColor;
+
+			commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+			commandBuffer.endRenderPass();
+		}
 	}
 
-	void RenderManager::present(uint32_t frameIndex) const
+	void RenderManager::createPresentPass()
+	{
+		vk::AttachmentDescription colorAttachment{};
+		colorAttachment.format = swapChain.getSwapchainImageFormat();
+		colorAttachment.samples = vk::SampleCountFlagBits::e1;
+		colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+		colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+		colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+		colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+		colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
+		colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+
+		vk::AttachmentReference colorAttachmentRef{};
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+		vk::SubpassDescription subpass{};
+		subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		vk::RenderPassCreateInfo renderPassCreateInfo{};
+		renderPassCreateInfo.attachmentCount = 1;
+		renderPassCreateInfo.pAttachments = &colorAttachment;
+		renderPassCreateInfo.subpassCount = 1;
+		renderPassCreateInfo.pSubpasses = &subpass;
+
+		presentRenderPass = device.getLogicalDevice().createRenderPass(renderPassCreateInfo);
+	}
+
+	void RenderManager::createPresentFrameBuffers()
+	{
+		presentFrameBuffers.resize(swapChain.getImageCount());
+
+		for (uint32_t i = 0; i < presentFrameBuffers.size(); i++)
+		{
+			vk::ImageView viewImage = swapChain.getSwapchainImageView(i);
+
+			vk::FramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.renderPass = presentRenderPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = &viewImage;
+			framebufferInfo.width = swapChain.getSwapchainExtent().width;
+			framebufferInfo.height = swapChain.getSwapchainExtent().height;
+			framebufferInfo.layers = 1;
+
+			presentFrameBuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+		}
+	}
+
+	void RenderManager::cleanUpPresentPass() const
+	{
+		for (auto fb : presentFrameBuffers)
+		{
+			device.getLogicalDevice().destroyFramebuffer(fb);
+		}
+		device.getLogicalDevice().destroyRenderPass(presentRenderPass);
+	}
+
+	void RenderManager::present(uint32_t frameIndex)
 	{
 		// Present the image to the screen
 		vk::PresentInfoKHR presentInfo{};

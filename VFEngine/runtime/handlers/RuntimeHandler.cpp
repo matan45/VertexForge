@@ -8,6 +8,7 @@
 #include "impl/audio/AudioServiceImpl.hpp"
 #include "impl/scripting/ScriptingServiceImpl.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
+#include "impl/scene/TerrainService.hpp"
 #include "impl/scene/WaterService.hpp"
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
@@ -15,6 +16,7 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
+#include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
@@ -28,6 +30,10 @@
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/CoreComponents.hpp"
+#include "events/render/RenderEvents.hpp"
+#include "math/TransformUtils.hpp"
 
 namespace handlers {
 
@@ -38,8 +44,13 @@ namespace handlers {
 
     void RuntimeHandler::init() {
         resource::PathResolver::initialize();
-
         bootstrap->init();
+
+        // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)
+        if (auto* offScreen = bootstrap->getOffScreenProvider())
+        {
+            offScreen->setPlayMode(true);
+        }
 
         initializeServices();
 
@@ -57,6 +68,11 @@ namespace handlers {
         pluginManager->initializeAll();
 
         bootstrap->setFrameCallback([this]() {
+            // Process deferred scene loading before other updates
+            if (sceneService) {
+                sceneService->update();
+            }
+
             if (inputService) {
                 inputService->update();
             }
@@ -91,6 +107,67 @@ namespace handlers {
                 pluginManager->updateAll(deltaTime);
             }
         });
+
+        // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
+        bootstrap->setPostUpdateCallback([this]() {
+            // Ensure cameras are registered before updating them
+            // (updateCamera needs the camera to be registered in the occlusion manager)
+            if (auto* offScreen = bootstrap->getOffScreenProvider()) {
+                offScreen->prepareCameras();
+            }
+
+            // Push primary camera matrices to the render system each frame
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto cameraView = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+                for (auto entity : cameraView) {
+                    auto& camComp = cameraView.get<components::CameraComponent>(entity);
+                    if (!camComp.isPrimary) continue;
+
+                    auto& worldTransform = cameraView.get<components::WorldTransformComponent>(entity);
+
+                    // Update aspect ratio to match window
+                    if (windowStateService) {
+                        uint32_t w = windowStateService->getWidth();
+                        uint32_t h = windowStateService->getHeight();
+                        if (w > 0 && h > 0) {
+                            float newAspect = static_cast<float>(w) / static_cast<float>(h);
+                            if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
+                                camComp.aspectRatio = newAspect;
+                                camComp.updateProjectionMatrix();
+                            }
+                        }
+                    }
+
+                    // Decompose world matrix into position/rotation (same as editor play mode)
+                    auto decomposed = math::decomposeMatrix(worldTransform.worldMatrix);
+                    camComp.updateViewMatrix(decomposed.position, decomposed.rotation);
+                    glm::vec3 cameraPos = decomposed.position;
+
+                    // Push to render system
+                    events::render::UpdateMeshCameraCommand meshCameraCmd;
+                    meshCameraCmd.viewMatrix = camComp.viewMatrix;
+                    meshCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                    meshCameraCmd.cameraPosition = cameraPos;
+                    meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+                    events::EventDispatcher::instance().execute(meshCameraCmd);
+
+                    // Push camera to IBL skybox renderer
+                    events::render::UpdateIBLCameraCommand iblCameraCmd;
+                    iblCameraCmd.viewMatrix = camComp.viewMatrix;
+                    iblCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                    events::EventDispatcher::instance().execute(iblCameraCmd);
+
+                    break; // Only use the first primary camera
+                }
+            }
+
+            // Trigger offscreen scene render (prepares cameras, meshes, then renders)
+            if (renderService) {
+                renderService->getViewportTexture();
+            }
+        });
         
         setupEventSubscriptions();
     }
@@ -121,6 +198,7 @@ namespace handlers {
         physicsService.reset();
         navmeshService.reset();
         waterService.reset();
+        terrainService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
@@ -153,16 +231,26 @@ namespace handlers {
             return false;
         }
 
-        // Set window title and icon from project config
+        // Set window title from project config
         bootstrap->setWindowTitle(projectOpt->projectName);
 
+        // Try to load a window icon (.vfImage) from the assets folder (optional)
         if (!projectOpt->exeIconPath.empty())
         {
-            std::filesystem::path iconPath =
+            std::filesystem::path iconBase =
                 std::filesystem::path(projectOpt->workingDirectory) / projectOpt->exeIconPath;
-            if (std::filesystem::exists(iconPath))
+            if (std::filesystem::exists(iconBase))
             {
-                bootstrap->setWindowIcon(iconPath.string());
+                bootstrap->setWindowIcon(iconBase.string());
+            }
+            else
+            {
+                std::filesystem::path vfImageIcon = iconBase;
+                vfImageIcon.replace_extension(".vfImage");
+                if (std::filesystem::exists(vfImageIcon))
+                {
+                    bootstrap->setWindowIcon(vfImageIcon.string());
+                }
             }
         }
 
@@ -177,8 +265,6 @@ namespace handlers {
 
         events::scene::LoadSceneCommand sceneCmd;
         sceneCmd.filePath = scenePath.string();
-        // loadScene is deferred: returns false only for invalid arguments (null sceneGraph, empty path).
-        // Actual load success/failure is reported via SceneLoadingCompletedNotification.
         if (!dispatcher.execute(sceneCmd)) {
             vfLogError("Failed to queue startup scene load: {}", scenePath.string());
             dispatcher.execute(events::scene::NewSceneCommand{});
@@ -218,6 +304,17 @@ namespace handlers {
         );
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
+
+        auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+        terrainService = terrainServiceImpl;
+        if (auto* terrainAdapter = bootstrap->getTerrainRenderAdapterInternal())
+        {
+            terrainAdapter->setTerrainService(terrainServiceImpl.get());
+        }
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            terrainServiceImpl->setPhysicsProvider(physicsProvider);
+        }
 
         auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
         waterService = waterServiceImpl;
@@ -269,6 +366,7 @@ namespace handlers {
         windowStateService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
+        terrainService->registerEventHandlers();
         waterService->registerEventHandlers();
         if (physicsService)
         {

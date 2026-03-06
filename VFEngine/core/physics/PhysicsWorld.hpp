@@ -179,7 +179,9 @@ namespace core::physics
         void applyTorque(JPH::BodyID bodyId, const glm::vec3& torque);
 
         RaycastResult raycast(const glm::vec3& origin, const glm::vec3& direction,
-                              float maxDistance) const;
+                              float maxDistance, uint16_t layerMask = 0xFFFF) const;
+        std::vector<RaycastResult> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                              float maxDistance, uint16_t layerMask = 0xFFFF) const;
         bool areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const;
 
         JPH::BodyID getBodyForEntity(uint64_t entityId) const;

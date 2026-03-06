@@ -48,7 +48,9 @@ namespace services {
         // === Queries ===
 
         RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-            float maxDistance) override;
+            float maxDistance, uint16_t layerMask = 0xFFFF) override;
+        std::vector<RaycastHit> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+            float maxDistance, uint16_t layerMask = 0xFFFF) override;
         bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const override;
 
     private:

@@ -1,10 +1,10 @@
 #include "WindowContext.hpp"
 
 namespace window {
-	void WindowContext::init()
+	void WindowContext::init(bool loadEditorIcon)
 	{
 		mainWindow = std::make_unique<Window>();
-		mainWindow->initWindow();
+		mainWindow->initWindow(loadEditorIcon);
 	}
 
 	void WindowContext::cleanup()

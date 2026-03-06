@@ -8,9 +8,55 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
+#include "../../../services/events/physics/PhysicsSettingsEvents.hpp"
 
 namespace core::api
 {
+    namespace
+    {
+        // Resolve comma-separated layer names (e.g. "Dynamic,Sensor") to a uint16_t bitmask.
+        // Returns 0xFFFF (all layers) if the string is empty.
+        uint16_t resolveLayerMask(const std::string& layerNames)
+        {
+            if (layerNames.empty()) return 0xFFFF;
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::physics::GetPhysicsSettingsQuery settingsQuery;
+            auto settings = dispatcher.query(settingsQuery);
+
+            uint16_t mask = 0;
+            size_t start = 0;
+            while (start < layerNames.size())
+            {
+                size_t end = layerNames.find(',', start);
+                if (end == std::string::npos) end = layerNames.size();
+
+                // Trim whitespace
+                size_t nameStart = start;
+                size_t nameEnd = end;
+                while (nameStart < nameEnd && layerNames[nameStart] == ' ') ++nameStart;
+                while (nameEnd > nameStart && layerNames[nameEnd - 1] == ' ') --nameEnd;
+
+                std::string name = layerNames.substr(nameStart, nameEnd - nameStart);
+                if (!name.empty())
+                {
+                    const auto* layer = settings.getLayerByName(name);
+                    if (layer)
+                    {
+                        mask |= (1u << layer->index);
+                    }
+                    else
+                    {
+                        vfLogWarning("[Script] Unknown collision layer name: '{}'", name);
+                    }
+                }
+                start = end + 1;
+            }
+
+            return mask == 0 ? 0xFFFF : mask;
+        }
+    }
+
     void PhysicsAPI::beginFrame()
     {
         raycastCountThisFrame = 0;
@@ -48,12 +94,19 @@ namespace core::api
                 float maxDist = std::min(std::max(0.0f, extractFloat(args[6])),
                                          MAX_RAYCAST_DISTANCE);
 
+                uint16_t layerMask = 0xFFFF;
+                if (args.size() >= 8)
+                {
+                    layerMask = resolveLayerMask(extractString(args[7]));
+                }
+
                 events::physics::RaycastQuery query;
                 query.origin = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                          extractFloat(args[2]));
                 query.direction = glm::vec3(extractFloat(args[3]), extractFloat(args[4]),
                                             extractFloat(args[5]));
                 query.maxDistance = maxDist;
+                query.layerMask = layerMask;
                 services::RaycastHit hit = dispatcher.query(query);
 
                 if (hit.hit)
@@ -73,6 +126,66 @@ namespace core::api
 
                 auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
                 result->set(0, value::Value(0.0f));
+                return value::Value(result);
+            });
+
+        interpreter->registerNativeFunction("_native_physics_raycastAll",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (raycastCountThisFrame >= MAX_RAYCASTS_PER_FRAME)
+                {
+                    vfLogWarning("[Script] Raycast rate limit exceeded ({}/frame)",
+                                 MAX_RAYCASTS_PER_FRAME);
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    return value::Value(result);
+                }
+                raycastCountThisFrame++;
+
+                if (args.size() < 7)
+                {
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    return value::Value(result);
+                }
+
+                float maxDist = std::min(std::max(0.0f, extractFloat(args[6])),
+                                         MAX_RAYCAST_DISTANCE);
+
+                uint16_t layerMask = 0xFFFF;
+                if (args.size() >= 8)
+                {
+                    layerMask = resolveLayerMask(extractString(args[7]));
+                }
+
+                events::physics::RaycastAllQuery query;
+                query.origin = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                query.direction = glm::vec3(extractFloat(args[3]), extractFloat(args[4]),
+                                            extractFloat(args[5]));
+                query.maxDistance = maxDist;
+                query.layerMask = layerMask;
+                auto hits = dispatcher.query(query);
+
+                // Pack as flat float array: [hitCount, entityId0, x0, y0, z0, nx0, ny0, nz0, dist0, entityId1, ...]
+                // Each hit = 8 floats (entityId, px, py, pz, nx, ny, nz, distance)
+                auto result = std::make_shared<value::NativeArray>(
+                    1 + hits.size() * 8, value::ValueType::FLOAT);
+                result->set(0, value::Value(static_cast<float>(hits.size())));
+
+                for (size_t i = 0; i < hits.size(); ++i)
+                {
+                    size_t base = 1 + i * 8;
+                    result->set(base + 0, value::Value(static_cast<float>(hits[i].entity.id)));
+                    result->set(base + 1, value::Value(hits[i].point.x));
+                    result->set(base + 2, value::Value(hits[i].point.y));
+                    result->set(base + 3, value::Value(hits[i].point.z));
+                    result->set(base + 4, value::Value(hits[i].normal.x));
+                    result->set(base + 5, value::Value(hits[i].normal.y));
+                    result->set(base + 6, value::Value(hits[i].normal.z));
+                    result->set(base + 7, value::Value(hits[i].distance));
+                }
+
                 return value::Value(result);
             });
 

@@ -190,4 +190,10 @@ namespace controllers
     {
         return offScreen->render();
     }
+
+    void* OffScreenController::getColorImage(uint32_t imageIndex) const
+    {
+        vk::Image img = offScreen->getColorImage(imageIndex);
+        return static_cast<VkImage>(img);
+    }
 }

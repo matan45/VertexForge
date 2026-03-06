@@ -48,6 +48,9 @@ namespace controllers
 
         void* render();
 
+        // Get the offscreen color image for runtime blit (returns VkImage as void*)
+        void* getColorImage(uint32_t imageIndex) const;
+
         void iblSet(std::string_view iblPath);
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         void iblRemove();

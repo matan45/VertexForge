@@ -304,12 +304,12 @@ namespace core
 
     services::RaycastHit PhysicsAdapter::raycast(const glm::vec3& origin,
                                                  const glm::vec3& direction,
-                                                 float maxDistance)
+                                                 float maxDistance, uint16_t layerMask)
     {
         services::RaycastHit result;
         if (!physicsWorld) return result;
 
-        auto physicsResult = physicsWorld->raycast(origin, direction, maxDistance);
+        auto physicsResult = physicsWorld->raycast(origin, direction, maxDistance, layerMask);
 
         result.hit = physicsResult.hit;
         result.point = physicsResult.point;
@@ -320,6 +320,31 @@ namespace core
             result.entity = services::EntityHandle{physicsResult.entityId};
 
         return result;
+    }
+
+    std::vector<services::RaycastHit> PhysicsAdapter::raycastAll(const glm::vec3& origin,
+                                                                const glm::vec3& direction,
+                                                                float maxDistance, uint16_t layerMask)
+    {
+        std::vector<services::RaycastHit> results;
+        if (!physicsWorld) return results;
+
+        auto physicsResults = physicsWorld->raycastAll(origin, direction, maxDistance, layerMask);
+        results.reserve(physicsResults.size());
+
+        for (const auto& pr : physicsResults)
+        {
+            services::RaycastHit hit;
+            hit.hit = pr.hit;
+            hit.point = pr.point;
+            hit.normal = pr.normal;
+            hit.distance = pr.distance;
+            if (pr.entityId != 0)
+                hit.entity = services::EntityHandle{pr.entityId};
+            results.push_back(hit);
+        }
+
+        return results;
     }
 
     bool PhysicsAdapter::isOverlapping(services::EntityHandle entityA,

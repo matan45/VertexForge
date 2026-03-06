@@ -184,6 +184,15 @@ namespace types
             return &layers[static_cast<size_t>(pos)];
         }
 
+        const CollisionLayer* getLayerByName(const std::string& name) const
+        {
+            for (const auto& layer : layers)
+            {
+                if (layer.name == name) return &layer;
+            }
+            return nullptr;
+        }
+
         uint8_t getNextAvailableLayerIndex() const
         {
             std::bitset<MAX_LAYERS> usedIndices;

@@ -5,11 +5,11 @@
 
 namespace controllers {
 
-	RenderController::RenderController()
+	RenderController::RenderController(bool imguiEnabled)
 		: window{ core::VulkanContext::getWindow() }
 		, swapChain{ *core::VulkanContext::getSwapChain() }
 		, device{ *core::VulkanContext::getDevice() }
-		, renderManager{ std::make_unique<core::RenderManager>(device, swapChain, window) }
+		, renderManager{ std::make_unique<core::RenderManager>(device, swapChain, window, imguiEnabled) }
 	{
 	}
 
@@ -18,7 +18,7 @@ namespace controllers {
 		renderManager->render();
 	}
 
-	void RenderController::reSize() const
+	void RenderController::reSize()
 	{
 		//handle resize window
 		swapChain.recreate(window->getWidth(), window->getHeight());
@@ -41,6 +41,11 @@ namespace controllers {
 	void RenderController::setResizeCallback(core::ResizeCallback callback)
 	{
 		renderManager->setResizeCallback(std::move(callback));
+	}
+
+	void RenderController::setBlitSourceProvider(core::BlitSourceProvider provider)
+	{
+		renderManager->setBlitSourceProvider(std::move(provider));
 	}
 
 }

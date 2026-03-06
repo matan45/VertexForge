@@ -26,6 +26,8 @@ namespace core {
 	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 	using ResizeCallback = std::function<void()>;
+	// Returns the offscreen color image for the current frame (used to blit to swapchain in runtime)
+	using BlitSourceProvider = std::function<vk::Image(uint32_t imageIndex)>;
 
 	class RenderManager
 	{
@@ -33,10 +35,16 @@ namespace core {
 		Device& device;
 		SwapChain& swapChain;
 		const window::Window* window;  // Non-owning pointer
+		bool imguiEnabled;
 		std::unique_ptr<CommandPool> commandPool;
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
 		std::unique_ptr<DeferredDeletionQueue> deletionQueue;
 		mutable ResizeCallback onResizeCallback;
+		BlitSourceProvider blitSourceProvider;
+
+		// Minimal present pass (used when ImGui is disabled and no blit source)
+		vk::RenderPass presentRenderPass;
+		std::vector<vk::Framebuffer> presentFrameBuffers;
 
 		// Per-frame synchronization objects (indexed by currentFrame)
 		std::vector<vk::Semaphore> imageAvailableSemaphores;
@@ -52,20 +60,25 @@ namespace core {
 		inline static uint32_t imageIndex;
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
+		void createPresentPass();
+		void createPresentFrameBuffers();
+		void cleanUpPresentPass() const;
+
 	public:
-		explicit RenderManager(Device& device, SwapChain& swapChain,const window::Window* window);
+		explicit RenderManager(Device& device, SwapChain& swapChain, const window::Window* window, bool imguiEnabled = true);
 		~RenderManager();
 
 		void init();
 
 		void render();
 
-		void recreate(uint32_t width, uint32_t height) const;
+		void recreate(uint32_t width, uint32_t height);
 
 		static uint32_t getImageIndex() { return imageIndex; }
 		static DeferredDeletionQueue* getGlobalDeletionQueue() { return globalDeletionQueue; }
 
 		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
+		void setBlitSourceProvider(BlitSourceProvider provider) { blitSourceProvider = std::move(provider); }
 
 		// Access for systems that need deferred deletion
 		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }
@@ -75,7 +88,7 @@ namespace core {
 	private:
 		void draw(const vk::CommandBuffer& commandBuffer) const;
 
-		void present(uint32_t frameIndex) const;
+		void present(uint32_t frameIndex);
 	};
 }
 

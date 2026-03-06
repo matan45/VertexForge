@@ -125,6 +125,9 @@ namespace controllers
 
         void* render();
 
+        // Get the offscreen color image for runtime blit (returns VkImage as void*)
+        void* getColorImage(uint32_t imageIndex) const;
+
         services::CullingDebugStats getCullingStats() const;
 
         void applyShadowSettings(const types::RenderSettings& settings);

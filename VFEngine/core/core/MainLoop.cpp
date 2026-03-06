@@ -16,14 +16,15 @@
 
 namespace core {
 
-	MainLoop::MainLoop()
+	MainLoop::MainLoop(bool imguiEnabled)
+		: imguiEnabled{ imguiEnabled }
 	{
 		threading::JobSystem::instance().init();
 		resource::ResourceManager::init();
-		controllers::WindowController::init();
+		controllers::WindowController::init(imguiEnabled);
 		mainWindow = controllers::WindowController::getWindow();
 		controllers::Graphics::createContext(mainWindow);
-		renderController = std::make_unique<controllers::RenderController>();
+		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);
 	}
 
 	void MainLoop::init()
@@ -46,9 +47,17 @@ namespace core {
 
 			scene::LevelHandler::update();
 
-			newFrame();
-			editorDraw();
-			endFrame();
+			// Post-update callback runs after world transforms are computed
+			if (postUpdateCallback) {
+				postUpdateCallback();
+			}
+
+			if (imguiEnabled)
+			{
+				newFrame();
+				editorDraw();
+				endFrame();
+			}
 
 			renderController->render();
 		}
@@ -80,6 +89,15 @@ namespace core {
 	}
 
 	MainLoop::~MainLoop() = default;
+
+	void MainLoop::setBlitSourceProvider(std::function<void*(uint32_t)> provider)
+	{
+		renderController->setBlitSourceProvider([p = std::move(provider)](uint32_t idx) -> vk::Image
+		{
+			VkImage raw = static_cast<VkImage>(p(idx));
+			return vk::Image(raw);
+		});
+	}
 
 	void MainLoop::newFrame() const
 	{

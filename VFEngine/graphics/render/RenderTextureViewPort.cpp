@@ -10,6 +10,7 @@
 #include "mesh/StaticMeshPipeline.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "print/Log.hpp"
+#include <imgui.h>
 #include <imgui_impl_vulkan.h>
 
 namespace render
@@ -61,11 +62,14 @@ namespace render
         width = newWidth;
         height = newHeight;
 
-        for (auto const& resources : offscreenResources.colorImages)
+        if (ImGui::GetCurrentContext())
         {
-            if (resources.descriptorSet)
+            for (auto const& resources : offscreenResources.colorImages)
             {
-                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                if (resources.descriptorSet)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                }
             }
         }
 
@@ -259,11 +263,14 @@ namespace render
         }
         inFlightFences.clear();
 
-        for (auto const& resources : offscreenResources.colorImages)
+        if (ImGui::GetCurrentContext())
         {
-            if (resources.descriptorSet)
+            for (auto const& resources : offscreenResources.colorImages)
             {
-                ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                if (resources.descriptorSet)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                }
             }
         }
 
@@ -562,6 +569,9 @@ namespace render
     void RenderTextureViewPort::updateDescriptorSets(vk::DescriptorSet& descriptorSet,
                                                       const vk::ImageView& imageView) const
     {
-        descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        if (ImGui::GetCurrentContext())
+        {
+            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
     }
 }

@@ -95,7 +95,10 @@ namespace services {
         // === Queries ===
         
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                   float maxDistance) = 0;
+                                   float maxDistance, uint16_t layerMask = 0xFFFF) = 0;
+
+        virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                                    float maxDistance, uint16_t layerMask = 0xFFFF) = 0;
 
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
     };

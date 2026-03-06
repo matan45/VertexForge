@@ -29,6 +29,11 @@ namespace controllers {
 		return offScreenController->render();
 	}
 
+	void* OffScreen::getColorImage(uint32_t imageIndex) const
+	{
+		return offScreenController->getColorImage(imageIndex);
+	}
+
 	void OffScreen::iblSet(std::string_view iblPath)
 	{
 		offScreenController->iblSet(iblPath);

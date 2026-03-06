@@ -276,11 +276,13 @@ namespace services
 
             auto& registry = scene::EntityRegistry::getRegistry();
             auto meshView = registry.view<components::MeshComponent>();
+            int meshCount = 0;
             for (auto entity : meshView)
             {
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
                 if (!meshComp.meshPath.empty())
                 {
+                    meshCount++;
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = internal::toHandle(entity);
                     meshNotif.meshPath = meshComp.meshPath;

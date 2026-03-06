@@ -4,8 +4,8 @@
 
 namespace controllers {
 
-	CoreInterface::CoreInterface()
-		: mainLoop{ std::make_unique<core::MainLoop>() }
+	CoreInterface::CoreInterface(bool imguiEnabled)
+		: mainLoop{ std::make_unique<core::MainLoop>(imguiEnabled) }
 		, animatorSystem{ std::make_unique<AnimatorSystemController>() }
 	{
 	}
@@ -44,6 +44,11 @@ namespace controllers {
 		mainLoop->setFrameCallback(std::move(callback));
 	}
 
+	void CoreInterface::setPostUpdateCallback(std::function<void()> callback)
+	{
+		mainLoop->setPostUpdateCallback(std::move(callback));
+	}
+
 	void CoreInterface::setResizeCallback(std::function<void()> callback)
 	{
 		mainLoop->setResizeCallback(std::move(callback));
@@ -52,6 +57,11 @@ namespace controllers {
 	void CoreInterface::triggerResize()
 	{
 		mainLoop->triggerResize();
+	}
+
+	void CoreInterface::setBlitSourceProvider(std::function<void*(uint32_t)> provider)
+	{
+		mainLoop->setBlitSourceProvider(std::move(provider));
 	}
 
 };

@@ -69,11 +69,20 @@ namespace controllers::offscreen
     void FramePreparationSystem::prepareMeshes(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
+
+        // Ensure the mesh pipeline + GPU-driven renderer are initialized so
+        // terrain/water can render even when the scene contains no mesh assets.
+        if (!renderHandler->isMeshPipelineInitialized())
+        {
+            renderHandler->initMeshPipeline();
+        }
+
         auto* meshPipeline = renderHandler->getMeshPipeline();
 
         if (!meshPipeline)
         {
             renderHandler->setMeshDrawList({});
+            renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
             return;
         }
 

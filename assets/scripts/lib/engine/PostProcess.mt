@@ -9,6 +9,8 @@
 //   PostProcess::setBloomEnabled(true);
 //   PostProcess::setBloomIntensity(0.8);
 
+import * from "../math/Vec3f.mt";
+
 public class PostProcess {
     public constructor() {
     }
@@ -313,8 +315,20 @@ public class PostProcess {
         return _native_postprocess_dof_getFocusTargetZ();
     }
 
+    public static function getDoFFocusTarget(): Vec3f {
+        return new Vec3f(
+            _native_postprocess_dof_getFocusTargetX(),
+            _native_postprocess_dof_getFocusTargetY(),
+            _native_postprocess_dof_getFocusTargetZ()
+        );
+    }
+
     public static function setDoFFocusTarget(float x, float y, float z): void {
         _native_postprocess_dof_setFocusTarget(x, y, z);
+    }
+
+    public static function setDoFFocusTargetVec(Vec3f target): void {
+        _native_postprocess_dof_setFocusTarget(target.x, target.y, target.z);
     }
 
     // How quickly focus transitions to target (0.1 - 50.0)
@@ -396,8 +410,20 @@ public class PostProcess {
         return _native_postprocess_volumetricFog_getColorB();
     }
 
+    public static function getVolumetricFogColor(): Vec3f {
+        return new Vec3f(
+            _native_postprocess_volumetricFog_getColorR(),
+            _native_postprocess_volumetricFog_getColorG(),
+            _native_postprocess_volumetricFog_getColorB()
+        );
+    }
+
     public static function setVolumetricFogColor(float r, float g, float b): void {
         _native_postprocess_volumetricFog_setColor(r, g, b);
+    }
+
+    public static function setVolumetricFogColorVec(Vec3f color): void {
+        _native_postprocess_volumetricFog_setColor(color.x, color.y, color.z);
     }
 
     // Height fog density (0.0 - 1.0)
@@ -590,8 +616,20 @@ public class PostProcess {
         return _native_postprocess_edgeDetection_getColorB();
     }
 
+    public static function getEdgeDetectionColor(): Vec3f {
+        return new Vec3f(
+            _native_postprocess_edgeDetection_getColorR(),
+            _native_postprocess_edgeDetection_getColorG(),
+            _native_postprocess_edgeDetection_getColorB()
+        );
+    }
+
     public static function setEdgeDetectionColor(float r, float g, float b): void {
         _native_postprocess_edgeDetection_setColor(r, g, b);
+    }
+
+    public static function setEdgeDetectionColorVec(Vec3f color): void {
+        _native_postprocess_edgeDetection_setColor(color.x, color.y, color.z);
     }
 
     // Edge overlay opacity (0.0 - 1.0)

@@ -11,6 +11,7 @@
 #include "../../adapters/physics/IKAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
+#include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -47,6 +48,7 @@ namespace core
         renderTextureAdapter.reset();
         debugDrawAdapter.reset();
         postProcessAdapter.reset();
+        terrainRenderAdapter.reset();
         waterRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
         offScreenAdapter.reset();

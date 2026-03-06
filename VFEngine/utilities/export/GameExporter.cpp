@@ -145,20 +145,30 @@ namespace gameExport
 	{
 		fs::path runtimeDir = findRuntimeExe().parent_path();
 
-		fs::path openAlDll = runtimeDir / "OpenAL32.dll";
-		if (fs::exists(openAlDll))
+		// Copy DLLs from the runtime build directory
+		const std::vector<std::string> runtimeDlls = {
+			"OpenAL32.dll",
+			"jolt.dll",
+			"meshoptimizer.dll"
+		};
+
+		for (const auto& dllName : runtimeDlls)
 		{
-			std::error_code ec;
-			fs::copy_file(openAlDll, config.outputDirectory / "OpenAL32.dll",
-						  fs::copy_options::overwrite_existing, ec);
-			if (ec)
+			fs::path dllPath = runtimeDir / dllName;
+			if (fs::exists(dllPath))
 			{
-				result.warnings.push_back("Failed to copy OpenAL32.dll: " + ec.message());
+				std::error_code ec;
+				fs::copy_file(dllPath, config.outputDirectory / dllName,
+							  fs::copy_options::overwrite_existing, ec);
+				if (ec)
+				{
+					result.warnings.push_back("Failed to copy " + dllName + ": " + ec.message());
+				}
 			}
-		}
-		else
-		{
-			result.warnings.push_back("OpenAL32.dll not found in runtime build output");
+			else
+			{
+				result.warnings.push_back(dllName + " not found in runtime build output");
+			}
 		}
 
 		{
@@ -214,23 +224,13 @@ namespace gameExport
 			copyDirectoryRecursive(iblSrc, iblDst, result);
 		}
 
-		// Copy editor resources (window icon fallback)
-		fs::path editorSrc = findResourcesEditorDirectory();
-		if (fs::exists(editorSrc))
-		{
-			fs::path editorDst = config.outputDirectory / "resources" / "editor";
-			std::error_code ec;
-			fs::create_directories(editorDst, ec);
-			copyDirectoryRecursive(editorSrc, editorDst, result);
-		}
-
 		return true;
 	}
 
 	bool GameExporter::copyAssets(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path assetsDst = config.outputDirectory / "Assets";
-		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result);
+		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result, config.outputDirectory);
 		return true;
 	}
 
@@ -417,24 +417,6 @@ namespace gameExport
 		return {};
 	}
 
-	fs::path GameExporter::findResourcesEditorDirectory() const
-	{
-		fs::path cwd = fs::current_path();
-
-		fs::path candidate = cwd / "../../resources/editor";
-		if (fs::exists(candidate))
-		{
-			return fs::canonical(candidate);
-		}
-
-		candidate = cwd / "resources/editor";
-		if (fs::exists(candidate))
-		{
-			return fs::canonical(candidate);
-		}
-
-		return {};
-	}
 
 	void GameExporter::copyDirectoryRecursive(const fs::path& src, const fs::path& dst, ExportResult& result) const
 	{
@@ -446,13 +428,36 @@ namespace gameExport
 		}
 	}
 
-	void GameExporter::copyDirectoryFilteredRecursive(const fs::path& src, const fs::path& dst, ExportResult& result) const
+	void GameExporter::copyDirectoryFilteredRecursive(const fs::path& src, const fs::path& dst,
+													ExportResult& result, const fs::path& excludeDir) const
 	{
 		std::error_code ec;
 		fs::create_directories(dst, ec);
 
-		for (const auto& entry : fs::recursive_directory_iterator(src, ec))
+		// Resolve the exclude directory (the export output root) so we can skip it
+		// when the user exports into a subfolder of the working directory.
+		fs::path excludeAbsolute;
+		if (!excludeDir.empty())
 		{
+			excludeAbsolute = fs::weakly_canonical(excludeDir, ec);
+		}
+
+		for (auto it = fs::recursive_directory_iterator(src, ec); it != fs::recursive_directory_iterator(); ++it)
+		{
+			const auto& entry = *it;
+
+			// Skip the export output directory to prevent infinite recursion
+			if (entry.is_directory() && !excludeAbsolute.empty())
+			{
+				std::error_code cmpEc;
+				fs::path entryAbs = fs::weakly_canonical(entry.path(), cmpEc);
+				if (!cmpEc && entryAbs == excludeAbsolute)
+				{
+					it.disable_recursion_pending();
+					continue;
+				}
+			}
+
 			fs::path relativePath = fs::relative(entry.path(), src, ec);
 			fs::path destPath = dst / relativePath;
 
@@ -463,8 +468,9 @@ namespace gameExport
 			}
 
 			// Skip .mt source files (keep .mtcLib compiled bytecode)
+			// Skip .vfproj files (a new one is generated in the export root)
 			auto ext = entry.path().extension().string();
-			if (ext == ".mt")
+			if (ext == ".mt" || ext == ".vfproj")
 			{
 				continue;
 			}

@@ -23,15 +23,15 @@ namespace gameExport
 		std::filesystem::path findRuntimeExe() const;
 		std::filesystem::path findShaderDirectory() const;
 		std::filesystem::path findIBLDirectory() const;
-		std::filesystem::path findResourcesEditorDirectory() const;
 
 		void copyDirectoryRecursive(const std::filesystem::path& src,
 									const std::filesystem::path& dst,
 									ExportResult& result) const;
 
-		// Copies directory but skips .mt source files (only .mtcLib compiled bytecode is needed at runtime)
+		// Copies directory but skips .mt/.vfproj source files and the export output directory
 		void copyDirectoryFilteredRecursive(const std::filesystem::path& src,
 											const std::filesystem::path& dst,
-											ExportResult& result) const;
+											ExportResult& result,
+											const std::filesystem::path& excludeDir = {}) const;
 	};
 }

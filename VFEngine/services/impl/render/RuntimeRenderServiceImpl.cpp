@@ -59,7 +59,7 @@ namespace services
         {
             return false;
         }
-        
+
         if (!std::filesystem::exists(hdrPath))
         {
             vfLogError("IBL file not found: {}", hdrPath);
@@ -155,6 +155,15 @@ namespace services
             [this](const events::render::GetMeshBoundingBoxQuery& q)
             {
                 return getMeshBoundingBox(q.meshPath);
+            });
+
+        dispatcher.registerCommandHandler<events::render::ApplyShadowSettingsCommand>(
+            [this](const events::render::ApplyShadowSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyShadowSettings(cmd.settings);
+                }
             });
 
         dispatcher.registerCommandHandler<events::postprocess::ApplyPostProcessSettingsCommand>(

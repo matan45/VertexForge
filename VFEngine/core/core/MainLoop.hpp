@@ -14,14 +14,17 @@ namespace core {
 	class MainLoop
 	{
 	private:
+		bool imguiEnabled;
 		std::unique_ptr<controllers::RenderController> renderController;
 		window::Window* mainWindow;  // Non-owning pointer (owned by WindowController)
 
-		// Frame callback - called each frame before rendering
+		// Frame callback - called each frame before scene graph update
 		std::function<void()> frameCallback;
+		// Post-update callback - called after scene graph update (world transforms computed)
+		std::function<void()> postUpdateCallback;
 
 	public:
-		explicit MainLoop();
+		explicit MainLoop(bool imguiEnabled = true);
 		~MainLoop();
 
 		void init();
@@ -35,11 +38,17 @@ namespace core {
 		// Set callback to be called each frame (for service updates)
 		void setFrameCallback(std::function<void()> callback) { frameCallback = std::move(callback); }
 
+		// Set callback called after scene graph update (world transforms are valid)
+		void setPostUpdateCallback(std::function<void()> callback) { postUpdateCallback = std::move(callback); }
+
 		// Set callback to be called on resize (for offscreen resource recreation)
 		void setResizeCallback(std::function<void()> callback);
 
 		// Trigger window resize handling (called by external event handlers)
 		void triggerResize();
+
+		// Set blit source provider for runtime (offscreen -> swapchain blit)
+		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);
 
 	private:
 		void newFrame() const;

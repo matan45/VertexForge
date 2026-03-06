@@ -1,13 +1,10 @@
 #include "../handlers/RuntimeHandler.hpp"
-#include "print/Log.hpp"
 #include <iostream>
 #include <filesystem>
 
+
 int main(int argc, char* argv[])
 {
-    // Disable info/warning logs for shipped games
-    util::loggingEnabled = false;
-
     handlers::RuntimeHandler runtime;
 
     try
@@ -45,7 +42,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Runtime error: " << e.what() << std::endl;
+        std::cerr << "FATAL: " << e.what() << std::endl;
         return 1;
     }
 
