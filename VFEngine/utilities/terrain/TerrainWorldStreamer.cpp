@@ -15,56 +15,47 @@ namespace terrain
             this->config.unloadRadius = this->config.loadRadius * 1.25f;
     }
 
-    std::vector<StreamingAction> TerrainWorldStreamer::update(
+    void TerrainWorldStreamer::update(
         const glm::vec3& cameraPos,
         float worldTileSize,
         const TerrainFileCache& fileCache,
-        const TerrainGrid& grid)
+        const TerrainGrid& grid,
+        std::vector<StreamingAction>& outActions)
     {
-        std::vector<StreamingAction> actions;
+        outActions.clear();
 
         if (!enabled)
-            return actions;
+            return;
 
         float loadRadiusSq = config.loadRadius * config.loadRadius;
         float unloadRadiusSq = config.unloadRadius * config.unloadRadius;
 
+        // Reuse persistent buffers (clear without deallocating)
+        loadCandidates.clear();
+        unloadCandidates.clear();
+
         // Collect load candidates: available on disk, not in grid, within load radius
-        struct Candidate
-        {
-            TileCoord coord;
-            float distSq;
-        };
-
-        std::vector<Candidate> loadCandidates;
-        std::vector<Candidate> unloadCandidates;
-
-        auto availableCoords = fileCache.getAvailableCoords();
-        for (const auto& coord : availableCoords)
+        fileCache.forEachSavedCoord([&](const TileCoord& coord)
         {
             if (grid.hasTile(coord))
-                continue;
+                return;
 
             float distSq = tileDistanceSq(coord, cameraPos, worldTileSize);
             if (distSq <= loadRadiusSq)
             {
                 loadCandidates.push_back({coord, distSq});
             }
-        }
+        });
 
         // Collect unload candidates: in grid, beyond unload radius
-        auto allTiles = grid.getAllTiles();
-        for (const auto* tile : allTiles)
+        grid.forEachTile([&](const TerrainTile& tile)
         {
-            if (!tile)
-                continue;
-
-            float distSq = tileDistanceSq(tile->coord, cameraPos, worldTileSize);
+            float distSq = tileDistanceSq(tile.coord, cameraPos, worldTileSize);
             if (distSq > unloadRadiusSq)
             {
-                unloadCandidates.push_back({tile->coord, distSq});
+                unloadCandidates.push_back({tile.coord, distSq});
             }
-        }
+        });
 
         // Sort: load nearest first, unload farthest first
         std::sort(loadCandidates.begin(), loadCandidates.end(),
@@ -77,19 +68,17 @@ namespace terrain
         int loadCount = std::min(static_cast<int>(loadCandidates.size()), config.maxLoadsPerFrame);
         int unloadCount = std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame);
 
-        actions.reserve(loadCount + unloadCount);
+        outActions.reserve(loadCount + unloadCount);
 
         for (int i = 0; i < unloadCount; ++i)
         {
-            actions.push_back({unloadCandidates[i].coord, false});
+            outActions.push_back({unloadCandidates[i].coord, false});
         }
 
         for (int i = 0; i < loadCount; ++i)
         {
-            actions.push_back({loadCandidates[i].coord, true});
+            outActions.push_back({loadCandidates[i].coord, true});
         }
-
-        return actions;
     }
 
     float TerrainWorldStreamer::tileDistanceSq(const TileCoord& coord, const glm::vec3& cameraPos,

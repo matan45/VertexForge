@@ -34,7 +34,18 @@ namespace terrain
         [[nodiscard]] const std::string& getFilePath() const { return filePath; }
 
         [[nodiscard]] std::vector<TileCoord> getAvailableCoords() const;
+        [[nodiscard]] std::vector<TileCoord> getSavedCoords() const;
         [[nodiscard]] bool hasCoord(const TileCoord& coord) const;
+
+        template<typename F>
+        void forEachSavedCoord(F&& func) const
+        {
+            for (const auto& [coord, entry] : indexMap)
+            {
+                if (entry.heightDataOffset != 0)
+                    func(coord);
+            }
+        }
 
     private:
         std::string filePath;

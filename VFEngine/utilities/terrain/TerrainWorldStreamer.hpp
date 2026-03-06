@@ -30,18 +30,28 @@ namespace terrain
         void setConfig(const StreamingConfig& config);
         [[nodiscard]] const StreamingConfig& getConfig() const { return config; }
 
-        std::vector<StreamingAction> update(
+        void update(
             const glm::vec3& cameraPos,
             float worldTileSize,
             const TerrainFileCache& fileCache,
-            const TerrainGrid& grid);
+            const TerrainGrid& grid,
+            std::vector<StreamingAction>& outActions);
 
         [[nodiscard]] bool isEnabled() const { return enabled; }
         void setEnabled(bool value) { enabled = value; }
 
     private:
+        struct Candidate
+        {
+            TileCoord coord;
+            float distSq;
+        };
+
         StreamingConfig config;
         bool enabled = false;
+
+        std::vector<Candidate> loadCandidates;
+        std::vector<Candidate> unloadCandidates;
 
         [[nodiscard]] float tileDistanceSq(const TileCoord& coord, const glm::vec3& cameraPos,
                                            float worldTileSize) const;

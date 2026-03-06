@@ -55,6 +55,7 @@ namespace services
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
+        std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -130,6 +131,8 @@ namespace services
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path);
+
+        void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);

@@ -338,7 +338,8 @@ namespace render::gpudriven
                 terrain.adapter->removeTileLOD(key, lod);
             }
         }
-        terrain.adapter->markGPUTileDataDirty();
+        if (terrain.adapter)
+            terrain.adapter->markGPUTileDataDirty();
     }
 
     void GPUDrivenRenderer::setSelectedTerrainTile(int32_t coordX, int32_t coordZ)

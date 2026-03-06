@@ -444,10 +444,11 @@ namespace services
             return grid.getTile(coord);
         };
 
-        // Stream in all tiles from file cache that aren't in the grid
+        // Stream in all previously-saved tiles from file cache that aren't in the grid
         // so they are included in the save (streaming may have unloaded them).
+        // Uses getSavedCoords() to skip entries with no file data (newly added, never saved).
         // This MUST run on the main thread to avoid racing with the render thread.
-        auto availableCoords = cacheIt->second->getAvailableCoords();
+        auto availableCoords = cacheIt->second->getSavedCoords();
         for (const auto& coord : availableCoords)
         {
             if (!grid.getTile(coord))

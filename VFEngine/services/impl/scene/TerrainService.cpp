@@ -11,6 +11,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -42,10 +43,22 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::AddTerrainTileCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemoveTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::PrepareTerrainSaveCommand>();
+        dispatcher.unregisterCommandHandler<events::holeBrush::ApplyHoleBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainTileDataQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightfieldQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
+        dispatcher.unregisterQueryHandler<events::physics::HasTerrainColliderQuery>();
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())
         {

@@ -229,6 +229,18 @@ namespace terrain
         return coords;
     }
 
+    std::vector<TileCoord> TerrainFileCache::getSavedCoords() const
+    {
+        std::vector<TileCoord> coords;
+        coords.reserve(indexMap.size());
+        for (const auto& [coord, entry] : indexMap)
+        {
+            if (entry.heightDataOffset != 0)
+                coords.push_back(coord);
+        }
+        return coords;
+    }
+
     bool TerrainFileCache::hasCoord(const TileCoord& coord) const
     {
         return indexMap.find(coord) != indexMap.end();
