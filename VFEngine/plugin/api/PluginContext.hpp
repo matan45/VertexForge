@@ -4,6 +4,7 @@
 #include <string_view>
 #include <any>
 #include <utility>
+#include <entt/entt.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
 
 struct ImGuiContext;
@@ -69,6 +70,11 @@ namespace plugin {
 
         // Unregister a previously registered render hook. Also cleaned up automatically on unload.
         virtual void unregisterRenderPassHook(RenderHookHandle handle) = 0;
+
+        // === ECS Registry Access ===
+        // Returns the global EnTT entity registry.
+        // Use this for direct component manipulation (add, get, view, etc.).
+        virtual entt::registry& getRegistry() = 0;
 
         // === Capability Queries ===
         // Check if an engine capability is available. Use plugin::capability constants.

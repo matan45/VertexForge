@@ -4,6 +4,7 @@
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
 #include <imgui.h>
 #include <filesystem>
@@ -113,6 +114,11 @@ namespace plugin {
 
         std::erase_if(registeredRenderHooks,
             [&](const plugin::RenderHookHandle& h) { return h.id == handle.id; });
+    }
+
+    entt::registry& PluginContextImpl::getRegistry()
+    {
+        return scene::EntityRegistry::getRegistry();
     }
 
     bool PluginContextImpl::hasCapability(const std::string& capability) const

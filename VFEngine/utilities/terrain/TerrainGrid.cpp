@@ -28,6 +28,90 @@ namespace terrain
         return (it != tiles.end()) ? it->second.get() : nullptr;
     }
 
+    TerrainTile* TerrainGrid::addTile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it != tiles.end())
+        {
+            return it->second.get();
+        }
+
+        auto tile = generator->generateTile(coord);
+        TerrainTile* tilePtr = tile.get();
+        tiles.emplace(coord, std::move(tile));
+
+        updateNeighborReferences(*tilePtr);
+
+        // Mark new tile and its existing neighbors dirty so boundary normals regenerate
+        tilePtr->edgeSyncDirty = true;
+        tilePtr->setAllLODsDirty();
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tilePtr->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tilePtr->neighbors[i].coord);
+                if (neighbor)
+                {
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        return tilePtr;
+    }
+
+    bool TerrainGrid::removeTile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it == tiles.end())
+        {
+            return false;
+        }
+
+        TerrainTile* tile = it->second.get();
+
+        // Clear neighbor references on adjacent tiles and mark them dirty
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tile->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tile->neighbors[i].coord);
+                if (neighbor)
+                {
+                    TileEdge oppositeEdge = TileCoord::getOppositeEdge(static_cast<TileEdge>(i));
+                    neighbor->clearNeighbor(oppositeEdge);
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        tiles.erase(it);
+        return true;
+    }
+
+    void TerrainGrid::computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const
+    {
+        if (tiles.empty())
+        {
+            minX = minZ = maxX = maxZ = 0;
+            return;
+        }
+
+        auto it = tiles.begin();
+        minX = maxX = it->first.x;
+        minZ = maxZ = it->first.z;
+
+        for (++it; it != tiles.end(); ++it)
+        {
+            minX = std::min(minX, it->first.x);
+            maxX = std::max(maxX, it->first.x);
+            minZ = std::min(minZ, it->first.z);
+            maxZ = std::max(maxZ, it->first.z);
+        }
+    }
+
     TerrainTile* TerrainGrid::getOrCreateTile(const TileCoord& coord)
     {
         auto it = tiles.find(coord);

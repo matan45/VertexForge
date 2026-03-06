@@ -25,6 +25,9 @@ namespace terrain
 
         void markDirty(const TileCoord& coord);
 
+        void addNewTileEntry(const TileCoord& coord);
+        void removeEntry(const TileCoord& coord);
+
         bool refreshIndex(const std::string& newPath);
 
         [[nodiscard]] bool hasMeshletCache() const;

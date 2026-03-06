@@ -99,6 +99,9 @@ namespace services
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 
+        bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
 

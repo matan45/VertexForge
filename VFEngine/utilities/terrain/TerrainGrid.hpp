@@ -49,6 +49,10 @@ namespace terrain
         [[nodiscard]] std::shared_ptr<TerrainFileCache> getFileCache() const { return fileCache; }
         [[nodiscard]] TerrainTileGenerator& getGenerator() { return *generator; }
 
+        TerrainTile* addTile(const TileCoord& coord);
+        bool removeTile(const TileCoord& coord);
+        void computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const;
+
         void initializeWeightMaps(uint8_t layerCount);
         void updateWeightMapLayerCount(uint8_t newLayerCount);
         [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();

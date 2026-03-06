@@ -144,6 +144,40 @@ namespace windows::details {
             }
 
             ImGui::Separator();
+            ImGui::Text("Grid Expansion");
+
+            ImGui::InputInt("Tile X", &pendingTileX);
+            ImGui::InputInt("Tile Z", &pendingTileZ);
+
+            if (ImGui::Button("Add Tile"))
+            {
+                events::terrain::AddTerrainTileCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.tileX = pendingTileX;
+                cmd.tileZ = pendingTileZ;
+                bool result = dispatcher.execute(cmd);
+                if (!result)
+                {
+                    saveStatusMessage = "Tile already exists or add failed";
+                    statusFrameCounter = 180;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Tile"))
+            {
+                events::terrain::RemoveTerrainTileCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.tileX = pendingTileX;
+                cmd.tileZ = pendingTileZ;
+                bool result = dispatcher.execute(cmd);
+                if (!result)
+                {
+                    saveStatusMessage = "Tile not found or remove failed";
+                    statusFrameCounter = 180;
+                }
+            }
+
+            ImGui::Separator();
             ImGui::Text("Physics");
 
             events::physics::HasTerrainColliderQuery hasColliderQuery;

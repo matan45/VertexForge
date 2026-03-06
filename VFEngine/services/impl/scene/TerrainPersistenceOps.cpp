@@ -490,9 +490,13 @@ namespace services
             physicsConfig.restitution = cc.restitution;
         }
 
+        // Compute actual bounds from grid tiles (supports sparse/dynamic grids)
+        int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
+        gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
+
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
-            comp.gridMinX, comp.gridMinZ, comp.gridMaxX, comp.gridMaxZ,
+            boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
             comp.terrainMaterialPath, physicsConfig);
 
         if (result)
@@ -500,6 +504,11 @@ namespace services
             auto& mutableComp = registry.get<components::TerrainComponent>(ent);
             mutableComp.savePath = path;
             mutableComp.saveDirty = false;
+            mutableComp.gridMinX = boundsMinX;
+            mutableComp.gridMinZ = boundsMinZ;
+            mutableComp.gridMaxX = boundsMaxX;
+            mutableComp.gridMaxZ = boundsMaxZ;
+            mutableComp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
 
             auto cacheIt = fileCaches.find(terrainEntityId);
             if (cacheIt != fileCaches.end() && cacheIt->second)

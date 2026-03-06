@@ -40,6 +40,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::AddTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RemoveTerrainTileCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -86,8 +88,11 @@ namespace services
         data.heightmapPath = comp.heightmapPath;
         data.terrainMaterialPath = comp.terrainMaterialPath;
         data.weightMapPath = comp.weightMapPath;
-        data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
-                                                (comp.gridMaxZ - comp.gridMinZ + 1));
+        auto gridIt = terrainGrids.find(entity.id);
+        data.tileCount = (gridIt != terrainGrids.end())
+            ? static_cast<uint32_t>(gridIt->second->getTileCount())
+            : static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
+                                     (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;
         data.isDirty = comp.isDirty;
         data.activeTileCount = comp.activeTileCount;

@@ -347,4 +347,148 @@ namespace services
             return;
         }
     }
+
+    bool TerrainService::addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        // Check if tile already exists
+        if (grid.getTile(coord))
+            return false;
+
+        terrain::TerrainTile* tile = grid.addTile(coord);
+        if (!tile)
+            return false;
+
+        // Track in file cache if one exists
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second)
+        {
+            cacheIt->second->addNewTileEntry(coord);
+        }
+
+        // Create ECS entity for the new tile
+        scene::Entity parentEntity(internal::fromHandle(terrainEntity));
+        std::string tileName = "Tile_" + std::to_string(tileX) + "_" + std::to_string(tileZ);
+        scene::Entity tileEntity(tileName);
+        parentEntity.addChildren(tileEntity);
+
+        auto& tileComp = tileEntity.addComponent<components::TerrainTileComponent>();
+        tileComp.tileX = tileX;
+        tileComp.tileZ = tileZ;
+        tileComp.currentLOD = tile->currentLOD;
+        tileComp.isVisible = tile->isVisible;
+        tileComp.isDirty = tile->isDirty;
+        tileComp.isGPUResident = false;
+        tileComp.boundingMinY = tile->worldBounds.min.y;
+        tileComp.boundingMaxY = tile->worldBounds.max.y;
+
+        auto& transform = tileEntity.getComponent<components::TransformComponent>();
+        transform.position = tile->worldOrigin;
+        transform.isDirty = true;
+
+        // Update TerrainComponent bounds
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            auto& comp = registry.get<components::TerrainComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+            comp.saveDirty = true;
+        }
+
+        events::terrain::TerrainTileAddedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("TerrainService: Added tile ({}, {})", tileX, tileZ);
+        return true;
+    }
+
+    bool TerrainService::removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        if (!grid.getTile(coord))
+            return false;
+
+        // Remove from grid (clears neighbor refs, marks neighbors dirty)
+        grid.removeTile(coord);
+
+        // Remove from file cache
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second)
+        {
+            cacheIt->second->removeEntry(coord);
+        }
+
+        // Find and destroy the child tile entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity parentEnt = internal::fromHandle(terrainEntity);
+        if (registry.valid(parentEnt) && registry.all_of<components::ChildrenComponent>(parentEnt))
+        {
+            const auto& children = registry.get<components::ChildrenComponent>(parentEnt).children;
+            for (auto childEnt : children)
+            {
+                if (!registry.valid(childEnt) ||
+                    !registry.all_of<components::TerrainTileComponent>(childEnt))
+                    continue;
+
+                const auto& tc = registry.get<components::TerrainTileComponent>(childEnt);
+                if (tc.tileX == tileX && tc.tileZ == tileZ)
+                {
+                    scene::Entity tileEntity(childEnt);
+                    sceneGraph->removeEntity(tileEntity);
+                    break;
+                }
+            }
+        }
+
+        // Update TerrainComponent bounds
+        if (registry.valid(parentEnt) && registry.all_of<components::TerrainComponent>(parentEnt))
+        {
+            auto& comp = registry.get<components::TerrainComponent>(parentEnt);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+            comp.saveDirty = true;
+        }
+
+        events::terrain::TerrainTileRemovedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("TerrainService: Removed tile ({}, {})", tileX, tileZ);
+        return true;
+    }
 }

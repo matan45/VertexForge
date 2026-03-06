@@ -21,6 +21,9 @@ namespace windows::details {
         std::string saveStatusMessage;
         int statusFrameCounter = 0;
         nfd::FileDialog fileDialog;
+
+        int pendingTileX = 0;
+        int pendingTileZ = 0;
     };
 
 }

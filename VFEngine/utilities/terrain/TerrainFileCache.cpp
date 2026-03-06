@@ -31,6 +31,10 @@ namespace terrain
             return false;
         }
 
+        // Dynamically added tile not yet saved to disk
+        if (entry->heightDataOffset == 0)
+            return false;
+
         if (hasMeshletCache() && entry->meshletDataOffset != 0)
         {
             std::array<TileLODData, TERRAIN_LOD_COUNT> lodData;
@@ -94,6 +98,10 @@ namespace terrain
             vfLogError("TerrainFileCache: No index entry for tile ({}, {})", tile.coord.x, tile.coord.z);
             return false;
         }
+
+        // Dynamically added tile not yet saved to disk
+        if (entry->heightDataOffset == 0)
+            return false;
 
         size_t oldUsage = estimateTileRAMUsage(tile);
 
@@ -162,6 +170,27 @@ namespace terrain
     void TerrainFileCache::markDirty(const TileCoord& coord)
     {
         dirtyCoords.insert(coord);
+    }
+
+    void TerrainFileCache::addNewTileEntry(const TileCoord& coord)
+    {
+        TileIndexEntry entry{};
+        entry.coordX = coord.x;
+        entry.coordZ = coord.z;
+        // Zero offsets indicate no file data yet
+        entry.heightDataOffset = 0;
+        entry.heightDataSize = 0;
+        entry.weightDataOffset = 0;
+        entry.meshletDataOffset = 0;
+        entry.holeMaskDataOffset = 0;
+        indexMap[coord] = entry;
+        dirtyCoords.insert(coord);
+    }
+
+    void TerrainFileCache::removeEntry(const TileCoord& coord)
+    {
+        indexMap.erase(coord);
+        dirtyCoords.erase(coord);
     }
 
     bool TerrainFileCache::refreshIndex(const std::string& newPath)

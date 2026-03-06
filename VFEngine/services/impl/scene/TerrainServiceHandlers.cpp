@@ -100,6 +100,18 @@ namespace services
             {
                 return getTerrainHeightfield();
             });
+
+        dispatcher.registerCommandHandler<events::terrain::AddTerrainTileCommand>(
+            [this](const events::terrain::AddTerrainTileCommand& cmd)
+            {
+                return addTile(cmd.terrainEntity, cmd.tileX, cmd.tileZ);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::RemoveTerrainTileCommand>(
+            [this](const events::terrain::RemoveTerrainTileCommand& cmd)
+            {
+                return removeTile(cmd.terrainEntity, cmd.tileX, cmd.tileZ);
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)
