@@ -2,6 +2,7 @@
 #include "TerrainGPUAdapter.hpp"
 #include "terrain/TerrainTile.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstring>
 
 namespace render::gpudriven
 {
@@ -333,9 +334,8 @@ namespace render::gpudriven
         auto& alloc = it->second;
         const auto& wm = tile.weightMap;
 
-        uint32_t numWeightTextures = (wm.activeLayerCount + 3) / 4;
-        uint32_t texSize = wm.resolution * wm.resolution * 4; // RGBA uint8 per texel
-        uint32_t totalBytes = numWeightTextures * texSize;
+        // Always 1 RGBA texture (4 channels)
+        uint32_t totalBytes = wm.resolution * wm.resolution * 4; // RGBA uint8 per texel
 
         std::string tileKey = alloc.getMeshPath();
         uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
@@ -346,25 +346,21 @@ namespace render::gpudriven
             return false;
         }
 
-        // Pack weight data: iterate weight textures, convert float -> uint8 RGBA
+        // Pack weight data: convert float channels 0-3 -> uint8 RGBA
         std::vector<uint8_t> packedData(totalBytes);
 
-        for (uint32_t texIdx = 0; texIdx < numWeightTextures; ++texIdx)
+        for (uint32_t z = 0; z < wm.resolution; ++z)
         {
-            uint32_t texOffset = texIdx * texSize;
-            for (uint32_t z = 0; z < wm.resolution; ++z)
+            for (uint32_t x = 0; x < wm.resolution; ++x)
             {
-                for (uint32_t x = 0; x < wm.resolution; ++x)
-                {
-                    float r, g, b, a;
-                    wm.packRGBA(texIdx, x, z, r, g, b, a);
+                float r, g, b, a;
+                wm.packRGBA(x, z, r, g, b, a);
 
-                    uint32_t pixelOffset = texOffset + (z * wm.resolution + x) * 4;
-                    packedData[pixelOffset + 0] = static_cast<uint8_t>(r * 255.0f + 0.5f);
-                    packedData[pixelOffset + 1] = static_cast<uint8_t>(g * 255.0f + 0.5f);
-                    packedData[pixelOffset + 2] = static_cast<uint8_t>(b * 255.0f + 0.5f);
-                    packedData[pixelOffset + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
-                }
+                uint32_t pixelOffset = (z * wm.resolution + x) * 4;
+                packedData[pixelOffset + 0] = static_cast<uint8_t>(r * 255.0f + 0.5f);
+                packedData[pixelOffset + 1] = static_cast<uint8_t>(g * 255.0f + 0.5f);
+                packedData[pixelOffset + 2] = static_cast<uint8_t>(b * 255.0f + 0.5f);
+                packedData[pixelOffset + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
             }
         }
 
@@ -422,8 +418,15 @@ namespace render::gpudriven
             gpuTile.boundingSphere = glm::vec4(currentCenter, currentRadius);
             gpuTile.aabbMin = glm::vec4(tile->worldBounds.min,
                 static_cast<float>(tile->weightMap.resolution));
-            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max,
-                static_cast<float>(tile->weightMap.activeLayerCount));
+
+            // Pack layerIndices[4] into aabbMax.w as uint bits reinterpreted as float
+            uint32_t packedLI = static_cast<uint32_t>(tile->weightMap.layerIndices[0])
+                | (static_cast<uint32_t>(tile->weightMap.layerIndices[1]) << 8)
+                | (static_cast<uint32_t>(tile->weightMap.layerIndices[2]) << 16)
+                | (static_cast<uint32_t>(tile->weightMap.layerIndices[3]) << 24);
+            float packedLIFloat;
+            std::memcpy(&packedLIFloat, &packedLI, sizeof(float));
+            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max, packedLIFloat);
 
             // LOD meshlet data for each level
             // Format: x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)

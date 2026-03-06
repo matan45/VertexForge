@@ -319,25 +319,19 @@ namespace terrain
                     && entry.weightDataOffset != 0)
                 {
                     file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
-                    result.weightMap.activeLayerCount = readLE<uint8_t>(file);
+
+                    // Read per-tile palette indices (4 bytes)
+                    for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
+                        result.weightMap.layerIndices[li] = readLE<uint8_t>(file);
+
                     result.weightMap.resolution = readLE<uint32_t>(file);
 
-                    if (result.weightMap.activeLayerCount == 0 ||
-                        result.weightMap.activeLayerCount > MAX_TERRAIN_LAYERS)
+                    size_t texelCount = static_cast<size_t>(result.weightMap.resolution)
+                                        * result.weightMap.resolution;
+                    result.weightMap.layerWeights.resize(WEIGHT_CHANNELS);
+                    for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
                     {
-                        vfLogWarning("TerrainSerializer: Invalid layer count {} for tile ({}, {}), skipping weights",
-                                     result.weightMap.activeLayerCount, entry.coordX, entry.coordZ);
-                        result.weightMap = TileWeightMapData{};
-                    }
-                    else
-                    {
-                        size_t texelCount = static_cast<size_t>(result.weightMap.resolution)
-                                            * result.weightMap.resolution;
-                        result.weightMap.layerWeights.resize(result.weightMap.activeLayerCount);
-                        for (uint8_t layer = 0; layer < result.weightMap.activeLayerCount; ++layer)
-                        {
-                            readVectorLE(file, result.weightMap.layerWeights[layer], texelCount);
-                        }
+                        readVectorLE(file, result.weightMap.layerWeights[ch], texelCount);
                     }
                 }
 
@@ -461,22 +455,18 @@ namespace terrain
             }
 
             file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
-            outWeights.activeLayerCount = readLE<uint8_t>(file);
+
+            // Read per-tile palette indices (4 bytes)
+            for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
+                outWeights.layerIndices[li] = readLE<uint8_t>(file);
+
             outWeights.resolution = readLE<uint32_t>(file);
 
-            if (outWeights.activeLayerCount == 0 || outWeights.activeLayerCount > MAX_TERRAIN_LAYERS)
-            {
-                vfLogError("TerrainSerializer: Invalid layer count {} for tile ({}, {})",
-                           outWeights.activeLayerCount, entry.coordX, entry.coordZ);
-                outWeights = TileWeightMapData{};
-                return false;
-            }
-
             size_t texelCount = static_cast<size_t>(outWeights.resolution) * outWeights.resolution;
-            outWeights.layerWeights.resize(outWeights.activeLayerCount);
-            for (uint8_t layer = 0; layer < outWeights.activeLayerCount; ++layer)
+            outWeights.layerWeights.resize(WEIGHT_CHANNELS);
+            for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
             {
-                readVectorLE(file, outWeights.layerWeights[layer], texelCount);
+                readVectorLE(file, outWeights.layerWeights[ch], texelCount);
             }
 
             if (!file.good())

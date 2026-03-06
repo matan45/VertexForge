@@ -185,7 +185,7 @@ namespace render::gpudriven
     void TerrainMeshShaderPipeline::createTerrainLayerBuffer()
     {
         vk::Device vkDevice = device.getLogicalDevice();
-        constexpr vk::DeviceSize layerBufferSize = 16 * sizeof(TerrainLayerGPUData);
+        constexpr vk::DeviceSize layerBufferSize = 32 * sizeof(TerrainLayerGPUData);
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = layerBufferSize;
@@ -649,7 +649,7 @@ namespace render::gpudriven
     {
         if (!terrainLayerBufferMapped) return;
 
-        constexpr uint32_t maxLayers = 16;
+        constexpr uint32_t maxLayers = 32;
         if (layers.empty())
         {
             std::memset(terrainLayerBufferMapped, 0, maxLayers * sizeof(TerrainLayerGPUData));

@@ -145,7 +145,6 @@ namespace services
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
-        uint16_t getOverlayMask() const;
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
         static void generateTileColliderWireframe(const terrain::TerrainTile& tile,

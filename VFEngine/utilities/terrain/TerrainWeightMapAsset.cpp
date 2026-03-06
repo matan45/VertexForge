@@ -11,7 +11,7 @@ namespace terrain
     using namespace resource::endian;
 
     static constexpr std::array<char, 4> WEIGHT_MAP_MAGIC = {'V', 'F', 'W', 'M'};
-    static constexpr uint32_t FORMAT_VERSION_MAJOR = 1;
+    static constexpr uint32_t FORMAT_VERSION_MAJOR = 2;
     static constexpr uint32_t FORMAT_VERSION_MINOR = 0;
     static constexpr uint32_t FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TILE_COUNT = 10000;
@@ -58,13 +58,17 @@ namespace terrain
             {
                 writeLE(file, coord.x);
                 writeLE(file, coord.z);
-                writeLE(file, weightData.activeLayerCount);
 
-                for (uint8_t layer = 0; layer < weightData.activeLayerCount; ++layer)
+                // Write per-tile palette indices (4 bytes)
+                for (uint8_t i = 0; i < WEIGHT_CHANNELS; ++i)
+                    writeLE<uint8_t>(file, weightData.layerIndices[i]);
+
+                // Always write exactly 4 channels
+                for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
                 {
-                    if (layer < weightData.layerWeights.size())
+                    if (ch < weightData.layerWeights.size())
                     {
-                        writeVectorLE(file, weightData.layerWeights[layer]);
+                        writeVectorLE(file, weightData.layerWeights[ch]);
                     }
                     else
                     {
@@ -178,25 +182,19 @@ namespace terrain
 
                 int32_t coordX = readLE<int32_t>(file);
                 int32_t coordZ = readLE<int32_t>(file);
-                uint8_t layerCount = readLE<uint8_t>(file);
-
-                if (layerCount == 0 || layerCount > MAX_TERRAIN_LAYERS)
-                {
-                    vfLogWarning("TerrainWeightMapAsset: Invalid layer count {} for tile ({}, {}), skipping",
-                                 layerCount, coordX, coordZ);
-                    file.seekg(static_cast<std::streamoff>(layerCount) * texelCount * sizeof(float),
-                               std::ios::cur);
-                    continue;
-                }
 
                 TileWeightMapData weightData;
                 weightData.resolution = resolution;
-                weightData.activeLayerCount = layerCount;
-                weightData.layerWeights.resize(layerCount);
 
-                for (uint8_t layer = 0; layer < layerCount; ++layer)
+                // Read per-tile palette indices (4 bytes)
+                for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
+                    weightData.layerIndices[li] = readLE<uint8_t>(file);
+
+                // Always read exactly 4 channels
+                weightData.layerWeights.resize(WEIGHT_CHANNELS);
+                for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
                 {
-                    readVectorLE(file, weightData.layerWeights[layer], texelCount);
+                    readVectorLE(file, weightData.layerWeights[ch], texelCount);
                 }
 
                 if (!file.good())

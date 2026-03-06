@@ -105,7 +105,7 @@ namespace render::gpudriven
         glm::mat4 modelMatrix;
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
         glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
-        glm::vec4 aabbMax;              // xyz = world AABB max, w = activeLayerCount (1-16)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[4] (uintBitsToFloat)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
         glm::uvec4 lod1MeshletData;
         glm::uvec4 lod2MeshletData;

@@ -221,10 +221,11 @@ namespace windows
                 "Depth",        // 5: Depth visualization
                 "Shadow",       // 6: Shadow visualization
                 "Terrain Tile", // 7: Terrain tile visualization (color per tile)
-                "Terrain UV"    // 8: Terrain world UV visualization
+                "Terrain UV",   // 8: Terrain world UV visualization
+                "Weight Map"    // 9: Terrain weight map visualization
             };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 9))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

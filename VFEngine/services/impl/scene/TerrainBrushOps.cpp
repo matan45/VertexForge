@@ -7,8 +7,6 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
-#include "terrain/TerrainMaterialTypes.hpp"
-#include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
@@ -157,8 +155,6 @@ namespace services
             worldTileSize = allTiles[0]->config.worldTileSize;
         }
 
-        uint16_t overlayMask = getOverlayMask();
-
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
@@ -191,12 +187,6 @@ namespace services
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
                 continue;
 
-            if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
-            {
-                tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
-                tile->weightMapGPUDirty = true;
-            }
-
             terrain::WeightBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = brushCenter;
             applyParams.tileWorldOrigin = glm::vec2(
@@ -213,7 +203,6 @@ namespace services
             applyParams.activeLayer = brushParams.activeLayer;
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
-            applyParams.overlayMask = overlayMask;
 
             if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
             {
@@ -456,24 +445,4 @@ namespace services
         }
     }
 
-    uint16_t TerrainService::getOverlayMask() const
-    {
-        uint16_t overlayMask = 0;
-        std::string materialPath = getTerrainMaterialPath();
-        if (!materialPath.empty())
-        {
-            auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
-            if (materialData)
-            {
-                for (uint8_t i = 0; i < materialData->activeLayerCount && i < 16; ++i)
-                {
-                    if (materialData->layers[i].blendMode == terrain::TerrainLayerBlendMode::Overlay)
-                    {
-                        overlayMask |= (1u << i);
-                    }
-                }
-            }
-        }
-        return overlayMask;
-    }
 }

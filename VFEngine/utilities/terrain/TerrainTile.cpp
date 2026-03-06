@@ -205,9 +205,9 @@ namespace terrain
         return static_cast<size_t>(z) * config.getVertexCount() + x;
     }
 
-    void TerrainTile::initializeWeightMap(uint8_t layerCount)
+    void TerrainTile::initializeWeightMap()
     {
-        weightMap.initializeDefault(config.getVertexCount(), layerCount);
+        weightMap.initializeDefault(config.getVertexCount());
         weightMapDirty = true;
         weightMapGPUDirty = true;
     }

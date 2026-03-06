@@ -16,6 +16,7 @@ namespace editor::graph {
     bool ShaderGraphCompiler::s_templatesLoaded = false;
 
     std::string ShaderGraphCompiler::generateLayerSampling(int layerIndex, const std::string& layerName) {
+        // This method is no longer used for terrain material compilation (kept for potential future use)
         std::string code;
         code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
             "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", layerIndex);
@@ -26,7 +27,6 @@ namespace editor::graph {
         code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", layerIndex);
         code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
             "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", layerIndex);
-        // ORM texture sampling (conditional - no fetch when not bound)
         code += std::format("    uint ormIdx_{0} = terrainLayers[{0}].ormTextureIndex;\n", layerIndex);
         code += std::format("    float layerAO, layerRoughness, layerMetallic;\n");
         code += std::format("    if (ormIdx_{0} > 0u) {{\n", layerIndex);
@@ -46,30 +46,10 @@ namespace editor::graph {
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
-        int layerCount = std::clamp(static_cast<int>(material.activeLayerCount), 1, terrain::MAX_TERRAIN_LAYERS);
-
-        struct LayerInfo {
-            int index;
-            std::string blendMode;
-            std::string name;
-            bool enabled;
-        };
-        std::vector<LayerInfo> baseLayers;
-        std::vector<LayerInfo> overlayLayers;
-
-        for (int i = 0; i < layerCount; ++i) {
-            const auto& layer = material.layers[i];
-            std::string blend = terrain::blendModeToString(layer.blendMode);
-            LayerInfo info{i, blend, layer.name, layer.enabled};
-            if (blend == "Overlay" && i > 0)
-                overlayLayers.push_back(info);
-            else
-                baseLayers.push_back(info);
-        }
-
+        // Static 4-channel loop with per-tile palette indirection — no longer depends on activeLayerCount
         std::string code;
         code += "// Generated terrain material code\n";
-        code += "// Terrain Layer Stack - blending " + std::to_string(layerCount) + " layer(s)\n";
+        code += "// Per-tile palette: 4 channels with runtime indirection into palette of " + std::to_string(material.activeLayerCount) + " layer(s)\n";
         code += "vec3 ls_Albedo = vec3(0.0);\n";
         code += "vec3 ls_Normal = vec3(0.0);\n";
         code += "float ls_Roughness = 0.0;\n";
@@ -77,24 +57,40 @@ namespace editor::graph {
         code += "float ls_AO = 0.0;\n";
         code += "float ls_Emission = 0.0;\n";
         code += "float ls_TotalW = 0.0;\n";
-
-        for (const auto& layer : baseLayers) {
-            if (!layer.enabled) {
-                code += "// Layer " + std::to_string(layer.index) + " (" + layer.name + ") - disabled\n";
-                continue;
-            }
-
-            code += "{ // Layer " + std::to_string(layer.index) + " (" + layer.name + ") - blend: " + layer.blendMode + "\n";
-            code += generateLayerSampling(layer.index, layer.name);
-            code += "    ls_Albedo += layerAlbedo * w;\n";
-            code += "    ls_Normal += layerNormal * w;\n";
-            code += "    ls_Roughness += layerRoughness * w;\n";
-            code += "    ls_Metallic += layerMetallic * w;\n";
-            code += "    ls_AO += layerAO * w;\n";
-            code += "    ls_Emission += layerEmission * w;\n";
-            code += "    ls_TotalW += w;\n";
-            code += "}\n";
-        }
+        code += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
+        code += "for (int ch = 0; ch < 4; ch++) {\n";
+        code += "    uint paletteIdx = (packedLI >> (ch * 8u)) & 0xFFu;\n";
+        code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
+        code += "    if (w < 0.001) continue;\n";
+        code += "    vec2 layerUV = fragWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
+        code += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
+        code += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV).rgb : vec3(0.5);\n";
+        code += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
+        code += "    vec3 layerNormal = (normalIdx > 0u) ? "
+                "texture(bindlessTextures[nonuniformEXT(normalIdx)], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
+        code += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
+        code += "    float layerAO, layerRoughness, layerMetallic;\n";
+        code += "    if (ormIdx > 0u) {\n";
+        code += "        vec3 ormSample = texture(bindlessTextures[nonuniformEXT(ormIdx)], layerUV).rgb;\n";
+        code += "        layerAO = ormSample.r;\n";
+        code += "        layerRoughness = ormSample.g;\n";
+        code += "        layerMetallic = ormSample.b;\n";
+        code += "    } else {\n";
+        code += "        layerAO = terrainLayers[paletteIdx].ao;\n";
+        code += "        layerRoughness = terrainLayers[paletteIdx].roughness;\n";
+        code += "        layerMetallic = terrainLayers[paletteIdx].metallic;\n";
+        code += "    }\n";
+        code += "    float layerEmission = terrainLayers[paletteIdx].emissionStrength;\n";
+        code += "    ls_Albedo += layerAlbedo * w;\n";
+        code += "    ls_Normal += layerNormal * w;\n";
+        code += "    ls_Roughness += layerRoughness * w;\n";
+        code += "    ls_Metallic += layerMetallic * w;\n";
+        code += "    ls_AO += layerAO * w;\n";
+        code += "    ls_Emission += layerEmission * w;\n";
+        code += "    ls_TotalW += w;\n";
+        code += "}\n";
 
         code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
         code += "ls_Albedo *= ls_InvW;\n";
@@ -103,29 +99,6 @@ namespace editor::graph {
         code += "ls_Metallic *= ls_InvW;\n";
         code += "ls_AO *= ls_InvW;\n";
         code += "ls_Emission *= ls_InvW;\n";
-
-        for (const auto& layer : overlayLayers) {
-            if (!layer.enabled) {
-                code += "// Layer " + std::to_string(layer.index) + " (" + layer.name + ") - disabled\n";
-                continue;
-            }
-
-            code += "{ // Layer " + std::to_string(layer.index) + " (" + layer.name + ") - blend: Overlay\n";
-            code += generateLayerSampling(layer.index, layer.name);
-            code += "    vec3 ovBase = ls_Albedo;\n";
-            code += "    vec3 ovBlend = layerAlbedo;\n";
-            code += "    vec3 ovResult = mix(\n";
-            code += "        1.0 - 2.0 * (1.0 - ovBase) * (1.0 - ovBlend),\n";
-            code += "        2.0 * ovBase * ovBlend,\n";
-            code += "        step(ovBase, vec3(0.5)));\n";
-            code += "    ls_Albedo = mix(ls_Albedo, ovResult, w);\n";
-            code += "    ls_Normal = normalize(mix(ls_Normal, layerNormal, w));\n";
-            code += "    ls_Roughness = mix(ls_Roughness, layerRoughness, w);\n";
-            code += "    ls_Metallic = mix(ls_Metallic, layerMetallic, w);\n";
-            code += "    ls_AO = mix(ls_AO, layerAO, w);\n";
-            code += "    ls_Emission = mix(ls_Emission, layerEmission, w);\n";
-            code += "}\n";
-        }
 
         code += "// Terrain material properties\n";
         code += "vec3 mat_albedo = ls_Albedo;\n";

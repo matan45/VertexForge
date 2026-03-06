@@ -65,8 +65,7 @@ namespace terrain
             }
         }
 
-        void initializeWeightMaps(uint8_t layerCount);
-        void updateWeightMapLayerCount(uint8_t newLayerCount);
+        void initializeWeightMaps();
         [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();
 
     private:
