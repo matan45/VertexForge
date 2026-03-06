@@ -324,6 +324,23 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::evictTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (terrain.streamManager)
+        {
+            terrain.streamManager->evictTile(coordX, coordZ);
+        }
+        else if (terrain.adapter)
+        {
+            render::gpudriven::TerrainTileKey key{coordX, coordZ};
+            for (uint32_t lod = 0; lod < 4; ++lod)
+            {
+                terrain.adapter->removeTileLOD(key, lod);
+            }
+        }
+        terrain.adapter->markGPUTileDataDirty();
+    }
+
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                               uint32_t screenWidth, uint32_t screenHeight)
     {

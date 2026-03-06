@@ -9,6 +9,7 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
+#include "terrain/TerrainWorldStreamer.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <memory>
@@ -53,6 +54,7 @@ namespace services
         float maxTerrainDistSq_ = 0.0f;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
+        std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -101,6 +103,10 @@ namespace services
 
         bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         bool removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+
+        bool streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        void commitStreamingChanges(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);

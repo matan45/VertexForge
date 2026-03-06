@@ -267,6 +267,7 @@ namespace render
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
+        void evictTerrainTile(int32_t coordX, int32_t coordZ);
 
         void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();

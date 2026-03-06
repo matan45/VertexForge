@@ -125,6 +125,8 @@ namespace render::gpudriven
 
         void clear();
 
+        void evictTile(int32_t coordX, int32_t coordZ);
+
     private:
         float calculatePriority(float distance,
                                 uint8_t targetLOD,

@@ -598,6 +598,7 @@ namespace services
 
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
+        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
 
         if (!header.materialPath.empty())
         {

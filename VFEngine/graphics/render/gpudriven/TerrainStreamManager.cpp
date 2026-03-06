@@ -467,4 +467,22 @@ namespace render::gpudriven
         stats = TerrainStreamingStats{};
     }
 
+    void TerrainStreamManager::evictTile(int32_t coordX, int32_t coordZ)
+    {
+        TerrainTileKey key{coordX, coordZ};
+        auto infoIt = tileInfos.find(key);
+        if (infoIt == tileInfos.end())
+            return;
+
+        for (uint8_t lod = 0; lod < 4; ++lod)
+        {
+            if (infoIt->second.hasLODLoaded(lod))
+            {
+                evictTileLOD(key, lod);
+            }
+        }
+
+        tileInfos.erase(infoIt);
+    }
+
 }

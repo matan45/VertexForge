@@ -178,6 +178,55 @@ namespace windows::details {
             }
 
             ImGui::Separator();
+            ImGui::Text("World Streaming");
+
+            {
+                events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
+                enabledQuery.terrainEntity = handle;
+                bool streamingEnabled = dispatcher.query(enabledQuery);
+
+                if (ImGui::Checkbox("Enable Streaming", &streamingEnabled))
+                {
+                    events::terrain::SetTerrainStreamingEnabledCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.enabled = streamingEnabled;
+                    dispatcher.execute(cmd);
+                }
+
+                events::terrain::GetTerrainStreamingConfigQuery configQuery;
+                configQuery.terrainEntity = handle;
+                auto streamConfig = dispatcher.query(configQuery);
+
+                bool configChanged = false;
+
+                if (ImGui::SliderFloat("Load Radius", &streamConfig.loadRadius, 64.0f, 2048.0f, "%.0f"))
+                    configChanged = true;
+
+                if (ImGui::SliderFloat("Unload Radius", &streamConfig.unloadRadius, 64.0f, 2048.0f, "%.0f"))
+                    configChanged = true;
+
+                if (streamConfig.unloadRadius < streamConfig.loadRadius)
+                    streamConfig.unloadRadius = streamConfig.loadRadius * 1.25f;
+
+                if (ImGui::SliderInt("Max Loads/Frame", &streamConfig.maxLoadsPerFrame, 1, 16))
+                    configChanged = true;
+
+                if (ImGui::SliderInt("Max Unloads/Frame", &streamConfig.maxUnloadsPerFrame, 1, 16))
+                    configChanged = true;
+
+                if (configChanged)
+                {
+                    events::terrain::SetTerrainStreamingConfigCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.loadRadius = streamConfig.loadRadius;
+                    cmd.unloadRadius = streamConfig.unloadRadius;
+                    cmd.maxLoadsPerFrame = streamConfig.maxLoadsPerFrame;
+                    cmd.maxUnloadsPerFrame = streamConfig.maxUnloadsPerFrame;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            ImGui::Separator();
             ImGui::Text("Physics");
 
             events::physics::HasTerrainColliderQuery hasColliderQuery;

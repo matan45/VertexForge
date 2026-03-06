@@ -329,6 +329,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::evictTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->evictTerrainTile(coordX, coordZ);
+        }
+    }
+
     void RenderPassHandler::addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
     {
         additionalTerrainFrustums.emplace_back(frustum, cameraPos);

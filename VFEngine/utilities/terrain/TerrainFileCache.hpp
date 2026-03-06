@@ -33,6 +33,9 @@ namespace terrain
         [[nodiscard]] bool hasMeshletCache() const;
         [[nodiscard]] const std::string& getFilePath() const { return filePath; }
 
+        [[nodiscard]] std::vector<TileCoord> getAvailableCoords() const;
+        [[nodiscard]] bool hasCoord(const TileCoord& coord) const;
+
     private:
         std::string filePath;
         TerrainFileHeader header;

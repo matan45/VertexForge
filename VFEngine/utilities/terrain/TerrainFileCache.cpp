@@ -218,6 +218,22 @@ namespace terrain
         return true;
     }
 
+    std::vector<TileCoord> TerrainFileCache::getAvailableCoords() const
+    {
+        std::vector<TileCoord> coords;
+        coords.reserve(indexMap.size());
+        for (const auto& [coord, entry] : indexMap)
+        {
+            coords.push_back(coord);
+        }
+        return coords;
+    }
+
+    bool TerrainFileCache::hasCoord(const TileCoord& coord) const
+    {
+        return indexMap.find(coord) != indexMap.end();
+    }
+
     bool TerrainFileCache::hasMeshletCache() const
     {
         return hasFlag(header.flags, TerrainFormatFlags::HAS_MESHLET_CACHE);

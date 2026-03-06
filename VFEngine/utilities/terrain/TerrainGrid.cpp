@@ -61,6 +61,39 @@ namespace terrain
         return tilePtr;
     }
 
+    TerrainTile* TerrainGrid::addTileFromFile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it != tiles.end())
+        {
+            return it->second.get();
+        }
+
+        auto tile = std::make_unique<TerrainTile>(coord, config);
+        tile->initializeMetadataOnly();
+        TerrainTile* tilePtr = tile.get();
+        tiles.emplace(coord, std::move(tile));
+
+        updateNeighborReferences(*tilePtr);
+
+        tilePtr->edgeSyncDirty = true;
+        tilePtr->setAllLODsDirty();
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tilePtr->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tilePtr->neighbors[i].coord);
+                if (neighbor)
+                {
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        return tilePtr;
+    }
+
     bool TerrainGrid::removeTile(const TileCoord& coord)
     {
         auto it = tiles.find(coord);

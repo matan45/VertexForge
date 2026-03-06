@@ -183,6 +183,7 @@
     <ClInclude Include="terrain\TerrainTypes.hpp" />
     <ClInclude Include="terrain\TerrainWeightMap.hpp" />
     <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
+    <ClInclude Include="terrain\TerrainWorldStreamer.hpp" />
     <ClInclude Include="terrain\WeightBrushApplicator.hpp" />
     <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
@@ -279,6 +280,7 @@
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />
     <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
+    <ClCompile Include="terrain\TerrainWorldStreamer.cpp" />
     <ClCompile Include="terrain\WeightBrushApplicator.cpp" />
     <ClCompile Include="text\TextLayout.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />

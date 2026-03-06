@@ -327,6 +327,7 @@ namespace render::gpudriven
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
+        void evictTerrainTile(int32_t coordX, int32_t coordZ);
 
         struct TerrainTileLightmapData
         {

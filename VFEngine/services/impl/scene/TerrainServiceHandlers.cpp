@@ -112,6 +112,55 @@ namespace services
             {
                 return removeTile(cmd.terrainEntity, cmd.tileX, cmd.tileZ);
             });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>(
+            [this](const events::terrain::SetTerrainStreamingEnabledCommand& cmd)
+            {
+                auto it = worldStreamers.find(cmd.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                    it->second->setEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>(
+            [this](const events::terrain::SetTerrainStreamingConfigCommand& cmd)
+            {
+                auto it = worldStreamers.find(cmd.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                {
+                    terrain::StreamingConfig config;
+                    config.loadRadius = cmd.loadRadius;
+                    config.unloadRadius = cmd.unloadRadius;
+                    config.maxLoadsPerFrame = cmd.maxLoadsPerFrame;
+                    config.maxUnloadsPerFrame = cmd.maxUnloadsPerFrame;
+                    it->second->setConfig(config);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>(
+            [this](const events::terrain::GetTerrainStreamingConfigQuery& query)
+            {
+                auto it = worldStreamers.find(query.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                {
+                    const auto& cfg = it->second->getConfig();
+                    events::terrain::StreamingConfigData data;
+                    data.loadRadius = cfg.loadRadius;
+                    data.unloadRadius = cfg.unloadRadius;
+                    data.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+                    data.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+                    return data;
+                }
+                return events::terrain::StreamingConfigData{};
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>(
+            [this](const events::terrain::IsTerrainStreamingEnabledQuery& query)
+            {
+                auto it = worldStreamers.find(query.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                    return it->second->isEnabled();
+                return false;
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)

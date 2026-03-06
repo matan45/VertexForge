@@ -72,6 +72,7 @@ namespace controllers
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
         std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> tileRemovedSubscription;
         std::unique_ptr<events::SubscriptionToken> waterDeletedSubscription;
 
         bool showBillboardIcons = true;

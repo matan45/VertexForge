@@ -50,8 +50,10 @@ namespace terrain
         [[nodiscard]] TerrainTileGenerator& getGenerator() { return *generator; }
 
         TerrainTile* addTile(const TileCoord& coord);
+        TerrainTile* addTileFromFile(const TileCoord& coord);
         bool removeTile(const TileCoord& coord);
         void computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const;
+        [[nodiscard]] bool hasTile(const TileCoord& coord) const { return tiles.find(coord) != tiles.end(); }
 
         void initializeWeightMaps(uint8_t layerCount);
         void updateWeightMapLayerCount(uint8_t newLayerCount);

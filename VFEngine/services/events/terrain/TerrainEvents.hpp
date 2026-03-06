@@ -256,4 +256,45 @@ namespace events::terrain
 
         std::string_view getName() const override { return "TerrainTileRemoved"; }
     };
+
+    struct SetTerrainStreamingEnabledCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetTerrainStreamingEnabled"; }
+    };
+
+    struct StreamingConfigData
+    {
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+    };
+
+    struct SetTerrainStreamingConfigCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+
+        std::string_view getName() const override { return "SetTerrainStreamingConfig"; }
+    };
+
+    struct GetTerrainStreamingConfigQuery : IQuery<StreamingConfigData>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "GetTerrainStreamingConfig"; }
+    };
+
+    struct IsTerrainStreamingEnabledQuery : IQuery<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "IsTerrainStreamingEnabled"; }
+    };
 }

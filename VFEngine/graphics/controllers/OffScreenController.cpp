@@ -35,6 +35,10 @@ namespace controllers
         {
             events::EventDispatcher::instance().unsubscribe(*terrainDeletedSubscription);
         }
+        if (tileRemovedSubscription && tileRemovedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*tileRemovedSubscription);
+        }
         if (waterDeletedSubscription && waterDeletedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*waterDeletedSubscription);
@@ -75,6 +79,17 @@ namespace controllers
                 }
             });
         terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainToken);
+
+        auto tileRemovedToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainTileRemovedNotification>(
+            [this](const events::terrain::TerrainTileRemovedNotification& notification)
+            {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler)
+                {
+                    renderHandler->evictTerrainTile(notification.tileX, notification.tileZ);
+                }
+            });
+        tileRemovedSubscription = std::make_unique<events::SubscriptionToken>(tileRemovedToken);
 
         auto waterToken = events::EventDispatcher::instance().subscribe<events::water::WaterDeletedNotification>(
             [this](const events::water::WaterDeletedNotification&)
