@@ -213,12 +213,16 @@ namespace services
         dispatcher.registerCommandHandler<events::terrain::PrepareTerrainSaveCommand>(
             [this](const events::terrain::PrepareTerrainSaveCommand& cmd)
             {
+                if (cmd.incremental)
+                    return prepareSaveIncremental(cmd.terrainEntity.id);
                 return prepareSave(cmd.terrainEntity.id);
             });
 
         dispatcher.registerCommandHandler<events::terrain::SaveTerrainCommand>(
             [this](const events::terrain::SaveTerrainCommand& cmd)
             {
+                if (cmd.incremental)
+                    return saveTerrainIncremental(cmd.terrainEntity.id, cmd.path);
                 return saveTerrain(cmd.terrainEntity.id, cmd.path);
             });
 
@@ -282,15 +286,16 @@ namespace services
 
                 terrain::TerrainFileHeader header;
                 std::vector<terrain::TileIndexEntry> index;
+                uint64_t indexTableOffset = 0;
 
-                if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index))
+                if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index, &indexTableOffset))
                 {
                     vfLogError("TerrainService: Failed to read terrain header from {}", cmd.path);
                     saveInProgress.store(false, std::memory_order_release);
                     return false;
                 }
 
-                EntityHandle result = finishLoadTerrain(header, index, cmd.path);
+                EntityHandle result = finishLoadTerrain(header, index, cmd.path, indexTableOffset);
                 saveInProgress.store(false, std::memory_order_release);
 
                 if (result.id != 0)

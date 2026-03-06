@@ -466,6 +466,137 @@ namespace services
         return true;
     }
 
+    bool TerrainService::prepareSaveIncremental(uint64_t terrainEntityId)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+            return true;
+
+        auto& grid = *gridIt->second;
+        auto& cache = *cacheIt->second;
+        auto& generator = grid.getGenerator();
+        auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+            return grid.getTile(coord);
+        };
+
+        // Only ensure dirty tiles have heights + LODs loaded
+        for (const auto& coord : cache.getDirtyCoords())
+        {
+            auto* tile = grid.getTile(coord);
+            if (!tile) continue;
+
+            if (!tile->hasHeightData())
+                cache.ensureHeightsLoaded(*tile);
+            if (!tile->hasAnyLODData())
+                cache.ensureLODsLoaded(*tile, generator, getTile);
+        }
+
+        return true;
+    }
+
+    bool TerrainService::saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+        {
+            vfLogInfo("TerrainService: No file cache, falling back to full save");
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        auto& cache = *cacheIt->second;
+
+        // If tiles were added/removed, tile count changed → fall back to full save
+        if (cache.hasNewOrRemovedTiles())
+        {
+            vfLogInfo("TerrainService: Tiles added/removed, falling back to full save");
+            prepareSave(terrainEntityId);
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        if (cache.getDirtyCount() == 0)
+        {
+            vfLogInfo("TerrainService: No dirty tiles, skipping save");
+            return true;
+        }
+
+        // Gather physics and streaming config from components
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+        {
+            vfLogError("TerrainService: Entity {} has no TerrainComponent", terrainEntityId);
+            return false;
+        }
+
+        terrain::TerrainPhysicsConfig physicsConfig;
+        if (registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            physicsConfig.hasCollider = cc.hasCollider;
+            physicsConfig.collisionLayer = cc.collisionLayer;
+            physicsConfig.friction = cc.friction;
+            physicsConfig.restitution = cc.restitution;
+        }
+
+        terrain::TerrainStreamingConfig streamingConfig;
+        auto streamerIt = worldStreamers.find(terrainEntityId);
+        if (streamerIt != worldStreamers.end() && streamerIt->second)
+        {
+            streamingConfig.enabled = streamerIt->second->isEnabled();
+            const auto& cfg = streamerIt->second->getConfig();
+            streamingConfig.loadRadius = cfg.loadRadius;
+            streamingConfig.unloadRadius = cfg.unloadRadius;
+            streamingConfig.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+            streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+        }
+
+        bool result = terrain::TerrainSerializer::saveIncremental(
+            path,
+            *gridIt->second,
+            cache.getDirtyCoords(),
+            cache.getHeader(),
+            cache.getIndexTableOffset(),
+            cache.getIndexMap(),
+            physicsConfig,
+            streamingConfig);
+
+        if (!result)
+        {
+            // Fall back to full save
+            vfLogWarning("TerrainService: Incremental save failed, falling back to full save");
+            prepareSave(terrainEntityId);
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        // Post-save bookkeeping
+        size_t savedCount = cache.getDirtyCount();
+
+        auto& comp = registry.get<components::TerrainComponent>(ent);
+        comp.saveDirty = false;
+
+        cache.refreshIndex(path);
+
+        events::terrain::TerrainSavedNotification savedNotification;
+        savedNotification.terrainEntity = EntityHandle{terrainEntityId};
+        savedNotification.path = path;
+        events::EventDispatcher::instance().publish(savedNotification);
+
+        vfLogInfo("TerrainService: Incremental save completed ({} tiles updated)", savedCount);
+        return true;
+    }
+
     bool TerrainService::saveTerrain(uint64_t terrainEntityId, const std::string& path)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
@@ -551,9 +682,10 @@ namespace services
             {
                 terrain::TerrainFileHeader newHeader;
                 std::vector<terrain::TileIndexEntry> newIndex;
-                if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex))
+                uint64_t newIndexOffset = 0;
+                if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex, &newIndexOffset))
                 {
-                    auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex);
+                    auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex, newIndexOffset);
                     fileCaches[terrainEntityId] = cache;
                     gridIt->second->setFileCache(cache);
                 }
@@ -574,20 +706,22 @@ namespace services
     {
         terrain::TerrainFileHeader header;
         std::vector<terrain::TileIndexEntry> index;
+        uint64_t indexTableOffset = 0;
 
-        if (!terrain::TerrainSerializer::readHeader(path, header, index))
+        if (!terrain::TerrainSerializer::readHeader(path, header, index, &indexTableOffset))
         {
             vfLogError("TerrainService: Failed to read terrain header from {}", path);
             return {};
         }
 
-        return finishLoadTerrain(header, index, path);
+        return finishLoadTerrain(header, index, path, indexTableOffset);
     }
 
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
-        const std::string& path)
+        const std::string& path,
+        uint64_t indexTableOffset)
     {
         terrain::TerrainTileConfig tileConfig;
         tileConfig.resolution = static_cast<terrain::TileResolution>(header.resolution);
@@ -600,7 +734,7 @@ namespace services
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
         grid->loadMetadataOnly(header, index);
 
-        auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index);
+        auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
 
         scene::Entity parentEntity("Terrain");

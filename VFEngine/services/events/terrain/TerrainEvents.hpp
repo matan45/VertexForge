@@ -98,6 +98,7 @@ namespace events::terrain
     {
         services::EntityHandle terrainEntity;
         std::string path;
+        bool incremental = false;
 
         std::string_view getName() const override { return "SaveTerrain"; }
     };
@@ -119,6 +120,7 @@ namespace events::terrain
     struct PrepareTerrainSaveCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;
+        bool incremental = false;
 
         std::string_view getName() const override { return "PrepareTerrainSave"; }
     };

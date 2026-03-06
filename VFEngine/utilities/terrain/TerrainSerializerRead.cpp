@@ -21,7 +21,7 @@ namespace terrain
         return TILE_VERTEX_COUNTS[res];
     }
 
-    bool TerrainSerializer::parseHeader(std::ifstream& file, TerrainFileHeader& outHeader)
+    bool TerrainSerializer::parseHeader(std::istream& file, TerrainFileHeader& outHeader)
     {
         std::array<char, 4> magic{};
         file.read(magic.data(), 4);
@@ -101,7 +101,7 @@ namespace terrain
         return file.good();
     }
 
-    bool TerrainSerializer::parseIndexTable(std::ifstream& file, uint32_t tileCount,
+    bool TerrainSerializer::parseIndexTable(std::istream& file, uint32_t tileCount,
                                             std::vector<TileIndexEntry>& outIndex)
     {
         outIndex.resize(tileCount);
@@ -118,7 +118,7 @@ namespace terrain
         return file.good();
     }
 
-    bool TerrainSerializer::parseTileMeshletData(std::ifstream& file, TileLoadResult& result)
+    bool TerrainSerializer::parseTileMeshletData(std::istream& file, TileLoadResult& result)
     {
         struct LODHeader
         {
@@ -373,7 +373,8 @@ namespace terrain
     bool TerrainSerializer::readHeader(
         std::string_view path,
         TerrainFileHeader& outHeader,
-        std::vector<TileIndexEntry>& outIndex)
+        std::vector<TileIndexEntry>& outIndex,
+        uint64_t* outIndexTableOffset)
     {
         fs::path filePath(path);
         if (!fs::exists(filePath))
@@ -393,6 +394,9 @@ namespace terrain
 
             if (!parseHeader(file, outHeader))
                 return false;
+
+            if (outIndexTableOffset)
+                *outIndexTableOffset = static_cast<uint64_t>(file.tellg());
 
             if (!parseIndexTable(file, outHeader.tileCount, outIndex))
             {

@@ -101,7 +101,9 @@ namespace services
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
         bool prepareSave(uint64_t terrainEntityId);
+        bool prepareSaveIncremental(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
+        bool saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
 
         bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
@@ -131,7 +133,8 @@ namespace services
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
-                                       const std::string& path);
+                                       const std::string& path,
+                                       uint64_t indexTableOffset = 0);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
         TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,

@@ -11,7 +11,7 @@ namespace terrain
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
-    bool TerrainSerializer::writeHeader(std::ofstream& file, const TerrainFileHeader& header)
+    bool TerrainSerializer::writeHeader(std::ostream& file, const TerrainFileHeader& header)
     {
         file.write(TERRAIN_MAGIC.data(), 4);
 
@@ -60,7 +60,7 @@ namespace terrain
         return file.good();
     }
 
-    bool TerrainSerializer::writeIndexTable(std::ofstream& file,
+    bool TerrainSerializer::writeIndexTable(std::ostream& file,
                                             const std::vector<TileIndexEntry>& index)
     {
         for (const auto& entry : index)
@@ -76,7 +76,7 @@ namespace terrain
         return file.good();
     }
 
-    bool TerrainSerializer::writeTileData(std::ofstream& file,
+    bool TerrainSerializer::writeTileData(std::ostream& file,
                                           const TerrainTile& tile,
                                           TerrainFormatFlags flags,
                                           TileIndexEntry& outEntry)
@@ -142,7 +142,7 @@ namespace terrain
         return file.good();
     }
 
-    bool TerrainSerializer::writeTileMeshletData(std::ofstream& file,
+    bool TerrainSerializer::writeTileMeshletData(std::ostream& file,
                                                   const TerrainTile& tile,
                                                   TileIndexEntry& outEntry)
     {
@@ -293,6 +293,180 @@ namespace terrain
         }
     }
 
+    TerrainFormatFlags TerrainSerializer::computeFlags(const TerrainGrid& grid,
+                                                       const TerrainPhysicsConfig& physicsConfig,
+                                                       const TerrainStreamingConfig& streamingConfig)
+    {
+        TerrainFormatFlags flags = TerrainFormatFlags::NONE;
+
+        auto allTiles = grid.getAllTiles();
+
+        for (const auto* tile : allTiles)
+        {
+            if (tile->weightMap.isInitialized())
+            {
+                flags = flags | TerrainFormatFlags::HAS_WEIGHT_MAPS;
+                break;
+            }
+        }
+        for (const auto* tile : allTiles)
+        {
+            if (!tile->lodLevels.empty() && tile->lodLevels[0].hasMeshlets())
+            {
+                flags = flags | TerrainFormatFlags::HAS_MESHLET_CACHE;
+                break;
+            }
+        }
+        if (physicsConfig.hasCollider)
+            flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
+        if (streamingConfig.enabled)
+            flags = flags | TerrainFormatFlags::HAS_STREAMING_CONFIG;
+
+        for (const auto* tile : allTiles)
+        {
+            if (tile->hasHoleMask())
+            {
+                bool hasAnyHole = false;
+                for (uint8_t h : tile->holeMask)
+                {
+                    if (h) { hasAnyHole = true; break; }
+                }
+                if (hasAnyHole)
+                {
+                    flags = flags | TerrainFormatFlags::HAS_HOLE_MASK;
+                    break;
+                }
+            }
+        }
+
+        return flags;
+    }
+
+    bool TerrainSerializer::saveIncremental(
+        std::string_view path,
+        const TerrainGrid& grid,
+        const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
+        const TerrainFileHeader& currentHeader,
+        uint64_t indexTableOffset,
+        const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& currentIndexMap,
+        const TerrainPhysicsConfig& physicsConfig,
+        const TerrainStreamingConfig& streamingConfig)
+    {
+        if (dirtyCoords.empty())
+            return true;
+
+        fs::path filePath(path);
+        if (!fs::exists(filePath))
+        {
+            vfLogError("TerrainSerializer: File not found for incremental save: {}", path);
+            return false;
+        }
+
+        try
+        {
+            TerrainFormatFlags newFlags = computeFlags(grid, physicsConfig, streamingConfig);
+
+            // If optional header sections toggled, header size changed — fall back to full save
+            bool hadPhysics = hasFlag(currentHeader.flags, TerrainFormatFlags::HAS_PHYSICS_DATA);
+            bool hasPhysicsNow = hasFlag(newFlags, TerrainFormatFlags::HAS_PHYSICS_DATA);
+            bool hadStreaming = hasFlag(currentHeader.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG);
+            bool hasStreamingNow = hasFlag(newFlags, TerrainFormatFlags::HAS_STREAMING_CONFIG);
+
+            if (hadPhysics != hasPhysicsNow || hadStreaming != hasStreamingNow)
+            {
+                vfLogWarning("TerrainSerializer: Header size changed, falling back to full save");
+                return false;
+            }
+
+            std::fstream file(filePath, std::ios::binary | std::ios::in | std::ios::out);
+            if (!file.is_open())
+            {
+                vfLogError("TerrainSerializer: Failed to open file for incremental save: {}", path);
+                return false;
+            }
+
+            // Build sorted index from current map
+            std::vector<TileIndexEntry> indexEntries;
+            indexEntries.reserve(currentIndexMap.size());
+            for (const auto& [coord, entry] : currentIndexMap)
+                indexEntries.push_back(entry);
+
+            std::sort(indexEntries.begin(), indexEntries.end(),
+                [](const TileIndexEntry& a, const TileIndexEntry& b) {
+                    if (a.coordX != b.coordX) return a.coordX < b.coordX;
+                    return a.coordZ < b.coordZ;
+                });
+
+            // Seek to end of file for appending dirty tile data
+            file.seekp(0, std::ios::end);
+
+            for (const auto& coord : dirtyCoords)
+            {
+                const TerrainTile* tile = grid.getTile(coord);
+                if (!tile)
+                {
+                    vfLogWarning("TerrainSerializer: Dirty tile ({}, {}) not in grid, skipping",
+                                 coord.x, coord.z);
+                    continue;
+                }
+
+                TileIndexEntry newEntry{};
+                if (!writeTileData(file, *tile, newFlags, newEntry))
+                {
+                    vfLogError("TerrainSerializer: Failed to write dirty tile ({}, {})",
+                               coord.x, coord.z);
+                    return false;
+                }
+
+                // Update the matching entry in the sorted index
+                for (auto& entry : indexEntries)
+                {
+                    if (entry.coordX == coord.x && entry.coordZ == coord.z)
+                    {
+                        entry = newEntry;
+                        break;
+                    }
+                }
+            }
+
+            // Rewrite header in-place (flags may have changed, e.g., HAS_HOLE_MASK added)
+            file.seekp(0, std::ios::beg);
+            TerrainFileHeader updatedHeader = currentHeader;
+            updatedHeader.flags = newFlags;
+            updatedHeader.physicsConfig = physicsConfig;
+            updatedHeader.streamingConfig = streamingConfig;
+            if (!writeHeader(file, updatedHeader))
+            {
+                vfLogError("TerrainSerializer: Failed to rewrite header");
+                return false;
+            }
+
+            // Rewrite index table in-place (same tile count, same position)
+            file.seekp(static_cast<std::streamoff>(indexTableOffset));
+            if (!writeIndexTable(file, indexEntries))
+            {
+                vfLogError("TerrainSerializer: Failed to rewrite index table");
+                return false;
+            }
+
+            file.flush();
+            if (!file.good())
+            {
+                vfLogError("TerrainSerializer: Failed to flush incremental save");
+                return false;
+            }
+
+            vfLogInfo("TerrainSerializer: Incremental save: updated {} dirty tiles in {}",
+                      dirtyCoords.size(), path);
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("TerrainSerializer: Incremental save failed for {}: {}", path, e.what());
+            return false;
+        }
+    }
+
     bool TerrainSerializer::save(
         std::string_view path,
         const TerrainGrid& grid,
@@ -317,48 +491,7 @@ namespace terrain
                       return a->coord.z < b->coord.z;
                   });
 
-        TerrainFormatFlags flags = TerrainFormatFlags::NONE;
-        for (const auto* tile : allTiles)
-        {
-            if (tile->weightMap.isInitialized())
-            {
-                flags = flags | TerrainFormatFlags::HAS_WEIGHT_MAPS;
-                break;
-            }
-        }
-        for (const auto* tile : allTiles)
-        {
-            if (!tile->lodLevels.empty() && tile->lodLevels[0].hasMeshlets())
-            {
-                flags = flags | TerrainFormatFlags::HAS_MESHLET_CACHE;
-                break;
-            }
-        }
-        if (physicsConfig.hasCollider)
-        {
-            flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
-        }
-        if (streamingConfig.enabled)
-        {
-            flags = flags | TerrainFormatFlags::HAS_STREAMING_CONFIG;
-        }
-        for (const auto* tile : allTiles)
-        {
-            if (tile->hasHoleMask())
-            {
-                // Check if any holes actually exist
-                bool hasAnyHole = false;
-                for (uint8_t h : tile->holeMask)
-                {
-                    if (h) { hasAnyHole = true; break; }
-                }
-                if (hasAnyHole)
-                {
-                    flags = flags | TerrainFormatFlags::HAS_HOLE_MASK;
-                    break;
-                }
-            }
-        }
+        TerrainFormatFlags flags = computeFlags(grid, physicsConfig, streamingConfig);
 
         TerrainFileHeader header;
         header.flags = flags;

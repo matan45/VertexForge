@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <cstdint>
 #include <array>
 
@@ -128,7 +130,18 @@ namespace terrain
         static bool readHeader(
             std::string_view path,
             TerrainFileHeader& outHeader,
-            std::vector<TileIndexEntry>& outIndex);
+            std::vector<TileIndexEntry>& outIndex,
+            uint64_t* outIndexTableOffset = nullptr);
+
+        static bool saveIncremental(
+            std::string_view path,
+            const TerrainGrid& grid,
+            const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
+            const TerrainFileHeader& currentHeader,
+            uint64_t indexTableOffset,
+            const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& currentIndexMap,
+            const TerrainPhysicsConfig& physicsConfig = {},
+            const TerrainStreamingConfig& streamingConfig = {});
 
         static bool readTileHeights(
             std::string_view path,
@@ -151,20 +164,24 @@ namespace terrain
             std::vector<uint8_t>& outHoleMask);
 
     private:
-        static bool writeHeader(std::ofstream& file, const TerrainFileHeader& header);
-        static bool writeIndexTable(std::ofstream& file, const std::vector<TileIndexEntry>& index);
+        static bool writeHeader(std::ostream& file, const TerrainFileHeader& header);
+        static bool writeIndexTable(std::ostream& file, const std::vector<TileIndexEntry>& index);
         static bool writeTileData(
-            std::ofstream& file,
+            std::ostream& file,
             const TerrainTile& tile,
             TerrainFormatFlags flags,
             TileIndexEntry& outEntry);
 
-        static bool writeTileMeshletData(std::ofstream& file, const TerrainTile& tile,
+        static bool writeTileMeshletData(std::ostream& file, const TerrainTile& tile,
                                          TileIndexEntry& outEntry);
 
-        static bool parseHeader(std::ifstream& file, TerrainFileHeader& outHeader);
-        static bool parseIndexTable(std::ifstream& file, uint32_t tileCount,
+        static TerrainFormatFlags computeFlags(const TerrainGrid& grid,
+                                                const TerrainPhysicsConfig& physicsConfig,
+                                                const TerrainStreamingConfig& streamingConfig);
+
+        static bool parseHeader(std::istream& file, TerrainFileHeader& outHeader);
+        static bool parseIndexTable(std::istream& file, uint32_t tileCount,
                                     std::vector<TileIndexEntry>& outIndex);
-        static bool parseTileMeshletData(std::ifstream& file, TileLoadResult& result);
+        static bool parseTileMeshletData(std::istream& file, TileLoadResult& result);
     };
 }

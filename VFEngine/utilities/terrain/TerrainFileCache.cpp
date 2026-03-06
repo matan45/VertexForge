@@ -7,9 +7,11 @@ namespace terrain
 {
     TerrainFileCache::TerrainFileCache(const std::string& filePath,
                                        const TerrainFileHeader& header,
-                                       const std::vector<TileIndexEntry>& index)
+                                       const std::vector<TileIndexEntry>& index,
+                                       uint64_t indexTableOffset)
         : filePath(filePath)
         , header(header)
+        , indexTableOffset(indexTableOffset)
     {
         for (const auto& entry : index)
         {
@@ -185,20 +187,23 @@ namespace terrain
         entry.holeMaskDataOffset = 0;
         indexMap[coord] = entry;
         dirtyCoords.insert(coord);
+        tilesAddedOrRemoved = true;
     }
 
     void TerrainFileCache::removeEntry(const TileCoord& coord)
     {
         indexMap.erase(coord);
         dirtyCoords.erase(coord);
+        tilesAddedOrRemoved = true;
     }
 
     bool TerrainFileCache::refreshIndex(const std::string& newPath)
     {
         TerrainFileHeader newHeader;
         std::vector<TileIndexEntry> newIndex;
+        uint64_t newIndexOffset = 0;
 
-        if (!TerrainSerializer::readHeader(newPath, newHeader, newIndex))
+        if (!TerrainSerializer::readHeader(newPath, newHeader, newIndex, &newIndexOffset))
         {
             vfLogError("TerrainFileCache: Failed to refresh index from {}", newPath);
             return false;
@@ -206,6 +211,8 @@ namespace terrain
 
         filePath = newPath;
         header = newHeader;
+        indexTableOffset = newIndexOffset;
+        tilesAddedOrRemoved = false;
 
         indexMap.clear();
         for (const auto& entry : newIndex)
@@ -249,6 +256,31 @@ namespace terrain
     bool TerrainFileCache::isTileDirty(const TileCoord& coord) const
     {
         return dirtyCoords.count(coord) > 0;
+    }
+
+    const std::unordered_set<TileCoord, TileCoordHash>& TerrainFileCache::getDirtyCoords() const
+    {
+        return dirtyCoords;
+    }
+
+    size_t TerrainFileCache::getDirtyCount() const
+    {
+        return dirtyCoords.size();
+    }
+
+    const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& TerrainFileCache::getIndexMap() const
+    {
+        return indexMap;
+    }
+
+    bool TerrainFileCache::hasNewOrRemovedTiles() const
+    {
+        return tilesAddedOrRemoved;
+    }
+
+    void TerrainFileCache::clearDirtyCoords()
+    {
+        dirtyCoords.clear();
     }
 
     bool TerrainFileCache::hasMeshletCache() const
