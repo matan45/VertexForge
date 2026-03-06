@@ -725,6 +725,7 @@ void main() {
         uint wmRes = uint(tiles[fragTileIndex].aabbMin.w);
         uint packedLI_vis = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
         vec3 c = vec3(0.0);
+        // Must match WEIGHT_CHANNELS (terrain/TerrainWeightMap.hpp) — 4 channels, 8 bits each packed into aabbMax.w
         for (uint ch = 0u; ch < 4u; ++ch) {
             uint paletteIdx = (packedLI_vis >> (ch * 8u)) & 0xFFu;
             float w = sampleTileWeight(wmOff, wmRes, ch, fragTexCoord);

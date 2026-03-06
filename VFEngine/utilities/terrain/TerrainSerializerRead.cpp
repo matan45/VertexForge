@@ -325,6 +325,12 @@ namespace terrain
                         result.weightMap.layerIndices[li] = readLE<uint8_t>(file);
 
                     result.weightMap.resolution = readLE<uint32_t>(file);
+                    if (result.weightMap.resolution == 0 || result.weightMap.resolution > 257)
+                    {
+                        vfLogError("TerrainSerializer: Invalid weight map resolution {} for tile ({}, {})",
+                                   result.weightMap.resolution, entry.coordX, entry.coordZ);
+                        return false;
+                    }
 
                     size_t texelCount = static_cast<size_t>(result.weightMap.resolution)
                                         * result.weightMap.resolution;
@@ -461,6 +467,12 @@ namespace terrain
                 outWeights.layerIndices[li] = readLE<uint8_t>(file);
 
             outWeights.resolution = readLE<uint32_t>(file);
+            if (outWeights.resolution == 0 || outWeights.resolution > 257)
+            {
+                vfLogError("TerrainSerializer: Invalid weight map resolution {} for tile ({}, {})",
+                           outWeights.resolution, entry.coordX, entry.coordZ);
+                return false;
+            }
 
             size_t texelCount = static_cast<size_t>(outWeights.resolution) * outWeights.resolution;
             outWeights.layerWeights.resize(WEIGHT_CHANNELS);

@@ -15,34 +15,6 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::s_fragmentFooter;
     bool ShaderGraphCompiler::s_templatesLoaded = false;
 
-    std::string ShaderGraphCompiler::generateLayerSampling(int layerIndex, const std::string& layerName) {
-        // This method is no longer used for terrain material compilation (kept for potential future use)
-        std::string code;
-        code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
-            "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", layerIndex);
-        code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", layerIndex);
-        code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", layerIndex);
-        code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
-            "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", layerIndex);
-        code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", layerIndex);
-        code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
-            "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", layerIndex);
-        code += std::format("    uint ormIdx_{0} = terrainLayers[{0}].ormTextureIndex;\n", layerIndex);
-        code += std::format("    float layerAO, layerRoughness, layerMetallic;\n");
-        code += std::format("    if (ormIdx_{0} > 0u) {{\n", layerIndex);
-        code += std::format("        vec3 ormSample = texture(bindlessTextures[nonuniformEXT(ormIdx_{0})], layerUV).rgb;\n", layerIndex);
-        code += "        layerAO = ormSample.r;\n";
-        code += "        layerRoughness = ormSample.g;\n";
-        code += "        layerMetallic = ormSample.b;\n";
-        code += std::format("    }} else {{\n");
-        code += std::format("        layerAO = terrainLayers[{0}].ao;\n", layerIndex);
-        code += std::format("        layerRoughness = terrainLayers[{0}].roughness;\n", layerIndex);
-        code += std::format("        layerMetallic = terrainLayers[{0}].metallic;\n", layerIndex);
-        code += "    }\n";
-        code += std::format("    float layerEmission = terrainLayers[{0}].emissionStrength;\n", layerIndex);
-        return code;
-    }
-
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
@@ -58,6 +30,7 @@ namespace editor::graph {
         code += "float ls_Emission = 0.0;\n";
         code += "float ls_TotalW = 0.0;\n";
         code += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
+        code += "// Must match WEIGHT_CHANNELS (terrain/TerrainWeightMap.hpp) — 4 channels, 8 bits each\n";
         code += "for (int ch = 0; ch < 4; ch++) {\n";
         code += "    uint paletteIdx = (packedLI >> (ch * 8u)) & 0xFFu;\n";
         code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "

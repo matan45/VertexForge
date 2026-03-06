@@ -1,4 +1,5 @@
 #include "WeightBrushApplicator.hpp"
+#include "TerrainMaterialTypes.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -12,6 +13,10 @@ namespace terrain
         }
 
         // Resolve palette layer to channel via per-tile indirection
+        if (params.activeLayer >= MAX_TERRAIN_LAYERS)
+        {
+            return false;
+        }
         uint8_t paletteLayer = static_cast<uint8_t>(params.activeLayer);
         uint8_t channel = weightMap.findChannel(paletteLayer);
         if (channel == 0xFF)

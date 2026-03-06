@@ -1,4 +1,5 @@
 #include "TerrainWeightMap.hpp"
+#include "../print/Log.hpp"
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -146,6 +147,10 @@ namespace terrain
                 minCh = ch;
             }
         }
+
+        vfLogWarning("TerrainWeightMap: Tile has all 4 channels occupied. "
+                     "Evicting palette layer {} (channel {}, weight sum {:.3f}) to assign palette layer {}",
+                     layerIndices[minCh], minCh, minSum, paletteLayer);
 
         // Zero out the channel's weights and renormalize
         if (minCh < layerWeights.size())
