@@ -483,7 +483,9 @@ namespace services
         // because prepareSave() adds tiles to the grid (not thread-safe).
         bool needsFullSave = cache.hasNewOrRemovedTiles();
 
-        // Check if header size would change (physics/streaming flags toggled)
+        // Check if header size would change (physics/streaming flags toggled).
+        // NOTE: TerrainSerializer::saveIncremental() has a matching guard as a safety net.
+        // Both must agree — if updating one, update the other.
         if (!needsFullSave)
         {
             auto& registry = scene::EntityRegistry::getRegistry();

@@ -11,6 +11,16 @@ namespace terrain
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
+    // Safe wrapper for tellp() — returns false on stream error (tellp() returns -1)
+    static bool safeTellp(std::ostream& file, uint64_t& outPos)
+    {
+        auto pos = file.tellp();
+        if (pos == std::streampos(-1) || !file.good())
+            return false;
+        outPos = static_cast<uint64_t>(pos);
+        return true;
+    }
+
     bool TerrainSerializer::writeHeader(std::ostream& file, const TerrainFileHeader& header)
     {
         file.write(TERRAIN_MAGIC.data(), 4);
@@ -84,17 +94,21 @@ namespace terrain
         outEntry.coordX = tile.coord.x;
         outEntry.coordZ = tile.coord.z;
 
-        outEntry.heightDataOffset = static_cast<uint64_t>(file.tellp());
+        if (!safeTellp(file, outEntry.heightDataOffset))
+            return false;
         uint32_t heightCount = static_cast<uint32_t>(tile.heightData.size());
         writeLE(file, heightCount);
         writeVectorLE(file, tile.heightData);
-        uint64_t afterHeight = static_cast<uint64_t>(file.tellp());
+        uint64_t afterHeight = 0;
+        if (!safeTellp(file, afterHeight))
+            return false;
         outEntry.heightDataSize = static_cast<uint32_t>(afterHeight - outEntry.heightDataOffset);
 
         outEntry.weightDataOffset = 0;
         if (hasFlag(flags, TerrainFormatFlags::HAS_WEIGHT_MAPS) && tile.weightMap.isInitialized())
         {
-            outEntry.weightDataOffset = static_cast<uint64_t>(file.tellp());
+            if (!safeTellp(file, outEntry.weightDataOffset))
+                return false;
             writeLE(file, tile.weightMap.activeLayerCount);
             writeLE(file, tile.weightMap.resolution);
 
@@ -122,7 +136,8 @@ namespace terrain
         outEntry.holeMaskDataOffset = 0;
         if (hasFlag(flags, TerrainFormatFlags::HAS_HOLE_MASK) && tile.hasHoleMask())
         {
-            outEntry.holeMaskDataOffset = static_cast<uint64_t>(file.tellp());
+            if (!safeTellp(file, outEntry.holeMaskDataOffset))
+                return false;
 
             // Bit-pack the hole mask: ceil(totalVertices / 8) bytes
             size_t totalVertices = tile.holeMask.size();
@@ -159,7 +174,8 @@ namespace terrain
         if (!hasMeshlets)
             return true; // meshletDataOffset stays 0
 
-        outEntry.meshletDataOffset = static_cast<uint64_t>(file.tellp());
+        if (!safeTellp(file, outEntry.meshletDataOffset))
+            return false;
 
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
@@ -366,7 +382,9 @@ namespace terrain
         {
             TerrainFormatFlags newFlags = computeFlags(grid, physicsConfig, streamingConfig);
 
-            // If optional header sections toggled, header size changed — fall back to full save
+            // If optional header sections toggled, header size changed — fall back to full save.
+            // NOTE: TerrainService::prepareSaveIncremental() has a matching guard on the main thread.
+            // Both must agree — if updating one, update the other.
             bool hadPhysics = hasFlag(currentHeader.flags, TerrainFormatFlags::HAS_PHYSICS_DATA);
             bool hasPhysicsNow = hasFlag(newFlags, TerrainFormatFlags::HAS_PHYSICS_DATA);
             bool hadStreaming = hasFlag(currentHeader.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG);
@@ -532,8 +550,12 @@ namespace terrain
             }
 
             auto indexTablePos = file.tellp();
-            constexpr size_t INDEX_ENTRY_SIZE = 44; // 4+4+8+4+8+8+8
-            std::vector<char> placeholder(header.tileCount * INDEX_ENTRY_SIZE, 0);
+            if (indexTablePos == std::streampos(-1))
+            {
+                vfLogError("TerrainSerializer: Failed to get index table position");
+                return false;
+            }
+            std::vector<char> placeholder(header.tileCount * TILE_INDEX_ENTRY_SIZE, 0);
             file.write(placeholder.data(), static_cast<std::streamsize>(placeholder.size()));
 
             if (!file.good())

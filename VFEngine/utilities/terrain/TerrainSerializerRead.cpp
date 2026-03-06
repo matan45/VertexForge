@@ -11,6 +11,12 @@ namespace terrain
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
+    // Sanity caps for file-read sizes to guard against corrupt data
+    static constexpr uint32_t MAX_PATH_LENGTH = 4096;
+    static constexpr uint32_t MAX_TILE_COUNT = 100000;
+    static constexpr uint32_t MAX_VERTICES_PER_LOD = 1 << 20;   // ~1M vertices
+    static constexpr uint32_t MAX_HOLE_MASK_VERTICES = 257 * 257; // largest resolution squared
+
     static bool validateResolution(uint8_t res)
     {
         return res <= static_cast<uint8_t>(TileResolution::High);
@@ -75,6 +81,11 @@ namespace terrain
         outHeader.gridMaxZ = readLE<int32_t>(file);
 
         uint32_t pathLen = readLE<uint32_t>(file);
+        if (pathLen > MAX_PATH_LENGTH)
+        {
+            vfLogError("TerrainSerializer: Material path length {} exceeds maximum {}", pathLen, MAX_PATH_LENGTH);
+            return false;
+        }
         if (pathLen > 0)
         {
             outHeader.materialPath.resize(pathLen);
@@ -104,6 +115,11 @@ namespace terrain
     bool TerrainSerializer::parseIndexTable(std::istream& file, uint32_t tileCount,
                                             std::vector<TileIndexEntry>& outIndex)
     {
+        if (tileCount > MAX_TILE_COUNT)
+        {
+            vfLogError("TerrainSerializer: Tile count {} exceeds maximum {}", tileCount, MAX_TILE_COUNT);
+            return false;
+        }
         outIndex.resize(tileCount);
         for (uint32_t i = 0; i < tileCount; ++i)
         {
@@ -141,6 +157,11 @@ namespace terrain
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             uint32_t vertexCount = readLE<uint32_t>(file);
+            if (vertexCount > MAX_VERTICES_PER_LOD)
+            {
+                vfLogError("TerrainSerializer: Meshlet vertex count {} exceeds maximum at LOD {}", vertexCount, lod);
+                return false;
+            }
             result.lodData[lod].vertices.resize(vertexCount);
 
             for (uint32_t i = 0; i < vertexCount; ++i)
@@ -339,6 +360,12 @@ namespace terrain
                 {
                     file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
                     uint32_t totalVertices = readLE<uint32_t>(file);
+                    if (totalVertices > MAX_HOLE_MASK_VERTICES)
+                    {
+                        vfLogError("TerrainSerializer: Hole mask vertex count {} exceeds maximum for tile ({}, {})",
+                                   totalVertices, entry.coordX, entry.coordZ);
+                        return false;
+                    }
                     uint32_t packedSize = (totalVertices + 7) / 8;
                     std::vector<uint8_t> packed(packedSize);
                     file.read(reinterpret_cast<char*>(packed.data()),

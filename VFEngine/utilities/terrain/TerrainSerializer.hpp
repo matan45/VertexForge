@@ -97,6 +97,14 @@ namespace terrain
         uint64_t holeMaskDataOffset = 0;
     };
 
+    // On-disk serialized size of TileIndexEntry (sum of field sizes, no padding)
+    inline constexpr size_t TILE_INDEX_ENTRY_SIZE =
+        sizeof(int32_t) + sizeof(int32_t) +     // coordX, coordZ
+        sizeof(uint64_t) + sizeof(uint32_t) +    // heightDataOffset, heightDataSize
+        sizeof(uint64_t) + sizeof(uint64_t) +    // weightDataOffset, meshletDataOffset
+        sizeof(uint64_t);                         // holeMaskDataOffset
+    static_assert(TILE_INDEX_ENTRY_SIZE == 44, "TileIndexEntry on-disk size changed — update serialization code");
+
     struct TileLoadResult
     {
         TileCoord coord;

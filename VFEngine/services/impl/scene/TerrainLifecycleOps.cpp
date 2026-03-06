@@ -599,6 +599,7 @@ namespace services
         notification.terrainEntity = terrainEntity;
         notification.tileX = tileX;
         notification.tileZ = tileZ;
+        notification.isStreamed = true;
         events::EventDispatcher::instance().publish(notification);
 
         return true;
@@ -671,6 +672,7 @@ namespace services
         notification.terrainEntity = terrainEntity;
         notification.tileX = tileX;
         notification.tileZ = tileZ;
+        notification.isStreamed = true;
         events::EventDispatcher::instance().publish(notification);
 
         return true;

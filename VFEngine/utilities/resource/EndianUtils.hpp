@@ -91,7 +91,7 @@ namespace resource::endian
     template<typename T>
     inline T readLE(std::istream& file)
     {
-        T value;
+        T value{};
         file.read(reinterpret_cast<char*>(&value), sizeof(T));
         return fromLittleEndian(value);
     }

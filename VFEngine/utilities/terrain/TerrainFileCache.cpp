@@ -70,7 +70,12 @@ namespace terrain
                 }
 
                 size_t newUsage = estimateTileRAMUsage(tile);
-                currentRAMUsage += (newUsage - oldUsage);
+                if (newUsage >= oldUsage)
+                    currentRAMUsage += (newUsage - oldUsage);
+                else if (currentRAMUsage > (oldUsage - newUsage))
+                    currentRAMUsage -= (oldUsage - newUsage);
+                else
+                    currentRAMUsage = 0;
                 return true;
             }
 
@@ -85,7 +90,12 @@ namespace terrain
         generator.generateAllLODs(tile, nullptr, getTile);
 
         size_t newUsage = estimateTileRAMUsage(tile);
-        currentRAMUsage += (newUsage - oldUsage);
+        if (newUsage >= oldUsage)
+            currentRAMUsage += (newUsage - oldUsage);
+        else if (currentRAMUsage > (oldUsage - newUsage))
+            currentRAMUsage -= (oldUsage - newUsage);
+        else
+            currentRAMUsage = 0;
         return tile.hasAnyLODData();
     }
 
@@ -137,7 +147,12 @@ namespace terrain
         }
 
         size_t newUsage = estimateTileRAMUsage(tile);
-        currentRAMUsage += (newUsage - oldUsage);
+        if (newUsage >= oldUsage)
+            currentRAMUsage += (newUsage - oldUsage);
+        else if (currentRAMUsage > (oldUsage - newUsage))
+            currentRAMUsage -= (oldUsage - newUsage);
+        else
+            currentRAMUsage = 0;
         return true;
     }
 
