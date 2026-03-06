@@ -6,6 +6,7 @@
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
 #include <array>
 
 namespace
@@ -185,7 +186,7 @@ namespace render::gpudriven
     void TerrainMeshShaderPipeline::createTerrainLayerBuffer()
     {
         vk::Device vkDevice = device.getLogicalDevice();
-        constexpr vk::DeviceSize layerBufferSize = 16 * sizeof(TerrainLayerGPUData);
+        constexpr vk::DeviceSize layerBufferSize = terrain::MAX_TERRAIN_LAYERS * sizeof(TerrainLayerGPUData);
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = layerBufferSize;
@@ -649,7 +650,7 @@ namespace render::gpudriven
     {
         if (!terrainLayerBufferMapped) return;
 
-        constexpr uint32_t maxLayers = 16;
+        constexpr uint32_t maxLayers = terrain::MAX_TERRAIN_LAYERS;
         if (layers.empty())
         {
             std::memset(terrainLayerBufferMapped, 0, maxLayers * sizeof(TerrainLayerGPUData));

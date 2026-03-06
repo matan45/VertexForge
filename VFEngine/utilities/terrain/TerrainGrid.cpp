@@ -505,30 +505,13 @@ namespace terrain
         return !tiles.empty();
     }
 
-    void TerrainGrid::initializeWeightMaps(uint8_t layerCount)
+    void TerrainGrid::initializeWeightMaps()
     {
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->hasWeightMap())
             {
-                tile->initializeWeightMap(layerCount);
-            }
-        }
-    }
-
-    void TerrainGrid::updateWeightMapLayerCount(uint8_t newLayerCount)
-    {
-        for (auto& [coord, tile] : tiles)
-        {
-            if (tile->hasWeightMap())
-            {
-                tile->weightMap.setLayerCount(newLayerCount);
-                tile->weightMapDirty = true;
-                tile->weightMapGPUDirty = true;
-            }
-            else
-            {
-                tile->initializeWeightMap(newLayerCount);
+                tile->initializeWeightMap();
             }
         }
     }

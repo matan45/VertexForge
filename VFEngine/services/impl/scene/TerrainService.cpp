@@ -264,26 +264,16 @@ namespace services
             return;
         }
 
-        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
-        if (!materialData)
-        {
-            return;
-        }
-
-        uint8_t layerCount = materialData->activeLayerCount;
-        if (layerCount == 0)
-        {
-            layerCount = 1;
-        }
-
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
         {
             return;
         }
 
+        // With per-tile palette, weight maps are always 4 channels.
+        // Just ensure all tiles have weight maps initialized.
         terrain::TerrainGrid* grid = gridIt->second.get();
-        grid->updateWeightMapLayerCount(layerCount);
+        grid->initializeWeightMaps();
     }
 
     events::terrain::TerrainGeometryResult TerrainService::getTerrainGeometryForNavmesh()

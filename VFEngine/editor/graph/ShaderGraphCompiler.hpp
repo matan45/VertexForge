@@ -85,8 +85,6 @@ namespace editor::graph {
 
         static bool validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage);
 
-        static std::string generateLayerSampling(int layerIndex, const std::string& layerName);
-
     };
 
 }

@@ -50,8 +50,8 @@ namespace terrain
             tile->initializeFromHeights(heights);
         }
 
-        // Initialize weight map with default layer 0 = 1.0
-        tile->initializeWeightMap(1);
+        // Initialize weight map with default channel 0 = 1.0
+        tile->initializeWeightMap();
 
         if (progress)
             progress(0.2f, "Generating LODs");

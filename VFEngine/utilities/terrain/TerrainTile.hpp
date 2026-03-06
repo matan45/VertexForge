@@ -138,7 +138,7 @@ namespace terrain
 
         void updateWorldBounds();
 
-        void initializeWeightMap(uint8_t layerCount);
+        void initializeWeightMap();
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
     private:

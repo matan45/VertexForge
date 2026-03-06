@@ -109,14 +109,19 @@ namespace terrain
         {
             if (!safeTellp(file, outEntry.weightDataOffset))
                 return false;
-            writeLE(file, tile.weightMap.activeLayerCount);
+
+            // Write per-tile palette indices (4 bytes)
+            for (uint8_t i = 0; i < WEIGHT_CHANNELS; ++i)
+                writeLE<uint8_t>(file, tile.weightMap.layerIndices[i]);
+
             writeLE(file, tile.weightMap.resolution);
 
-            for (uint8_t layer = 0; layer < tile.weightMap.activeLayerCount; ++layer)
+            // Always write exactly 4 channels
+            for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
             {
-                if (layer < tile.weightMap.layerWeights.size())
+                if (ch < tile.weightMap.layerWeights.size())
                 {
-                    writeVectorLE(file, tile.weightMap.layerWeights[layer]);
+                    writeVectorLE(file, tile.weightMap.layerWeights[ch]);
                 }
                 else
                 {
