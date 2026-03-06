@@ -84,6 +84,7 @@ namespace render::gpudriven
         constexpr uint32_t AdditiveBlend = 1 << 10;
         constexpr uint32_t MultiplyBlend = 1 << 11;
         constexpr uint32_t TerrainTile = 1 << 12;
+        constexpr uint32_t Selected = 1 << 13;
     }
 
     namespace ObjectCategory

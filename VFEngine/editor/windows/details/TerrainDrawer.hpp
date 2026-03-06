@@ -1,6 +1,7 @@
 #pragma once
 #include "data/EntityHandle.hpp"
 #include "nfd/FileDialog.hpp"
+#include "threading/JobSystem.hpp"
 #include <future>
 #include <string>
 
@@ -21,6 +22,9 @@ namespace windows::details {
         std::string saveStatusMessage;
         int statusFrameCounter = 0;
         nfd::FileDialog fileDialog;
+
+        int pendingTileX = 0;
+        int pendingTileZ = 0;
     };
 
 }

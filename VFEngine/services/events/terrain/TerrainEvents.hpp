@@ -116,6 +116,13 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
     };
 
+    struct PrepareTerrainSaveCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "PrepareTerrainSave"; }
+    };
+
     struct TerrainSavedNotification : INotification
     {
         services::EntityHandle terrainEntity;
@@ -219,5 +226,82 @@ namespace events::terrain
     struct TerrainMaterialCompiledNotification : INotification
     {
         std::string_view getName() const override { return "TerrainMaterialCompiled"; }
+    };
+
+    struct AddTerrainTileCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "AddTerrainTile"; }
+    };
+
+    struct RemoveTerrainTileCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "RemoveTerrainTile"; }
+    };
+
+    struct TerrainTileAddedNotification : INotification
+    {
+        services::EntityHandle terrainEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "TerrainTileAdded"; }
+    };
+
+    struct TerrainTileRemovedNotification : INotification
+    {
+        services::EntityHandle terrainEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "TerrainTileRemoved"; }
+    };
+
+    struct SetTerrainStreamingEnabledCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetTerrainStreamingEnabled"; }
+    };
+
+    struct StreamingConfigData
+    {
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+    };
+
+    struct SetTerrainStreamingConfigCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+
+        std::string_view getName() const override { return "SetTerrainStreamingConfig"; }
+    };
+
+    struct GetTerrainStreamingConfigQuery : IQuery<StreamingConfigData>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "GetTerrainStreamingConfig"; }
+    };
+
+    struct IsTerrainStreamingEnabledQuery : IQuery<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "IsTerrainStreamingEnabled"; }
     };
 }

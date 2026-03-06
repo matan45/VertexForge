@@ -109,6 +109,7 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
+        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
 
         if (!config.weightMapPath.empty())
         {
@@ -132,27 +133,9 @@ namespace services
 
     void TerrainService::createTileEntities(EntityHandle parentHandle, terrain::TerrainGrid& grid)
     {
-        scene::Entity parentEntity(internal::fromHandle(parentHandle));
-
         for (auto* tile : grid.getAllTiles())
         {
-            std::string tileName = "Tile_" + std::to_string(tile->coord.x) + "_" + std::to_string(tile->coord.z);
-            scene::Entity tileEntity(tileName);
-            parentEntity.addChildren(tileEntity);
-
-            auto& tileComp = tileEntity.addComponent<components::TerrainTileComponent>();
-            tileComp.tileX = tile->coord.x;
-            tileComp.tileZ = tile->coord.z;
-            tileComp.currentLOD = tile->currentLOD;
-            tileComp.isVisible = tile->isVisible;
-            tileComp.isDirty = tile->isDirty;
-            tileComp.isGPUResident = false;
-            tileComp.boundingMinY = tile->worldBounds.min.y;
-            tileComp.boundingMaxY = tile->worldBounds.max.y;
-
-            auto& transform = tileEntity.getComponent<components::TransformComponent>();
-            transform.position = tile->worldOrigin;
-            transform.isDirty = true;
+            createTileEntity(parentHandle, tile, tile->coord.x, tile->coord.z);
         }
     }
 
@@ -179,6 +162,7 @@ namespace services
 
         terrainGrids.erase(terrainEntity.id);
         fileCaches.erase(terrainEntity.id);
+        worldStreamers.erase(terrainEntity.id);
 
         scene::Entity terrainEnt(entity);
         sceneGraph->removeEntity(terrainEnt);
@@ -198,6 +182,7 @@ namespace services
         std::vector<bool> hadCollider;
         std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
         std::vector<std::shared_ptr<terrain::TerrainFileCache>> caches;
+        std::vector<std::unique_ptr<terrain::TerrainWorldStreamer>> streamers;
         for (auto& [id, grid] : terrainGrids)
         {
             bool hasCollider = physicsProvider && physicsProvider->hasTerrainCollider(EntityHandle{id});
@@ -209,9 +194,12 @@ namespace services
             grids.push_back(std::move(grid));
             auto cacheIt = fileCaches.find(id);
             caches.push_back(cacheIt != fileCaches.end() ? std::move(cacheIt->second) : nullptr);
+            auto streamerIt = worldStreamers.find(id);
+            streamers.push_back(streamerIt != worldStreamers.end() ? std::move(streamerIt->second) : nullptr);
         }
         terrainGrids.clear();
         fileCaches.clear();
+        worldStreamers.clear();
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::TerrainComponent>();
@@ -226,6 +214,8 @@ namespace services
             terrainGrids[newId] = std::move(grids[gridIndex]);
             if (caches[gridIndex])
                 fileCaches[newId] = std::move(caches[gridIndex]);
+            if (streamers[gridIndex])
+                worldStreamers[newId] = std::move(streamers[gridIndex]);
 
             if (gridIndex < hadCollider.size() && hadCollider[gridIndex])
                 addTerrainCollider(EntityHandle{newId});
@@ -242,6 +232,34 @@ namespace services
 
         for (auto& [entityId, grid] : terrainGrids)
         {
+            // Run world streaming before LOD updates (skip during save to avoid data races)
+            auto streamerIt = worldStreamers.find(entityId);
+            if (streamerIt != worldStreamers.end() && streamerIt->second && streamerIt->second->isEnabled()
+                && !saveInProgress.load(std::memory_order_acquire))
+            {
+                auto cacheIt = fileCaches.find(entityId);
+                if (cacheIt != fileCaches.end() && cacheIt->second)
+                {
+                    EntityHandle terrainHandle{entityId};
+                    auto& comp = scene::EntityRegistry::getRegistry()
+                        .get<components::TerrainComponent>(internal::fromHandle(terrainHandle));
+
+                    streamerIt->second->update(
+                        cameraPosition, comp.worldTileSize, *cacheIt->second, *grid, streamingActions);
+
+                    for (const auto& action : streamingActions)
+                    {
+                        if (action.isLoad)
+                            streamInTile(terrainHandle, action.coord.x, action.coord.z);
+                        else
+                            streamOutTile(terrainHandle, action.coord.x, action.coord.z);
+                    }
+
+                    if (!streamingActions.empty())
+                        commitStreamingChanges(terrainHandle);
+                }
+            }
+
             (void)grid->updateLODs(cameraPosition);
 
             grid->regenerateDirtyTiles(cameraPosition);
@@ -345,6 +363,263 @@ namespace services
                 cacheIt->second->evictTileGeometry(tile);
             }
             return;
+        }
+    }
+
+    void TerrainService::createTileEntity(EntityHandle parentHandle, terrain::TerrainTile* tile,
+                                            int32_t tileX, int32_t tileZ)
+    {
+        scene::Entity parentEntity(internal::fromHandle(parentHandle));
+        std::string tileName = "Tile_" + std::to_string(tileX) + "_" + std::to_string(tileZ);
+        scene::Entity tileEntity(tileName);
+        parentEntity.addChildren(tileEntity);
+
+        auto& tileComp = tileEntity.addComponent<components::TerrainTileComponent>();
+        tileComp.tileX = tileX;
+        tileComp.tileZ = tileZ;
+        tileComp.currentLOD = tile->currentLOD;
+        tileComp.isVisible = tile->isVisible;
+        tileComp.isDirty = tile->isDirty;
+        tileComp.isGPUResident = false;
+        tileComp.boundingMinY = tile->worldBounds.min.y;
+        tileComp.boundingMaxY = tile->worldBounds.max.y;
+
+        auto& transform = tileEntity.getComponent<components::TransformComponent>();
+        transform.position = tile->worldOrigin;
+        transform.isDirty = true;
+    }
+
+    bool TerrainService::addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        // Check if tile already exists
+        if (grid.getTile(coord))
+            return false;
+
+        terrain::TerrainTile* tile = grid.addTile(coord);
+        if (!tile)
+            return false;
+
+        // Track in file cache if one exists
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second)
+        {
+            cacheIt->second->addNewTileEntry(coord);
+        }
+
+        createTileEntity(terrainEntity, tile, tileX, tileZ);
+
+        // Update TerrainComponent bounds
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            auto& comp = registry.get<components::TerrainComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+            comp.saveDirty = true;
+        }
+
+        events::terrain::TerrainTileAddedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("TerrainService: Added tile ({}, {})", tileX, tileZ);
+        return true;
+    }
+
+    bool TerrainService::removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        if (!grid.getTile(coord))
+            return false;
+
+        // Remove from grid (clears neighbor refs, marks neighbors dirty)
+        grid.removeTile(coord);
+
+        // Remove from file cache
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt != fileCaches.end() && cacheIt->second)
+        {
+            cacheIt->second->removeEntry(coord);
+        }
+
+        // Find and destroy the child tile entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity parentEnt = internal::fromHandle(terrainEntity);
+        if (registry.valid(parentEnt) && registry.all_of<components::ChildrenComponent>(parentEnt))
+        {
+            const auto& children = registry.get<components::ChildrenComponent>(parentEnt).children;
+            for (auto childEnt : children)
+            {
+                if (!registry.valid(childEnt) ||
+                    !registry.all_of<components::TerrainTileComponent>(childEnt))
+                    continue;
+
+                const auto& tc = registry.get<components::TerrainTileComponent>(childEnt);
+                if (tc.tileX == tileX && tc.tileZ == tileZ)
+                {
+                    scene::Entity tileEntity(childEnt);
+                    sceneGraph->removeEntity(tileEntity);
+                    break;
+                }
+            }
+        }
+
+        // Update TerrainComponent bounds
+        if (registry.valid(parentEnt) && registry.all_of<components::TerrainComponent>(parentEnt))
+        {
+            auto& comp = registry.get<components::TerrainComponent>(parentEnt);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+            comp.saveDirty = true;
+        }
+
+        events::terrain::TerrainTileRemovedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("TerrainService: Removed tile ({}, {})", tileX, tileZ);
+        return true;
+    }
+
+    bool TerrainService::streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        if (grid.getTile(coord))
+            return false;
+
+        terrain::TerrainTile* tile = grid.addTileFromFile(coord);
+        if (!tile)
+            return false;
+
+        // Note: saveDirty is intentionally NOT set here. Streamed-in tiles are
+        // transient copies loaded from an already-saved file, not user modifications.
+
+        createTileEntity(terrainEntity, tile, tileX, tileZ);
+
+        events::terrain::TerrainTileAddedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool TerrainService::streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!terrainEntity.isValid())
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        terrain::TileCoord coord{tileX, tileZ};
+
+        if (!grid.getTile(coord))
+            return false;
+
+        grid.removeTile(coord);
+
+        // Note: saveDirty is intentionally NOT set here. Streaming out a tile
+        // does not alter the saved file — the tile data remains on disk.
+
+        // Find and destroy the child tile entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity parentEnt = internal::fromHandle(terrainEntity);
+        if (registry.valid(parentEnt) && registry.all_of<components::ChildrenComponent>(parentEnt))
+        {
+            const auto& children = registry.get<components::ChildrenComponent>(parentEnt).children;
+            for (auto childEnt : children)
+            {
+                if (!registry.valid(childEnt) ||
+                    !registry.all_of<components::TerrainTileComponent>(childEnt))
+                    continue;
+
+                const auto& tc = registry.get<components::TerrainTileComponent>(childEnt);
+                if (tc.tileX == tileX && tc.tileZ == tileZ)
+                {
+                    scene::Entity tileEntity(childEnt);
+                    sceneGraph->removeEntity(tileEntity);
+                    break;
+                }
+            }
+        }
+
+        events::terrain::TerrainTileRemovedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    void TerrainService::commitStreamingChanges(EntityHandle terrainEntity)
+    {
+        if (!terrainEntity.isValid())
+            return;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            auto& comp = registry.get<components::TerrainComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            gridIt->second->computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
         }
     }
 }

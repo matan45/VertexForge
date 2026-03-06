@@ -15,6 +15,7 @@
 #include "../../services/events/render/MaterialEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
 #include "../../services/events/terrain/WaterEvents.hpp"
+#include "../../services/events/scene/EntityTransformEvents.hpp"
 
 namespace controllers
 {
@@ -35,9 +36,17 @@ namespace controllers
         {
             events::EventDispatcher::instance().unsubscribe(*terrainDeletedSubscription);
         }
+        if (tileRemovedSubscription && tileRemovedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*tileRemovedSubscription);
+        }
         if (waterDeletedSubscription && waterDeletedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*waterDeletedSubscription);
+        }
+        if (entitySelectedSubscription && entitySelectedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*entitySelectedSubscription);
         }
     }
 
@@ -76,6 +85,17 @@ namespace controllers
             });
         terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainToken);
 
+        auto tileRemovedToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainTileRemovedNotification>(
+            [this](const events::terrain::TerrainTileRemovedNotification& notification)
+            {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler)
+                {
+                    renderHandler->evictTerrainTile(notification.tileX, notification.tileZ);
+                }
+            });
+        tileRemovedSubscription = std::make_unique<events::SubscriptionToken>(tileRemovedToken);
+
         auto waterToken = events::EventDispatcher::instance().subscribe<events::water::WaterDeletedNotification>(
             [this](const events::water::WaterDeletedNotification&)
             {
@@ -86,6 +106,38 @@ namespace controllers
                 }
             });
         waterDeletedSubscription = std::make_unique<events::SubscriptionToken>(waterToken);
+
+        auto entitySelectedToken = events::EventDispatcher::instance().subscribe<events::scene::EntitySelectedNotification>(
+            [this](const events::scene::EntitySelectedNotification& notification)
+            {
+                auto* rh = offScreen->getRenderPassHandler();
+                if (!rh) return;
+
+                if (!notification.entity.has_value())
+                {
+                    rh->clearSelectedTerrainTile();
+                    return;
+                }
+
+                auto& disp = events::EventDispatcher::instance();
+
+                events::terrain::HasTerrainTileComponentQuery tileQuery;
+                tileQuery.entity = *notification.entity;
+                if (disp.query(tileQuery))
+                {
+                    events::terrain::GetTerrainTileDataQuery dataQuery;
+                    dataQuery.entity = *notification.entity;
+                    auto tileOpt = disp.query(dataQuery);
+                    if (tileOpt.has_value())
+                    {
+                        rh->setSelectedTerrainTile(tileOpt->tileX, tileOpt->tileZ);
+                        return;
+                    }
+                }
+
+                rh->clearSelectedTerrainTile();
+            });
+        entitySelectedSubscription = std::make_unique<events::SubscriptionToken>(entitySelectedToken);
     }
 
     void OffScreenController::recreate()

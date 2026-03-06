@@ -9,6 +9,7 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
+#include "terrain/TerrainWorldStreamer.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <memory>
@@ -53,6 +54,8 @@ namespace services
         float maxTerrainDistSq_ = 0.0f;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
+        std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
+        std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -96,8 +99,16 @@ namespace services
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
+        bool prepareSave(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
+
+        bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+
+        bool streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        void commitStreamingChanges(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
@@ -120,6 +131,8 @@ namespace services
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path);
+
+        void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);

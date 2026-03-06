@@ -48,6 +48,15 @@ namespace terrain
             writeLE(file, header.physicsConfig.restitution);
         }
 
+        if (hasFlag(header.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG))
+        {
+            writeLE<uint8_t>(file, header.streamingConfig.enabled ? 1 : 0);
+            writeLE(file, header.streamingConfig.loadRadius);
+            writeLE(file, header.streamingConfig.unloadRadius);
+            writeLE(file, header.streamingConfig.maxLoadsPerFrame);
+            writeLE(file, header.streamingConfig.maxUnloadsPerFrame);
+        }
+
         return file.good();
     }
 
@@ -291,7 +300,8 @@ namespace terrain
         int32_t gridMinX, int32_t gridMinZ,
         int32_t gridMaxX, int32_t gridMaxZ,
         const std::string& materialPath,
-        const TerrainPhysicsConfig& physicsConfig)
+        const TerrainPhysicsConfig& physicsConfig,
+        const TerrainStreamingConfig& streamingConfig)
     {
         auto allTiles = grid.getAllTiles();
         if (allTiles.empty())
@@ -328,6 +338,10 @@ namespace terrain
         {
             flags = flags | TerrainFormatFlags::HAS_PHYSICS_DATA;
         }
+        if (streamingConfig.enabled)
+        {
+            flags = flags | TerrainFormatFlags::HAS_STREAMING_CONFIG;
+        }
         for (const auto* tile : allTiles)
         {
             if (tile->hasHoleMask())
@@ -361,6 +375,7 @@ namespace terrain
         header.gridMaxZ = gridMaxZ;
         header.materialPath = materialPath;
         header.physicsConfig = physicsConfig;
+        header.streamingConfig = streamingConfig;
 
         try
         {

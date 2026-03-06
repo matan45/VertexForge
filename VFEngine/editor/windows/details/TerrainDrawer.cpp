@@ -144,6 +144,89 @@ namespace windows::details {
             }
 
             ImGui::Separator();
+            ImGui::Text("Grid Expansion");
+
+            ImGui::InputInt("Tile X", &pendingTileX);
+            ImGui::InputInt("Tile Z", &pendingTileZ);
+
+            if (ImGui::Button("Add Tile"))
+            {
+                events::terrain::AddTerrainTileCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.tileX = pendingTileX;
+                cmd.tileZ = pendingTileZ;
+                bool result = dispatcher.execute(cmd);
+                if (!result)
+                {
+                    saveStatusMessage = "Tile already exists or add failed";
+                    statusFrameCounter = 180;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Tile"))
+            {
+                events::terrain::RemoveTerrainTileCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.tileX = pendingTileX;
+                cmd.tileZ = pendingTileZ;
+                bool result = dispatcher.execute(cmd);
+                if (!result)
+                {
+                    saveStatusMessage = "Tile not found or remove failed";
+                    statusFrameCounter = 180;
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Text("World Streaming");
+
+            {
+                events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
+                enabledQuery.terrainEntity = handle;
+                bool streamingEnabled = dispatcher.query(enabledQuery);
+
+                if (ImGui::Checkbox("Enable Streaming", &streamingEnabled))
+                {
+                    events::terrain::SetTerrainStreamingEnabledCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.enabled = streamingEnabled;
+                    dispatcher.execute(cmd);
+                }
+
+                events::terrain::GetTerrainStreamingConfigQuery configQuery;
+                configQuery.terrainEntity = handle;
+                auto streamConfig = dispatcher.query(configQuery);
+
+                bool configChanged = false;
+
+                if (ImGui::SliderFloat("Load Radius", &streamConfig.loadRadius, 64.0f, 2048.0f, "%.0f"))
+                    configChanged = true;
+
+                if (ImGui::SliderFloat("Unload Radius", &streamConfig.unloadRadius, 64.0f, 2048.0f, "%.0f"))
+                    configChanged = true;
+
+                if (streamConfig.unloadRadius < streamConfig.loadRadius)
+                    streamConfig.unloadRadius = streamConfig.loadRadius * 1.25f;
+
+                if (ImGui::SliderInt("Max Loads/Frame", &streamConfig.maxLoadsPerFrame, 1, 16))
+                    configChanged = true;
+
+                if (ImGui::SliderInt("Max Unloads/Frame", &streamConfig.maxUnloadsPerFrame, 1, 16))
+                    configChanged = true;
+
+                if (configChanged)
+                {
+                    events::terrain::SetTerrainStreamingConfigCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.loadRadius = streamConfig.loadRadius;
+                    cmd.unloadRadius = streamConfig.unloadRadius;
+                    cmd.maxLoadsPerFrame = streamConfig.maxLoadsPerFrame;
+                    cmd.maxUnloadsPerFrame = streamConfig.maxUnloadsPerFrame;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            ImGui::Separator();
             ImGui::Text("Physics");
 
             events::physics::HasTerrainColliderQuery hasColliderQuery;
@@ -256,13 +339,19 @@ namespace windows::details {
         lockCmd.locked = true;
         dispatcher.execute(lockCmd);
 
-        pendingSave = std::async(std::launch::async, [handle, path]()
+        // Prepare save data on main thread: stream in all tiles from file cache
+        // so the background thread only does read-only serialization.
+        events::terrain::PrepareTerrainSaveCommand prepCmd;
+        prepCmd.terrainEntity = handle;
+        dispatcher.execute(prepCmd);
+
+        pendingSave = threading::JobSystem::instance().submit([handle, path]()
         {
             events::terrain::SaveTerrainCommand cmd;
             cmd.terrainEntity = handle;
             cmd.path = path;
             return events::EventDispatcher::instance().execute(cmd);
-        });
+        }, threading::JobPriority::LOW);
     }
 
     void TerrainDrawer::startSaveAs(services::EntityHandle handle)

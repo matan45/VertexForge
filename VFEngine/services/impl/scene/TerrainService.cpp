@@ -11,6 +11,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -40,10 +41,24 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::AddTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RemoveTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::PrepareTerrainSaveCommand>();
+        dispatcher.unregisterCommandHandler<events::holeBrush::ApplyHoleBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainTileDataQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightfieldQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
+        dispatcher.unregisterQueryHandler<events::physics::HasTerrainColliderQuery>();
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())
         {
@@ -86,8 +101,11 @@ namespace services
         data.heightmapPath = comp.heightmapPath;
         data.terrainMaterialPath = comp.terrainMaterialPath;
         data.weightMapPath = comp.weightMapPath;
-        data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
-                                                (comp.gridMaxZ - comp.gridMinZ + 1));
+        auto gridIt = terrainGrids.find(entity.id);
+        data.tileCount = (gridIt != terrainGrids.end())
+            ? static_cast<uint32_t>(gridIt->second->getTileCount())
+            : static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
+                                     (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;
         data.isDirty = comp.isDirty;
         data.activeTileCount = comp.activeTileCount;
@@ -233,6 +251,7 @@ namespace services
 
         terrainGrids.clear();
         fileCaches.clear();
+        worldStreamers.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }

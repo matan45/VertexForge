@@ -25,10 +25,27 @@ namespace terrain
 
         void markDirty(const TileCoord& coord);
 
+        void addNewTileEntry(const TileCoord& coord);
+        void removeEntry(const TileCoord& coord);
+
         bool refreshIndex(const std::string& newPath);
 
         [[nodiscard]] bool hasMeshletCache() const;
         [[nodiscard]] const std::string& getFilePath() const { return filePath; }
+
+        [[nodiscard]] std::vector<TileCoord> getAvailableCoords() const;
+        [[nodiscard]] std::vector<TileCoord> getSavedCoords() const;
+        [[nodiscard]] bool hasCoord(const TileCoord& coord) const;
+
+        template<typename F>
+        void forEachSavedCoord(F&& func) const
+        {
+            for (const auto& [coord, entry] : indexMap)
+            {
+                if (entry.heightDataOffset != 0)
+                    func(coord);
+            }
+        }
 
     private:
         std::string filePath;
