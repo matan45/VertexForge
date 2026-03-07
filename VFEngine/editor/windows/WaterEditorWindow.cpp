@@ -50,6 +50,8 @@ namespace windows
             {
                 drawSettingsSection();
                 ImGui::Spacing();
+                drawGridExpansionSection();
+                ImGui::Spacing();
                 drawInfoSection();
 
                 ImGui::Spacing();
@@ -77,9 +79,9 @@ namespace windows
 
         ImGui::Text("Grid Size");
         ImGui::PushItemWidth(100);
-        ImGui::DragInt("##TilesX", &tilesX, 0.1f, 1, 16, "X: %d");
+        ImGui::DragInt("##TilesX", &tilesX, 0.1f, 1, 100, "X: %d");
         ImGui::SameLine();
-        ImGui::DragInt("##TilesZ", &tilesZ, 0.1f, 1, 16, "Z: %d");
+        ImGui::DragInt("##TilesZ", &tilesZ, 0.1f, 1, 100, "Z: %d");
         ImGui::PopItemWidth();
 
         ImGui::Spacing();
@@ -294,6 +296,54 @@ namespace windows
         if (ImGui::Button("Save Water", ImVec2(-1, 0)))
         {
             saveWater();
+        }
+    }
+
+    void WaterEditorWindow::drawGridExpansionSection()
+    {
+        ImGui::Separator();
+        ImGui::Text("Grid Expansion");
+
+        ImGui::InputInt("Tile X", &pendingTileX);
+        ImGui::InputInt("Tile Z", &pendingTileZ);
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (ImGui::Button("Add Tile"))
+        {
+            events::water::AddWaterTileCommand cmd;
+            cmd.waterEntity = waterEntity;
+            cmd.tileX = pendingTileX;
+            cmd.tileZ = pendingTileZ;
+            bool result = dispatcher.execute(cmd);
+            if (!result)
+            {
+                tileStatusMessage = "Tile already exists or add failed";
+                tileStatusFrameCounter = 180;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Remove Tile"))
+        {
+            events::water::RemoveWaterTileCommand cmd;
+            cmd.waterEntity = waterEntity;
+            cmd.tileX = pendingTileX;
+            cmd.tileZ = pendingTileZ;
+            bool result = dispatcher.execute(cmd);
+            if (!result)
+            {
+                tileStatusMessage = "Tile not found or remove failed";
+                tileStatusFrameCounter = 180;
+            }
+        }
+
+        if (tileStatusFrameCounter > 0)
+        {
+            tileStatusFrameCounter--;
+            ImVec4 color = tileStatusMessage.find("failed") != std::string::npos
+                ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
+                : ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
+            ImGui::TextColored(color, "%s", tileStatusMessage.c_str());
         }
     }
 

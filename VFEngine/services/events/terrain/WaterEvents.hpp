@@ -31,6 +31,22 @@ namespace events::water
         std::string_view getName() const override { return "SetWaterTileHeight"; }
     };
 
+    struct AddWaterTileCommand : ICommand<bool> {
+        services::EntityHandle waterEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "AddWaterTile"; }
+    };
+
+    struct RemoveWaterTileCommand : ICommand<bool> {
+        services::EntityHandle waterEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "RemoveWaterTile"; }
+    };
+
     struct SetWaterGlobalSettingsCommand : ICommand<> {
         services::EntityHandle waterEntity;
         services::WaterGlobalSettingsData settings;
@@ -128,6 +144,22 @@ namespace events::water
         std::string path;
 
         std::string_view getName() const override { return "WaterLoaded"; }
+    };
+
+    struct WaterTileAddedNotification : INotification {
+        services::EntityHandle waterEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "WaterTileAdded"; }
+    };
+
+    struct WaterTileRemovedNotification : INotification {
+        services::EntityHandle waterEntity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "WaterTileRemoved"; }
     };
 
     struct WaterTileEnteredNotification : INotification {

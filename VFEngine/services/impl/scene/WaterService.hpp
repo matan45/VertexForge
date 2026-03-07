@@ -64,6 +64,9 @@ namespace services
         std::optional<WaterData> getWaterData(EntityHandle entity) const override;
         bool hasWaterComponent(EntityHandle entity) const override;
 
+        bool addTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ) override;
+        bool removeTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ) override;
+
         bool hasWaterTileComponent(EntityHandle entity) const;
 
         std::vector<water::WaterTile*> getVisibleWaterTiles(
@@ -102,6 +105,7 @@ namespace services
         void registerWaterQueryHandlers(::events::EventDispatcher& dispatcher);
 
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);
+        void createTileEntity(EntityHandle parentHandle, water::WaterTile* tile, float tileSize);
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
     };

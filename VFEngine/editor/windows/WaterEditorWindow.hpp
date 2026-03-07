@@ -27,6 +27,12 @@ namespace windows
         services::WaterGlobalSettingsData globalSettings;
         bool settingsDirty = false;
 
+        // Grid expansion
+        int pendingTileX = 0;
+        int pendingTileZ = 0;
+        std::string tileStatusMessage;
+        int tileStatusFrameCounter = 0;
+
         nfd::FileDialog fileDialog;
 
     public:
@@ -36,6 +42,7 @@ namespace windows
     private:
         void drawCreationSection();
         void drawSettingsSection();
+        void drawGridExpansionSection();
         void drawInfoSection();
         void createWater();
         void deleteWater();

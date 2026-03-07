@@ -56,12 +56,15 @@ namespace services
         settings.dudvStrength = comp.dudvStrength;
         settings.waveDirectionDegrees = comp.waveDirectionDegrees;
 
+        int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
+        gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
+
         bool success = water::WaterSerializer::save(
             path,
             *gridIt->second,
             settings,
-            comp.gridMinX, comp.gridMinZ,
-            comp.gridMaxX, comp.gridMaxZ,
+            boundsMinX, boundsMinZ,
+            boundsMaxX, boundsMaxZ,
             comp.physicsEnabled);
 
         if (!success)
@@ -70,9 +73,14 @@ namespace services
             return false;
         }
 
-        // Update savePath on the component
+        // Update savePath and bounds on the component
         auto& mutableComp = registry.get<components::WaterComponent>(ent);
         mutableComp.savePath = path;
+        mutableComp.gridMinX = boundsMinX;
+        mutableComp.gridMinZ = boundsMinZ;
+        mutableComp.gridMaxX = boundsMaxX;
+        mutableComp.gridMaxZ = boundsMaxZ;
+        mutableComp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
 
         events::water::WaterSavedNotification notification;
         notification.waterEntity = waterEntity;
@@ -102,12 +110,11 @@ namespace services
         tileConfig.worldTileSize = header.worldTileSize;
 
         auto grid = std::make_unique<water::WaterGrid>(tileConfig, 0.0f);
-        grid->createGrid(header.gridMinX, header.gridMinZ, header.gridMaxX, header.gridMaxZ);
 
-        // Apply per-tile data from file
+        // Create only the tiles that exist in the file (sparse)
         for (const auto& tileData : loadResult.tiles)
         {
-            water::WaterTile* tile = grid->getTile(water::TileCoord(tileData.tileX, tileData.tileZ));
+            water::WaterTile* tile = grid->getOrCreateTile(water::TileCoord(tileData.tileX, tileData.tileZ));
             if (tile)
             {
                 tile->updateHeight(tileData.waterHeight, tileConfig.worldTileSize);
@@ -122,10 +129,13 @@ namespace services
 
         auto& waterComp = parentEntity.addComponent<components::WaterComponent>();
         waterComp.worldTileSize = header.worldTileSize;
-        waterComp.gridMinX = header.gridMinX;
-        waterComp.gridMinZ = header.gridMinZ;
-        waterComp.gridMaxX = header.gridMaxX;
-        waterComp.gridMaxZ = header.gridMaxZ;
+
+        int32_t loadedMinX, loadedMinZ, loadedMaxX, loadedMaxZ;
+        grid->computeBounds(loadedMinX, loadedMinZ, loadedMaxX, loadedMaxZ);
+        waterComp.gridMinX = loadedMinX;
+        waterComp.gridMinZ = loadedMinZ;
+        waterComp.gridMaxX = loadedMaxX;
+        waterComp.gridMaxZ = loadedMaxZ;
         waterComp.physicsEnabled = header.physicsEnabled;
         waterComp.isActive = true;
         waterComp.savePath = path;
@@ -153,7 +163,7 @@ namespace services
             waterComp.defaultWaveIntensity = loadResult.tiles[0].waveIntensity;
         }
 
-        waterComp.activeTileCount = header.tileCount;
+        waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
         waterComp.visibleTileCount = 0;
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());

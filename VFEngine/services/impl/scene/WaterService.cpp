@@ -25,6 +25,8 @@ namespace services
 
         dispatcher.unregisterCommandHandler<events::water::CreateWaterCommand>();
         dispatcher.unregisterCommandHandler<events::water::DeleteWaterCommand>();
+        dispatcher.unregisterCommandHandler<events::water::AddWaterTileCommand>();
+        dispatcher.unregisterCommandHandler<events::water::RemoveWaterTileCommand>();
         dispatcher.unregisterCommandHandler<events::water::SetWaterTileHeightCommand>();
         dispatcher.unregisterCommandHandler<events::water::SetWaterGlobalSettingsCommand>();
         dispatcher.unregisterCommandHandler<events::water::RebuildWaterFromComponentsCommand>();
@@ -142,6 +144,18 @@ namespace services
             [this](const events::water::DeleteWaterCommand& cmd)
             {
                 return deleteWater(cmd.waterEntity);
+            });
+
+        dispatcher.registerCommandHandler<events::water::AddWaterTileCommand>(
+            [this](const events::water::AddWaterTileCommand& cmd)
+            {
+                return addTile(cmd.waterEntity, cmd.tileX, cmd.tileZ);
+            });
+
+        dispatcher.registerCommandHandler<events::water::RemoveWaterTileCommand>(
+            [this](const events::water::RemoveWaterTileCommand& cmd)
+            {
+                return removeTile(cmd.waterEntity, cmd.tileX, cmd.tileZ);
             });
 
         dispatcher.registerCommandHandler<events::water::SetWaterTileHeightCommand>(
@@ -262,23 +276,34 @@ namespace services
         WaterData data;
         data.defaultWaterHeight = comp.defaultWaterHeight;
         data.defaultWaveIntensity = comp.defaultWaveIntensity;
-        data.gridMinX = comp.gridMinX;
-        data.gridMinZ = comp.gridMinZ;
-        data.gridMaxX = comp.gridMaxX;
-        data.gridMaxZ = comp.gridMaxZ;
         data.shallowColor = comp.shallowColor;
         data.deepColor = comp.deepColor;
         data.physicsEnabled = comp.physicsEnabled;
         data.isActive = comp.isActive;
-        data.tileCount = static_cast<uint32_t>(
-            (comp.gridMaxX - comp.gridMinX + 1) * (comp.gridMaxZ - comp.gridMinZ + 1));
-        data.activeTileCount = comp.activeTileCount;
         data.visibleTileCount = comp.visibleTileCount;
 
         auto gridIt = waterGrids.find(entity.id);
         if (gridIt != waterGrids.end())
         {
-            data.worldTileSize = gridIt->second->getConfig().worldTileSize;
+            auto& grid = *gridIt->second;
+            data.worldTileSize = grid.getConfig().worldTileSize;
+            data.tileCount = static_cast<uint32_t>(grid.getTileCount());
+            data.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            data.gridMinX = minX;
+            data.gridMinZ = minZ;
+            data.gridMaxX = maxX;
+            data.gridMaxZ = maxZ;
+        }
+        else
+        {
+            data.gridMinX = comp.gridMinX;
+            data.gridMinZ = comp.gridMinZ;
+            data.gridMaxX = comp.gridMaxX;
+            data.gridMaxZ = comp.gridMaxZ;
+            data.tileCount = comp.activeTileCount;
+            data.activeTileCount = comp.activeTileCount;
         }
 
         return data;

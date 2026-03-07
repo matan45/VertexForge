@@ -42,13 +42,15 @@ namespace services
         waterComp.defaultWaveIntensity = config.waveIntensity;
         waterComp.shallowColor = config.shallowColor;
         waterComp.deepColor = config.deepColor;
-        waterComp.gridMinX = minX;
-        waterComp.gridMinZ = minZ;
-        waterComp.gridMaxX = maxX;
-        waterComp.gridMaxZ = maxZ;
+        int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
+        grid->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
+        waterComp.gridMinX = boundsMinX;
+        waterComp.gridMinZ = boundsMinZ;
+        waterComp.gridMaxX = boundsMaxX;
+        waterComp.gridMaxZ = boundsMaxZ;
         waterComp.physicsEnabled = config.physicsEnabled;
         waterComp.isActive = true;
-        waterComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
+        waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
         waterComp.visibleTileCount = 0;
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
@@ -69,37 +71,42 @@ namespace services
         return parentHandle;
     }
 
-    void WaterService::createTileEntities(EntityHandle parentHandle, water::WaterGrid& grid)
+    void WaterService::createTileEntity(EntityHandle parentHandle, water::WaterTile* tile, float tileSize)
     {
         scene::Entity parentEntity(internal::fromHandle(parentHandle));
-        float tileSize = grid.getConfig().worldTileSize;
 
+        std::string tileName = "WaterTile_" + std::to_string(tile->coord.x) +
+                               "_" + std::to_string(tile->coord.z);
+        scene::Entity tileEntity(tileName);
+        parentEntity.addChildren(tileEntity);
+
+        auto& tileComp = tileEntity.addComponent<components::WaterTileComponent>();
+        tileComp.tileX = tile->coord.x;
+        tileComp.tileZ = tile->coord.z;
+        tileComp.waterHeight = tile->waterHeight;
+        tileComp.waveIntensity = tile->waveIntensity;
+        tileComp.physicsEnabled = tile->physicsEnabled;
+        tileComp.isVisible = tile->isVisible;
+
+        auto& transform = tileEntity.getComponent<components::TransformComponent>();
+        transform.position = tile->worldOrigin;
+        transform.isDirty = true;
+
+        if (physicsProvider && tileComp.physicsEnabled)
+        {
+            EntityHandle tileHandle = internal::toHandle(tileEntity.getHandle());
+            glm::vec3 halfExtents(tileSize * 0.5f, 0.5f, tileSize * 0.5f);
+            glm::vec3 position = tile->worldOrigin + halfExtents;
+            physicsProvider->addWaterSensorBody(tileHandle, position, halfExtents);
+        }
+    }
+
+    void WaterService::createTileEntities(EntityHandle parentHandle, water::WaterGrid& grid)
+    {
+        float tileSize = grid.getConfig().worldTileSize;
         for (auto* tile : grid.getAllTiles())
         {
-            std::string tileName = "WaterTile_" + std::to_string(tile->coord.x) +
-                                   "_" + std::to_string(tile->coord.z);
-            scene::Entity tileEntity(tileName);
-            parentEntity.addChildren(tileEntity);
-
-            auto& tileComp = tileEntity.addComponent<components::WaterTileComponent>();
-            tileComp.tileX = tile->coord.x;
-            tileComp.tileZ = tile->coord.z;
-            tileComp.waterHeight = tile->waterHeight;
-            tileComp.waveIntensity = tile->waveIntensity;
-            tileComp.physicsEnabled = tile->physicsEnabled;
-            tileComp.isVisible = tile->isVisible;
-
-            auto& transform = tileEntity.getComponent<components::TransformComponent>();
-            transform.position = tile->worldOrigin;
-            transform.isDirty = true;
-
-            if (physicsProvider && tileComp.physicsEnabled)
-            {
-                EntityHandle tileHandle = internal::toHandle(tileEntity.getHandle());
-                glm::vec3 halfExtents(tileSize * 0.5f, 0.5f, tileSize * 0.5f);
-                glm::vec3 position = tile->worldOrigin + halfExtents;
-                physicsProvider->addWaterSensorBody(tileHandle, position, halfExtents);
-            }
+            createTileEntity(parentHandle, tile, tileSize);
         }
     }
 
@@ -207,8 +214,6 @@ namespace services
                     tileConfig.worldTileSize = header.worldTileSize;
 
                     auto grid = std::make_unique<water::WaterGrid>(tileConfig, 0.0f);
-                    grid->createGrid(header.gridMinX, header.gridMinZ,
-                                     header.gridMaxX, header.gridMaxZ);
 
                     // Remove existing tile children (scene JSON may have stale ones)
                     scene::Entity waterEntity(entity);
@@ -219,10 +224,10 @@ namespace services
                             sceneGraph->removeEntity(child);
                     }
 
-                    // Apply per-tile data and create tile entities
+                    // Create only tiles that exist in the file (sparse)
                     for (const auto& tileData : loadResult.tiles)
                     {
-                        water::WaterTile* tile = grid->getTile(
+                        water::WaterTile* tile = grid->getOrCreateTile(
                             water::TileCoord(tileData.tileX, tileData.tileZ));
                         if (tile)
                         {
@@ -239,7 +244,14 @@ namespace services
                         waterComp.defaultWaterHeight = loadResult.tiles[0].waterHeight;
                         waterComp.defaultWaveIntensity = loadResult.tiles[0].waveIntensity;
                     }
-                    waterComp.activeTileCount = header.tileCount;
+
+                    int32_t rbMinX, rbMinZ, rbMaxX, rbMaxZ;
+                    grid->computeBounds(rbMinX, rbMinZ, rbMaxX, rbMaxZ);
+                    waterComp.gridMinX = rbMinX;
+                    waterComp.gridMinZ = rbMinZ;
+                    waterComp.gridMaxX = rbMaxX;
+                    waterComp.gridMaxZ = rbMaxZ;
+                    waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
 
                     waterGrids[waterHandle.id] = std::move(grid);
                     vfLogInfo("WaterService: Rebuilt water from .vfWater file: {}", waterComp.savePath);
@@ -252,13 +264,11 @@ namespace services
                 }
             }
 
-            // Fallback: rebuild from inline component/tile data
+            // Fallback: rebuild from inline component/tile data (sparse)
             water::WaterTileConfig tileConfig;
             tileConfig.worldTileSize = waterComp.worldTileSize;
 
             auto grid = std::make_unique<water::WaterGrid>(tileConfig, waterComp.defaultWaterHeight);
-            grid->createGrid(waterComp.gridMinX, waterComp.gridMinZ,
-                             waterComp.gridMaxX, waterComp.gridMaxZ);
 
             scene::Entity waterEntity(entity);
             for (auto& child : waterEntity.getChildren())
@@ -267,7 +277,7 @@ namespace services
                     continue;
 
                 const auto& tileComp = child.getComponent<components::WaterTileComponent>();
-                water::WaterTile* tile = grid->getTile(water::TileCoord(tileComp.tileX, tileComp.tileZ));
+                water::WaterTile* tile = grid->getOrCreateTile(water::TileCoord(tileComp.tileX, tileComp.tileZ));
                 if (tile)
                 {
                     tile->updateHeight(tileComp.waterHeight, tileConfig.worldTileSize);
@@ -287,6 +297,15 @@ namespace services
                 }
             }
 
+            // Recompute bounds from actual tiles
+            int32_t fbMinX, fbMinZ, fbMaxX, fbMaxZ;
+            grid->computeBounds(fbMinX, fbMinZ, fbMaxX, fbMaxZ);
+            waterComp.gridMinX = fbMinX;
+            waterComp.gridMinZ = fbMinZ;
+            waterComp.gridMaxX = fbMaxX;
+            waterComp.gridMaxZ = fbMaxZ;
+            waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
+
             waterGrids[waterHandle.id] = std::move(grid);
         }
 
@@ -294,6 +313,113 @@ namespace services
         {
             vfLogInfo("WaterService: Rebuilt {} water grid(s) from components", waterGrids.size());
         }
+    }
+
+    bool WaterService::addTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!waterEntity.isValid())
+            return false;
+
+        auto gridIt = waterGrids.find(waterEntity.id);
+        if (gridIt == waterGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        water::TileCoord coord(tileX, tileZ);
+
+        if (grid.hasTile(coord))
+            return false;
+
+        water::WaterTile* tile = grid.getOrCreateTile(coord);
+        if (!tile)
+            return false;
+
+        float tileSize = grid.getConfig().worldTileSize;
+        createTileEntity(waterEntity, tile, tileSize);
+
+        // Update component bounds
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(waterEntity);
+        if (registry.valid(ent) && registry.all_of<components::WaterComponent>(ent))
+        {
+            auto& comp = registry.get<components::WaterComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+        }
+
+        events::water::WaterTileAddedNotification notification;
+        notification.waterEntity = waterEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool WaterService::removeTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ)
+    {
+        if (!waterEntity.isValid())
+            return false;
+
+        auto gridIt = waterGrids.find(waterEntity.id);
+        if (gridIt == waterGrids.end())
+            return false;
+
+        auto& grid = *gridIt->second;
+        water::TileCoord coord(tileX, tileZ);
+
+        if (!grid.hasTile(coord))
+            return false;
+
+        // Find and destroy the child entity with matching tile coordinates
+        scene::Entity parentEntity(internal::fromHandle(waterEntity));
+        for (auto& child : parentEntity.getChildren())
+        {
+            if (!child.hasComponent<components::WaterTileComponent>())
+                continue;
+
+            const auto& tileComp = child.getComponent<components::WaterTileComponent>();
+            if (tileComp.tileX == tileX && tileComp.tileZ == tileZ)
+            {
+                EntityHandle tileHandle = internal::toHandle(child.getHandle());
+                if (physicsProvider)
+                {
+                    physicsProvider->removeWaterSensorBody(tileHandle);
+                }
+                sceneGraph->removeEntity(child);
+                break;
+            }
+        }
+
+        grid.removeTile(coord);
+
+        // Update component bounds
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(waterEntity);
+        if (registry.valid(ent) && registry.all_of<components::WaterComponent>(ent))
+        {
+            auto& comp = registry.get<components::WaterComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+        }
+
+        events::water::WaterTileRemovedNotification notification;
+        notification.waterEntity = waterEntity;
+        notification.tileX = tileX;
+        notification.tileZ = tileZ;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
     }
 
     void WaterService::remapWaterEntities()
