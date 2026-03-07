@@ -192,6 +192,8 @@ namespace render::gpudriven
             return;
         }
 
+        peakObjectCount = std::max(peakObjectCount, currentObjectCount);
+
         size_t copySize = currentObjectCount * sizeof(GPUObjectData);
         std::memcpy(objectStagingMapped, cpuObjectData.data(), copySize);
 
@@ -421,6 +423,9 @@ namespace render::gpudriven
 
             totalVertexCount = vertexAllocator.getUsedCount();
             totalIndexCount = indexAllocator.getUsedCount();
+
+            peakVertexCount = std::max(peakVertexCount, totalVertexCount);
+            peakIndexCount = std::max(peakIndexCount, totalIndexCount);
         }
     }
 
@@ -435,6 +440,58 @@ namespace render::gpudriven
             return &allSubmeshLocations[it->second];
         }
         return nullptr;
+    }
+
+    void MergedMeshBuffer::freeMesh(const std::string& meshPath)
+    {
+        if (!initialized) return;
+
+        auto pathIt = meshPathToIndex.find(meshPath);
+        if (pathIt == meshPathToIndex.end())
+        {
+            vfLogWarning("MergedMeshBuffer::freeMesh: Mesh '{}' not found", meshPath);
+            return;
+        }
+
+        size_t meshIdx = pathIt->second;
+        auto& meshInfo = registeredMeshes[meshIdx];
+
+        // Free all LOD allocations for each submesh
+        for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
+        {
+            std::string key = makeSubmeshKey(meshPath, meshInfo.submeshes[subIdx].submeshName, subIdx);
+            auto keyIt = submeshKeyToIndex.find(key);
+            if (keyIt == submeshKeyToIndex.end()) continue;
+
+            size_t locIdx = keyIt->second;
+            auto& loc = allSubmeshLocations[locIdx];
+
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
+                const auto& lodInfo = loc.lods[lod];
+                if (lodInfo.vertexCount > 0)
+                {
+                    vertexAllocator.free(lodInfo.vertexOffset, lodInfo.vertexCount);
+                }
+                if (lodInfo.indexCount > 0)
+                {
+                    indexAllocator.free(lodInfo.indexOffset, lodInfo.indexCount);
+                }
+                loc.lodStates[lod] = LODStreamState::NotRequested;
+            }
+
+            submeshKeyToIndex.erase(keyIt);
+        }
+
+        totalVertexCount = vertexAllocator.getUsedCount();
+        totalIndexCount = indexAllocator.getUsedCount();
+
+        meshPathToIndex.erase(pathIt);
+
+        // Clear the mesh info but don't remove from vector to avoid invalidating other indices
+        meshInfo = MergedMeshInfo{};
+
+        vfLogInfo("MergedMeshBuffer::freeMesh: Freed mesh '{}'", meshPath);
     }
 
     void MergedMeshBuffer::flushPendingTransfers()

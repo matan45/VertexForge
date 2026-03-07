@@ -103,6 +103,7 @@ namespace controllers
 
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
+        void meshRelease(const std::string& meshPath);
         void meshUpdateCamera(render::occlusion::CameraId cameraId, const glm::mat4& view,
                               const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;

@@ -1,13 +1,32 @@
 #include "AudioAdapter.hpp"
 #include "../../audio/AudioController.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
+#include "resource/AssetTypes.hpp"
+#include "print/Log.hpp"
 
 namespace core {
 
     AudioAdapter::AudioAdapter()
-        : audioController(std::make_unique<audio::AudioController>()) {
+        : audioController(std::make_unique<audio::AudioController>())
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        assetReleaseToken = dispatcher.subscribe<events::lifecycle::AssetReleaseReadyNotification>(
+            [this](const events::lifecycle::AssetReleaseReadyNotification& notification)
+            {
+                if (notification.type == resource::AssetType::Audio && audioController)
+                {
+                    audioController->unloadAudioBuffer(notification.path);
+                    vfLogInfo("AudioAdapter: Released audio buffer for '{}'", notification.path);
+                }
+            });
     }
 
     AudioAdapter::~AudioAdapter() {
+        if (assetReleaseToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(assetReleaseToken);
+        }
         if (audioController && audioController->isInitialized()) {
             audioController->cleanUp();
         }

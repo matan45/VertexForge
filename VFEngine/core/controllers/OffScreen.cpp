@@ -59,6 +59,11 @@ namespace controllers {
 		offScreenController->meshUnload(meshId);
 	}
 
+	void OffScreen::meshRelease(const std::string& meshPath)
+	{
+		offScreenController->meshRelease(meshPath);
+	}
+
 	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
 	                                 const glm::vec3& cameraPos, float time)
 	{

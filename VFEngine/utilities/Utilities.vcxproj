@@ -143,6 +143,8 @@
     <ClInclude Include="print\LogEntry.hpp" />
     <ClInclude Include="rendertexture\RenderTextureTypes.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
+    <ClInclude Include="resource\AssetLifecycleManager.hpp" />
+    <ClInclude Include="resource\AssetTypes.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
@@ -239,6 +241,7 @@
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
+    <ClCompile Include="resource\AssetLifecycleManager.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
     <ClCompile Include="resource\FontResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />

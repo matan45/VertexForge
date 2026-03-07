@@ -124,6 +124,8 @@ namespace render::mesh
         bool hasDefaultTexture() const { return defaultTextureCreated; }
         bool hasDescriptorResources() const { return descriptorPoolCreated; }
         
+        void unloadTexture(const std::string& path);
+
         vk::ImageView getViewForPath(const std::string& path) const;
         vk::Sampler getSamplerForPath(const std::string& path) const;
 

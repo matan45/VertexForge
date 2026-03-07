@@ -21,6 +21,7 @@ namespace render::gpudriven {
         
         std::unordered_map<std::string, uint32_t> texturePathToIndex;
         uint32_t nextTextureIndex = 1; // Index 0 is reserved for default texture
+        std::vector<uint32_t> freeIndices;
 
         bool initialized = false;
         bool defaultTextureSet = false;
@@ -32,22 +33,24 @@ namespace render::gpudriven {
         // Non-copyable
         BindlessTextureManager(const BindlessTextureManager&) = delete;
         BindlessTextureManager& operator=(const BindlessTextureManager&) = delete;
-        
+
         void init();
-        
+
         void cleanup();
-        
+
         uint32_t registerTexture(const std::string& path, vk::ImageView imageView, vk::Sampler sampler);
-        
+
+        void unregisterTexture(const std::string& path);
+
         uint32_t getTextureIndex(const std::string& path) const;
 
         void setDefaultTexture(vk::ImageView imageView, vk::Sampler sampler);
-        
+
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
-        
+
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
-        
-        uint32_t getRegisteredTextureCount() const { return nextTextureIndex - 1; }
+
+        uint32_t getRegisteredTextureCount() const { return nextTextureIndex - 1 - static_cast<uint32_t>(freeIndices.size()); }
 
     private:
         // Helper methods

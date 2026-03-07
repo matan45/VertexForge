@@ -21,6 +21,7 @@
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -101,6 +102,11 @@ namespace handlers {
 
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
+            }
+
+            // Update asset lifecycle manager (deferred releases)
+            if (assetLifecycleService) {
+                assetLifecycleService->update(deltaTime);
             }
 
             if (pluginManager) {
@@ -192,6 +198,7 @@ namespace handlers {
 
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        assetLifecycleService.reset();
         controllerService.reset();
         ikComponentService.reset();
         physicsAnimationService.reset();
@@ -353,6 +360,8 @@ namespace handlers {
             bootstrap->getDebugDrawProvider()
         );
 
+        assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
         {
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
@@ -382,6 +391,7 @@ namespace handlers {
         }
         renderTextureService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
+        assetLifecycleService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {

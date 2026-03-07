@@ -379,6 +379,8 @@ namespace render::gpudriven
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
+        void releaseMeshAsset(const std::string& meshPath);
+
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
 
         float getTerrainUpdateUs() const { return terrain.updateUs; }

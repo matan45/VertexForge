@@ -35,18 +35,29 @@ namespace resource
 
     void ResourceManager::unloadUnusedResources()
     {
-        // Remove the entry if the resource is no longer referenced
-        std::erase_if(textureCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(hdrCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(audioCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(meshCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(materialCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(animationCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(animatorCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(terrainMaterialCache, [](const auto& pair) { return pair.second.expired(); });
+        auto& lifecycle = AssetLifecycleManager::instance();
+
+        auto releaseExpired = [&lifecycle](auto& cache) {
+            std::erase_if(cache, [&lifecycle](const auto& pair) {
+                if (pair.second.expired()) {
+                    lifecycle.release(pair.first);
+                    return true;
+                }
+                return false;
+            });
+        };
+
+        releaseExpired(textureCache);
+        releaseExpired(hdrCache);
+        releaseExpired(audioCache);
+        releaseExpired(meshCache);
+        releaseExpired(shaderCache);
+        releaseExpired(materialCache);
+        releaseExpired(materialInstanceCache);
+        releaseExpired(fontCache);
+        releaseExpired(animationCache);
+        releaseExpired(animatorCache);
+        releaseExpired(terrainMaterialCache);
     }
 
     static FileType getExpectedTypeFromExtension(const std::string& ext)
@@ -165,7 +176,8 @@ namespace resource
         return loadResourceAsync<TextureData>(
             path,
             textureCache,
-            [](std::string_view p) { return TextureResource::loadTexture(p); });
+            [](std::string_view p) { return TextureResource::loadTexture(p); },
+            AssetType::Texture);
     }
 
     std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(std::string_view path)
@@ -173,7 +185,8 @@ namespace resource
         return loadResourceAsync<HDRData>(
             path,
             hdrCache,
-            [](std::string_view p) { return TextureResource::loadHDR(p); });
+            [](std::string_view p) { return TextureResource::loadHDR(p); },
+            AssetType::HDR);
     }
 
     std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(std::string_view path)
@@ -181,7 +194,8 @@ namespace resource
         return loadResourceAsync<AudioData>(
             path,
             audioCache,
-            [](std::string_view p) { return AudioResource::loadAudio(p); });
+            [](std::string_view p) { return AudioResource::loadAudio(p); },
+            AssetType::Audio);
     }
 
     std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(std::string_view path)
@@ -191,7 +205,8 @@ namespace resource
             meshCache,
             [](std::string_view p) {
                 return MeshStreamResource::loadAll(p);
-            });
+            },
+            AssetType::Mesh);
     }
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
@@ -207,7 +222,8 @@ namespace resource
         return loadResourceAsync<FontData>(
             path,
             fontCache,
-            [](std::string_view p) { return FontResource::loadFont(p); });
+            [](std::string_view p) { return FontResource::loadFont(p); },
+            AssetType::Font);
     }
 
     std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(std::string_view path)
@@ -215,7 +231,8 @@ namespace resource
         return loadResourceAsync<AnimationData>(
             path,
             animationCache,
-            [](std::string_view p) { return AnimationResource::loadAnimation(p); });
+            [](std::string_view p) { return AnimationResource::loadAnimation(p); },
+            AssetType::Animation);
     }
 
     void ResourceManager::init()
@@ -254,6 +271,8 @@ namespace resource
         animatorCache.clear();
         terrainMaterialCache.clear();
 
+        AssetLifecycleManager::instance().clear();
+
         vfLogInfo("All resource caches cleared");
     }
 
@@ -264,6 +283,7 @@ namespace resource
             auto it = materialCache.find(std::string(path));
             if (it != materialCache.end()) {
                 if (auto existing = it->second.lock()) {
+                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::Material);
                     return existing;
                 }
             }
@@ -282,6 +302,24 @@ namespace resource
             materialCache[std::string(path)] = material;
         }
 
+        auto& lifecycle = AssetLifecycleManager::instance();
+        lifecycle.acquire(std::string(path), AssetType::Material);
+
+        // Register texture dependencies from shader graph
+        for (const auto& node : material->graph.nodes) {
+            if (node.type == material::NodeType::TextureSample ||
+                node.type == material::NodeType::OrmSample) {
+                auto propIt = node.properties.find("texturePath");
+                if (propIt != node.properties.end() &&
+                    std::holds_alternative<std::string>(propIt->second)) {
+                    const auto& texPath = std::get<std::string>(propIt->second);
+                    if (!texPath.empty()) {
+                        lifecycle.addDependency(std::string(path), texPath, AssetType::Texture);
+                    }
+                }
+            }
+        }
+
         return material;
     }
 
@@ -298,6 +336,7 @@ namespace resource
             auto it = materialInstanceCache.find(std::string(path));
             if (it != materialInstanceCache.end()) {
                 if (auto existing = it->second.lock()) {
+                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::MaterialInstance);
                     return existing;
                 }
             }
@@ -314,6 +353,20 @@ namespace resource
         {
             std::scoped_lock lock(cacheMutex);
             materialInstanceCache[std::string(path)] = instance;
+        }
+
+        auto& lifecycle = AssetLifecycleManager::instance();
+        lifecycle.acquire(std::string(path), AssetType::MaterialInstance);
+
+        // Register parent material dependency
+        if (!instance->parentMaterialPath.empty()) {
+            lifecycle.addDependency(std::string(path), instance->parentMaterialPath, AssetType::Material);
+        }
+        // Register texture override dependencies
+        for (const auto& [slot, texPath] : instance->textureOverrides) {
+            if (!texPath.empty()) {
+                lifecycle.addDependency(std::string(path), texPath, AssetType::Texture);
+            }
         }
 
         return instance;
@@ -400,6 +453,8 @@ namespace resource
         animationCache.erase(path);
         animatorCache.erase(path);
         terrainMaterialCache.erase(path);
+
+        AssetLifecycleManager::instance().forceRelease(path);
     }
 
     void ResourceManager::migrateCachePrefix(const std::string& oldPrefix, const std::string& newPrefix)
@@ -450,6 +505,7 @@ namespace resource
             auto it = animatorCache.find(std::string(path));
             if (it != animatorCache.end()) {
                 if (auto existing = it->second.lock()) {
+                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::Animator);
                     return existing;
                 }
             }
@@ -466,6 +522,16 @@ namespace resource
         {
             std::scoped_lock lock(cacheMutex);
             animatorCache[std::string(path)] = animatorData;
+        }
+
+        auto& lifecycle = AssetLifecycleManager::instance();
+        lifecycle.acquire(std::string(path), AssetType::Animator);
+
+        // Register animation clip dependencies
+        for (const auto& state : animatorData->graph.states) {
+            if (!state.animationPath.empty()) {
+                lifecycle.addDependency(std::string(path), state.animationPath, AssetType::Animation);
+            }
         }
 
         return animatorData;

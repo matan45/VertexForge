@@ -1,5 +1,6 @@
 #pragma once
 #include "../../services/providers/render/IOffScreenProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 
 namespace controllers
 {
@@ -19,10 +20,11 @@ namespace core
     {
     private:
         controllers::OffScreen* offScreen;
+        events::SubscriptionToken assetReleaseToken;
 
     public:
         explicit OffScreenAdapter(controllers::OffScreen* offScreen);
-        ~OffScreenAdapter() override = default;
+        ~OffScreenAdapter() override;
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

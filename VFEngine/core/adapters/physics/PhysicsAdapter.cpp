@@ -1,5 +1,6 @@
 #include "PhysicsAdapter.hpp"
 #include "PhysicsConversions.hpp"
+#include "../../physics/PhysicsShapeFactory.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 
@@ -119,6 +120,7 @@ namespace core
             physicsWorld->cleanUp();
         fixedTimestep->reset();
         waterSensorEntities.clear();
+        physics::PhysicsShapeFactory::clearCache();
     }
 
     bool PhysicsAdapter::isInitialized() const

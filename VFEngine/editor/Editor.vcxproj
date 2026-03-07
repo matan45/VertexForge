@@ -128,6 +128,7 @@
     <ClInclude Include="handlers\ExportHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
+    <ClInclude Include="windows\AssetLifecycleWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MainMenuBar.hpp" />
@@ -255,6 +256,7 @@
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
+    <ClCompile Include="windows\AssetLifecycleWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MainMenuBar.cpp" />

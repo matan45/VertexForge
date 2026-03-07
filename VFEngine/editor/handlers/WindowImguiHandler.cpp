@@ -12,6 +12,7 @@
 #include "../windows/import/FileOperationProgressWindow.hpp"
 #include "../windows/import/SceneLoadProgressWindow.hpp"
 #include "../windows/config/NavmeshWindow.hpp"
+#include "../windows/AssetLifecycleWindow.hpp"
 
 namespace handlers
 {
@@ -37,6 +38,7 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::FileOperationProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneLoadProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::NavmeshWindow>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::AssetLifecycleWindow>());
     }
 
     void WindowImguiHandler::cleanUp() const

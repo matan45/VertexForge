@@ -116,6 +116,7 @@
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
+    <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\lightbake\LightBakeEvents.hpp" />
     <ClInclude Include="events\navmesh\NavmeshEvents.hpp" />
     <ClInclude Include="events\physics\ControllerEvents.hpp" />
@@ -183,6 +184,7 @@
     <ClInclude Include="impl\editor\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
+    <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\lightbake\LightBakeServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
@@ -222,6 +224,7 @@
     <ClInclude Include="interfaces\editor\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
+    <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
     <ClInclude Include="interfaces\lightbake\ILightBakeService.hpp" />
     <ClInclude Include="interfaces\navmesh\INavmeshService.hpp" />
     <ClInclude Include="interfaces\physics\IControllerService.hpp" />
@@ -300,6 +303,7 @@
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
+    <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\lightbake\LightBakeServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshGeometryCollector.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshServiceImpl.cpp" />

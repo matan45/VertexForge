@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 #include "Types.hpp"
 #include "ShaderResource.hpp"
 #include "MeshStreamHandle.hpp"
+#include "AssetLifecycleManager.hpp"
 
 namespace resource {
 	class ResourceManager
@@ -81,7 +82,8 @@ namespace resource {
 		static std::future<std::shared_ptr<T>> loadResourceAsync(
 			std::string_view path,
 			std::unordered_map<std::string, std::weak_ptr<T>>& cache,
-			LoaderFunc loader);
+			LoaderFunc loader,
+			AssetType assetType = AssetType::Texture);
 
 		template <typename T>
 		static std::future<T> make_ready_future(T value) {
@@ -92,28 +94,30 @@ namespace resource {
 	};
 
 	template<typename T, typename LoaderFunc>
-	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader)
+	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader, AssetType assetType)
 	{
 		if (auto resource = cache[path.data()].lock()) {
+			AssetLifecycleManager::instance().acquire(std::string(path), assetType);
 			return make_ready_future(resource);
 		}
 
-		return std::async(std::launch::async, [path = std::string(path), loader, &cache]() -> std::shared_ptr<T> {
+		return std::async(std::launch::async, [path = std::string(path), loader, &cache, assetType]() -> std::shared_ptr<T> {
 			try {
 				// Validate path before processing
 				if (path.empty()) {
 					vfLogError("Empty path provided for resource loading");
 					return nullptr;
 				}
-				
+
 				auto resource = std::make_shared<T>(loader(path));
-				
+
 				// Only cache if resource was successfully loaded
 				if (resource) {
 					std::scoped_lock lock(cacheMutex);
 					cache[path] = resource;
+					AssetLifecycleManager::instance().acquire(path, assetType);
 				}
-				
+
 				return resource;
 			}
 			catch (const std::exception& e) {

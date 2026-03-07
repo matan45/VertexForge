@@ -179,6 +179,14 @@ namespace render::gpudriven
         meshStreamManager->update(cameraPosition);
     }
 
+    void GPUDrivenRenderer::releaseMeshAsset(const std::string& meshPath)
+    {
+        if (meshStreamManager)
+        {
+            meshStreamManager->unrequestMesh(meshPath);
+        }
+    }
+
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
     {
         if (!materials.textureCache || !bindlessTextures)

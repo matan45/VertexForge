@@ -104,6 +104,8 @@ namespace render::mesh
 
         void requestMesh(const std::string& meshPath);
 
+        void unrequestMesh(const std::string& meshPath);
+
         void update(const glm::vec3& cameraPos);
 
         void setMeshletBuffer(gpudriven::MeshletBuffer* buffer) { meshletBuffer = buffer; }

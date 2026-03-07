@@ -51,6 +51,7 @@ namespace render::gpudriven {
         }
 
         texturePathToIndex.clear();
+        freeIndices.clear();
         nextTextureIndex = 1;
         initialized = false;
         defaultTextureSet = false;
@@ -155,19 +156,60 @@ namespace render::gpudriven {
             return it->second;
         }
 
-        // Check capacity
-        if (nextTextureIndex >= MAX_BINDLESS_TEXTURES) {
-            vfLogError("BindlessTextureManager: Maximum texture count ({}) exceeded", MAX_BINDLESS_TEXTURES);
-            return INVALID_TEXTURE_INDEX;
+        // Reuse a free slot if available, otherwise allocate new
+        uint32_t index;
+        if (!freeIndices.empty()) {
+            index = freeIndices.back();
+            freeIndices.pop_back();
         }
-        
-        uint32_t index = nextTextureIndex++;
+        else {
+            if (nextTextureIndex >= MAX_BINDLESS_TEXTURES) {
+                vfLogError("BindlessTextureManager: Maximum texture count ({}) exceeded", MAX_BINDLESS_TEXTURES);
+                return INVALID_TEXTURE_INDEX;
+            }
+            index = nextTextureIndex++;
+        }
         texturePathToIndex[path] = index;
         
         updateDescriptor(index, imageView, sampler);
 
         vfLogWarning("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
         return index;
+    }
+
+    void BindlessTextureManager::unregisterTexture(const std::string& path)
+    {
+        if (!initialized) {
+            return;
+        }
+
+        auto it = texturePathToIndex.find(path);
+        if (it == texturePathToIndex.end()) {
+            vfLogWarning("BindlessTextureManager: Texture '{}' not found for unregister", path);
+            return;
+        }
+
+        uint32_t index = it->second;
+
+        // Never free index 0 (default texture)
+        if (index == 0) {
+            vfLogWarning("BindlessTextureManager: Cannot unregister default texture (index 0)");
+            return;
+        }
+
+        // Update descriptor to point to default texture to avoid dangling references
+        if (defaultTextureSet) {
+            // Re-read default texture descriptor info and write it to the freed slot
+            // Since we can't read back descriptor info, we just leave it as-is.
+            // The slot is marked free and won't be sampled because no object references it.
+            // When re-used, registerTexture() will overwrite with the new texture.
+        }
+
+        freeIndices.push_back(index);
+        texturePathToIndex.erase(it);
+
+        vfLogInfo("BindlessTextureManager: Unregistered texture '{}' at index {} (free slots: {})",
+                  path, index, freeIndices.size());
     }
 
     uint32_t BindlessTextureManager::getTextureIndex(const std::string& path) const
