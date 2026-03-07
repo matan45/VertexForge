@@ -233,12 +233,14 @@ namespace services
             services::EntityHandle handle{ entityHandleId };
 
             // Remove physics body if it exists
-            auto hasBody = ::events::EventDispatcher::instance().query(
-                ::events::physics::HasRigidBodyQuery{ handle });
+            ::events::physics::HasRigidBodyQuery hasBodyQuery;
+            hasBodyQuery.entity = handle;
+            auto hasBody = ::events::EventDispatcher::instance().query(hasBodyQuery);
             if (hasBody)
             {
-                ::events::EventDispatcher::instance().execute(
-                    ::events::physics::RemoveRigidBodyCommand{ handle });
+                ::events::physics::RemoveRigidBodyCommand removeCmd;
+                removeCmd.entity = handle;
+                ::events::EventDispatcher::instance().execute(removeCmd);
             }
 
             ::events::scene::EntityDeletedNotification notif;

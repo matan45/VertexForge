@@ -64,6 +64,16 @@ namespace controllers {
 		offScreenController->meshRelease(meshPath);
 	}
 
+	void OffScreen::textureRelease(const std::string& texturePath)
+	{
+		offScreenController->textureRelease(texturePath);
+	}
+
+	void OffScreen::materialRelease(const std::string& materialPath)
+	{
+		offScreenController->materialRelease(materialPath);
+	}
+
 	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
 	                                 const glm::vec3& cameraPos, float time)
 	{
