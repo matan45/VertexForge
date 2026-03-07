@@ -6,10 +6,16 @@
 namespace render::water
 {
     // Per-tile instance data uploaded to SSBO each frame
+    namespace WaterTileFlags
+    {
+        constexpr uint32_t None     = 0;
+        constexpr uint32_t Selected = 1 << 0;
+    }
+
     struct alignas(16) WaterTileGPUData
     {
         glm::vec4 worldOriginAndSize;   // xyz = tile world origin, w = worldTileSize
-        glm::vec4 heightAndWave;        // x = waterHeight, y = waveIntensity, z = 0, w = 0
+        glm::vec4 heightAndWave;        // x = waterHeight, y = waveIntensity, z = flags (as float-bits), w = 0
     };
     static_assert(sizeof(WaterTileGPUData) == 32);
 

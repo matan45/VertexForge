@@ -103,6 +103,9 @@ namespace render::gpudriven
             std::vector<render::water::WaterTileGPUData> tileData;
             render::water::WaterPushConstants cachedPushConstants{};
             bool renderingEnabled = true;
+            int32_t selectedCoordX = 0;
+            int32_t selectedCoordZ = 0;
+            bool hasSelectedTile = false;
         };
 
         struct LightCullingState
@@ -353,6 +356,8 @@ namespace render::gpudriven
                          const ::water::WaterTileConfig& tileConfig);
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
+        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedWaterTile();
 
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }

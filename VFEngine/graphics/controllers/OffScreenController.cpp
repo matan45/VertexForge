@@ -116,6 +116,7 @@ namespace controllers
                 if (!notification.entity.has_value())
                 {
                     rh->clearSelectedTerrainTile();
+                    rh->clearSelectedWaterTile();
                     return;
                 }
 
@@ -131,11 +132,28 @@ namespace controllers
                     if (tileOpt.has_value())
                     {
                         rh->setSelectedTerrainTile(tileOpt->tileX, tileOpt->tileZ);
+                        rh->clearSelectedWaterTile();
+                        return;
+                    }
+                }
+
+                events::water::HasWaterTileComponentQuery waterTileQuery;
+                waterTileQuery.entity = *notification.entity;
+                if (disp.query(waterTileQuery))
+                {
+                    events::water::GetWaterTileDataQuery waterDataQuery;
+                    waterDataQuery.entity = *notification.entity;
+                    auto waterTileOpt = disp.query(waterDataQuery);
+                    if (waterTileOpt.has_value())
+                    {
+                        rh->setSelectedWaterTile(waterTileOpt->tileX, waterTileOpt->tileZ);
+                        rh->clearSelectedTerrainTile();
                         return;
                     }
                 }
 
                 rh->clearSelectedTerrainTile();
+                rh->clearSelectedWaterTile();
             });
         entitySelectedSubscription = std::make_unique<events::SubscriptionToken>(entitySelectedToken);
     }

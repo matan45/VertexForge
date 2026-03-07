@@ -7,6 +7,7 @@ layout(location = 1) in vec2 inTexCoord;
 layout(location = 0) out vec3 fragWorldPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
+layout(location = 3) flat out uint fragFlags;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -103,6 +104,7 @@ void main() {
 
     fragWorldPos = worldPos;
     fragTexCoord = inTexCoord;
+    fragFlags = floatBitsToUint(heightWave.z);
 
     gl_Position = camera.projection * camera.view * vec4(worldPos, 1.0);
 }
@@ -114,8 +116,11 @@ void main() {
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
+layout(location = 3) flat in uint fragFlags;
 
 layout(location = 0) out vec4 outColor;
+
+const uint WATER_FLAG_SELECTED = 1u;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -428,6 +433,12 @@ void main() {
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
+
+    // Debug highlight for selected tile
+    if ((fragFlags & WATER_FLAG_SELECTED) != 0u)
+    {
+        color = mix(color, vec3(1.0, 0.6, 0.0), 0.3);
+    }
 
     float alpha = mix(pc.shallowColor.a, 1.0, fresnel);
 

@@ -276,6 +276,8 @@ namespace render
 
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
+        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedWaterTile();
 
         void addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();

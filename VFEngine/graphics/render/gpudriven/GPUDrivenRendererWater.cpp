@@ -4,6 +4,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
+#include <cstring>
 
 namespace render::gpudriven
 {
@@ -51,7 +52,12 @@ namespace render::gpudriven
             const auto* tile = visibleTiles[i];
             auto& gpuTile = water.tileData[i];
             gpuTile.worldOriginAndSize = glm::vec4(tile->worldOrigin, tileConfig.worldTileSize);
-            gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, 0.0f, 0.0f);
+            uint32_t flags = render::water::WaterTileFlags::None;
+            if (water.hasSelectedTile && tile->coord.x == water.selectedCoordX && tile->coord.z == water.selectedCoordZ)
+                flags |= render::water::WaterTileFlags::Selected;
+            float flagsAsFloat;
+            std::memcpy(&flagsAsFloat, &flags, sizeof(float));
+            gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, flagsAsFloat, 0.0f);
         }
 
         water.meshBuffer->updateTileData(water.tileData);
@@ -92,5 +98,17 @@ namespace render::gpudriven
     void GPUDrivenRenderer::clearWaterData()
     {
         water.tileData.clear();
+    }
+
+    void GPUDrivenRenderer::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
+    {
+        water.selectedCoordX = coordX;
+        water.selectedCoordZ = coordZ;
+        water.hasSelectedTile = true;
+    }
+
+    void GPUDrivenRenderer::clearSelectedWaterTile()
+    {
+        water.hasSelectedTile = false;
     }
 }

@@ -100,6 +100,10 @@ namespace windows
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
 
+        // Water components
+        waterDrawer.draw(handle);
+        waterTileDrawer.draw(handle);
+
         // UI components
         bool hasUICanvas = uiCanvasDrawer.draw(handle);
         bool hasUIRect = uiRectDrawer.draw(handle);

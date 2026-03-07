@@ -39,6 +39,16 @@ namespace services
         uint32_t visibleTileCount = 0;
     };
 
+    struct WaterTileData
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        float waterHeight = 0.0f;
+        float waveIntensity = 1.0f;
+        bool physicsEnabled = true;
+        bool isVisible = false;
+    };
+
     struct WaterGlobalSettingsData
     {
         float density = 1000.0f;

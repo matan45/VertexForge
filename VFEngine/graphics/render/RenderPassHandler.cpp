@@ -371,6 +371,22 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setSelectedWaterTile(coordX, coordZ);
+        }
+    }
+
+    void RenderPassHandler::clearSelectedWaterTile()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearSelectedWaterTile();
+        }
+    }
+
     void RenderPassHandler::addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos)
     {
         additionalWaterFrustums.emplace_back(frustum, cameraPos);

@@ -80,6 +80,12 @@ namespace events::water
         std::string_view getName() const override { return "HasWaterComponent"; }
     };
 
+    struct GetWaterTileDataQuery : IQuery<std::optional<services::WaterTileData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetWaterTileData"; }
+    };
+
     struct HasWaterTileComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 

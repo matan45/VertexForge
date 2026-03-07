@@ -38,6 +38,7 @@ namespace services
         dispatcher.unregisterQueryHandler<events::water::IsPositionInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::water::GetWaterHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::water::HasWaterComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::water::GetWaterTileDataQuery>();
         dispatcher.unregisterQueryHandler<events::water::HasWaterTileComponentQuery>();
 
         if (triggerEnterSubscription && triggerEnterSubscription->isValid())
@@ -219,6 +220,28 @@ namespace services
             [this](const events::water::HasWaterComponentQuery& query)
             {
                 return hasWaterComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::water::GetWaterTileDataQuery>(
+            [this](const events::water::GetWaterTileDataQuery& query) -> std::optional<WaterTileData>
+            {
+                if (!query.entity.isValid())
+                    return std::nullopt;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(query.entity);
+                if (!registry.valid(ent) || !registry.all_of<components::WaterTileComponent>(ent))
+                    return std::nullopt;
+
+                const auto& comp = registry.get<components::WaterTileComponent>(ent);
+                WaterTileData data;
+                data.tileX = comp.tileX;
+                data.tileZ = comp.tileZ;
+                data.waterHeight = comp.waterHeight;
+                data.waveIntensity = comp.waveIntensity;
+                data.physicsEnabled = comp.physicsEnabled;
+                data.isVisible = comp.isVisible;
+                return data;
             });
 
         dispatcher.registerQueryHandler<events::water::HasWaterTileComponentQuery>(

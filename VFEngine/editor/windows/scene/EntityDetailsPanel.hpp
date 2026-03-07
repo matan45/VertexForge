@@ -21,6 +21,8 @@
 #include "../details/SpotLightDrawer.hpp"
 #include "../details/TerrainDrawer.hpp"
 #include "../details/TerrainTileDrawer.hpp"
+#include "../details/WaterDrawer.hpp"
+#include "../details/WaterTileDrawer.hpp"
 #include "../details/UICanvasDrawer.hpp"
 #include "../details/UIRectDrawer.hpp"
 #include "../details/UIImageDrawer.hpp"
@@ -69,6 +71,8 @@ namespace windows
         details::SpotLightDrawer spotLightDrawer;
         details::TerrainDrawer terrainDrawer;
         details::TerrainTileDrawer terrainTileDrawer;
+        details::WaterDrawer waterDrawer;
+        details::WaterTileDrawer waterTileDrawer;
         details::UICanvasDrawer uiCanvasDrawer;
         details::UIRectDrawer uiRectDrawer;
         details::UIImageDrawer uiImageDrawer;
