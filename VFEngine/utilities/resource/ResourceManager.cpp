@@ -285,7 +285,6 @@ namespace resource
             auto it = materialCache.find(std::string(path));
             if (it != materialCache.end()) {
                 if (auto existing = it->second.lock()) {
-                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::Material);
                     return existing;
                 }
             }
@@ -338,7 +337,6 @@ namespace resource
             auto it = materialInstanceCache.find(std::string(path));
             if (it != materialInstanceCache.end()) {
                 if (auto existing = it->second.lock()) {
-                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::MaterialInstance);
                     return existing;
                 }
             }
@@ -507,7 +505,6 @@ namespace resource
             auto it = animatorCache.find(std::string(path));
             if (it != animatorCache.end()) {
                 if (auto existing = it->second.lock()) {
-                    AssetLifecycleManager::instance().acquire(std::string(path), AssetType::Animator);
                     return existing;
                 }
             }

@@ -83,7 +83,7 @@ namespace resource {
 			std::string_view path,
 			std::unordered_map<std::string, std::weak_ptr<T>>& cache,
 			LoaderFunc loader,
-			AssetType assetType = AssetType::Texture);
+			AssetType assetType = AssetType::COUNT);
 
 		template <typename T>
 		static std::future<T> make_ready_future(T value) {
@@ -97,7 +97,6 @@ namespace resource {
 	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader, AssetType assetType)
 	{
 		if (auto resource = cache[path.data()].lock()) {
-			AssetLifecycleManager::instance().acquire(std::string(path), assetType);
 			return make_ready_future(resource);
 		}
 
@@ -115,7 +114,9 @@ namespace resource {
 				if (resource) {
 					std::scoped_lock lock(cacheMutex);
 					cache[path] = resource;
-					AssetLifecycleManager::instance().acquire(path, assetType);
+					if (assetType != AssetType::COUNT) {
+						AssetLifecycleManager::instance().acquire(path, assetType);
+					}
 				}
 
 				return resource;
