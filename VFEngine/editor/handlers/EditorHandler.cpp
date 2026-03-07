@@ -35,6 +35,7 @@
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/world/WorldSectorServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -156,6 +157,12 @@ namespace handlers
                 }
             }
 
+            // Update world sector streaming (distance-based entity load/unload)
+            if (worldSectorService)
+            {
+                worldSectorService->update();
+            }
+
             // Update asset lifecycle manager (deferred releases)
             if (assetLifecycleService)
             {
@@ -213,6 +220,7 @@ namespace handlers
         renderHookService.reset();
         debugDrawService.reset();
         audioSceneUpdater.reset();
+        worldSectorService.reset();
         assetLifecycleService.reset();
         audioService.reset();
         scriptingService.reset();
@@ -306,6 +314,10 @@ namespace handlers
         );
 
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
+        worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
+            bootstrap->getSceneGraphSystem()
+        );
     }
 
     void EditorHandler::createMediaServices()
@@ -440,6 +452,7 @@ namespace handlers
         renderHookService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
+        worldSectorService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

@@ -22,6 +22,7 @@
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/world/WorldSectorServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -102,6 +103,11 @@ namespace handlers {
 
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
+            }
+
+            // Update world sector streaming (distance-based entity load/unload)
+            if (worldSectorService) {
+                worldSectorService->update();
             }
 
             // Update asset lifecycle manager (deferred releases)
@@ -198,6 +204,7 @@ namespace handlers {
 
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        worldSectorService.reset();
         assetLifecycleService.reset();
         controllerService.reset();
         ikComponentService.reset();
@@ -362,6 +369,10 @@ namespace handlers {
 
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
 
+        worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
+            bootstrap->getSceneGraphSystem()
+        );
+
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
         {
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
@@ -392,6 +403,7 @@ namespace handlers {
         renderTextureService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
+        worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {

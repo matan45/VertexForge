@@ -14,6 +14,7 @@
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
+#include "WorldSectorWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
@@ -47,6 +48,7 @@ namespace windows
         NavmeshWindow navmeshWindow;
         LightBakeWindow lightBakeWindow;
         AssetLifecycleWindow assetLifecycleWindow;
+        WorldSectorWindow worldSectorWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;

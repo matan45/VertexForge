@@ -34,14 +34,15 @@ namespace serialization
         static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
                                         SceneLoadProgressCallback progressCallback = nullptr);
 
-    private:
-        static json serializeRootEntity(scene::Entity& root);
         static json serializeEntity(scene::Entity& entity);
-        static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
                                       scene::SceneGraphSystem& sceneGraph, bool isRoot,
                                       SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
                                       size_t totalEntities);
+
+    private:
+        static json serializeRootEntity(scene::Entity& root);
+        static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
         static void deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph);
 

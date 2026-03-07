@@ -216,6 +216,15 @@
     <ClInclude Include="water\WaterTile.hpp" />
     <ClInclude Include="water\WaterTypes.hpp" />
     <ClInclude Include="water\WaterWorldStreamer.hpp" />
+    <ClInclude Include="world\PendingReferenceResolver.hpp" />
+    <ClInclude Include="world\SectorEntityLoader.hpp" />
+    <ClInclude Include="world\SectorStreamer.hpp" />
+    <ClInclude Include="world\WorldDefinition.hpp" />
+    <ClInclude Include="world\WorldDefinitionSerialization.hpp" />
+    <ClInclude Include="world\WorldSector.hpp" />
+    <ClInclude Include="world\WorldSectorManager.hpp" />
+    <ClInclude Include="world\WorldSectorSerialization.hpp" />
+    <ClInclude Include="world\WorldTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animator\AnimatorAsset.cpp" />
@@ -303,6 +312,12 @@
     <ClCompile Include="water\WaterSerializer.cpp" />
     <ClCompile Include="water\WaterSerializerRead.cpp" />
     <ClCompile Include="water\WaterWorldStreamer.cpp" />
+    <ClCompile Include="world\PendingReferenceResolver.cpp" />
+    <ClCompile Include="world\SectorEntityLoader.cpp" />
+    <ClCompile Include="world\SectorStreamer.cpp" />
+    <ClCompile Include="world\WorldDefinitionSerialization.cpp" />
+    <ClCompile Include="world\WorldSectorManager.cpp" />
+    <ClCompile Include="world\WorldSectorSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

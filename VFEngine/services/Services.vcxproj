@@ -162,6 +162,7 @@
     <ClInclude Include="events\vfx\VFXEventNotifications.hpp" />
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
+    <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\audio\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
@@ -217,6 +218,7 @@
     <ClInclude Include="impl\terrain\TerrainRaycastServiceImpl.hpp" />
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
+    <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
@@ -248,6 +250,7 @@
     <ClInclude Include="interfaces\terrain\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\terrain\ITerrainService.hpp" />
     <ClInclude Include="interfaces\terrain\IWaterService.hpp" />
+    <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
@@ -344,6 +347,7 @@
     <ClCompile Include="impl\terrain\TerrainRaycastServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
+    <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

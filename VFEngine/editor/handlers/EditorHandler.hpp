@@ -33,6 +33,7 @@
 #include "interfaces/render/IDebugDrawService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
+#include "interfaces/world/IWorldSectorService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace plugin {
@@ -102,6 +103,7 @@ namespace handlers {
 		std::shared_ptr<services::IRenderHookService> renderHookService;
 		std::shared_ptr<services::IDebugDrawService> debugDrawService;
 		std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
+		std::shared_ptr<services::IWorldSectorService> worldSectorService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 

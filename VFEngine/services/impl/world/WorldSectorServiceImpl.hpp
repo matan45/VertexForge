@@ -1,0 +1,69 @@
+#pragma once
+
+#include "../../interfaces/world/IWorldSectorService.hpp"
+#include "../../events/EventTypes.hpp"
+#include "world/WorldSectorManager.hpp"
+#include "world/WorldDefinition.hpp"
+#include "world/SectorStreamer.hpp"
+#include "world/SectorEntityLoader.hpp"
+#include "world/PendingReferenceResolver.hpp"
+#include <memory>
+#include <optional>
+#include <string>
+
+namespace scene
+{
+    class SceneGraphSystem;
+}
+
+namespace events
+{
+    class EventDispatcher;
+}
+
+namespace services
+{
+    class WorldSectorServiceImpl : public IWorldSectorService
+    {
+    public:
+        explicit WorldSectorServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
+
+        void registerEventHandlers() override;
+        void update() override;
+
+        [[nodiscard]] bool isWorldMode() const override { return worldMode; }
+
+        bool createWorld(const std::string& name, const std::string& filePath,
+                         const world::SectorConfig& sectorConfig,
+                         const world::SectorStreamingConfig& streamingConfig);
+        bool saveWorld(const std::string& filePath);
+        bool loadWorld(const std::string& filePath);
+
+        bool saveSector(const world::SectorCoord& coord, const std::string& filePath);
+        bool loadSector(const world::SectorCoord& coord);
+        bool unloadSector(const world::SectorCoord& coord);
+
+        world::WorldSectorManager& getSectorManager() { return sectorManager; }
+        const world::WorldDefinition& getWorldDefinition() const { return worldDefinition; }
+
+    private:
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+        world::WorldSectorManager sectorManager;
+        world::WorldDefinition worldDefinition;
+        world::SectorStreamer streamer;
+        world::SectorEntityLoader entityLoader;
+        world::PendingReferenceResolver referenceResolver;
+
+        bool worldMode = false;
+        std::string currentWorldPath;
+
+        std::vector<world::SectorStreamingAction> streamingActions;
+
+        ::events::SubscriptionToken transformChangedToken;
+
+        void handleSectorLoad(const world::SectorCoord& coord);
+        void handleSectorUnload(const world::SectorCoord& coord);
+        void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
+    };
+
+} // namespace services

@@ -19,6 +19,7 @@ namespace windows
     class NavmeshWindow;
     class LightBakeWindow;
     class AssetLifecycleWindow;
+    class WorldSectorWindow;
 
     class MainMenuBar
     {
@@ -42,6 +43,7 @@ namespace windows
         NavmeshWindow* navmeshWindow = nullptr;
         LightBakeWindow* lightBakeWindow = nullptr;
         AssetLifecycleWindow* assetLifecycleWindow = nullptr;
+        WorldSectorWindow* worldSectorWindow = nullptr;
 
     public:
         MainMenuBar();
@@ -95,6 +97,11 @@ namespace windows
         void setAssetLifecycleWindow(AssetLifecycleWindow* window)
         {
             assetLifecycleWindow = window;
+        }
+
+        void setWorldSectorWindow(WorldSectorWindow* window)
+        {
+            worldSectorWindow = window;
         }
 
     private:
