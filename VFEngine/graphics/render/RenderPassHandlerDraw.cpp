@@ -175,7 +175,7 @@ namespace render
                 cfg.windDirection = cfgData.windDirection;
                 cfg.amplitude = cfgData.amplitude;
                 cfg.choppiness = cfgData.choppiness;
-                cfg.gravity = cfgData.gravity;
+                cfg.gravity = waterRenderProvider->getPhysicsGravity();
                 cfg.foamThreshold = cfgData.foamThreshold;
                 cfg.displacementScale = cfgData.displacementScale;
                 gpuDrivenRenderer->initOceanFFT(cfg);
@@ -203,7 +203,7 @@ namespace render
                 cfg.windDirection = cfgData.windDirection;
                 cfg.amplitude = cfgData.amplitude;
                 cfg.choppiness = cfgData.choppiness;
-                cfg.gravity = cfgData.gravity;
+                cfg.gravity = waterRenderProvider->getPhysicsGravity();
                 cfg.foamThreshold = cfgData.foamThreshold;
                 cfg.displacementScale = cfgData.displacementScale;
                 gpuDrivenRenderer->updateOceanConfig(cfg);

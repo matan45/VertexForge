@@ -5,8 +5,8 @@
 namespace water
 {
     WaterWorldStreamer::WaterWorldStreamer(const WaterStreamingConfig& config)
-        : config(config)
     {
+        setConfig(config);
     }
 
     void WaterWorldStreamer::setConfig(const WaterStreamingConfig& config)

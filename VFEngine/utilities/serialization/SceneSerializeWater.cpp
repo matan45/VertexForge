@@ -53,7 +53,6 @@ namespace serialization
             j["oceanWindDirection"] = water.oceanWindDirection;
             j["oceanAmplitude"] = water.oceanAmplitude;
             j["oceanChoppiness"] = water.oceanChoppiness;
-            j["oceanGravity"] = water.oceanGravity;
             j["oceanFoamThreshold"] = water.oceanFoamThreshold;
             j["oceanDisplacementScale"] = water.oceanDisplacementScale;
         }
@@ -135,8 +134,6 @@ namespace serialization
             water.oceanAmplitude = it->get<float>();
         if (auto it = j.find("oceanChoppiness"); it != j.end() && it->is_number())
             water.oceanChoppiness = it->get<float>();
-        if (auto it = j.find("oceanGravity"); it != j.end() && it->is_number())
-            water.oceanGravity = it->get<float>();
         if (auto it = j.find("oceanFoamThreshold"); it != j.end() && it->is_number())
             water.oceanFoamThreshold = it->get<float>();
         if (auto it = j.find("oceanDisplacementScale"); it != j.end() && it->is_number())

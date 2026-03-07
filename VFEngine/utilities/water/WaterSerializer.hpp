@@ -15,7 +15,7 @@ namespace water
     static constexpr std::array<char, 4> WATER_MAGIC = {'V', 'F', 'W', 'T'};
     static constexpr uint32_t WATER_FORMAT_VERSION_MAJOR = 1;
     static constexpr uint32_t WATER_FORMAT_VERSION_MINOR = 1;
-    static constexpr uint32_t WATER_FORMAT_VERSION_PATCH = 0;
+    static constexpr uint32_t WATER_FORMAT_VERSION_PATCH = 1;
     static constexpr uint32_t MAX_REASONABLE_WATER_TILES = 10000;
 
     struct WaterFileHeader
@@ -45,6 +45,7 @@ namespace water
         float waterHeight = 0.0f;
         float waveIntensity = 1.0f;
         bool physicsEnabled = true;
+        bool isVisible = true;
     };
 
     struct WaterLoadResult

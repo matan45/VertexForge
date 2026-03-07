@@ -44,7 +44,6 @@ namespace water
         float windDirection = 45.0f;
         float amplitude = 0.00003f;
         float choppiness = 1.2f;
-        float gravity = 9.81f;
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
     };

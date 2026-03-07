@@ -396,10 +396,15 @@ namespace services
                     streamerIt->second->update(
                         cameraPosition, tileSize, defIt->second, *grid, waterStreamingActions);
 
+                    bool streamingChanged = false;
                     for (const auto& action : waterStreamingActions)
                     {
                         if (action.isLoad)
                         {
+                            // Guard: skip if tile already exists in grid (avoids duplicate entities)
+                            if (grid->hasTile(action.coord))
+                                continue;
+
                             const auto* def = defIt->second.getDefinition(action.coord);
                             if (def)
                             {
@@ -410,6 +415,7 @@ namespace services
                                     tile->waveIntensity = def->waveIntensity;
                                     tile->physicsEnabled = def->physicsEnabled;
                                     createTileEntity(waterHandle, tile, tileSize);
+                                    streamingChanged = true;
                                 }
                             }
                         }
@@ -432,6 +438,25 @@ namespace services
                                 }
                             }
                             grid->removeTile(action.coord);
+                            streamingChanged = true;
+                        }
+                    }
+
+                    // Sync component bounds and tile count after streaming changes
+                    if (streamingChanged)
+                    {
+                        auto& registry = scene::EntityRegistry::getRegistry();
+                        entt::entity ent = internal::fromHandle(waterHandle);
+                        if (registry.valid(ent) && registry.all_of<components::WaterComponent>(ent))
+                        {
+                            auto& comp = registry.get<components::WaterComponent>(ent);
+                            int32_t minX, minZ, maxX, maxZ;
+                            grid->computeBounds(minX, minZ, maxX, maxZ);
+                            comp.gridMinX = minX;
+                            comp.gridMinZ = minZ;
+                            comp.gridMaxX = maxX;
+                            comp.gridMaxZ = maxZ;
+                            comp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
                         }
                     }
                 }
@@ -455,6 +480,15 @@ namespace services
             else
             {
                 result.insert(result.end(), visibleTiles.begin(), visibleTiles.end());
+            }
+
+            // Update visibleTileCount on the component
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(EntityHandle{entityId});
+            if (registry.valid(ent) && registry.all_of<components::WaterComponent>(ent))
+            {
+                registry.get<components::WaterComponent>(ent).visibleTileCount =
+                    static_cast<uint32_t>(visibleTiles.size());
             }
         }
 
@@ -642,7 +676,12 @@ namespace services
             [this](const events::water::SetOceanFFTEnabledCommand& cmd)
             {
                 oceanFFTEnabled = cmd.enabled;
+                oceanConfig.enabled = cmd.enabled;
                 oceanConfigVersion++;
+
+                events::water::OceanFFTConfigChangedNotification notification;
+                notification.config = oceanConfig;
+                events::EventDispatcher::instance().publish(notification);
             });
 
         dispatcher.registerCommandHandler<events::water::SetOceanFFTConfigCommand>(

@@ -82,7 +82,6 @@ namespace water
             o.windDirection = readLE<float>(file);
             o.amplitude = readLE<float>(file);
             o.choppiness = readLE<float>(file);
-            o.gravity = readLE<float>(file);
             o.foamThreshold = readLE<float>(file);
             if (file.good())
                 o.displacementScale = readLE<float>(file);
@@ -98,6 +97,8 @@ namespace water
         outTile.waterHeight = readLE<float>(file);
         outTile.waveIntensity = readLE<float>(file);
         outTile.physicsEnabled = readLE<uint8_t>(file) != 0;
+        if (file.good())
+            outTile.isVisible = readLE<uint8_t>(file) != 0;
 
         return file.good();
     }

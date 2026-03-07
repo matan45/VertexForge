@@ -70,6 +70,7 @@ namespace services
         ~WaterService() override;
 
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        IPhysicsProvider* getPhysicsProvider() const { return physicsProvider; }
         void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) { oceanHeightSampler = std::move(sampler); }
 
         void registerEventHandlers() override;

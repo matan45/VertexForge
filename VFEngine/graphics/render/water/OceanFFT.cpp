@@ -96,6 +96,7 @@ namespace render::water
 
         if (resolutionChanged && initialized)
         {
+            device.getLogicalDevice().waitIdle();
             cleanup();
             init(config);
         }
@@ -108,9 +109,6 @@ namespace render::water
     void OceanFFT::dispatch(vk::CommandBuffer cmd, float time)
     {
         if (!initialized) return;
-
-        static int debugFrameCount = 0;
-        debugFrameCount++;
 
         // Transition output images back to General for compute writes
         // On first dispatch they're already in General from transitionImagesInitial
@@ -804,6 +802,9 @@ namespace render::water
         if (!initialized || !readbackReady || !readbackBuffer)
             return;
 
+        // Ensure GPU transfer is complete before reading back
+        device.getLogicalDevice().waitIdle();
+
         uint32_t N = config.resolution;
         vk::DeviceSize bufferSize = N * N * 8; // RGBA16F = 8 bytes per pixel
 
@@ -837,7 +838,8 @@ namespace render::water
                 }
 
                 float f = std::ldexp(static_cast<float>(mant | 0x400), static_cast<int>(exp) - 25);
-                return sign ? -f : f;
+                float result = sign ? -f : f;
+                return std::isnan(result) ? 0.0f : result;
             };
 
             cpuDisplacementData[i] = glm::vec4(

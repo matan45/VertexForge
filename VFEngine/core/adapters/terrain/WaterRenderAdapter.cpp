@@ -1,6 +1,7 @@
 #include "WaterRenderAdapter.hpp"
 #include "../../services/impl/scene/WaterService.hpp"
 #include "../../services/data/WaterData.hpp"
+#include "../../services/providers/physics/IPhysicsProvider.hpp"
 
 namespace core
 {
@@ -100,5 +101,15 @@ namespace core
         if (oceanHeightSampler)
             return oceanHeightSampler(worldXZ);
         return 0.0f;
+    }
+
+    float WaterRenderAdapter::getPhysicsGravity() const
+    {
+        if (waterService && waterService->getPhysicsProvider())
+        {
+            glm::vec3 g = waterService->getPhysicsProvider()->getGravity();
+            return glm::length(g);
+        }
+        return 9.81f;
     }
 }

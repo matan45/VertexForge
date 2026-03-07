@@ -51,5 +51,6 @@ namespace services
         virtual uint32_t getOceanFFTConfigVersion() const = 0;
         virtual float getOceanHeightAt(const glm::vec2& worldXZ) const = 0;
         virtual void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) = 0;
+        virtual float getPhysicsGravity() const = 0;
     };
 }

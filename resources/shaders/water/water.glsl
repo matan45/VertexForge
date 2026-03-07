@@ -88,7 +88,7 @@ void main() {
         // Ocean FFT path: sample displacement and normal from compute output
         // Two octaves at different scales to break up visible FFT tiling
         vec2 oceanUV1 = worldPos.xz / pc.oceanPatchSize;
-        vec2 oceanUV2 = worldPos.xz / (pc.oceanPatchSize * 2.731); // irrational scale to avoid alignment
+        vec2 oceanUV2 = worldPos.xz / (pc.oceanPatchSize * 2.731) + vec2(0.37, 0.71); // irrational scale + phase offset to avoid alignment
 
         vec4 disp1 = texture(oceanDisplacementMap, oceanUV1);
         vec4 disp2 = texture(oceanDisplacementMap, oceanUV2);
@@ -195,7 +195,7 @@ layout(set = 7, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 7, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
 layout(set = 8, binding = 0) uniform sampler2D frag_oceanDisplacementMap;
-layout(set = 8, binding = 1) uniform sampler2D frag_oceanNormalMap;
+layout(set = 8, binding = 1) uniform sampler2D frag_oceanNormalMap; // bound for descriptor set compatibility
 
 layout(push_constant) uniform PushConstants {
     vec4 shallowColor;
@@ -514,8 +514,9 @@ void main() {
 
     // Ocean foam blending — only appears on large wave crests
     if (pc.oceanEnabled != 0u) {
-        vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
-        float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
+        vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize;
+        vec2 foamUV2 = fragWorldPos.xz / (pc.oceanPatchSize * 2.731) + vec2(0.37, 0.71);
+        float foam = texture(frag_oceanDisplacementMap, foamUV1).w + texture(frag_oceanDisplacementMap, foamUV2).w * 0.3;
         vec3 foamColor = vec3(0.95, 0.97, 1.0);
         color = mix(color, foamColor, foam * 0.6);
     }

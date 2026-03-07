@@ -56,7 +56,7 @@ namespace services
     {
         float density = 1000.0f;
         float drag = 0.5f;
-        float buoyancyStrength = 1.0f;
+        float buoyancyStrength = 2.0f;
 
         float waveSpeed = 1.0f;
         float waveAmplitude = 0.5f;
@@ -80,7 +80,6 @@ namespace services
         float windDirection = 45.0f;
         float amplitude = 0.00003f;
         float choppiness = 1.2f;
-        float gravity = 9.81f;
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
         bool enabled = false;

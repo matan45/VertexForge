@@ -50,21 +50,24 @@ void main() {
                  imageLoad(chopZField, ivec2(x, ym)).r * signYM;
     float dxdz = imageLoad(chopXField, ivec2(x, yp)).r * signYP -
                  imageLoad(chopXField, ivec2(x, ym)).r * signYM;
+    float dzdx = imageLoad(chopZField, ivec2(xp, y)).r * signXP -
+                 imageLoad(chopZField, ivec2(xm, y)).r * signXM;
 
-    // Jacobian = (1 + dDx/dx)(1 + dDz/dz) - (dDx/dz)^2
+    // Jacobian = (1 + dDx/dx)(1 + dDz/dz) - (dDx/dz)(dDz/dx)
     // Choppiness is already baked into chopX/chopZ by time_evolve shader
     float texelSize = pc.patchSize / float(pc.N);
     float derivScale = 1.0 / (2.0 * texelSize);
     float Jxx = 1.0 + dxdx * derivScale;
     float Jzz = 1.0 + dzdz * derivScale;
     float Jxz = dxdz * derivScale;
-    float jacobian = Jxx * Jzz - Jxz * Jxz;
+    float Jzx = dzdx * derivScale;
+    float jacobian = Jxx * Jzz - Jxz * Jzx;
 
     // Foam only on strong wave crests that are actually folding
     float displacementMag = length(vec3(dx, dy, dz));
     float foam = 0.0;
     if (displacementMag > 1.0 && jacobian < pc.foamThreshold) {
-        float rawFoam = smoothstep(pc.foamThreshold, pc.foamThreshold - 0.5, jacobian);
+        float rawFoam = 1.0 - smoothstep(pc.foamThreshold - 0.5, pc.foamThreshold, jacobian);
         foam = rawFoam * smoothstep(1.0, 3.0, displacementMag);
     }
 

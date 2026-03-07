@@ -44,5 +44,6 @@ namespace core
         services::OceanFFTConfigData getOceanFFTConfig() const override;
         uint32_t getOceanFFTConfigVersion() const override;
         float getOceanHeightAt(const glm::vec2& worldXZ) const override;
+        float getPhysicsGravity() const override;
     };
 }

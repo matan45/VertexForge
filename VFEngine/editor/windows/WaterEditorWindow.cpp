@@ -391,7 +391,7 @@ namespace windows
 
                 ImGui::Text("Amplitude");
                 ImGui::PushItemWidth(-1);
-                if (ImGui::DragFloat("##OceanAmplitude", &oceanConfig.amplitude, 0.00001f, 0.00001f, 0.1f, "%.6f"))
+                if (ImGui::DragFloat("##OceanAmplitude", &oceanConfig.amplitude, 0.000001f, 0.00001f, 0.001f, "%.6f"))
                     oceanConfigDirty = true;
                 ImGui::PopItemWidth();
 
@@ -414,12 +414,6 @@ namespace windows
                 ImGui::Text("Choppiness");
                 ImGui::PushItemWidth(-1);
                 if (ImGui::DragFloat("##OceanChoppiness", &oceanConfig.choppiness, 0.01f, 0.0f, 5.0f, "%.2f"))
-                    oceanConfigDirty = true;
-                ImGui::PopItemWidth();
-
-                ImGui::Text("Gravity");
-                ImGui::PushItemWidth(-1);
-                if (ImGui::DragFloat("##OceanGravity", &oceanConfig.gravity, 0.01f, 1.0f, 20.0f, "%.2f"))
                     oceanConfigDirty = true;
                 ImGui::PopItemWidth();
 
@@ -480,18 +474,9 @@ namespace windows
 
         refreshWaterState();
 
-        // Auto-enable ocean FFT
+        // Auto-enable ocean FFT (uses struct defaults for all other fields)
         oceanConfig = services::OceanFFTConfigData{};
         oceanConfig.enabled = true;
-        oceanConfig.resolution = 256;
-        oceanConfig.patchSize = 100.0f;
-        oceanConfig.amplitude = 0.00003f;
-        oceanConfig.windSpeed = 8.0f;
-        oceanConfig.windDirection = 45.0f;
-        oceanConfig.choppiness = 1.2f;
-        oceanConfig.gravity = 9.81f;
-        oceanConfig.foamThreshold = -0.1f;
-        oceanConfig.displacementScale = 4.0f;
 
         auto& dispatcher = events::EventDispatcher::instance();
 

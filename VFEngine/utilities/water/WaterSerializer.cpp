@@ -62,7 +62,6 @@ namespace water
         writeLE(file, o.windDirection);
         writeLE(file, o.amplitude);
         writeLE(file, o.choppiness);
-        writeLE(file, o.gravity);
         writeLE(file, o.foamThreshold);
         writeLE(file, o.displacementScale);
 
@@ -76,6 +75,7 @@ namespace water
         writeLE(file, tile.waterHeight);
         writeLE(file, tile.waveIntensity);
         writeLE<uint8_t>(file, tile.physicsEnabled ? 1 : 0);
+        writeLE<uint8_t>(file, tile.isVisible ? 1 : 0);
 
         return file.good();
     }

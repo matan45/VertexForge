@@ -47,13 +47,12 @@ namespace components
         bool oceanFFTEnabled = false;
         uint32_t oceanResolution = 256;
         float oceanPatchSize = 100.0f;
-        float oceanWindSpeed = 20.0f;
+        float oceanWindSpeed = 8.0f;
         float oceanWindDirection = 45.0f;
-        float oceanAmplitude = 0.0003f;
-        float oceanChoppiness = 1.5f;
-        float oceanGravity = 9.81f;
-        float oceanFoamThreshold = 0.3f;
-        float oceanDisplacementScale = 1.0f;
+        float oceanAmplitude = 0.00003f;
+        float oceanChoppiness = 1.2f;
+        float oceanFoamThreshold = -0.1f;
+        float oceanDisplacementScale = 4.0f;
     };
 
     struct WaterTileComponent

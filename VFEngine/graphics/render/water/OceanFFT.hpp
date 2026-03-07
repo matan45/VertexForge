@@ -72,11 +72,8 @@ namespace render::water
         float patchSize;
         float foamThreshold;
         float displacementScale;
-        uint32_t padding1;
-        uint32_t padding2;
-        uint32_t padding3;
     };
-    static_assert(sizeof(MergePushConstants) == 32);
+    static_assert(sizeof(MergePushConstants) == 20);
 
     class OceanFFT
     {

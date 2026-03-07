@@ -68,7 +68,6 @@ namespace services
         oceanSettings.windDirection = oceanConfig.windDirection;
         oceanSettings.amplitude = oceanConfig.amplitude;
         oceanSettings.choppiness = oceanConfig.choppiness;
-        oceanSettings.gravity = oceanConfig.gravity;
         oceanSettings.foamThreshold = oceanConfig.foamThreshold;
         oceanSettings.displacementScale = oceanConfig.displacementScale;
 
@@ -103,7 +102,6 @@ namespace services
         mutableComp.oceanWindDirection = oceanConfig.windDirection;
         mutableComp.oceanAmplitude = oceanConfig.amplitude;
         mutableComp.oceanChoppiness = oceanConfig.choppiness;
-        mutableComp.oceanGravity = oceanConfig.gravity;
         mutableComp.oceanFoamThreshold = oceanConfig.foamThreshold;
         mutableComp.oceanDisplacementScale = oceanConfig.displacementScale;
 
@@ -199,7 +197,6 @@ namespace services
         oceanConfig.windDirection = o.windDirection;
         oceanConfig.amplitude = o.amplitude;
         oceanConfig.choppiness = o.choppiness;
-        oceanConfig.gravity = o.gravity;
         oceanConfig.foamThreshold = o.foamThreshold;
         oceanConfig.displacementScale = o.displacementScale;
         oceanConfig.enabled = o.enabled;

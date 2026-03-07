@@ -248,6 +248,7 @@ namespace services
                             tile->updateHeight(tileData.waterHeight, tileConfig.worldTileSize);
                             tile->waveIntensity = tileData.waveIntensity;
                             tile->physicsEnabled = tileData.physicsEnabled;
+                            tile->isVisible = tileData.isVisible;
                         }
                     }
 
@@ -279,7 +280,6 @@ namespace services
                     oceanConfig.windDirection = o.windDirection;
                     oceanConfig.amplitude = o.amplitude;
                     oceanConfig.choppiness = o.choppiness;
-                    oceanConfig.gravity = o.gravity;
                     oceanConfig.foamThreshold = o.foamThreshold;
                     oceanConfig.displacementScale = o.displacementScale;
                     oceanConfig.enabled = o.enabled;
@@ -349,7 +349,6 @@ namespace services
             oceanConfig.windDirection = waterComp.oceanWindDirection;
             oceanConfig.amplitude = waterComp.oceanAmplitude;
             oceanConfig.choppiness = waterComp.oceanChoppiness;
-            oceanConfig.gravity = waterComp.oceanGravity;
             oceanConfig.foamThreshold = waterComp.oceanFoamThreshold;
             oceanConfig.displacementScale = waterComp.oceanDisplacementScale;
             oceanConfig.enabled = waterComp.oceanFFTEnabled;
