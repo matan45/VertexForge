@@ -2,6 +2,7 @@
 
 #include "data/WaterData.hpp"
 #include "data/EntityHandle.hpp"
+#include "nfd/FileDialog.hpp"
 
 namespace windows
 {
@@ -26,6 +27,12 @@ namespace windows
         services::WaterGlobalSettingsData globalSettings;
         bool settingsDirty = false;
 
+        // Ocean FFT config
+        services::OceanFFTConfigData oceanConfig;
+        bool oceanConfigDirty = false;
+
+        nfd::FileDialog fileDialog;
+
     public:
         void draw();
         void show();
@@ -33,11 +40,16 @@ namespace windows
     private:
         void drawCreationSection();
         void drawSettingsSection();
+        void drawOceanFFTSection();
         void drawInfoSection();
         void createWater();
+        void createOcean();
         void deleteWater();
         void applySettings();
+        void applyOceanConfig();
         void resetCreationDefaults();
         void refreshWaterState();
+        void saveWater();
+        void loadWater();
     };
 }

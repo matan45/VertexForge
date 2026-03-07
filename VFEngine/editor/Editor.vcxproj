@@ -200,6 +200,8 @@
     <ClInclude Include="windows\details\UITabsDrawer.hpp" />
     <ClInclude Include="windows\details\UITextInputDrawer.hpp" />
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
+    <ClInclude Include="windows\details\WaterDrawer.hpp" />
+    <ClInclude Include="windows\details\WaterTileDrawer.hpp" />
     <ClInclude Include="windows\import\ExportProgressWindow.hpp" />
     <ClInclude Include="windows\import\FileOperationProgressWindow.hpp" />
     <ClInclude Include="windows\import\ImportModalDialog.hpp" />
@@ -325,6 +327,8 @@
     <ClCompile Include="windows\details\UITabsDrawer.cpp" />
     <ClCompile Include="windows\details\UITextInputDrawer.cpp" />
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
+    <ClCompile Include="windows\details\WaterDrawer.cpp" />
+    <ClCompile Include="windows\details\WaterTileDrawer.cpp" />
     <ClCompile Include="windows\import\ExportProgressWindow.cpp" />
     <ClCompile Include="windows\import\FileOperationProgressWindow.cpp" />
     <ClCompile Include="windows\import\ImportModalDialog.cpp" />

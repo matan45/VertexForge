@@ -96,6 +96,32 @@ namespace water
         return tiles.size();
     }
 
+    bool WaterGrid::hasTile(const TileCoord& coord) const
+    {
+        return tiles.count(coord) > 0;
+    }
+
+    void WaterGrid::computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const
+    {
+        if (tiles.empty())
+        {
+            minX = minZ = maxX = maxZ = 0;
+            return;
+        }
+
+        auto it = tiles.begin();
+        minX = maxX = it->first.x;
+        minZ = maxZ = it->first.z;
+
+        for (++it; it != tiles.end(); ++it)
+        {
+            minX = std::min(minX, it->first.x);
+            maxX = std::max(maxX, it->first.x);
+            minZ = std::min(minZ, it->first.z);
+            maxZ = std::max(maxZ, it->first.z);
+        }
+    }
+
     float WaterGrid::getWaterHeightAt(const glm::vec2& worldXZ) const
     {
         int32_t tileX = static_cast<int32_t>(std::floor(worldXZ.x / config.worldTileSize));

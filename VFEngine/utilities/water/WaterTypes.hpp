@@ -34,4 +34,17 @@ namespace water
         float dudvStrength = 0.02f;
         float waveDirectionDegrees = 0.0f;
     };
+
+    struct OceanFFTSettings
+    {
+        bool enabled = false;
+        uint32_t resolution = 256;
+        float patchSize = 100.0f;
+        float windSpeed = 8.0f;
+        float windDirection = 45.0f;
+        float amplitude = 0.00003f;
+        float choppiness = 1.2f;
+        float foamThreshold = -0.1f;
+        float displacementScale = 4.0f;
+    };
 }

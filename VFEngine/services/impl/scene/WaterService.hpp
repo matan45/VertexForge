@@ -2,11 +2,15 @@
 
 #include "../../interfaces/terrain/IWaterService.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../data/WaterData.hpp"
 #include "../../events/terrain/WaterEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "water/WaterTypes.hpp"
+#include "water/WaterDefinitionMap.hpp"
+#include "water/WaterWorldStreamer.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -37,6 +41,9 @@ namespace services
         IPhysicsProvider* physicsProvider = nullptr;
 
         std::unordered_map<uint64_t, std::unique_ptr<water::WaterGrid>> waterGrids;
+        std::unordered_map<uint64_t, water::WaterDefinitionMap> definitionMaps;
+        std::unordered_map<uint64_t, std::unique_ptr<water::WaterWorldStreamer>> waterStreamers;
+        std::vector<water::WaterStreamingAction> waterStreamingActions;
         std::unordered_set<EntityHandle, EntityHandle::Hash> entitiesInWater;
 
         mutable water::WaterGlobalSettings cachedGlobalSettings;
@@ -44,6 +51,13 @@ namespace services
 
         bool distanceCullingEnabled = false;
         float maxWaterDistSq = 0.0f;
+
+        OceanFFTConfigData oceanConfig;
+        bool oceanFFTEnabled = false;
+        uint32_t oceanConfigVersion = 0;
+
+        // CPU-side ocean height sampling (set by render side via callback)
+        std::function<float(const glm::vec2&)> oceanHeightSampler;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
@@ -56,6 +70,8 @@ namespace services
         ~WaterService() override;
 
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        IPhysicsProvider* getPhysicsProvider() const { return physicsProvider; }
+        void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) { oceanHeightSampler = std::move(sampler); }
 
         void registerEventHandlers() override;
 
@@ -63,6 +79,9 @@ namespace services
         bool deleteWater(EntityHandle waterEntity) override;
         std::optional<WaterData> getWaterData(EntityHandle entity) const override;
         bool hasWaterComponent(EntityHandle entity) const override;
+
+        bool addTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ) override;
+        bool removeTile(EntityHandle waterEntity, int32_t tileX, int32_t tileZ) override;
 
         bool hasWaterTileComponent(EntityHandle entity) const;
 
@@ -85,11 +104,19 @@ namespace services
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxWaterDistSq = distance * distance; }
 
+        // Ocean FFT
+        bool isOceanFFTEnabled() const { return oceanFFTEnabled; }
+        OceanFFTConfigData getOceanFFTConfig() const { return oceanConfig; }
+        uint32_t getOceanFFTConfigVersion() const { return oceanConfigVersion; }
+
         void setWaterTileHeight(EntityHandle waterEntity, int32_t tileX, int32_t tileZ, float height);
         void setWaterGlobalSettings(EntityHandle waterEntity, const WaterGlobalSettingsData& settings);
 
         void updateBuoyancy();
         void clearBuoyancyTracking();
+
+        bool saveWater(EntityHandle waterEntity, const std::string& path) override;
+        EntityHandle loadWater(const std::string& path) override;
 
         void rebuildWaterFromComponents();
         void remapWaterEntities();
@@ -97,8 +124,13 @@ namespace services
     private:
         void registerWaterCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerWaterQueryHandlers(::events::EventDispatcher& dispatcher);
+        void registerOceanFFTHandlers(::events::EventDispatcher& dispatcher);
+        void registerStreamingHandlers(::events::EventDispatcher& dispatcher);
+
+        void populateDefinitionMap(uint64_t entityId, const water::WaterGrid& grid);
 
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);
+        void createTileEntity(EntityHandle parentHandle, water::WaterTile* tile, float tileSize);
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
     };

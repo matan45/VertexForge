@@ -148,6 +148,9 @@ namespace render
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IWaterRenderProvider* waterRenderProvider = nullptr;
 
+        mutable uint32_t lastOceanConfigVersion = 0;
+        mutable bool oceanFFTInitialized = false;
+
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
         mutable bool lightOcclusionInitialized = false;
@@ -276,6 +279,8 @@ namespace render
 
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
+        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedWaterTile();
 
         void addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();

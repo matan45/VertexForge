@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include <functional>
 
 namespace services
 {
@@ -13,12 +14,14 @@ namespace core
     {
     private:
         services::WaterService* waterService = nullptr;
+        std::function<float(const glm::vec2&)> oceanHeightSampler;
 
     public:
         WaterRenderAdapter() = default;
         ~WaterRenderAdapter() override = default;
 
-        void setWaterService(services::WaterService* service) { waterService = service; }
+        void setWaterService(services::WaterService* service);
+        void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) override;
 
         std::vector<water::WaterTile*> getVisibleWaterTiles(
             const math::Frustum& frustum,
@@ -36,5 +39,11 @@ namespace core
 
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;
+
+        bool isOceanFFTEnabled() const override;
+        services::OceanFFTConfigData getOceanFFTConfig() const override;
+        uint32_t getOceanFFTConfigVersion() const override;
+        float getOceanHeightAt(const glm::vec2& worldXZ) const override;
+        float getPhysicsGravity() const override;
     };
 }

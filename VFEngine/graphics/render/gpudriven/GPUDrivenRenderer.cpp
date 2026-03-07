@@ -219,6 +219,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (volumetricPipeline) volumetricPipeline->cleanup();
+        if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
         if (terrain.pipeline) terrain.pipeline->cleanup();
@@ -245,6 +246,7 @@ namespace render::gpudriven
         terrain.adapter.reset();
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
+        water.oceanFFT.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
         lightOcclusionCulling.reset();
@@ -361,6 +363,10 @@ namespace render::gpudriven
 
             if (water.pipeline)
             {
+                vk::DescriptorSetLayout oceanLayout{};
+                if (water.oceanFFT && water.oceanFFT->isInitialized())
+                    oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
                 water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
@@ -368,6 +374,7 @@ namespace render::gpudriven
                     lightCullingPipeline->getDescriptorSetLayout(),
                     shadowSystem->getShadowDataLayout(),
                     shadowSystem->getShadowTextureLayout(),
+                    oceanLayout,
                     cachedRenderPass
                 });
             }

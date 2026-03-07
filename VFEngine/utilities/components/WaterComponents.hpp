@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
 
 namespace components
 {
@@ -39,6 +40,19 @@ namespace components
 
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
+
+        std::string savePath;
+
+        // Ocean FFT settings
+        bool oceanFFTEnabled = false;
+        uint32_t oceanResolution = 256;
+        float oceanPatchSize = 100.0f;
+        float oceanWindSpeed = 8.0f;
+        float oceanWindDirection = 45.0f;
+        float oceanAmplitude = 0.00003f;
+        float oceanChoppiness = 1.2f;
+        float oceanFoamThreshold = -0.1f;
+        float oceanDisplacementScale = 4.0f;
     };
 
     struct WaterTileComponent

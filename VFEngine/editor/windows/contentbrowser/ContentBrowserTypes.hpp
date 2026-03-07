@@ -25,6 +25,7 @@ namespace windows
         Navmesh,
         PhysAnim,
         Lightmap,
+        Water,
         Other
     };
 
@@ -47,7 +48,8 @@ namespace windows
         VFX = 14,
         Terrain = 15,
         Navmesh = 16,
-        PhysAnim = 17
+        PhysAnim = 17,
+        Water = 18
     };
 
     struct Asset

@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
 
 namespace services
 {
@@ -37,13 +38,25 @@ namespace services
         uint32_t tileCount = 0;
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
+
+        std::string savePath;
+    };
+
+    struct WaterTileData
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        float waterHeight = 0.0f;
+        float waveIntensity = 1.0f;
+        bool physicsEnabled = true;
+        bool isVisible = false;
     };
 
     struct WaterGlobalSettingsData
     {
         float density = 1000.0f;
         float drag = 0.5f;
-        float buoyancyStrength = 1.0f;
+        float buoyancyStrength = 2.0f;
 
         float waveSpeed = 1.0f;
         float waveAmplitude = 0.5f;
@@ -57,5 +70,18 @@ namespace services
         float dudvTiling = 4.0f;
         float dudvStrength = 0.02f;
         float waveDirectionDegrees = 0.0f;
+    };
+
+    struct OceanFFTConfigData
+    {
+        uint32_t resolution = 256;
+        float patchSize = 100.0f;
+        float windSpeed = 8.0f;
+        float windDirection = 45.0f;
+        float amplitude = 0.00003f;
+        float choppiness = 1.2f;
+        float foamThreshold = -0.1f;
+        float displacementScale = 4.0f;
+        bool enabled = false;
     };
 }

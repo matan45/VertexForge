@@ -9,6 +9,7 @@
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/terrain/WaterEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
@@ -265,6 +266,12 @@ namespace windows
                     cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
                     events::EventDispatcher::instance().execute(cmd);
                 }
+                else if (selectedType == AssetType::Water)
+                {
+                    events::water::LoadWaterCommand cmd;
+                    cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                    events::EventDispatcher::instance().execute(cmd);
+                }
                 else if (selectedType == AssetType::Scene)
                 {
                     events::scene::LoadSceneCommand cmd;
@@ -443,6 +450,7 @@ namespace windows
         if (extension == ".vfNavmesh") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
         if (extension == ".vfLightmap") return Lightmap;
+        if (extension == ".vfWater") return Water;
         if (extension == ".mt") return Script;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||

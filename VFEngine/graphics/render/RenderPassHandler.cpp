@@ -50,6 +50,12 @@ namespace render
         {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
+
+        if (oceanFFTInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanupOceanFFT();
+            oceanFFTInitialized = false;
+        }
     }
 
     void RenderPassHandler::init()
@@ -368,6 +374,22 @@ namespace render
         if (gpuDrivenRenderer)
         {
             gpuDrivenRenderer->clearWaterData();
+        }
+    }
+
+    void RenderPassHandler::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setSelectedWaterTile(coordX, coordZ);
+        }
+    }
+
+    void RenderPassHandler::clearSelectedWaterTile()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearSelectedWaterTile();
         }
     }
 
