@@ -78,12 +78,13 @@ namespace resource {
 		static void notifyThread();
 		static void releaseResources();
 
-		template <typename T, typename LoaderFunc>
+		template <typename T, typename LoaderFunc, typename MemoryEstimator = std::nullptr_t>
 		static std::future<std::shared_ptr<T>> loadResourceAsync(
 			std::string_view path,
 			std::unordered_map<std::string, std::weak_ptr<T>>& cache,
 			LoaderFunc loader,
-			AssetType assetType = AssetType::COUNT);
+			AssetType assetType = AssetType::COUNT,
+			MemoryEstimator memEstimator = nullptr);
 
 		template <typename T>
 		static std::future<T> make_ready_future(T value) {
@@ -93,14 +94,14 @@ namespace resource {
 		}
 	};
 
-	template<typename T, typename LoaderFunc>
-	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader, AssetType assetType)
+	template<typename T, typename LoaderFunc, typename MemoryEstimator>
+	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator)
 	{
 		if (auto resource = cache[path.data()].lock()) {
 			return make_ready_future(resource);
 		}
 
-		return std::async(std::launch::async, [path = std::string(path), loader, &cache, assetType]() -> std::shared_ptr<T> {
+		return std::async(std::launch::async, [path = std::string(path), loader, &cache, assetType, memEstimator]() -> std::shared_ptr<T> {
 			try {
 				// Validate path before processing
 				if (path.empty()) {
@@ -115,7 +116,11 @@ namespace resource {
 					std::scoped_lock lock(cacheMutex);
 					cache[path] = resource;
 					if (assetType != AssetType::COUNT) {
-						AssetLifecycleManager::instance().acquire(path, assetType);
+						size_t memBytes = 0;
+						if constexpr (!std::is_null_pointer_v<MemoryEstimator>) {
+							memBytes = memEstimator(*resource);
+						}
+						AssetLifecycleManager::instance().acquire(path, assetType, memBytes);
 					}
 				}
 

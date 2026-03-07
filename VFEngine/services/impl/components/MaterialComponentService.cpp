@@ -89,6 +89,7 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
+        // Release old materials that are changing
         if (!comp.defaultMaterial.empty() && comp.defaultMaterial != material.defaultMaterial) {
             lifecycle.release(comp.defaultMaterial);
         }
@@ -97,6 +98,18 @@ namespace services {
                 auto it = material.subMeshMaterials.find(name);
                 if (it == material.subMeshMaterials.end() || it->second != path) {
                     lifecycle.release(path);
+                }
+            }
+        }
+        // Acquire new materials
+        if (!material.defaultMaterial.empty() && material.defaultMaterial != comp.defaultMaterial) {
+            lifecycle.acquire(material.defaultMaterial, resource::AssetType::Material);
+        }
+        for (const auto& [name, path] : material.subMeshMaterials) {
+            if (!path.empty()) {
+                auto it = comp.subMeshMaterials.find(name);
+                if (it == comp.subMeshMaterials.end() || it->second != path) {
+                    lifecycle.acquire(path, resource::AssetType::Material);
                 }
             }
         }
@@ -118,8 +131,12 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
         if (!comp.defaultMaterial.empty() && comp.defaultMaterial != materialPath) {
-            resource::AssetLifecycleManager::instance().release(comp.defaultMaterial);
+            lifecycle.release(comp.defaultMaterial);
+        }
+        if (!materialPath.empty() && materialPath != comp.defaultMaterial) {
+            lifecycle.acquire(materialPath, resource::AssetType::Material);
         }
         comp.setDefaultMaterial(materialPath);
         return true;
@@ -145,7 +162,11 @@ namespace services {
         if (materialPath.empty()) {
             comp.subMeshMaterials.erase(submeshName);
         } else {
+            bool isNew = (it == comp.subMeshMaterials.end() || it->second != materialPath);
             comp.setSubMeshMaterial(submeshName, materialPath);
+            if (isNew) {
+                lifecycle.acquire(materialPath, resource::AssetType::Material);
+            }
         }
         return true;
     }

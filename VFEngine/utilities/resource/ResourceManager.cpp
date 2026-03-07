@@ -179,7 +179,14 @@ namespace resource
             path,
             textureCache,
             [](std::string_view p) { return TextureResource::loadTexture(p); },
-            AssetType::Texture);
+            AssetType::Texture,
+            [](const TextureData& tex) -> size_t {
+                size_t total = 0;
+                for (const auto& mip : tex.mipData) {
+                    total += mip.data.size();
+                }
+                return total;
+            });
     }
 
     std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(std::string_view path)
@@ -188,7 +195,10 @@ namespace resource
             path,
             hdrCache,
             [](std::string_view p) { return TextureResource::loadHDR(p); },
-            AssetType::HDR);
+            AssetType::HDR,
+            [](const HDRData& hdr) -> size_t {
+                return hdr.pixels.size() * sizeof(float);
+            });
     }
 
     std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(std::string_view path)
@@ -197,7 +207,10 @@ namespace resource
             path,
             audioCache,
             [](std::string_view p) { return AudioResource::loadAudio(p); },
-            AssetType::Audio);
+            AssetType::Audio,
+            [](const AudioData& audio) -> size_t {
+                return audio.data.size() * sizeof(short);
+            });
     }
 
     std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(std::string_view path)
@@ -208,7 +221,17 @@ namespace resource
             [](std::string_view p) {
                 return MeshStreamResource::loadAll(p);
             },
-            AssetType::Mesh);
+            AssetType::Mesh,
+            [](const MeshesData& meshes) -> size_t {
+                size_t total = 0;
+                for (const auto& mesh : meshes.meshes) {
+                    for (const auto& lod : mesh.lodLevels) {
+                        total += lod.vertices.size() * sizeof(Vertex);
+                        total += lod.indices.size() * sizeof(uint32_t);
+                    }
+                }
+                return total;
+            });
     }
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
@@ -303,24 +326,6 @@ namespace resource
             materialCache[std::string(path)] = material;
         }
 
-        auto& lifecycle = AssetLifecycleManager::instance();
-        lifecycle.acquire(std::string(path), AssetType::Material);
-
-        // Register texture dependencies from shader graph
-        for (const auto& node : material->graph.nodes) {
-            if (node.type == material::NodeType::TextureSample ||
-                node.type == material::NodeType::OrmSample) {
-                auto propIt = node.properties.find("texturePath");
-                if (propIt != node.properties.end() &&
-                    std::holds_alternative<std::string>(propIt->second)) {
-                    const auto& texPath = std::get<std::string>(propIt->second);
-                    if (!texPath.empty()) {
-                        lifecycle.addDependency(std::string(path), texPath, AssetType::Texture);
-                    }
-                }
-            }
-        }
-
         return material;
     }
 
@@ -353,20 +358,6 @@ namespace resource
         {
             std::scoped_lock lock(cacheMutex);
             materialInstanceCache[std::string(path)] = instance;
-        }
-
-        auto& lifecycle = AssetLifecycleManager::instance();
-        lifecycle.acquire(std::string(path), AssetType::MaterialInstance);
-
-        // Register parent material dependency
-        if (!instance->parentMaterialPath.empty()) {
-            lifecycle.addDependency(std::string(path), instance->parentMaterialPath, AssetType::Material);
-        }
-        // Register texture override dependencies
-        for (const auto& [slot, texPath] : instance->textureOverrides) {
-            if (!texPath.empty()) {
-                lifecycle.addDependency(std::string(path), texPath, AssetType::Texture);
-            }
         }
 
         return instance;
@@ -521,16 +512,6 @@ namespace resource
         {
             std::scoped_lock lock(cacheMutex);
             animatorCache[std::string(path)] = animatorData;
-        }
-
-        auto& lifecycle = AssetLifecycleManager::instance();
-        lifecycle.acquire(std::string(path), AssetType::Animator);
-
-        // Register animation clip dependencies
-        for (const auto& state : animatorData->graph.states) {
-            if (!state.animationPath.empty()) {
-                lifecycle.addDependency(std::string(path), state.animationPath, AssetType::Animation);
-            }
         }
 
         return animatorData;

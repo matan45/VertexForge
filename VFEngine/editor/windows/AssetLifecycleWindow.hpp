@@ -9,7 +9,7 @@ namespace windows
     {
     private:
         bool visible = false;
-        int filterType = -1; // -1 = All
+        int filterType = 0; // 0 = All in combo, effectiveFilter = filterType - 1
         int sortColumn = 0;  // 0=path, 1=type, 2=refs, 3=memory, 4=state
         bool sortAscending = true;
 

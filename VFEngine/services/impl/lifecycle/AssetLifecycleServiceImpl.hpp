@@ -15,8 +15,11 @@ namespace services {
 	private:
 		void setupReleaseCallback();
 
+		void acquireAllEntityAssets();
+
 		::events::SubscriptionToken sceneClearedSubscription;
 		::events::SubscriptionToken entityDeletedSubscription;
+		::events::SubscriptionToken sceneLoadedSubscription;
 	};
 
 }
