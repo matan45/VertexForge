@@ -12,6 +12,7 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
+#include "../../events/render/DebugDrawEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
@@ -45,6 +46,9 @@ namespace services
                     0.0f,
                     (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
                 ));
+            // Entity was loaded from file — don't mark sector as needing save
+            auto* sector = sectorManager.getSector(coord);
+            if (sector) sector->dirty = false;
         });
 
         entityLoader.setOnEntityUnloaded([this](uint64_t uuid, const world::SectorCoord& coord)
@@ -224,6 +228,18 @@ namespace services
                 return streamer.getConfig();
             });
 
+        dispatcher.registerCommandHandler<::events::world::SetSectorDebugDrawCommand>(
+            [this](const ::events::world::SetSectorDebugDrawCommand& cmd)
+            {
+                debugDrawSectors = cmd.enabled;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetSectorDebugDrawQuery>(
+            [this](const ::events::world::GetSectorDebugDrawQuery&)
+            {
+                return debugDrawSectors;
+            });
+
         // Handle play/stop transitions — snapshot restore creates new entity handles
         editorModeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
             [this](const ::events::editor::EditorModeChangedNotification& notif)
@@ -232,22 +248,52 @@ namespace services
 
                 if (notif.currentMode == services::EditorMode::Play)
                 {
+                    isPlayMode = true;
+
                     // Entering play mode — simulate runtime: unload all sectors so they
                     // stream in based on camera distance (like a fresh world load)
                     savedWorldDefinition = worldDefinition;
                     savedWorldPath = currentWorldPath;
                     entityLoader.clear();
 
-                    // Remove all sector entities from scene
-                    sectorManager.forEachSector([this](world::WorldSector& sector)
+                    int loadedCount = 0;
+                    int totalStaticEntities = 0;
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto uuidView = registry.view<components::UUIDComponent>();
+
+                    // Remove static sector entities from scene; keep dynamic ones alive
+                    sectorManager.forEachSector([&](world::WorldSector& sector)
                     {
-                        if (sector.state == world::SectorState::Loaded && !sector.entityUUIDs.empty())
+                        if (sector.state != world::SectorState::Loaded || sector.entityUUIDs.empty())
+                            return;
+
+                        loadedCount++;
+                        std::vector<uint64_t> staticUUIDs;
+
+                        for (uint64_t uuid : sector.entityUUIDs)
                         {
-                            entityLoader.queueSectorUnload(sector.coord, sector.entityUUIDs);
+                            bool isDynamic = false;
+                            for (auto entity : uuidView)
+                            {
+                                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                                {
+                                    scene::Entity sceneEntity(entity);
+                                    if (sceneEntity.hasComponent<components::TransformComponent>())
+                                        isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
+                                    break;
+                                }
+                            }
+                            if (!isDynamic)
+                                staticUUIDs.push_back(uuid);
                         }
+
+                        totalStaticEntities += static_cast<int>(staticUUIDs.size());
+                        entityLoader.queueSectorUnload(sector.coord, staticUUIDs);
                     });
+
                     // Process all unloads immediately
-                    entityLoader.update(*sceneGraph, 999999);
+                    entityLoader.flush(*sceneGraph);
 
                     // Reset all sectors to Unloaded so streamer can load them by distance
                     sectorManager.forEachSector([](world::WorldSector& sector)
@@ -258,6 +304,8 @@ namespace services
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
+                    isPlayMode = false;
+
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();
                     sectorManager.clear();
@@ -378,20 +426,28 @@ namespace services
         if (!worldMode)
             return;
 
-        // Use cached camera position (updated by CameraPositionUpdatedNotification from viewport)
-        streamer.update(cachedCameraPos, sectorManager, streamingActions);
-
-        for (const auto& action : streamingActions)
+        // Only stream sectors during play mode (based on primary camera distance).
+        // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
+        if (isPlayMode)
         {
-            if (action.isLoad)
+            glm::vec3 cameraPos = getPrimaryCameraPosition();
+            streamer.update(cameraPos, sectorManager, streamingActions);
+
+            for (const auto& action : streamingActions)
             {
-                handleSectorLoad(action.coord);
-            }
-            else
-            {
-                handleSectorUnload(action.coord);
+                if (action.isLoad)
+                {
+                    handleSectorLoad(action.coord);
+                }
+                else
+                {
+                    handleSectorUnload(action.coord);
+                }
             }
         }
+
+        // Draw debug sector visualization in viewport
+        drawDebugSectors();
 
         // Process per-frame entity loading budget
         entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
@@ -552,9 +608,7 @@ namespace services
     {
         auto* sector = sectorManager.getSector(coord);
         if (!sector || sector->state != world::SectorState::Loaded)
-        {
             return false;
-        }
 
         handleSectorUnload(coord);
         return true;
@@ -589,6 +643,7 @@ namespace services
         entityLoader.queueSectorLoad(coord, sector->filePath);
 
         sector->state = world::SectorState::Loaded;
+        sector->dirty = false; // Just loaded from disk — nothing to save
 
         ::events::world::SectorLoadedNotification notif;
         notif.coord = coord;
@@ -606,11 +661,45 @@ namespace services
 
         sector->state = world::SectorState::Unloading;
 
-        referenceResolver.onSectorUnloaded(sector->entityUUIDs);
+        // Cancel any pending entity loads for this sector (prevents recreating entities after unload)
+        entityLoader.cancelPendingLoads(coord);
 
-        entityLoader.queueSectorUnload(coord, sector->entityUUIDs);
+        // Separate static entities (to unload) from dynamic entities (to keep alive)
+        std::vector<uint64_t> staticUUIDs;
+        std::vector<uint64_t> dynamicUUIDs;
 
-        sector->entityUUIDs.clear();
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto uuidView = registry.view<components::UUIDComponent>();
+
+        for (uint64_t uuid : sector->entityUUIDs)
+        {
+            bool isDynamic = false;
+            for (auto entity : uuidView)
+            {
+                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                {
+                    scene::Entity sceneEntity(entity);
+                    if (sceneEntity.hasComponent<components::TransformComponent>())
+                    {
+                        isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
+                    }
+                    break;
+                }
+            }
+
+            if (isDynamic)
+                dynamicUUIDs.push_back(uuid);
+            else
+                staticUUIDs.push_back(uuid);
+        }
+
+        referenceResolver.onSectorUnloaded(staticUUIDs);
+
+        // Only unload static entities — dynamic entities persist in the scene
+        entityLoader.queueSectorUnload(coord, staticUUIDs);
+
+        // Clear the sector's entity list, then re-add dynamic entities so they remain tracked
+        sector->entityUUIDs = dynamicUUIDs;
         sector->state = world::SectorState::Unloaded;
 
         ::events::world::SectorUnloadedNotification notif;
@@ -652,9 +741,65 @@ namespace services
 
         sectorManager.removeEntityFromSector(uuid, oldCoord);
         sectorManager.assignEntityToSector(uuid, newPosition);
+    }
 
-        vfLogInfo("Entity {} migrated from sector ({},{}) to ({},{})",
-                  uuid, oldCoord.x, oldCoord.z, newCoord.x, newCoord.z);
+    glm::vec3 WorldSectorServiceImpl::getPrimaryCameraPosition() const
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        auto primaryCameraOpt = dispatcher.query(::events::scene::GetPrimaryCameraQuery{});
+        if (!primaryCameraOpt.has_value())
+            return cachedCameraPos;
+
+        ::events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = *primaryCameraOpt;
+        auto transformOpt = dispatcher.query(transformQuery);
+        if (transformOpt.has_value())
+            return transformOpt->position;
+
+        return cachedCameraPos;
+    }
+
+    void WorldSectorServiceImpl::drawDebugSectors() const
+    {
+        if (!debugDrawSectors)
+            return;
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        float sectorSize = sectorManager.getConfig().sectorWorldSize;
+        float boxHeight = 10.0f; // Visual height for sector boxes
+        glm::vec3 halfExtents(sectorSize * 0.5f, boxHeight * 0.5f, sectorSize * 0.5f);
+
+        sectorManager.forEachSector([&](const world::WorldSector& sector)
+        {
+            float cx = (static_cast<float>(sector.coord.x) + 0.5f) * sectorSize;
+            float cz = (static_cast<float>(sector.coord.z) + 0.5f) * sectorSize;
+            glm::vec3 center(cx, boxHeight * 0.5f, cz);
+
+            glm::vec4 color;
+            switch (sector.state)
+            {
+            case world::SectorState::Loaded:
+                color = glm::vec4(0.2f, 0.9f, 0.2f, 1.0f); // Green
+                break;
+            case world::SectorState::Loading:
+                color = glm::vec4(0.9f, 0.9f, 0.2f, 1.0f); // Yellow
+                break;
+            case world::SectorState::Unloading:
+                color = glm::vec4(0.9f, 0.3f, 0.3f, 1.0f); // Red
+                break;
+            default:
+                color = glm::vec4(0.5f, 0.5f, 0.5f, 0.6f); // Gray
+                break;
+            }
+
+            ::events::debugdraw::DrawBoxCommand boxCmd;
+            boxCmd.center = center;
+            boxCmd.halfExtents = halfExtents;
+            boxCmd.color = color;
+            dispatcher.execute(boxCmd);
+        });
     }
 
 } // namespace services

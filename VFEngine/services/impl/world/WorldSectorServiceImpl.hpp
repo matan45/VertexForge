@@ -57,6 +57,8 @@ namespace services
         world::PendingReferenceResolver referenceResolver;
 
         bool worldMode = false;
+        bool isPlayMode = false;
+        bool debugDrawSectors = false;
         std::string currentWorldPath;
 
         std::vector<world::SectorStreamingAction> streamingActions;
@@ -77,6 +79,8 @@ namespace services
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
+        glm::vec3 getPrimaryCameraPosition() const;
+        void drawDebugSectors() const;
     };
 
 } // namespace services

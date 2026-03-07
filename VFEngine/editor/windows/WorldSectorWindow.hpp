@@ -19,8 +19,8 @@ namespace windows
         char worldPath[512] = "";
         float sectorSize = 128.0f;
         int tilesPerSector = 4;
-        float loadRadius = 512.0f;
-        float unloadRadius = 640.0f;
+        float loadRadius = 4.0f;
+        float unloadRadius = 5.0f;
 
         // Cached stats
         int totalSectors = 0;

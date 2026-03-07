@@ -51,6 +51,17 @@ namespace windows
                 }
 
                 ImGui::Separator();
+
+                // Debug draw toggle
+                bool debugDraw = dispatcher.query(events::world::GetSectorDebugDrawQuery{});
+                if (ImGui::Checkbox("Show Sector Bounds", &debugDraw))
+                {
+                    events::world::SetSectorDebugDrawCommand cmd;
+                    cmd.enabled = debugDraw;
+                    dispatcher.execute(cmd);
+                }
+
+                ImGui::Separator();
                 if (ImGui::Button("Save World"))
                 {
                     events::world::SaveWorldCommand cmd;
@@ -201,8 +212,8 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         auto config = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
 
-        ImGui::Text("Load Radius: %.0f", config.loadRadius);
-        ImGui::Text("Unload Radius: %.0f", config.unloadRadius);
+        ImGui::Text("Load Radius: %.0f sectors", config.loadRadius);
+        ImGui::Text("Unload Radius: %.0f sectors", config.unloadRadius);
         ImGui::Text("Max Loads/Frame: %d", config.maxLoadsPerFrame);
         ImGui::Text("Max Unloads/Frame: %d", config.maxUnloadsPerFrame);
         ImGui::Text("Max Entities/Frame: %d", config.maxEntitiesPerFrame);
@@ -217,8 +228,8 @@ namespace windows
             ImGui::InputFloat("Sector Size", &sectorSize, 16.0f, 64.0f);
             ImGui::InputInt("Tiles Per Sector", &tilesPerSector);
             ImGui::Separator();
-            ImGui::InputFloat("Load Radius", &loadRadius, 32.0f, 128.0f);
-            ImGui::InputFloat("Unload Radius", &unloadRadius, 32.0f, 128.0f);
+            ImGui::InputFloat("Load Radius (sectors)", &loadRadius, 1.0f, 2.0f);
+            ImGui::InputFloat("Unload Radius (sectors)", &unloadRadius, 1.0f, 2.0f);
 
             ImGui::Spacing();
             if (ImGui::Button("Create"))

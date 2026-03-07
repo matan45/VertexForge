@@ -11,8 +11,8 @@ namespace world
     void SectorStreamer::setConfig(const SectorStreamingConfig& config)
     {
         this->config = config;
-        if (this->config.unloadRadius < this->config.loadRadius)
-            this->config.unloadRadius = this->config.loadRadius * 1.25f;
+        if (this->config.unloadRadius <= this->config.loadRadius)
+            this->config.unloadRadius = this->config.loadRadius + 1.0f;
     }
 
     void SectorStreamer::update(
@@ -26,8 +26,11 @@ namespace world
             return;
 
         float sectorSize = manager.getConfig().sectorWorldSize;
-        float loadRadiusSq = config.loadRadius * config.loadRadius;
-        float unloadRadiusSq = config.unloadRadius * config.unloadRadius;
+        // loadRadius/unloadRadius are in sector counts — convert to world units
+        float loadWorldRadius = config.loadRadius * sectorSize;
+        float unloadWorldRadius = config.unloadRadius * sectorSize;
+        float loadRadiusSq = loadWorldRadius * loadWorldRadius;
+        float unloadRadiusSq = unloadWorldRadius * unloadWorldRadius;
 
         loadCandidates.clear();
         unloadCandidates.clear();

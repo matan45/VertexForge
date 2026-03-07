@@ -37,6 +37,17 @@ namespace world
         }
     }
 
+    void SectorEntityLoader::cancelPendingLoads(const SectorCoord& coord)
+    {
+        std::deque<PendingLoad> remaining;
+        for (auto& load : pendingLoads)
+        {
+            if (!(load.coord == coord))
+                remaining.push_back(std::move(load));
+        }
+        pendingLoads = std::move(remaining);
+    }
+
     void SectorEntityLoader::update(scene::SceneGraphSystem& sceneGraph, int maxEntitiesPerFrame)
     {
         int processed = 0;

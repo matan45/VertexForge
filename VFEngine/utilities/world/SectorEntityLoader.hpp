@@ -4,6 +4,7 @@
 #include <deque>
 #include <vector>
 #include <cstdint>
+#include <limits>
 #include <functional>
 #include <string>
 
@@ -35,6 +36,10 @@ namespace world
         void setOnEntityPostLoad(EntityPostLoadCallback callback) { onEntityPostLoad = std::move(callback); }
         void setOnEntityPreUnload(EntityPreUnloadCallback callback) { onEntityPreUnload = std::move(callback); }
         void setOnEntityPreDestroy(EntityPreDestroyCallback callback) { onEntityPreDestroy = std::move(callback); }
+
+        void flush(scene::SceneGraphSystem& sceneGraph) { update(sceneGraph, std::numeric_limits<int>::max()); }
+
+        void cancelPendingLoads(const SectorCoord& coord);
 
         void clear() { pendingLoads.clear(); pendingUnloads.clear(); }
 

@@ -105,6 +105,18 @@ namespace events::world
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
+    struct SetSectorDebugDrawCommand : ICommand<>
+    {
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetSectorDebugDraw"; }
+    };
+
+    struct GetSectorDebugDrawQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "GetSectorDebugDraw"; }
+    };
+
     // ============================================
     // Notifications
     // ============================================

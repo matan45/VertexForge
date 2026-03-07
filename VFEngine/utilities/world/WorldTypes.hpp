@@ -60,8 +60,8 @@ namespace world
 
     struct SectorStreamingConfig
     {
-        float loadRadius = 512.0f;
-        float unloadRadius = 640.0f;
+        float loadRadius = 4.0f;    // in sector counts (e.g. 4 = load sectors within 4 sectors of camera)
+        float unloadRadius = 5.0f;  // in sector counts (should be > loadRadius for hysteresis)
         int maxLoadsPerFrame = 1;
         int maxUnloadsPerFrame = 1;
         int maxEntitiesPerFrame = 8;
