@@ -15,8 +15,8 @@ namespace services {
 	private:
 		void setupReleaseCallback();
 
-		events::SubscriptionToken sceneClearedSubscription;
-		events::SubscriptionToken entityDeletedSubscription;
+		::events::SubscriptionToken sceneClearedSubscription;
+		::events::SubscriptionToken entityDeletedSubscription;
 	};
 
 }

@@ -13,6 +13,7 @@
 #include "WaterEditorWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
+#include "AssetLifecycleWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
@@ -45,6 +46,7 @@ namespace windows
         WaterEditorWindow waterEditorWindow;
         NavmeshWindow navmeshWindow;
         LightBakeWindow lightBakeWindow;
+        AssetLifecycleWindow assetLifecycleWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;

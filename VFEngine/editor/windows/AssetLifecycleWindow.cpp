@@ -44,18 +44,8 @@ namespace windows
     void AssetLifecycleWindow::refreshData()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        auto allAssets = dispatcher.query(events::lifecycle::QueryAssetStatsQuery{});
-        if (allAssets)
-        {
-            cachedAssets = *allAssets;
-        }
-
-        auto pending = dispatcher.query(events::lifecycle::QueryPendingReleasesQuery{});
-        if (pending)
-        {
-            cachedPending = *pending;
-        }
+        cachedAssets = dispatcher.query(events::lifecycle::QueryAssetStatsQuery{});
+        cachedPending = dispatcher.query(events::lifecycle::QueryPendingReleasesQuery{});
     }
 
     void AssetLifecycleWindow::drawSummary()

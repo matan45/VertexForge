@@ -18,6 +18,7 @@ namespace windows
     class WaterEditorWindow;
     class NavmeshWindow;
     class LightBakeWindow;
+    class AssetLifecycleWindow;
 
     class MainMenuBar
     {
@@ -40,6 +41,7 @@ namespace windows
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
         LightBakeWindow* lightBakeWindow = nullptr;
+        AssetLifecycleWindow* assetLifecycleWindow = nullptr;
 
     public:
         MainMenuBar();
@@ -88,6 +90,11 @@ namespace windows
         void setLightBakeWindow(LightBakeWindow* window)
         {
             lightBakeWindow = window;
+        }
+
+        void setAssetLifecycleWindow(AssetLifecycleWindow* window)
+        {
+            assetLifecycleWindow = window;
         }
 
     private:

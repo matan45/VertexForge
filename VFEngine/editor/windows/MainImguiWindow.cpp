@@ -21,6 +21,7 @@ namespace windows
         menuBar.setWaterEditorWindow(&waterEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
         menuBar.setLightBakeWindow(&lightBakeWindow);
+        menuBar.setAssetLifecycleWindow(&assetLifecycleWindow);
 
         subscribeToEvents();
     }
@@ -87,6 +88,7 @@ namespace windows
             waterEditorWindow.draw();
             navmeshWindow.draw();
             lightBakeWindow.draw();
+            assetLifecycleWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();
