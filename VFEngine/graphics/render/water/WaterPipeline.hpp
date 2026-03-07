@@ -79,8 +79,6 @@ namespace render::water
         vk::DeviceMemory oceanDummyMemory;
         vk::ImageView oceanDummyView;
         vk::Sampler oceanDummySampler;
-        bool hasOceanTextureLayout = false;
-
         bool initialized = false;
         uint32_t lastDescriptorTileCount = 0;
 

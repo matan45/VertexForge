@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <cstdint>
+#include "../../core/RenderManager.hpp"
 
 namespace core
 {
@@ -140,10 +141,13 @@ namespace render::water
         vk::Sampler outputSampler;
 
         // GPU readback for CPU-side displacement sampling (physics)
-        vk::Buffer readbackBuffer;
-        vk::DeviceMemory readbackMemory;
+        // Ring buffer: one staging buffer per frame-in-flight, guarded by per-frame fences
+        std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> readbackBuffers{};
+        std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> readbackMemories{};
+        std::array<void*, core::MAX_FRAMES_IN_FLIGHT> readbackMapped{};
         std::vector<glm::vec4> cpuDisplacementData;
-        bool readbackReady = false;
+        uint32_t readbackFrameIndex = 0;
+        uint32_t readbackFrameCount = 0;
 
         bool initialized = false;
         bool spectrumDirty = true;

@@ -44,12 +44,10 @@ namespace render::water
         if (config.oceanTextureLayout)
         {
             oceanTextureLayout = config.oceanTextureLayout;
-            hasOceanTextureLayout = true;
         }
         else
         {
             createOceanDummyTexture();
-            hasOceanTextureLayout = true;
         }
 
         createGraphicsPipeline(config);
@@ -179,7 +177,6 @@ namespace render::water
             oceanDummyLayout = nullptr;
         }
         oceanTextureLayout = nullptr;
-        hasOceanTextureLayout = false;
 
         if (waterShader)
         {

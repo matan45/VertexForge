@@ -46,7 +46,8 @@ namespace render::water
 
         spectrumDirty = true;
         firstDispatch = true;
-        readbackReady = false;
+        readbackFrameIndex = 0;
+        readbackFrameCount = 0;
         initialized = true;
 
         vfLogInfo("OceanFFT: Initialized ({}x{}, patch={}, wind={})",
@@ -728,31 +729,48 @@ namespace render::water
         // RGBA16F = 8 bytes per pixel
         vk::DeviceSize bufferSize = N * N * 8;
 
-        core::BufferInfoRequest req(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            bufferSize,
-            vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            core::BufferInfoRequest req(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                bufferSize,
+                vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-        core::BufferUtilities::createBuffer(req, readbackBuffer, readbackMemory);
+            core::BufferUtilities::createBuffer(req, readbackBuffers[i], readbackMemories[i]);
+
+            // Persistently map — these are host-visible + host-coherent
+            readbackMapped[i] = device.getLogicalDevice().mapMemory(readbackMemories[i], 0, bufferSize);
+        }
     }
 
     void OceanFFT::destroyReadbackBuffer()
     {
-        if (readbackBuffer)
+        vk::Device vkDevice = device.getLogicalDevice();
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), readbackBuffer, readbackMemory);
-            readbackBuffer = nullptr;
-            readbackMemory = nullptr;
+            if (readbackMapped[i])
+            {
+                vkDevice.unmapMemory(readbackMemories[i]);
+                readbackMapped[i] = nullptr;
+            }
+            if (readbackBuffers[i])
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, readbackBuffers[i], readbackMemories[i]);
+                readbackBuffers[i] = nullptr;
+                readbackMemories[i] = nullptr;
+            }
         }
         cpuDisplacementData.clear();
-        readbackReady = false;
+        readbackFrameIndex = 0;
+        readbackFrameCount = 0;
     }
 
     void OceanFFT::recordReadbackCopy(vk::CommandBuffer cmd)
     {
         uint32_t N = config.resolution;
+        vk::Buffer targetBuffer = readbackBuffers[readbackFrameIndex];
 
         // Barrier: compute write → transfer read
         vk::ImageMemoryBarrier barrier{};
@@ -768,7 +786,7 @@ namespace render::water
             vk::PipelineStageFlagBits::eTransfer,
             {}, {}, {}, barrier);
 
-        // Copy image to buffer
+        // Copy image to ring buffer slot for this frame
         vk::BufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -781,7 +799,7 @@ namespace render::water
         region.imageExtent = vk::Extent3D{N, N, 1};
 
         cmd.copyImageToBuffer(displacementImage, vk::ImageLayout::eTransferSrcOptimal,
-                              readbackBuffer, region);
+                              targetBuffer, region);
 
         // Barrier: transfer → back to general for next frame's compute
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
@@ -794,30 +812,29 @@ namespace render::water
             vk::PipelineStageFlagBits::eComputeShader,
             {}, {}, {}, barrier);
 
-        readbackReady = true;
+        ++readbackFrameCount;
+        readbackFrameIndex = (readbackFrameIndex + 1) % core::MAX_FRAMES_IN_FLIGHT;
     }
 
     void OceanFFT::readbackDisplacementData()
     {
-        if (!initialized || !readbackReady || !readbackBuffer)
+        if (!initialized || readbackFrameCount < core::MAX_FRAMES_IN_FLIGHT)
             return;
 
-        // Ensure GPU transfer is complete before reading back
-        device.getLogicalDevice().waitIdle();
-
-        uint32_t N = config.resolution;
-        vk::DeviceSize bufferSize = N * N * 8; // RGBA16F = 8 bytes per pixel
-
-        void* mapped = device.getLogicalDevice().mapMemory(readbackMemory, 0, bufferSize);
+        // Read from the current frame slot — RenderManager already waited on this
+        // slot's fence before we got here, so the previous GPU copy is complete.
+        // readbackFrameIndex points to the slot about to be written, which is also
+        // the slot whose previous write (MAX_FRAMES_IN_FLIGHT frames ago) is done.
+        void* mapped = readbackMapped[readbackFrameIndex];
         if (!mapped)
             return;
 
+        uint32_t N = config.resolution;
         const uint16_t* halfData = static_cast<const uint16_t*>(mapped);
         cpuDisplacementData.resize(N * N);
 
         for (uint32_t i = 0; i < N * N; ++i)
         {
-            // Convert half-float to float manually
             auto halfToFloat = [](uint16_t h) -> float
             {
                 uint32_t sign = (h >> 15) & 0x1;
@@ -827,7 +844,6 @@ namespace render::water
                 if (exp == 0)
                 {
                     if (mant == 0) return sign ? -0.0f : 0.0f;
-                    // Denormalized
                     float f = std::ldexp(static_cast<float>(mant), -24);
                     return sign ? -f : f;
                 }
@@ -849,8 +865,6 @@ namespace render::water
                 halfToFloat(halfData[i * 4 + 3])   // foam
             );
         }
-
-        device.getLogicalDevice().unmapMemory(readbackMemory);
     }
 
     float OceanFFT::sampleHeightAt(const glm::vec2& worldXZ) const
