@@ -116,6 +116,7 @@
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
+    <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\lightbake\LightBakeEvents.hpp" />
     <ClInclude Include="events\navmesh\NavmeshEvents.hpp" />
     <ClInclude Include="events\physics\ControllerEvents.hpp" />
@@ -161,6 +162,7 @@
     <ClInclude Include="events\vfx\VFXEventNotifications.hpp" />
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
+    <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\audio\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
@@ -183,6 +185,7 @@
     <ClInclude Include="impl\editor\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
+    <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\lightbake\LightBakeServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
@@ -215,6 +218,7 @@
     <ClInclude Include="impl\terrain\TerrainRaycastServiceImpl.hpp" />
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
+    <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
@@ -222,6 +226,7 @@
     <ClInclude Include="interfaces\editor\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
+    <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
     <ClInclude Include="interfaces\lightbake\ILightBakeService.hpp" />
     <ClInclude Include="interfaces\navmesh\INavmeshService.hpp" />
     <ClInclude Include="interfaces\physics\IControllerService.hpp" />
@@ -245,6 +250,7 @@
     <ClInclude Include="interfaces\terrain\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\terrain\ITerrainService.hpp" />
     <ClInclude Include="interfaces\terrain\IWaterService.hpp" />
+    <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
@@ -300,6 +306,7 @@
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
+    <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\lightbake\LightBakeServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshGeometryCollector.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshServiceImpl.cpp" />
@@ -340,6 +347,7 @@
     <ClCompile Include="impl\terrain\TerrainRaycastServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
+    <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

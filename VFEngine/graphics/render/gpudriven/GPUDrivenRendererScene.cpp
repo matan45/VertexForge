@@ -179,6 +179,34 @@ namespace render::gpudriven
         meshStreamManager->update(cameraPosition);
     }
 
+    void GPUDrivenRenderer::releaseMeshAsset(const std::string& meshPath)
+    {
+        if (meshStreamManager)
+        {
+            meshStreamManager->unrequestMesh(meshPath);
+        }
+    }
+
+    void GPUDrivenRenderer::releaseTextureAsset(const std::string& texturePath)
+    {
+        if (bindlessTextures)
+        {
+            bindlessTextures->unregisterTexture(texturePath);
+        }
+        if (materials.textureCache)
+        {
+            materials.textureCache->unloadTexture(texturePath);
+        }
+    }
+
+    void GPUDrivenRenderer::releaseMaterialAsset(const std::string& materialPath)
+    {
+        if (materials.textureCache)
+        {
+            materials.textureCache->invalidateMaterialDescriptorSet(materialPath);
+        }
+    }
+
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
     {
         if (!materials.textureCache || !bindlessTextures)

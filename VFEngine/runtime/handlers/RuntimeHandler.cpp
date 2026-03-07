@@ -21,6 +21,8 @@
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/world/WorldSectorServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -103,6 +105,16 @@ namespace handlers {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
 
+            // Update world sector streaming (distance-based entity load/unload)
+            if (worldSectorService) {
+                worldSectorService->update();
+            }
+
+            // Update asset lifecycle manager (deferred releases)
+            if (assetLifecycleService) {
+                assetLifecycleService->update(deltaTime);
+            }
+
             if (pluginManager) {
                 pluginManager->updateAll(deltaTime);
             }
@@ -153,6 +165,11 @@ namespace handlers {
                     meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
                     events::EventDispatcher::instance().execute(meshCameraCmd);
 
+                    // Broadcast camera position for world sector streaming
+                    events::render::CameraPositionUpdatedNotification camPosNotif;
+                    camPosNotif.position = cameraPos;
+                    events::EventDispatcher::instance().publish(camPosNotif);
+
                     // Push camera to IBL skybox renderer
                     events::render::UpdateIBLCameraCommand iblCameraCmd;
                     iblCameraCmd.viewMatrix = camComp.viewMatrix;
@@ -192,6 +209,8 @@ namespace handlers {
 
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        worldSectorService.reset();
+        assetLifecycleService.reset();
         controllerService.reset();
         ikComponentService.reset();
         physicsAnimationService.reset();
@@ -353,6 +372,12 @@ namespace handlers {
             bootstrap->getDebugDrawProvider()
         );
 
+        assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
+        worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
+            bootstrap->getSceneGraphSystem()
+        );
+
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
         {
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
@@ -382,6 +407,8 @@ namespace handlers {
         }
         renderTextureService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
+        assetLifecycleService->registerEventHandlers();
+        worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {

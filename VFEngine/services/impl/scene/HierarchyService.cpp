@@ -134,11 +134,12 @@ namespace services
             }
         }
 
-        sceneGraph->removeEntity(sceneEntity);
-
+        // Publish before removeEntity so subscribers can still read components
         events::scene::EntityDeletedNotification notification;
         notification.entity = entity;
         dispatcher.publish(notification);
+
+        sceneGraph->removeEntity(sceneEntity);
 
         return true;
     }

@@ -76,6 +76,12 @@ namespace events::render {
         std::string_view getName() const override { return "UpdateMeshCamera"; }
     };
 
+    struct CameraPositionUpdatedNotification : INotification {
+        glm::vec3 position{0.0f};
+
+        std::string_view getName() const override { return "CameraPositionUpdated"; }
+    };
+
     struct SetShowBillboardIconsCommand : ICommand<> {
         bool show;
 

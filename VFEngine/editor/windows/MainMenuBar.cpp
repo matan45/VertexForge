@@ -12,6 +12,8 @@
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
+#include "AssetLifecycleWindow.hpp"
+#include "WorldSectorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -127,6 +129,16 @@ namespace windows
                 if (!canExport && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 {
                     ImGui::SetTooltip("Load a project before exporting");
+                }
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("World Sectors"))
+            {
+                if (worldSectorWindow)
+                {
+                    worldSectorWindow->show();
                 }
             }
 
@@ -332,6 +344,14 @@ namespace windows
                 if (cullingStatsWindow)
                 {
                     cullingStatsWindow->toggle();
+                }
+            }
+
+            if (ImGui::MenuItem("Asset Lifecycle"))
+            {
+                if (assetLifecycleWindow)
+                {
+                    assetLifecycleWindow->show();
                 }
             }
 

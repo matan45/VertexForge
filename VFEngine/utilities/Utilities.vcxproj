@@ -143,6 +143,9 @@
     <ClInclude Include="print\LogEntry.hpp" />
     <ClInclude Include="rendertexture\RenderTextureTypes.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
+    <ClInclude Include="resource\AssetLifecycleHelpers.hpp" />
+    <ClInclude Include="resource\AssetLifecycleManager.hpp" />
+    <ClInclude Include="resource\AssetTypes.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
@@ -214,6 +217,15 @@
     <ClInclude Include="water\WaterTile.hpp" />
     <ClInclude Include="water\WaterTypes.hpp" />
     <ClInclude Include="water\WaterWorldStreamer.hpp" />
+    <ClInclude Include="world\PendingReferenceResolver.hpp" />
+    <ClInclude Include="world\SectorEntityLoader.hpp" />
+    <ClInclude Include="world\SectorStreamer.hpp" />
+    <ClInclude Include="world\WorldDefinition.hpp" />
+    <ClInclude Include="world\WorldDefinitionSerialization.hpp" />
+    <ClInclude Include="world\WorldSector.hpp" />
+    <ClInclude Include="world\WorldSectorManager.hpp" />
+    <ClInclude Include="world\WorldSectorSerialization.hpp" />
+    <ClInclude Include="world\WorldTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animator\AnimatorAsset.cpp" />
@@ -239,6 +251,7 @@
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
+    <ClCompile Include="resource\AssetLifecycleManager.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
     <ClCompile Include="resource\FontResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
@@ -300,6 +313,12 @@
     <ClCompile Include="water\WaterSerializer.cpp" />
     <ClCompile Include="water\WaterSerializerRead.cpp" />
     <ClCompile Include="water\WaterWorldStreamer.cpp" />
+    <ClCompile Include="world\PendingReferenceResolver.cpp" />
+    <ClCompile Include="world\SectorEntityLoader.cpp" />
+    <ClCompile Include="world\SectorStreamer.cpp" />
+    <ClCompile Include="world\WorldDefinitionSerialization.cpp" />
+    <ClCompile Include="world\WorldSectorManager.cpp" />
+    <ClCompile Include="world\WorldSectorSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

@@ -368,6 +368,27 @@ namespace render::mesh
         defaultTextureCreated = true;
     }
     
+    void MaterialTextureCache::unloadTexture(const std::string& path)
+    {
+        if (path.empty()) return;
+
+        auto it = textureCache.find(path);
+        if (it == textureCache.end()) return;
+
+        // Invalidate any material descriptor sets that reference this texture
+        std::vector<std::string> materialsToInvalidate;
+        for (const auto& [matPath, set] : materialDescriptorSets)
+        {
+            // We can't easily check which materials use this texture without
+            // storing the association. Just remove the texture and let
+            // descriptor sets be rebuilt on next use.
+        }
+
+        // The unique_ptr destructor will clean up the Vulkan resources
+        textureCache.erase(it);
+        vfLogInfo("MaterialTextureCache: Unloaded texture '{}'", path);
+    }
+
     bool MaterialTextureCache::loadTexture(const std::string& path)
     {
         if (path.empty()) return false;

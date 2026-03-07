@@ -113,6 +113,8 @@ namespace render::gpudriven
         
         MeshletLODInfo getMeshletLODInfo(const MeshletAllocation& alloc, uint32_t lodLevel) const;
         
+        void freeAllMeshlets(const std::string& meshPath);
+
         vk::Buffer getMeshletBuffer() const { return meshletBuffer; }
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer; }

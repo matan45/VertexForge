@@ -34,6 +34,8 @@
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/world/WorldSectorServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -155,6 +157,19 @@ namespace handlers
                 }
             }
 
+            // Update world sector streaming (distance-based entity load/unload)
+            if (worldSectorService)
+            {
+                worldSectorService->update();
+            }
+
+            // Update asset lifecycle manager (deferred releases)
+            if (assetLifecycleService)
+            {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                assetLifecycleService->update(deltaTime);
+            }
+
             // Update plugins every frame (regardless of play/edit mode)
             if (pluginManager)
             {
@@ -205,6 +220,8 @@ namespace handlers
         renderHookService.reset();
         debugDrawService.reset();
         audioSceneUpdater.reset();
+        worldSectorService.reset();
+        assetLifecycleService.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
@@ -294,6 +311,12 @@ namespace handlers
 
         debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(
             bootstrap->getDebugDrawProvider()
+        );
+
+        assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
+        worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
+            bootstrap->getSceneGraphSystem()
         );
     }
 
@@ -428,6 +451,8 @@ namespace handlers
         exportHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
+        assetLifecycleService->registerEventHandlers();
+        worldSectorService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

@@ -42,10 +42,7 @@ namespace core
                 if (debugDrawAdapter)
                 {
                     auto drawList = debugDrawAdapter->consumeDrawList();
-                    if (!drawList.empty())
-                    {
-                        offScreen->updateImmediateDebugDrawList(std::move(drawList));
-                    }
+                    offScreen->updateImmediateDebugDrawList(std::move(drawList));
                 }
             });
         }

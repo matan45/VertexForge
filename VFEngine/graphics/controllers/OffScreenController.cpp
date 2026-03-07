@@ -1,4 +1,5 @@
 #include "OffScreenController.hpp"
+#include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/gpudriven/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../render/OffScreenViewPort.hpp"
@@ -197,6 +198,45 @@ namespace controllers
     void OffScreenController::meshUnload(const std::string& meshId)
     {
         meshAssetManager->unload(meshId);
+    }
+
+    void OffScreenController::meshRelease(const std::string& meshPath)
+    {
+        auto* handler = getRenderPassHandler();
+        if (handler)
+        {
+            auto* gpu = handler->getGPUDrivenRenderer();
+            if (gpu)
+            {
+                gpu->releaseMeshAsset(meshPath);
+            }
+        }
+    }
+
+    void OffScreenController::textureRelease(const std::string& texturePath)
+    {
+        auto* handler = getRenderPassHandler();
+        if (handler)
+        {
+            auto* gpu = handler->getGPUDrivenRenderer();
+            if (gpu)
+            {
+                gpu->releaseTextureAsset(texturePath);
+            }
+        }
+    }
+
+    void OffScreenController::materialRelease(const std::string& materialPath)
+    {
+        auto* handler = getRenderPassHandler();
+        if (handler)
+        {
+            auto* gpu = handler->getGPUDrivenRenderer();
+            if (gpu)
+            {
+                gpu->releaseMaterialAsset(materialPath);
+            }
+        }
     }
 
     void OffScreenController::meshUpdateCamera(render::occlusion::CameraId cameraId,

@@ -474,6 +474,42 @@ namespace render::gpudriven
         return info;
     }
 
+    void MeshletBuffer::freeAllMeshlets(const std::string& meshPath)
+    {
+        if (!initialized) return;
+
+        std::vector<std::string> keysToRemove;
+        for (const auto& [key, allocIdx] : allocationKeyToIndex)
+        {
+            auto& alloc = allocations[allocIdx];
+            if (alloc.meshPath == meshPath)
+            {
+                for (auto& lodAlloc : alloc.lods)
+                {
+                    freeLODMeshletSpace(lodAlloc);
+                }
+                alloc = MeshletAllocation{};
+                freeAllocationSlots.push_back(allocIdx);
+                keysToRemove.push_back(key);
+            }
+        }
+
+        for (const auto& key : keysToRemove)
+        {
+            allocationKeyToIndex.erase(key);
+        }
+
+        currentMeshletCount = meshletAllocator.getUsedCount();
+        currentVertexIndexCount = vertexIndexAllocator.getUsedCount();
+        currentPrimitiveCount = primitiveAllocator.getUsedCount();
+
+        if (!keysToRemove.empty())
+        {
+            vfLogInfo("MeshletBuffer::freeAllMeshlets: Freed {} allocations for '{}'",
+                      keysToRemove.size(), meshPath);
+        }
+    }
+
     void MeshletBuffer::flushPendingTransfers()
     {
         if (transferManager && transferManager->hasPendingTransfers())

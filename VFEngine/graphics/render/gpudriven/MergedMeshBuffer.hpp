@@ -97,9 +97,14 @@ namespace render::gpudriven
         uint32_t currentObjectCount = 0;
         uint32_t transparentObjectCount = 0;
 
+        uint32_t peakObjectCount = 0;
+        uint32_t peakVertexCount = 0;
+        uint32_t peakIndexCount = 0;
+
         static constexpr uint32_t vertexStride = 64;
 
         std::vector<MergedMeshInfo> registeredMeshes;
+        std::vector<size_t> freeMeshSlots;
         std::unordered_map<std::string, size_t> meshPathToIndex;
 
         std::vector<SubmeshLocation> allSubmeshLocations;
@@ -140,6 +145,17 @@ namespace render::gpudriven
         uint32_t getObjectCount() const { return currentObjectCount; }
         uint32_t getTransparentObjectCount() const { return transparentObjectCount; }
 
+        uint32_t getPeakObjectCount() const { return peakObjectCount; }
+        uint32_t getPeakVertexCount() const { return peakVertexCount; }
+        uint32_t getPeakIndexCount() const { return peakIndexCount; }
+        uint32_t getMaxVertexCount() const { return maxVertexCount; }
+        uint32_t getMaxIndexCount() const { return maxIndexCount; }
+        uint32_t getMaxObjectCount() const { return maxObjectCount; }
+        uint32_t getRegisteredMeshCount() const { return static_cast<uint32_t>(meshPathToIndex.size()); }
+        uint32_t getRegisteredSubmeshCount() const { return static_cast<uint32_t>(submeshKeyToIndex.size()); }
+        float getVertexUtilization() const { return maxVertexCount > 0 ? static_cast<float>(totalVertexCount) / maxVertexCount : 0.0f; }
+        float getIndexUtilization() const { return maxIndexCount > 0 ? static_cast<float>(totalIndexCount) / maxIndexCount : 0.0f; }
+
         const SubmeshLocation* getSubmeshLocation(const std::string& meshPath,
                                                   const std::string& submeshName,
                                                   uint32_t submeshIndex) const;
@@ -148,6 +164,8 @@ namespace render::gpudriven
 
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);
+
+        void freeMesh(const std::string& meshPath);
 
         bool uploadLOD(const std::string& meshPath,
                        const std::string& submeshName,

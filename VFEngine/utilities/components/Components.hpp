@@ -26,5 +26,5 @@ namespace components
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent, LightmapComponent,
-                                               IKTargetComponent>;
+                                               IKTargetComponent, WorldSectorComponent>;
 }

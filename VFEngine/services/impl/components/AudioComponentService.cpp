@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 
 namespace services {
 
@@ -37,8 +38,11 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
+            if (!comp.audioFilePath.empty()) {
+                resource::AssetLifecycleManager::instance().release(comp.audioFilePath);
+            }
             sceneEntity.removeComponent<components::AudioSource2DComponent>();
-            // Only remove billboard if no other audio component exists
             if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
                 autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio2D));
             }
@@ -89,10 +93,17 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (!comp.audioFilePath.empty() && comp.audioFilePath != audioData.audioFilePath) {
+            lifecycle.release(comp.audioFilePath);
+        }
         comp.audioFilePath = audioData.audioFilePath;
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
+        if (!audioData.audioFilePath.empty()) {
+            lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
+        }
         return true;
     }
 
@@ -121,8 +132,11 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
+            if (!comp.audioFilePath.empty()) {
+                resource::AssetLifecycleManager::instance().release(comp.audioFilePath);
+            }
             sceneEntity.removeComponent<components::AudioSource3DComponent>();
-            // Only remove billboard if no other audio component exists
             if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
                 autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
             }
@@ -176,6 +190,10 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (!comp.audioFilePath.empty() && comp.audioFilePath != audioData.audioFilePath) {
+            lifecycle.release(comp.audioFilePath);
+        }
         comp.audioFilePath = audioData.audioFilePath;
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
@@ -183,6 +201,9 @@ namespace services {
         comp.minDistance = audioData.minDistance;
         comp.maxDistance = audioData.maxDistance;
         comp.showDebugSpheres = audioData.showDebugSpheres;
+        if (!audioData.audioFilePath.empty()) {
+            lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
+        }
         return true;
     }
 
