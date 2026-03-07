@@ -29,6 +29,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::water::SetWaterGlobalSettingsCommand>();
         dispatcher.unregisterCommandHandler<events::water::RebuildWaterFromComponentsCommand>();
         dispatcher.unregisterCommandHandler<events::water::RemapWaterEntitiesCommand>();
+        dispatcher.unregisterCommandHandler<events::water::SaveWaterCommand>();
+        dispatcher.unregisterCommandHandler<events::water::LoadWaterCommand>();
 
         dispatcher.unregisterQueryHandler<events::water::GetWaterDataQuery>();
         dispatcher.unregisterQueryHandler<events::water::IsPositionInWaterQuery>();
@@ -164,6 +166,18 @@ namespace services
             [this](const events::water::RemapWaterEntitiesCommand&)
             {
                 remapWaterEntities();
+            });
+
+        dispatcher.registerCommandHandler<events::water::SaveWaterCommand>(
+            [this](const events::water::SaveWaterCommand& cmd)
+            {
+                return saveWater(cmd.waterEntity, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::water::LoadWaterCommand>(
+            [this](const events::water::LoadWaterCommand& cmd)
+            {
+                return loadWater(cmd.path);
             });
     }
 

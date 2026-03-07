@@ -2,6 +2,7 @@
 
 #include "data/WaterData.hpp"
 #include "data/EntityHandle.hpp"
+#include "nfd/FileDialog.hpp"
 
 namespace windows
 {
@@ -26,6 +27,8 @@ namespace windows
         services::WaterGlobalSettingsData globalSettings;
         bool settingsDirty = false;
 
+        nfd::FileDialog fileDialog;
+
     public:
         void draw();
         void show();
@@ -39,5 +42,7 @@ namespace windows
         void applySettings();
         void resetCreationDefaults();
         void refreshWaterState();
+        void saveWater();
+        void loadWater();
     };
 }

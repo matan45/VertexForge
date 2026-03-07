@@ -209,6 +209,7 @@
     <ClInclude Include="vfx\VFXShapeTypes.hpp" />
     <ClInclude Include="vfx\VFXTypes.hpp" />
     <ClInclude Include="water\WaterGrid.hpp" />
+    <ClInclude Include="water\WaterSerializer.hpp" />
     <ClInclude Include="water\WaterTile.hpp" />
     <ClInclude Include="water\WaterTypes.hpp" />
   </ItemGroup>
@@ -294,6 +295,8 @@
     <ClCompile Include="vfx\VFXShapeConfigLoader.cpp" />
     <ClCompile Include="vfx\VFXTypes.cpp" />
     <ClCompile Include="water\WaterGrid.cpp" />
+    <ClCompile Include="water\WaterSerializer.cpp" />
+    <ClCompile Include="water\WaterSerializerRead.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

@@ -88,6 +88,19 @@ namespace events::water
         std::string_view getName() const override { return "RemapWaterEntities"; }
     };
 
+    struct SaveWaterCommand : ICommand<bool> {
+        services::EntityHandle waterEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "SaveWater"; }
+    };
+
+    struct LoadWaterCommand : ICommand<services::EntityHandle> {
+        std::string path;
+
+        std::string_view getName() const override { return "LoadWater"; }
+    };
+
     // === Notifications ===
 
     struct WaterCreatedNotification : INotification {
@@ -101,6 +114,20 @@ namespace events::water
         services::EntityHandle waterEntity;
 
         std::string_view getName() const override { return "WaterDeleted"; }
+    };
+
+    struct WaterSavedNotification : INotification {
+        services::EntityHandle waterEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "WaterSaved"; }
+    };
+
+    struct WaterLoadedNotification : INotification {
+        services::EntityHandle waterEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "WaterLoaded"; }
     };
 
     struct WaterTileEnteredNotification : INotification {

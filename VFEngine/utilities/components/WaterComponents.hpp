@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
 
 namespace components
 {
@@ -39,6 +40,8 @@ namespace components
 
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
+
+        std::string savePath;
     };
 
     struct WaterTileComponent

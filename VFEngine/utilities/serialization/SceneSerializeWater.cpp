@@ -7,35 +7,72 @@ namespace serialization
     json SceneSerialization::serializeWater(const components::WaterComponent& water)
     {
         json j;
-        j["globalDensity"] = water.globalDensity;
-        j["globalDrag"] = water.globalDrag;
-        j["globalBuoyancyStrength"] = water.globalBuoyancyStrength;
-        j["defaultWaterHeight"] = water.defaultWaterHeight;
-        j["defaultWaveIntensity"] = water.defaultWaveIntensity;
-        j["waveSpeed"] = water.waveSpeed;
-        j["waveAmplitude"] = water.waveAmplitude;
-        j["waveFrequency"] = water.waveFrequency;
-        j["shallowColor"] = json::array({water.shallowColor.x, water.shallowColor.y,
-                                          water.shallowColor.z, water.shallowColor.w});
-        j["deepColor"] = json::array({water.deepColor.x, water.deepColor.y,
-                                       water.deepColor.z, water.deepColor.w});
-        j["maxVisibleDepth"] = water.maxVisibleDepth;
-        j["fresnelPower"] = water.fresnelPower;
-        j["dudvTiling"] = water.dudvTiling;
-        j["dudvStrength"] = water.dudvStrength;
-        j["waveDirectionDegrees"] = water.waveDirectionDegrees;
+
+        // Always store scene reference fields
         j["worldTileSize"] = water.worldTileSize;
         j["gridMinX"] = water.gridMinX;
         j["gridMinZ"] = water.gridMinZ;
         j["gridMaxX"] = water.gridMaxX;
         j["gridMaxZ"] = water.gridMaxZ;
-        j["physicsEnabled"] = water.physicsEnabled;
         j["isActive"] = water.isActive;
+
+        if (!water.savePath.empty())
+        {
+            // When a .vfWater file exists, store only the reference
+            std::string cleanPath = water.savePath;
+            std::replace(cleanPath.begin(), cleanPath.end(), '\\', '/');
+            j["savePath"] = cleanPath;
+        }
+        else
+        {
+            // Inline fallback when no .vfWater file has been saved
+            j["globalDensity"] = water.globalDensity;
+            j["globalDrag"] = water.globalDrag;
+            j["globalBuoyancyStrength"] = water.globalBuoyancyStrength;
+            j["defaultWaterHeight"] = water.defaultWaterHeight;
+            j["defaultWaveIntensity"] = water.defaultWaveIntensity;
+            j["waveSpeed"] = water.waveSpeed;
+            j["waveAmplitude"] = water.waveAmplitude;
+            j["waveFrequency"] = water.waveFrequency;
+            j["shallowColor"] = json::array({water.shallowColor.x, water.shallowColor.y,
+                                              water.shallowColor.z, water.shallowColor.w});
+            j["deepColor"] = json::array({water.deepColor.x, water.deepColor.y,
+                                           water.deepColor.z, water.deepColor.w});
+            j["maxVisibleDepth"] = water.maxVisibleDepth;
+            j["fresnelPower"] = water.fresnelPower;
+            j["dudvTiling"] = water.dudvTiling;
+            j["dudvStrength"] = water.dudvStrength;
+            j["waveDirectionDegrees"] = water.waveDirectionDegrees;
+            j["physicsEnabled"] = water.physicsEnabled;
+        }
+
         return j;
     }
 
     void SceneSerialization::deserializeWater(const json& j, components::WaterComponent& water)
     {
+        // Scene reference fields (always present)
+        if (auto it = j.find("worldTileSize"); it != j.end() && it->is_number())
+            water.worldTileSize = it->get<float>();
+        if (auto it = j.find("gridMinX"); it != j.end() && it->is_number_integer())
+            water.gridMinX = it->get<int32_t>();
+        if (auto it = j.find("gridMinZ"); it != j.end() && it->is_number_integer())
+            water.gridMinZ = it->get<int32_t>();
+        if (auto it = j.find("gridMaxX"); it != j.end() && it->is_number_integer())
+            water.gridMaxX = it->get<int32_t>();
+        if (auto it = j.find("gridMaxZ"); it != j.end() && it->is_number_integer())
+            water.gridMaxZ = it->get<int32_t>();
+        if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
+            water.isActive = it->get<bool>();
+
+        if (auto it = j.find("savePath"); it != j.end() && it->is_string())
+        {
+            water.savePath = it->get<std::string>();
+            // Rest of data will be loaded from .vfWater file
+            return;
+        }
+
+        // Inline fallback — read all settings from JSON
         if (auto it = j.find("globalDensity"); it != j.end() && it->is_number())
             water.globalDensity = it->get<float>();
         if (auto it = j.find("globalDrag"); it != j.end() && it->is_number())
@@ -68,20 +105,8 @@ namespace serialization
             water.dudvStrength = it->get<float>();
         if (auto it = j.find("waveDirectionDegrees"); it != j.end() && it->is_number())
             water.waveDirectionDegrees = it->get<float>();
-        if (auto it = j.find("worldTileSize"); it != j.end() && it->is_number())
-            water.worldTileSize = it->get<float>();
-        if (auto it = j.find("gridMinX"); it != j.end() && it->is_number_integer())
-            water.gridMinX = it->get<int32_t>();
-        if (auto it = j.find("gridMinZ"); it != j.end() && it->is_number_integer())
-            water.gridMinZ = it->get<int32_t>();
-        if (auto it = j.find("gridMaxX"); it != j.end() && it->is_number_integer())
-            water.gridMaxX = it->get<int32_t>();
-        if (auto it = j.find("gridMaxZ"); it != j.end() && it->is_number_integer())
-            water.gridMaxZ = it->get<int32_t>();
         if (auto it = j.find("physicsEnabled"); it != j.end() && it->is_boolean())
             water.physicsEnabled = it->get<bool>();
-        if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
-            water.isActive = it->get<bool>();
     }
 
     json SceneSerialization::serializeWaterTile(const components::WaterTileComponent& tile)

@@ -3,6 +3,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/WaterData.hpp"
 #include <optional>
+#include <string>
 
 namespace services
 {
@@ -17,5 +18,8 @@ namespace services
         virtual bool deleteWater(EntityHandle waterEntity) = 0;
         virtual std::optional<WaterData> getWaterData(EntityHandle entity) const = 0;
         virtual bool hasWaterComponent(EntityHandle entity) const = 0;
+
+        virtual bool saveWater(EntityHandle waterEntity, const std::string& path) = 0;
+        virtual EntityHandle loadWater(const std::string& path) = 0;
     };
 }

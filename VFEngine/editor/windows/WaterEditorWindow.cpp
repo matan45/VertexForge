@@ -131,6 +131,16 @@ namespace windows
         {
             resetCreationDefaults();
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::Text("Or Load Existing");
+        if (ImGui::Button("Load Water", ImVec2(-1, 30)))
+        {
+            loadWater();
+        }
     }
 
     void WaterEditorWindow::drawSettingsSection()
@@ -276,6 +286,15 @@ namespace windows
         {
             refreshWaterState();
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Save Water", ImVec2(-1, 0)))
+        {
+            saveWater();
+        }
     }
 
     void WaterEditorWindow::drawInfoSection()
@@ -362,5 +381,41 @@ namespace windows
         physicsEnabled = true;
         shallowColor[0] = 0.0f; shallowColor[1] = 0.5f; shallowColor[2] = 0.7f; shallowColor[3] = 0.6f;
         deepColor[0] = 0.0f; deepColor[1] = 0.1f; deepColor[2] = 0.3f; deepColor[3] = 0.9f;
+    }
+
+    void WaterEditorWindow::saveWater()
+    {
+        if (!hasWater)
+            return;
+
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Water (*.vfWater)", L"*.vfWater"}
+        };
+
+        std::string path = fileDialog.saveFileDialog(fileTypes, L"vfWater");
+        if (!path.empty())
+        {
+            events::water::SaveWaterCommand cmd;
+            cmd.waterEntity = waterEntity;
+            cmd.path = path;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void WaterEditorWindow::loadWater()
+    {
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Water (*.vfWater)", L"*.vfWater"}
+        };
+
+        std::string path = fileDialog.openFileDialog(fileTypes);
+        if (!path.empty())
+        {
+            events::water::LoadWaterCommand cmd;
+            cmd.path = path;
+            events::EventDispatcher::instance().execute(cmd);
+
+            refreshWaterState();
+        }
     }
 }

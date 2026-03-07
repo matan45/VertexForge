@@ -213,6 +213,9 @@ namespace windows
         case Lightmap:
             icon = AtlasIcon::Texture;
             break;
+        case Water:
+            icon = AtlasIcon::Water;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

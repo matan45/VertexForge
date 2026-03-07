@@ -6,10 +6,12 @@
 #include "water/WaterGrid.hpp"
 #include "water/WaterTile.hpp"
 #include "water/WaterTypes.hpp"
+#include "water/WaterSerializer.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/WaterEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include <filesystem>
 
 namespace services
 {
@@ -173,9 +175,84 @@ namespace services
 
         for (auto entity : waterView)
         {
-            const auto& waterComp = registry.get<components::WaterComponent>(entity);
+            auto& waterComp = registry.get<components::WaterComponent>(entity);
             EntityHandle waterHandle = internal::toHandle(entity);
 
+            // If a .vfWater file reference exists, load from it
+            if (!waterComp.savePath.empty() && std::filesystem::exists(waterComp.savePath))
+            {
+                water::WaterLoadResult loadResult;
+                if (water::WaterSerializer::loadAll(waterComp.savePath, loadResult))
+                {
+                    const auto& header = loadResult.header;
+
+                    // Apply loaded settings to component
+                    const auto& s = header.globalSettings;
+                    waterComp.globalDensity = s.density;
+                    waterComp.globalDrag = s.drag;
+                    waterComp.globalBuoyancyStrength = s.buoyancyStrength;
+                    waterComp.waveSpeed = s.waveSpeed;
+                    waterComp.waveAmplitude = s.waveAmplitude;
+                    waterComp.waveFrequency = s.waveFrequency;
+                    waterComp.shallowColor = s.shallowColor;
+                    waterComp.deepColor = s.deepColor;
+                    waterComp.maxVisibleDepth = s.maxVisibleDepth;
+                    waterComp.fresnelPower = s.fresnelPower;
+                    waterComp.dudvTiling = s.dudvTiling;
+                    waterComp.dudvStrength = s.dudvStrength;
+                    waterComp.waveDirectionDegrees = s.waveDirectionDegrees;
+                    waterComp.physicsEnabled = header.physicsEnabled;
+
+                    water::WaterTileConfig tileConfig;
+                    tileConfig.worldTileSize = header.worldTileSize;
+
+                    auto grid = std::make_unique<water::WaterGrid>(tileConfig, 0.0f);
+                    grid->createGrid(header.gridMinX, header.gridMinZ,
+                                     header.gridMaxX, header.gridMaxZ);
+
+                    // Remove existing tile children (scene JSON may have stale ones)
+                    scene::Entity waterEntity(entity);
+                    auto children = waterEntity.getChildren();
+                    for (auto& child : children)
+                    {
+                        if (child.hasComponent<components::WaterTileComponent>())
+                            sceneGraph->removeEntity(child);
+                    }
+
+                    // Apply per-tile data and create tile entities
+                    for (const auto& tileData : loadResult.tiles)
+                    {
+                        water::WaterTile* tile = grid->getTile(
+                            water::TileCoord(tileData.tileX, tileData.tileZ));
+                        if (tile)
+                        {
+                            tile->updateHeight(tileData.waterHeight, tileConfig.worldTileSize);
+                            tile->waveIntensity = tileData.waveIntensity;
+                            tile->physicsEnabled = tileData.physicsEnabled;
+                        }
+                    }
+
+                    createTileEntities(waterHandle, *grid);
+
+                    if (!loadResult.tiles.empty())
+                    {
+                        waterComp.defaultWaterHeight = loadResult.tiles[0].waterHeight;
+                        waterComp.defaultWaveIntensity = loadResult.tiles[0].waveIntensity;
+                    }
+                    waterComp.activeTileCount = header.tileCount;
+
+                    waterGrids[waterHandle.id] = std::move(grid);
+                    vfLogInfo("WaterService: Rebuilt water from .vfWater file: {}", waterComp.savePath);
+                    continue;
+                }
+                else
+                {
+                    vfLogWarning("WaterService: Failed to load .vfWater file '{}', falling back to component data",
+                                 waterComp.savePath);
+                }
+            }
+
+            // Fallback: rebuild from inline component/tile data
             water::WaterTileConfig tileConfig;
             tileConfig.worldTileSize = waterComp.worldTileSize;
 

@@ -91,6 +91,9 @@ namespace services
         void updateBuoyancy();
         void clearBuoyancyTracking();
 
+        bool saveWater(EntityHandle waterEntity, const std::string& path) override;
+        EntityHandle loadWater(const std::string& path) override;
+
         void rebuildWaterFromComponents();
         void remapWaterEntities();
 
