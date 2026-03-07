@@ -81,14 +81,22 @@ void main() {
 
     if (pc.oceanEnabled != 0u) {
         // Ocean FFT path: sample displacement and normal from compute output
-        vec2 oceanUV = worldPos.xz / pc.oceanPatchSize;
-        vec4 disp = texture(oceanDisplacementMap, oceanUV);
+        // Two octaves at different scales to break up visible FFT tiling
+        vec2 oceanUV1 = worldPos.xz / pc.oceanPatchSize;
+        vec2 oceanUV2 = worldPos.xz / (pc.oceanPatchSize * 2.731); // irrational scale to avoid alignment
+
+        vec4 disp1 = texture(oceanDisplacementMap, oceanUV1);
+        vec4 disp2 = texture(oceanDisplacementMap, oceanUV2);
+        vec4 disp = disp1 + disp2 * 0.3; // second octave at 30% strength
+
         worldPos.x += disp.x;
         worldPos.y += disp.y;
         worldPos.z += disp.z;
 
-        vec3 oceanNorm = texture(oceanNormalMap, oceanUV).xyz;
-        fragNormal = normalize(oceanNorm);
+        vec3 norm1 = texture(oceanNormalMap, oceanUV1).xyz;
+        vec3 norm2 = texture(oceanNormalMap, oceanUV2).xyz;
+        vec3 blendedNorm = normalize(norm1 + (norm2 - vec3(0.0, 1.0, 0.0)) * 0.3);
+        fragNormal = normalize(blendedNorm);
     } else {
         // Gerstner wave path (original)
         float time = camera.u_Time * pc.waveSpeed;
