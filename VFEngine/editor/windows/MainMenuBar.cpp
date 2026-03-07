@@ -9,7 +9,6 @@
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
-#include "OceanEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
@@ -208,13 +207,6 @@ namespace windows
                 if (waterEditorWindow)
                 {
                     waterEditorWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Ocean"))
-            {
-                if (oceanEditorWindow)
-                {
-                    oceanEditorWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Post Process"))

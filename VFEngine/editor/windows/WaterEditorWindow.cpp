@@ -30,6 +30,9 @@ namespace windows
         settingsQuery.entity = waterEntity;
         globalSettings = dispatcher.query(settingsQuery);
         settingsDirty = false;
+
+        oceanConfig = dispatcher.query(events::water::GetOceanFFTConfigQuery{});
+        oceanConfigDirty = false;
     }
 
     void WaterEditorWindow::draw()
@@ -49,6 +52,8 @@ namespace windows
             else
             {
                 drawSettingsSection();
+                ImGui::Spacing();
+                drawOceanFFTSection();
                 ImGui::Spacing();
                 drawInfoSection();
 
@@ -324,6 +329,113 @@ namespace windows
 
             ImGui::Unindent();
         }
+    }
+
+    void WaterEditorWindow::drawOceanFFTSection()
+    {
+        if (ImGui::CollapsingHeader("Ocean FFT"))
+        {
+            ImGui::Indent();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            if (ImGui::Checkbox("Enable Ocean FFT", &oceanConfig.enabled))
+            {
+                events::water::SetOceanFFTEnabledCommand cmd;
+                cmd.enabled = oceanConfig.enabled;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Replaces Gerstner waves with FFT-based ocean simulation");
+
+            if (oceanConfig.enabled)
+            {
+                ImGui::Spacing();
+
+                ImGui::Text("FFT Resolution");
+                ImGui::PushItemWidth(-1);
+                static const uint32_t resolutions[] = {64, 128, 256, 512};
+                int resIndex = 2;
+                for (int i = 0; i < 4; ++i)
+                {
+                    if (resolutions[i] == oceanConfig.resolution) { resIndex = i; break; }
+                }
+                const char* resLabels = "64" "\0" "128" "\0" "256" "\0" "512" "\0";
+                if (ImGui::Combo("##OceanResolution", &resIndex, resLabels))
+                {
+                    oceanConfig.resolution = resolutions[resIndex];
+                    oceanConfigDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Patch Size (world units)");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanPatchSize", &oceanConfig.patchSize, 1.0f, 10.0f, 2000.0f, "%.0f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Amplitude");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanAmplitude", &oceanConfig.amplitude, 0.00001f, 0.00001f, 0.01f, "%.5f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Spacing();
+
+                ImGui::Text("Wind Speed (m/s)");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanWindSpeed", &oceanConfig.windSpeed, 0.1f, 0.1f, 100.0f, "%.1f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Wind Direction");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderFloat("##OceanWindDir", &oceanConfig.windDirection, 0.0f, 360.0f, "%.0f deg"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Spacing();
+
+                ImGui::Text("Choppiness");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanChoppiness", &oceanConfig.choppiness, 0.01f, 0.0f, 5.0f, "%.2f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Gravity");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanGravity", &oceanConfig.gravity, 0.01f, 1.0f, 20.0f, "%.2f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Foam Threshold");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanFoamThreshold", &oceanConfig.foamThreshold, 0.01f, -1.0f, 2.0f, "%.2f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Lower = more foam");
+
+                ImGui::Spacing();
+
+                if (ImGui::Button("Apply Ocean", ImVec2(100, 0)))
+                    applyOceanConfig();
+
+                if (oceanConfigDirty)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+                }
+            }
+
+            ImGui::Unindent();
+        }
+    }
+
+    void WaterEditorWindow::applyOceanConfig()
+    {
+        events::water::SetOceanFFTConfigCommand cmd;
+        cmd.config = oceanConfig;
+        events::EventDispatcher::instance().execute(cmd);
+        oceanConfigDirty = false;
     }
 
     void WaterEditorWindow::createWater()
