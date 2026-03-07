@@ -474,12 +474,12 @@ namespace windows
         oceanConfig.enabled = true;
         oceanConfig.resolution = 256;
         oceanConfig.patchSize = 100.0f;
-        oceanConfig.amplitude = 0.002f;
-        oceanConfig.windSpeed = 20.0f;
+        oceanConfig.amplitude = 0.00003f;
+        oceanConfig.windSpeed = 8.0f;
         oceanConfig.windDirection = 45.0f;
-        oceanConfig.choppiness = 1.5f;
+        oceanConfig.choppiness = 0.8f;
         oceanConfig.gravity = 9.81f;
-        oceanConfig.foamThreshold = 0.3f;
+        oceanConfig.foamThreshold = -0.1f;
 
         auto& dispatcher = events::EventDispatcher::instance();
 

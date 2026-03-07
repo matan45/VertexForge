@@ -374,22 +374,26 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 void main() {
     vec3 N = normalize(fragNormal);
 
-    float moveSpeed = pc.waveSpeed * 0.03;
-    vec2 dudvUV1 = fragTexCoord * pc.dudvTiling + vec2(camera.u_Time * moveSpeed);
-    vec2 dudvUV2 = fragTexCoord * pc.dudvTiling * 0.8 + vec2(-camera.u_Time * moveSpeed * 0.7, camera.u_Time * moveSpeed * 0.5);
+    // DuDv normal distortion — skip for ocean FFT (it has its own normal map)
+    if (pc.oceanEnabled == 0u) {
+        float moveSpeed = pc.waveSpeed * 0.03;
+        vec2 dudvUV1 = fragTexCoord * pc.dudvTiling + vec2(camera.u_Time * moveSpeed);
+        vec2 dudvUV2 = fragTexCoord * pc.dudvTiling * 0.8 + vec2(-camera.u_Time * moveSpeed * 0.7, camera.u_Time * moveSpeed * 0.5);
 
-    vec2 distortion1 = texture(dudvMap, dudvUV1).rg * 2.0 - 1.0;
-    vec2 distortion2 = texture(dudvMap, dudvUV2).rg * 2.0 - 1.0;
-    vec2 totalDistortion = (distortion1 + distortion2) * pc.dudvStrength;
+        vec2 distortion1 = texture(dudvMap, dudvUV1).rg * 2.0 - 1.0;
+        vec2 distortion2 = texture(dudvMap, dudvUV2).rg * 2.0 - 1.0;
+        vec2 totalDistortion = (distortion1 + distortion2) * pc.dudvStrength;
 
-    N = normalize(N + vec3(totalDistortion.x, 0.0, totalDistortion.y));
+        N = normalize(N + vec3(totalDistortion.x, 0.0, totalDistortion.y));
+    }
 
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
     vec3 R = reflect(-V, N);
 
     float NdotV = max(dot(N, V), 0.0);
     float fresnel = pow(1.0 - NdotV, pc.fresnelPower);
-    fresnel = clamp(fresnel, 0.0, 1.0);
+    // Cap fresnel so ocean color always shows through (max 40% reflection)
+    fresnel = clamp(fresnel, 0.0, 0.4);
 
     float depthFactor = clamp((1.0 - NdotV) * pc.maxVisibleDepth, 0.0, 1.0);
     vec3 waterColor = mix(pc.shallowColor.rgb, pc.deepColor.rgb, depthFactor);
@@ -460,13 +464,13 @@ void main() {
 
     vec3 color = mix(waterColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
-    // Ocean foam blending
-    if (pc.oceanEnabled != 0u) {
-        vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
-        float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
-        vec3 foamColor = vec3(0.9, 0.95, 1.0);
-        color = mix(color, foamColor, foam * 0.7);
-    }
+    // Ocean foam blending (disabled until Jacobian tuning is done)
+    // if (pc.oceanEnabled != 0u) {
+    //     vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
+    //     float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
+    //     vec3 foamColor = vec3(0.9, 0.95, 1.0);
+    //     color = mix(color, foamColor, foam * 0.4);
+    // }
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));

@@ -76,12 +76,12 @@ namespace services
     {
         uint32_t resolution = 256;
         float patchSize = 100.0f;
-        float windSpeed = 20.0f;
+        float windSpeed = 8.0f;
         float windDirection = 45.0f;
-        float amplitude = 0.002f;
-        float choppiness = 1.5f;
+        float amplitude = 0.00003f;
+        float choppiness = 0.8f;
         float gravity = 9.81f;
-        float foamThreshold = 0.3f;
+        float foamThreshold = -0.1f;
         bool enabled = false;
     };
 }

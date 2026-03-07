@@ -5,7 +5,6 @@
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 #include <cstring>
-#include <iostream>
 
 namespace render::gpudriven
 {
@@ -99,18 +98,6 @@ namespace render::gpudriven
             water.cachedPushConstants.oceanChoppiness = cfg.choppiness;
             water.cachedPushConstants.oceanPatchSize = cfg.patchSize;
             water.cachedPushConstants.oceanFoamThreshold = cfg.foamThreshold;
-
-            static int logCounter = 0;
-            if (logCounter++ % 300 == 0)
-            {
-                std::cout << "[OceanFFT] RENDER: oceanEnabled=1"
-                          << " chop=" << cfg.choppiness
-                          << " patch=" << cfg.patchSize
-                          << " foam=" << cfg.foamThreshold
-                          << " amp=" << cfg.amplitude
-                          << " descSet=" << (bool)water.oceanFFT->getOceanTextureDescSet()
-                          << std::endl;
-            }
         }
         else
         {
@@ -216,17 +203,8 @@ namespace render::gpudriven
     {
         if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
         {
-            static int skipLog = 0;
-            if (skipLog++ % 300 == 0)
-                std::cout << "[OceanFFT] DISPATCH SKIPPED: enabled=" << water.oceanEnabled
-                          << " hasFFT=" << (bool)water.oceanFFT
-                          << " init=" << (water.oceanFFT ? water.oceanFFT->isInitialized() : false) << std::endl;
             return;
         }
-
-        static int dispLog = 0;
-        if (dispLog++ % 300 == 0)
-            std::cout << "[OceanFFT] DISPATCH: time=" << time << std::endl;
 
         water.oceanFFT->dispatch(cmd, time);
         water.oceanFFT->insertBarrier(cmd);

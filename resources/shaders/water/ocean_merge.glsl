@@ -51,14 +51,16 @@ void main() {
                  imageLoad(chopXField, ivec2(x, ym)).r * signYM;
 
     // Jacobian = (1 + dDx/dx)(1 + dDz/dz) - (dDx/dz)^2
+    // Choppiness is already baked into chopX/chopZ by time_evolve shader
     float texelSize = pc.patchSize / float(pc.N);
-    float Jxx = 1.0 + dxdx / (2.0 * texelSize);
-    float Jzz = 1.0 + dzdz / (2.0 * texelSize);
-    float Jxz = dxdz / (2.0 * texelSize);
+    float derivScale = 1.0 / (2.0 * texelSize);
+    float Jxx = 1.0 + dxdx * derivScale;
+    float Jzz = 1.0 + dzdz * derivScale;
+    float Jxz = dxdz * derivScale;
     float jacobian = Jxx * Jzz - Jxz * Jxz;
 
-    // Foam where Jacobian < threshold (wave folding)
-    float foam = clamp(pc.foamThreshold - jacobian, 0.0, 1.0);
+    // Foam where Jacobian < threshold (wave folding), wide smooth falloff
+    float foam = smoothstep(pc.foamThreshold + 0.5, pc.foamThreshold - 0.2, jacobian);
 
     // Store displacement (Dx, Dy, Dz, foam)
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));
@@ -69,8 +71,9 @@ void main() {
     float dyDz = imageLoad(heightField, ivec2(x, yp)).r * signYP -
                  imageLoad(heightField, ivec2(x, ym)).r * signYM;
 
-    float scale = 1.0 / (2.0 * texelSize);
-    vec3 normal = normalize(vec3(-dyDx * scale, 1.0, -dyDz * scale));
+    // Central difference derivative: dh/dx ≈ (h(x+1) - h(x-1)) / (2 * texelSize)
+    float normalDerivScale = 1.0 / (2.0 * texelSize);
+    vec3 normal = normalize(vec3(-dyDx * normalDerivScale, 1.0, -dyDz * normalDerivScale));
 
     imageStore(normalMap, ivec2(x, y), vec4(normal, foam));
 }

@@ -8,7 +8,6 @@
 
 #include <cmath>
 #include <cstring>
-#include <iostream>
 
 // Windows defines MemoryBarrier as a macro, which conflicts with vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -159,28 +158,6 @@ namespace render::water
 
         // Copy displacement to staging buffer for CPU-side physics readback
         recordReadbackCopy(cmd);
-
-        // One-time readback to verify compute output
-        if (debugFrameCount == 5)
-        {
-            // Insert barrier so we can read back
-            vk::MemoryBarrier memBar{};
-            memBar.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-            memBar.dstAccessMask = vk::AccessFlagBits::eTransferRead;
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-                                vk::PipelineStageFlagBits::eTransfer,
-                                {}, memBar, {}, {});
-
-            std::cout << "[OceanFFT] DEBUG: dispatch completed frame " << debugFrameCount
-                      << " time=" << time
-                      << " N=" << config.resolution
-                      << " amp=" << config.amplitude
-                      << " wind=" << config.windSpeed
-                      << " displacementImg=" << (bool)displacementImage
-                      << " normalImg=" << (bool)normalImage
-                      << " h0Img=" << (bool)h0Image
-                      << std::endl;
-        }
     }
 
     void OceanFFT::insertBarrier(vk::CommandBuffer cmd)
@@ -620,17 +597,6 @@ namespace render::water
         pc.gravity = config.gravity;
         pc.cutoffLow = config.patchSize / 2000.0f; // Small wave cutoff
         pc.seed = 42;
-
-        std::cout << "[OceanFFT] SPECTRUM: N=" << pc.N
-                  << " patch=" << pc.patchSize
-                  << " wind=" << pc.windSpeed
-                  << " windDir=(" << pc.windDirX << "," << pc.windDirZ << ")"
-                  << " amp=" << pc.amplitude
-                  << " gravity=" << pc.gravity
-                  << " cutoff=" << pc.cutoffLow
-                  << " pipeline=" << (bool)spectrumPipeline
-                  << " descSet=" << (bool)spectrumDescSet
-                  << std::endl;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, spectrumPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, spectrumPipelineLayout, 0, spectrumDescSet, nullptr);
