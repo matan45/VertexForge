@@ -232,11 +232,29 @@ namespace services
 
                 if (notif.currentMode == services::EditorMode::Play)
                 {
-                    // Entering play mode — save world state, clear sector tracking
+                    // Entering play mode — simulate runtime: unload all sectors so they
+                    // stream in based on camera distance (like a fresh world load)
                     savedWorldDefinition = worldDefinition;
                     savedWorldPath = currentWorldPath;
                     entityLoader.clear();
-                    sectorManager.clear();
+
+                    // Remove all sector entities from scene
+                    sectorManager.forEachSector([this](world::WorldSector& sector)
+                    {
+                        if (sector.state == world::SectorState::Loaded && !sector.entityUUIDs.empty())
+                        {
+                            entityLoader.queueSectorUnload(sector.coord, sector.entityUUIDs);
+                        }
+                    });
+                    // Process all unloads immediately
+                    entityLoader.update(*sceneGraph, 999999);
+
+                    // Reset all sectors to Unloaded so streamer can load them by distance
+                    sectorManager.forEachSector([](world::WorldSector& sector)
+                    {
+                        sector.entityUUIDs.clear();
+                        sector.state = world::SectorState::Unloaded;
+                    });
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
@@ -310,7 +328,7 @@ namespace services
 
         // Auto-load world when a scene with WorldSectorComponent is loaded
         sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
-            [this](const ::events::scene::SceneLoadedNotification&)
+            [this](const ::events::scene::SceneLoadedNotification& notif)
             {
                 auto& root = sceneGraph->GetRoot();
                 if (root.hasComponent<components::WorldSectorComponent>())
@@ -319,6 +337,22 @@ namespace services
                     if (!wsComp.worldFilePath.empty())
                     {
                         loadWorld(wsComp.worldFilePath);
+                        return;
+                    }
+                }
+
+                // Fallback: check for .vfworld file next to the scene file
+                if (!notif.scenePath.empty())
+                {
+                    std::filesystem::path scenePath(notif.scenePath);
+                    std::filesystem::path worldPath = scenePath.parent_path() / (scenePath.stem().string() + ".vfworld");
+                    if (std::filesystem::exists(worldPath))
+                    {
+                        std::string wp = worldPath.string();
+                        loadWorld(wp);
+
+                        // Tag root so future saves include it
+                        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = wp;
                     }
                 }
             });
@@ -422,6 +456,10 @@ namespace services
             vfLogError("Cannot save world: no file path specified");
             return false;
         }
+
+        // Ensure root entity has WorldSectorComponent so scene auto-loads the world
+        auto& root = sceneGraph->GetRoot();
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = path;
 
         // Save dirty sectors
         std::filesystem::path worldDir = std::filesystem::path(path).parent_path();

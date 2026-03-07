@@ -43,6 +43,7 @@
 #include "../details/IKDrawer.hpp"
 #include "../details/LightmapRootDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
+#include "../details/WorldSectorDrawer.hpp"
 #include "../details/AddComponentPopup.hpp"
 
 namespace windows
@@ -93,6 +94,7 @@ namespace windows
         details::IKDrawer ikDrawer;
         details::LightmapRootDrawer lightmapRootDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
+        details::WorldSectorDrawer worldSectorDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:
