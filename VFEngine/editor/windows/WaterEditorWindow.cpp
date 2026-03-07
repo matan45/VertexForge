@@ -488,10 +488,10 @@ namespace windows
         oceanConfig.amplitude = 0.00003f;
         oceanConfig.windSpeed = 8.0f;
         oceanConfig.windDirection = 45.0f;
-        oceanConfig.choppiness = 0.8f;
+        oceanConfig.choppiness = 1.2f;
         oceanConfig.gravity = 9.81f;
         oceanConfig.foamThreshold = -0.1f;
-        oceanConfig.displacementScale = 1.0f;
+        oceanConfig.displacementScale = 4.0f;
 
         auto& dispatcher = events::EventDispatcher::instance();
 

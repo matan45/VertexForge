@@ -8,6 +8,8 @@ layout(location = 0) out vec3 fragWorldPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
 layout(location = 3) flat out uint fragFlags;
+layout(location = 4) out float fragOceanDispY;  // ocean wave height displacement
+layout(location = 5) out float fragBaseHeight;   // flat water height (no waves)
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -79,6 +81,9 @@ void main() {
         tileOrigin.z + inPosition.z * tileSize
     );
 
+    fragOceanDispY = 0.0;
+    fragBaseHeight = waterHeight;
+
     if (pc.oceanEnabled != 0u) {
         // Ocean FFT path: sample displacement and normal from compute output
         // Two octaves at different scales to break up visible FFT tiling
@@ -92,6 +97,8 @@ void main() {
         worldPos.x += disp.x;
         worldPos.y += disp.y;
         worldPos.z += disp.z;
+
+        fragOceanDispY = disp.y;
 
         vec3 norm1 = texture(oceanNormalMap, oceanUV1).xyz;
         vec3 norm2 = texture(oceanNormalMap, oceanUV2).xyz;
@@ -147,6 +154,8 @@ layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) flat in uint fragFlags;
+layout(location = 4) in float fragOceanDispY;
+layout(location = 5) in float fragBaseHeight;
 
 layout(location = 0) out vec4 outColor;
 
@@ -400,20 +409,51 @@ void main() {
 
     float NdotV = max(dot(N, V), 0.0);
     float fresnel = pow(1.0 - NdotV, pc.fresnelPower);
-    // Cap fresnel so ocean color always shows through (max 40% reflection)
-    fresnel = clamp(fresnel, 0.0, 0.4);
+    fresnel = clamp(fresnel, 0.0, 1.0);
 
-    float depthFactor = clamp((1.0 - NdotV) * pc.maxVisibleDepth, 0.0, 1.0);
-    vec3 waterColor = mix(pc.shallowColor.rgb, pc.deepColor.rgb, depthFactor);
-
-    float roughness = 0.05; // Water is highly reflective
+    float roughness = 0.05;
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
     vec3 F0 = vec3(0.02); // Water IOR ~1.33
     vec3 specular = prefilteredColor * (F0 * brdf.x + brdf.y);
 
+    vec3 waterColor;
+    float sss = 0.0;
+
+    if (pc.oceanEnabled != 0u) {
+        // Height-based color: wave peaks get shallow color, troughs get deep color
+        float heightRange = fragOceanDispY;
+        float heightFactor = clamp(heightRange * 0.5 + 0.5, 0.0, 1.0);
+        waterColor = mix(pc.deepColor.rgb, pc.shallowColor.rgb, heightFactor);
+
+        // Subsurface scattering approximation
+        // Light passes through thin wave peaks — bright teal glow when backlit
+        vec3 sssColor = vec3(0.0, 0.7, 0.6); // turquoise SSS tint
+        // Use directional light if available, otherwise default sun from above
+        vec3 L = normalize(vec3(0.5, 0.7, 0.3));
+        vec3 lightColor = vec3(1.0);
+        if (lightCounts.directionalCount > 0u) {
+            L = normalize(-directionalLights[0].direction);
+            lightColor = directionalLights[0].color;
+        }
+        // SSS strongest when looking toward the light through a wave peak
+        float LdotV = max(dot(L, -V), 0.0);
+        float waveHeight = clamp(heightRange, 0.0, 1.0);
+        float NdotL = dot(N, L);
+        float wrapDiffuse = max(0.0, (NdotL + 0.5) / 1.5);
+        sss = pow(LdotV, 4.0) * waveHeight * 0.8 + wrapDiffuse * waveHeight * 0.3;
+        sss = clamp(sss, 0.0, 1.0);
+        waterColor = mix(waterColor, sssColor * lightColor, sss);
+
+        // Fresnel blend — balanced for ocean (less reflection at steep angles)
+        fresnel = clamp(fresnel, 0.02, 0.6);
+    } else {
+        float depthFactor = clamp((1.0 - NdotV) * pc.maxVisibleDepth, 0.0, 1.0);
+        waterColor = mix(pc.shallowColor.rgb, pc.deepColor.rgb, depthFactor);
+    }
+
     float metallic = 0.0;
-    float directRoughness = 0.3; // Higher roughness for direct lights to spread sun specular
+    float directRoughness = 0.3;
     vec3 albedo = waterColor;
 
     vec3 directLighting = vec3(0.0);
@@ -476,8 +516,8 @@ void main() {
     if (pc.oceanEnabled != 0u) {
         vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
         float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
-        vec3 foamColor = vec3(0.9, 0.95, 1.0);
-        color = mix(color, foamColor, foam * 0.5);
+        vec3 foamColor = vec3(0.95, 0.97, 1.0);
+        color = mix(color, foamColor, foam * 0.6);
     }
 
     color = color / (color + vec3(1.0));
