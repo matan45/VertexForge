@@ -37,6 +37,8 @@ namespace render::gpudriven {
             return;
         }
 
+        std::lock_guard lock(textureMutex);
+
         vk::Device vkDevice = device.getLogicalDevice();
 
         // Descriptor set is freed when pool is destroyed
@@ -150,7 +152,9 @@ namespace render::gpudriven {
         if (!initialized) {
             throw std::runtime_error("BindlessTextureManager: Cannot register texture before initialization");
         }
-        
+
+        std::lock_guard lock(textureMutex);
+
         auto it = texturePathToIndex.find(path);
         if (it != texturePathToIndex.end()) {
             return it->second;
@@ -170,7 +174,7 @@ namespace render::gpudriven {
             index = nextTextureIndex++;
         }
         texturePathToIndex[path] = index;
-        
+
         updateDescriptor(index, imageView, sampler);
 
         vfLogWarning("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
@@ -182,6 +186,8 @@ namespace render::gpudriven {
         if (!initialized) {
             return;
         }
+
+        std::lock_guard lock(textureMutex);
 
         auto it = texturePathToIndex.find(path);
         if (it == texturePathToIndex.end()) {
@@ -214,6 +220,8 @@ namespace render::gpudriven {
 
     uint32_t BindlessTextureManager::getTextureIndex(const std::string& path) const
     {
+        std::lock_guard lock(textureMutex);
+
         auto it = texturePathToIndex.find(path);
         if (it != texturePathToIndex.end()) {
             return it->second;

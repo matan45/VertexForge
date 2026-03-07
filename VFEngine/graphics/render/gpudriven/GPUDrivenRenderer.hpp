@@ -380,6 +380,8 @@ namespace render::gpudriven
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
         void releaseMeshAsset(const std::string& meshPath);
+        void releaseTextureAsset(const std::string& texturePath);
+        void releaseMaterialAsset(const std::string& materialPath);
 
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
 

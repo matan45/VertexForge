@@ -213,6 +213,32 @@ namespace controllers
         }
     }
 
+    void OffScreenController::textureRelease(const std::string& texturePath)
+    {
+        auto* handler = getRenderPassHandler();
+        if (handler)
+        {
+            auto* gpu = handler->getGPUDrivenRenderer();
+            if (gpu)
+            {
+                gpu->releaseTextureAsset(texturePath);
+            }
+        }
+    }
+
+    void OffScreenController::materialRelease(const std::string& materialPath)
+    {
+        auto* handler = getRenderPassHandler();
+        if (handler)
+        {
+            auto* gpu = handler->getGPUDrivenRenderer();
+            if (gpu)
+            {
+                gpu->releaseMaterialAsset(materialPath);
+            }
+        }
+    }
+
     void OffScreenController::meshUpdateCamera(render::occlusion::CameraId cameraId,
                                                const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos, float time)

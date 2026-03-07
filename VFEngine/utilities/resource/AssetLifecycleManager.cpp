@@ -71,6 +71,7 @@ namespace resource {
 	void AssetLifecycleManager::tick(float deltaTime)
 	{
 		std::vector<std::pair<std::string, AssetType>> toNotify;
+		std::vector<std::vector<std::string>> dependencyChildren;
 
 		{
 			std::scoped_lock lock(registryMutex);
@@ -101,6 +102,17 @@ namespace resource {
 					toNotify.emplace_back(path, it->second.type);
 					registry.erase(it);
 					releasedThisFrame++;
+
+					// Collect dependency children inside the lock to avoid TOCTOU race
+					std::vector<std::string> children;
+					auto depIt = dependencies.find(path);
+					if (depIt != dependencies.end()) {
+						for (const auto& dep : depIt->second) {
+							children.push_back(dep.childPath);
+						}
+						dependencies.erase(depIt);
+					}
+					dependencyChildren.push_back(std::move(children));
 				}
 			}
 
@@ -110,12 +122,19 @@ namespace resource {
 		}
 
 		// Invoke callback and cascade dependencies outside the lock
-		for (const auto& [path, type] : toNotify) {
+		for (size_t i = 0; i < toNotify.size(); ++i) {
+			const auto& [path, type] = toNotify[i];
 
 			if (releaseCallback) {
 				releaseCallback(path, type);
 			}
-			removeDependencies(path);
+
+			// Release children collected while lock was held
+			if (i < dependencyChildren.size()) {
+				for (const auto& child : dependencyChildren[i]) {
+					release(child);
+				}
+			}
 		}
 	}
 

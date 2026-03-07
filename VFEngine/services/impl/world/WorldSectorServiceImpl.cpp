@@ -13,6 +13,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
@@ -40,12 +41,29 @@ namespace services
     {
         entityLoader.setOnEntityLoaded([this](uint64_t uuid, const world::SectorCoord& coord)
         {
-            sectorManager.assignEntityToSector(uuid,
-                glm::vec3(
-                    (static_cast<float>(coord.x) + 0.5f) * sectorManager.getConfig().sectorWorldSize,
-                    0.0f,
-                    (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
-                ));
+            // Look up the entity's actual deserialized position for correct sector assignment
+            glm::vec3 assignPos(
+                (static_cast<float>(coord.x) + 0.5f) * sectorManager.getConfig().sectorWorldSize,
+                0.0f,
+                (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
+            );
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto uuidView = registry.view<components::UUIDComponent>();
+            for (auto entity : uuidView)
+            {
+                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                {
+                    scene::Entity sceneEntity(entity);
+                    if (sceneEntity.hasComponent<components::TransformComponent>())
+                    {
+                        assignPos = sceneEntity.getComponent<components::TransformComponent>().position;
+                    }
+                    break;
+                }
+            }
+
+            sectorManager.assignEntityToSector(uuid, assignPos);
             // Entity was loaded from file — don't mark sector as needing save
             auto* sector = sectorManager.getSector(coord);
             if (sector) sector->dirty = false;
@@ -125,6 +143,82 @@ namespace services
                         ::events::EventDispatcher::instance().publish(meshNotif);
                     }
 
+                    // Create physics body if entity has physics components (for play-mode streaming)
+                    if (sceneEntity.hasComponent<components::RigidBodyComponent>())
+                    {
+                        const auto& rigidBody = sceneEntity.getComponent<components::RigidBodyComponent>();
+                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+
+                        ::events::physics::AddRigidBodyCommand cmd;
+                        cmd.entity = internal::toHandle(entity);
+
+                        switch (rigidBody.type)
+                        {
+                        case components::RigidBodyType::Static:   cmd.rigidBody.type = services::RigidBodyData::Type::Static; break;
+                        case components::RigidBodyType::Kinematic: cmd.rigidBody.type = services::RigidBodyData::Type::Kinematic; break;
+                        default:                                   cmd.rigidBody.type = services::RigidBodyData::Type::Dynamic; break;
+                        }
+                        cmd.rigidBody.mass = rigidBody.mass;
+                        cmd.rigidBody.linearDamping = rigidBody.linearDamping;
+                        cmd.rigidBody.angularDamping = rigidBody.angularDamping;
+
+                        if (sceneEntity.hasComponent<components::ColliderComponent>())
+                        {
+                            const auto& collider = sceneEntity.getComponent<components::ColliderComponent>();
+                            switch (collider.shape)
+                            {
+                            case components::ColliderShape::Box:          cmd.collider.shape = services::ColliderData::Shape::Box; break;
+                            case components::ColliderShape::Sphere:       cmd.collider.shape = services::ColliderData::Shape::Sphere; break;
+                            case components::ColliderShape::Capsule:      cmd.collider.shape = services::ColliderData::Shape::Capsule; break;
+                            case components::ColliderShape::ConvexMesh:   cmd.collider.shape = services::ColliderData::Shape::ConvexMesh; break;
+                            case components::ColliderShape::TriangleMesh: cmd.collider.shape = services::ColliderData::Shape::TriangleMesh; break;
+                            }
+                            cmd.collider.size = collider.size * glm::abs(transform.scale);
+                            cmd.collider.height = collider.height;
+                            cmd.collider.isTrigger = collider.isTrigger;
+                            cmd.collider.offset = collider.offset;
+                            cmd.collider.collisionLayer = collider.collisionLayer;
+                            if (!collider.meshPath.empty())
+                                cmd.collider.meshPath = collider.meshPath;
+                            else if (!meshPath.empty())
+                                cmd.collider.meshPath = meshPath;
+                        }
+                        else
+                        {
+                            cmd.collider.shape = services::ColliderData::Shape::Box;
+                            cmd.collider.size = glm::abs(transform.scale);
+                        }
+
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                    else if (sceneEntity.hasComponent<components::ColliderComponent>())
+                    {
+                        const auto& collider = sceneEntity.getComponent<components::ColliderComponent>();
+                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+
+                        ::events::physics::AddColliderCommand cmd;
+                        cmd.entity = internal::toHandle(entity);
+                        switch (collider.shape)
+                        {
+                        case components::ColliderShape::Box:          cmd.collider.shape = services::ColliderData::Shape::Box; break;
+                        case components::ColliderShape::Sphere:       cmd.collider.shape = services::ColliderData::Shape::Sphere; break;
+                        case components::ColliderShape::Capsule:      cmd.collider.shape = services::ColliderData::Shape::Capsule; break;
+                        case components::ColliderShape::ConvexMesh:   cmd.collider.shape = services::ColliderData::Shape::ConvexMesh; break;
+                        case components::ColliderShape::TriangleMesh: cmd.collider.shape = services::ColliderData::Shape::TriangleMesh; break;
+                        }
+                        cmd.collider.size = collider.size * glm::abs(transform.scale);
+                        cmd.collider.height = collider.height;
+                        cmd.collider.isTrigger = collider.isTrigger;
+                        cmd.collider.offset = collider.offset;
+                        cmd.collider.collisionLayer = collider.collisionLayer;
+                        if (!collider.meshPath.empty())
+                            cmd.collider.meshPath = collider.meshPath;
+                        else if (!meshPath.empty())
+                            cmd.collider.meshPath = meshPath;
+
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+
                     break;
                 }
             }
@@ -133,10 +227,22 @@ namespace services
         // Publish EntityDeletedNotification before entity is destroyed so
         // AssetLifecycleServiceImpl releases all asset types (mesh, material, audio, VFX, animator).
         // SceneGraphSystem::removeEntity() doesn't publish this — only HierarchyService does.
+        // Also remove physics bodies for streamed entities.
         entityLoader.setOnEntityPreDestroy([](uint64_t entityHandleId)
         {
+            services::EntityHandle handle{ entityHandleId };
+
+            // Remove physics body if it exists
+            auto hasBody = ::events::EventDispatcher::instance().query(
+                ::events::physics::HasRigidBodyQuery{ handle });
+            if (hasBody)
+            {
+                ::events::EventDispatcher::instance().execute(
+                    ::events::physics::RemoveRigidBodyCommand{ handle });
+            }
+
             ::events::scene::EntityDeletedNotification notif;
-            notif.entity = services::EntityHandle{ entityHandleId };
+            notif.entity = handle;
             ::events::EventDispatcher::instance().publish(notif);
         });
     }
@@ -405,6 +511,30 @@ namespace services
                 }
             });
 
+        // Track dynamically-created entities in world mode
+        entityCreatedToken = dispatcher.subscribe<::events::scene::EntityCreatedNotification>(
+            [this](const ::events::scene::EntityCreatedNotification& notif)
+            {
+                if (!worldMode) return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(notif.entity);
+                if (!registry.valid(entity)) return;
+
+                scene::Entity sceneEntity(entity);
+                if (isManagedBySeparateSystem(sceneEntity)) return;
+
+                if (sceneEntity.hasComponent<components::TransformComponent>())
+                {
+                    uint64_t uuid = sceneEntity.getUUID().getValue();
+                    if (!sectorManager.hasEntitySector(uuid))
+                    {
+                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+                        sectorManager.assignEntityToSector(uuid, transform.position);
+                    }
+                }
+            });
+
         // Clear world state when scene is cleared (new scene)
         sceneClearedToken = dispatcher.subscribe<::events::scene::SceneClearedNotification>(
             [this](const ::events::scene::SceneClearedNotification&)
@@ -451,6 +581,23 @@ namespace services
 
         // Process per-frame entity loading budget
         entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
+
+        // Transition sectors from Loading to Loaded once all their entities are processed
+        sectorManager.forEachSector([&](world::WorldSector& sector)
+        {
+            if (sector.state == world::SectorState::Loading &&
+                !entityLoader.hasPendingLoadsForSector(sector.coord))
+            {
+                sector.state = world::SectorState::Loaded;
+
+                ::events::world::SectorLoadedNotification notif;
+                notif.coord = sector.coord;
+                notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
+                ::events::EventDispatcher::instance().publish(notif);
+
+                referenceResolver.onSectorLoaded(sector.entityUUIDs);
+            }
+        });
     }
 
     bool WorldSectorServiceImpl::createWorld(const std::string& name, const std::string& filePath,
@@ -642,15 +789,8 @@ namespace services
         // Queue deferred entity loading (reads file again internally, budgeted per-frame)
         entityLoader.queueSectorLoad(coord, sector->filePath);
 
-        sector->state = world::SectorState::Loaded;
+        // State stays Loading until all entities are processed (checked in update())
         sector->dirty = false; // Just loaded from disk — nothing to save
-
-        ::events::world::SectorLoadedNotification notif;
-        notif.coord = coord;
-        notif.entityCount = static_cast<uint32_t>(entityData.size());
-        ::events::EventDispatcher::instance().publish(notif);
-
-        referenceResolver.onSectorLoaded(sector->entityUUIDs);
     }
 
     void WorldSectorServiceImpl::handleSectorUnload(const world::SectorCoord& coord)

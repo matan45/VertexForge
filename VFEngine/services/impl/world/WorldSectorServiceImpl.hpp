@@ -69,6 +69,7 @@ namespace services
 
         ::events::SubscriptionToken sceneLoadedToken;
         ::events::SubscriptionToken sceneClearedToken;
+        ::events::SubscriptionToken entityCreatedToken;
 
         glm::vec3 cachedCameraPos{0.0f};
 

@@ -22,6 +22,15 @@ namespace core {
                     this->offScreen->meshRelease(notification.path);
                     vfLogInfo("OffScreenAdapter: Released mesh GPU resources for '{}'", notification.path);
                     break;
+                case resource::AssetType::Texture:
+                case resource::AssetType::HDR:
+                    this->offScreen->textureRelease(notification.path);
+                    vfLogInfo("OffScreenAdapter: Released texture GPU resources for '{}'", notification.path);
+                    break;
+                case resource::AssetType::Material:
+                    this->offScreen->materialRelease(notification.path);
+                    vfLogInfo("OffScreenAdapter: Released material GPU resources for '{}'", notification.path);
+                    break;
                 default:
                     break;
                 }

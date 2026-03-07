@@ -7,6 +7,7 @@
 #include "../components/Components.hpp"
 #include "../print/Log.hpp"
 #include <nlohmann/json.hpp>
+#include <unordered_set>
 
 namespace world
 {
@@ -95,7 +96,8 @@ namespace world
             ++processed;
         }
 
-        // Process loads
+        // Process loads — track UUIDs loaded this frame to prevent intra-frame duplicates
+        std::unordered_set<uint64_t> loadedThisFrame;
         while (!pendingLoads.empty() && processed < maxEntitiesPerFrame)
         {
             auto pending = std::move(pendingLoads.front());
@@ -109,6 +111,14 @@ namespace world
                 if (entityJson.contains("uuid") && entityJson["uuid"].is_number_unsigned())
                 {
                     uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
+
+                    // Check intra-frame duplicates first (O(1))
+                    if (loadedThisFrame.contains(uuidValue))
+                    {
+                        ++processed;
+                        continue;
+                    }
+
                     auto& reg = scene::EntityRegistry::getRegistry();
                     auto uuidView = reg.view<components::UUIDComponent>();
                     bool alreadyExists = false;
@@ -151,6 +161,7 @@ namespace world
                     nullptr, entitiesLoaded, totalEntities);
 
                 uint64_t uuid = newEntity.getUUID().getValue();
+                loadedThisFrame.insert(uuid);
 
                 // Notify service layer to acquire assets and publish mesh notifications
                 if (onEntityPostLoad && newEntity.hasComponent<components::MeshComponent>())

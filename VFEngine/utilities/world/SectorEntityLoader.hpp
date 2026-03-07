@@ -47,6 +47,15 @@ namespace world
         [[nodiscard]] size_t pendingLoadCount() const { return pendingLoads.size(); }
         [[nodiscard]] size_t pendingUnloadCount() const { return pendingUnloads.size(); }
 
+        [[nodiscard]] bool hasPendingLoadsForSector(const SectorCoord& coord) const
+        {
+            for (const auto& load : pendingLoads)
+            {
+                if (load.coord == coord) return true;
+            }
+            return false;
+        }
+
     private:
         struct PendingLoad
         {

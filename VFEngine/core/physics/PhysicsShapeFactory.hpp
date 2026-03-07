@@ -17,6 +17,7 @@ namespace core::physics
         static JPH::Ref<JPH::Shape> createShape(const ColliderCreateInfo& info);
         static JPH::EMotionType getMotionType(BodyType type);
         static void clearCache();
+        static void evictFromCache(const std::string& meshPath);
 
     private:
         static JPH::Ref<JPH::Shape> makeBoxFallback(const glm::vec3& halfExtents);

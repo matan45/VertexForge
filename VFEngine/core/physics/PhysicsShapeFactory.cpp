@@ -88,6 +88,16 @@ namespace core::physics
         shapeCache.clear();
     }
 
+    void PhysicsShapeFactory::evictFromCache(const std::string& meshPath)
+    {
+        std::lock_guard lock(shapeCacheMutex);
+        // Remove all cached shapes that were built from this mesh path
+        // Cache keys are formatted as "meshPath|shapeType"
+        std::erase_if(shapeCache, [&meshPath](const auto& pair) {
+            return pair.first.starts_with(meshPath);
+        });
+    }
+
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::createConvexMeshShape(const ColliderCreateInfo& info)
     {
         if (info.meshPath.empty())

@@ -3,6 +3,7 @@
 #include "GPUDrivenTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <string>
+#include <mutex>
 #include <unordered_map>
 
 namespace core {
@@ -19,6 +20,7 @@ namespace render::gpudriven {
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
         
+        mutable std::mutex textureMutex;
         std::unordered_map<std::string, uint32_t> texturePathToIndex;
         uint32_t nextTextureIndex = 1; // Index 0 is reserved for default texture
         std::vector<uint32_t> freeIndices;

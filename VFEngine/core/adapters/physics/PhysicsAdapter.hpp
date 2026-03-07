@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../services/providers/physics/IPhysicsProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 #include "../../physics/PhysicsWorld.hpp"
 #include "../../physics/FixedTimestep.hpp"
 #include "../../physics/RagdollSettingsBuilder.hpp"
@@ -129,6 +130,7 @@ namespace core
         void setCharacterPosition(services::EntityHandle entity, const glm::vec3& position) override;
 
     private:
+        events::SubscriptionToken assetReleaseToken;
         std::unordered_set<uint64_t> waterSensorEntities;
 
         struct PhysicsAnimationState

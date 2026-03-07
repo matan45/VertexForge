@@ -28,7 +28,11 @@ namespace world
         void onSectorLoaded(const std::vector<uint64_t>& loadedUUIDs);
         void onSectorUnloaded(const std::vector<uint64_t>& unloadedUUIDs);
 
+        [[nodiscard]] const std::vector<PendingReference>& getResolved() const { return resolvedRefs; }
+        void clearResolved() { resolvedRefs.clear(); }
+
         [[nodiscard]] size_t pendingCount() const { return pendingRefs.size(); }
+        [[nodiscard]] size_t resolvedCount() const { return resolvedRefs.size(); }
 
     private:
         std::vector<PendingReference> pendingRefs;

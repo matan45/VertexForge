@@ -2,7 +2,10 @@
 #include "PhysicsConversions.hpp"
 #include "../../physics/PhysicsShapeFactory.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
+#include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
+#include "resource/AssetTypes.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -46,10 +49,25 @@ namespace core
           , fixedTimestep(std::make_unique<physics::FixedTimestep>())
           , currentSettings(types::PhysicsSettings::createDefault())
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+        assetReleaseToken = dispatcher.subscribe<events::lifecycle::AssetReleaseReadyNotification>(
+            [](const events::lifecycle::AssetReleaseReadyNotification& notification)
+            {
+                if (notification.type == resource::AssetType::PhysicsShape ||
+                    notification.type == resource::AssetType::Mesh)
+                {
+                    physics::PhysicsShapeFactory::evictFromCache(notification.path);
+                    vfLogInfo("PhysicsAdapter: Evicted cached physics shapes for '{}'", notification.path);
+                }
+            });
     }
 
     PhysicsAdapter::~PhysicsAdapter()
     {
+        if (assetReleaseToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(assetReleaseToken);
+        }
         cleanUp();
     }
 
