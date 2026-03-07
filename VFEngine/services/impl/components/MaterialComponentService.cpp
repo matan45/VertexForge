@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/MaterialEvents.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 
 namespace services {
 
@@ -34,6 +35,12 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::MaterialComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (!comp.defaultMaterial.empty()) lifecycle.release(comp.defaultMaterial);
+            for (const auto& [name, path] : comp.subMeshMaterials) {
+                if (!path.empty()) lifecycle.release(path);
+            }
             sceneEntity.removeComponent<components::MaterialComponent>();
             return true;
         }
@@ -81,6 +88,18 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (!comp.defaultMaterial.empty() && comp.defaultMaterial != material.defaultMaterial) {
+            lifecycle.release(comp.defaultMaterial);
+        }
+        for (const auto& [name, path] : comp.subMeshMaterials) {
+            if (!path.empty()) {
+                auto it = material.subMeshMaterials.find(name);
+                if (it == material.subMeshMaterials.end() || it->second != path) {
+                    lifecycle.release(path);
+                }
+            }
+        }
         comp.defaultMaterial = material.defaultMaterial;
         comp.subMeshMaterials = material.subMeshMaterials;
         comp.parameterOverrides = material.parameterOverrides;
@@ -99,6 +118,9 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        if (!comp.defaultMaterial.empty() && comp.defaultMaterial != materialPath) {
+            resource::AssetLifecycleManager::instance().release(comp.defaultMaterial);
+        }
         comp.setDefaultMaterial(materialPath);
         return true;
     }
@@ -115,8 +137,12 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        auto it = comp.subMeshMaterials.find(submeshName);
+        if (it != comp.subMeshMaterials.end() && !it->second.empty() && it->second != materialPath) {
+            lifecycle.release(it->second);
+        }
         if (materialPath.empty()) {
-            // Clear the assignment
             comp.subMeshMaterials.erase(submeshName);
         } else {
             comp.setSubMeshMaterial(submeshName, materialPath);
