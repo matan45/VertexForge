@@ -8,7 +8,6 @@
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
-#include "print/Log.hpp"
 
 namespace services {
 
@@ -74,7 +73,6 @@ namespace services {
 			[](const events::scene::SceneClearedNotification&)
 			{
 				resource::AssetLifecycleManager::instance().clear();
-				vfLogInfo("AssetLifecycleService: Cleared all tracked assets on scene clear");
 			});
 
 		entityDeletedSubscription = dispatcher.subscribe<events::scene::EntityDeletedNotification>(

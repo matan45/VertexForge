@@ -51,13 +51,15 @@ namespace resource
         releaseExpired(hdrCache);
         releaseExpired(audioCache);
         releaseExpired(meshCache);
-        releaseExpired(shaderCache);
         releaseExpired(materialCache);
         releaseExpired(materialInstanceCache);
         releaseExpired(fontCache);
         releaseExpired(animationCache);
         releaseExpired(animatorCache);
         releaseExpired(terrainMaterialCache);
+
+        // Shaders are engine-internal, not lifecycle-tracked — just clean expired entries
+        std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     static FileType getExpectedTypeFromExtension(const std::string& ext)

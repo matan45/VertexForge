@@ -1,5 +1,4 @@
 #include "AssetLifecycleManager.hpp"
-#include "../print/Log.hpp"
 #include <algorithm>
 
 namespace resource {
@@ -25,7 +24,7 @@ namespace resource {
 
 				std::erase(pendingReleaseQueue, path);
 
-				vfLogInfo("Asset re-acquired during grace period: {} (refs: {})", path, entry.refCount);
+	
 			}
 
 			if (estimatedMemoryBytes > 0) {
@@ -50,13 +49,11 @@ namespace resource {
 
 		auto it = registry.find(path);
 		if (it == registry.end()) {
-			vfLogWarning("Attempted to release untracked asset: {}", path);
 			return;
 		}
 
 		auto& entry = it->second;
 		if (entry.refCount == 0) {
-			vfLogWarning("Attempted to release asset with zero ref-count: {}", path);
 			return;
 		}
 
@@ -67,7 +64,7 @@ namespace resource {
 			entry.graceTimeRemaining = gracePeriodSeconds;
 			pendingReleaseQueue.push_back(path);
 
-			vfLogInfo("Asset entered deferred release queue: {} (grace: {:.1f}s)", path, gracePeriodSeconds);
+
 		}
 	}
 
@@ -114,7 +111,7 @@ namespace resource {
 
 		// Invoke callback and cascade dependencies outside the lock
 		for (const auto& [path, type] : toNotify) {
-			vfLogInfo("Asset released: {} (type: {})", path, assetTypeName(type));
+
 			if (releaseCallback) {
 				releaseCallback(path, type);
 			}
@@ -142,7 +139,6 @@ namespace resource {
 		}
 
 		if (releaseCallback) {
-			vfLogInfo("Asset force-released: {} (type: {})", releasePath, assetTypeName(releaseType));
 			releaseCallback(releasePath, releaseType);
 		}
 		removeDependencies(releasePath);
