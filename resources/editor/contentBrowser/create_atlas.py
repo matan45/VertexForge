@@ -56,6 +56,7 @@ ICON_FILES = {
     15: "terrain",                # terrain
     16: "navmesh",               # navmesh
     17: "physAnim",              # physics animation
+    18: "sea",              # physics animation
 }
 
 def find_icon_file(base_name):
