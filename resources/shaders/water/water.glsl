@@ -464,13 +464,13 @@ void main() {
 
     vec3 color = mix(waterColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
-    // Ocean foam blending (disabled until Jacobian tuning is done)
-    // if (pc.oceanEnabled != 0u) {
-    //     vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
-    //     float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
-    //     vec3 foamColor = vec3(0.9, 0.95, 1.0);
-    //     color = mix(color, foamColor, foam * 0.4);
-    // }
+    // Ocean foam blending — only appears on large wave crests
+    if (pc.oceanEnabled != 0u) {
+        vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
+        float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
+        vec3 foamColor = vec3(0.9, 0.95, 1.0);
+        color = mix(color, foamColor, foam * 0.5);
+    }
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));

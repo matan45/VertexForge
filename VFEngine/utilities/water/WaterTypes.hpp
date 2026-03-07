@@ -46,5 +46,6 @@ namespace water
         float choppiness = 0.8f;
         float gravity = 9.81f;
         float foamThreshold = -0.1f;
+        float displacementScale = 1.0f;
     };
 }

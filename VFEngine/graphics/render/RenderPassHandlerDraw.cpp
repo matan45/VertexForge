@@ -177,6 +177,7 @@ namespace render
                 cfg.choppiness = cfgData.choppiness;
                 cfg.gravity = cfgData.gravity;
                 cfg.foamThreshold = cfgData.foamThreshold;
+                cfg.displacementScale = cfgData.displacementScale;
                 gpuDrivenRenderer->initOceanFFT(cfg);
                 oceanFFTInitialized = true;
                 lastOceanConfigVersion = version;
@@ -204,6 +205,7 @@ namespace render
                 cfg.choppiness = cfgData.choppiness;
                 cfg.gravity = cfgData.gravity;
                 cfg.foamThreshold = cfgData.foamThreshold;
+                cfg.displacementScale = cfgData.displacementScale;
                 gpuDrivenRenderer->updateOceanConfig(cfg);
                 lastOceanConfigVersion = version;
             }

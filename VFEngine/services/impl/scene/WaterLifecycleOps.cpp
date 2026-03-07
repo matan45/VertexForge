@@ -281,6 +281,7 @@ namespace services
                     oceanConfig.choppiness = o.choppiness;
                     oceanConfig.gravity = o.gravity;
                     oceanConfig.foamThreshold = o.foamThreshold;
+                    oceanConfig.displacementScale = o.displacementScale;
                     oceanConfig.enabled = o.enabled;
                     oceanFFTEnabled = o.enabled;
                     oceanConfigVersion++;
@@ -350,6 +351,7 @@ namespace services
             oceanConfig.choppiness = waterComp.oceanChoppiness;
             oceanConfig.gravity = waterComp.oceanGravity;
             oceanConfig.foamThreshold = waterComp.oceanFoamThreshold;
+            oceanConfig.displacementScale = waterComp.oceanDisplacementScale;
             oceanConfig.enabled = waterComp.oceanFFTEnabled;
             oceanFFTEnabled = waterComp.oceanFFTEnabled;
             oceanConfigVersion++;

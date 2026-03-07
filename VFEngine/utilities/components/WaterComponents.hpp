@@ -53,6 +53,7 @@ namespace components
         float oceanChoppiness = 1.5f;
         float oceanGravity = 9.81f;
         float oceanFoamThreshold = 0.3f;
+        float oceanDisplacementScale = 1.0f;
     };
 
     struct WaterTileComponent

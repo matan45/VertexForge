@@ -25,6 +25,7 @@ namespace render::water
         float choppiness = 0.8f;
         float gravity = 9.81f;
         float foamThreshold = -0.1f;
+        float displacementScale = 1.0f;
     };
 
     struct SpectrumPushConstants
@@ -70,8 +71,12 @@ namespace render::water
         float choppiness;
         float patchSize;
         float foamThreshold;
+        float displacementScale;
+        uint32_t padding1;
+        uint32_t padding2;
+        uint32_t padding3;
     };
-    static_assert(sizeof(MergePushConstants) == 16);
+    static_assert(sizeof(MergePushConstants) == 32);
 
     class OceanFFT
     {

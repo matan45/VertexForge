@@ -14,6 +14,7 @@ layout(push_constant) uniform PushConstants {
     float choppiness;
     float patchSize;
     float foamThreshold;
+    float displacementScale;
 } pc;
 
 void main() {
@@ -27,9 +28,9 @@ void main() {
     float sign = ((x + y) % 2u == 0u) ? 1.0 : -1.0;
 
     // No /N^2 normalization: Phillips spectrum is designed for unnormalized DFT (Tessendorf)
-    float dy = imageLoad(heightField, ivec2(x, y)).r * sign;
-    float dx = imageLoad(chopXField, ivec2(x, y)).r * sign;
-    float dz = imageLoad(chopZField, ivec2(x, y)).r * sign;
+    float dy = imageLoad(heightField, ivec2(x, y)).r * sign * pc.displacementScale;
+    float dx = imageLoad(chopXField, ivec2(x, y)).r * sign * pc.displacementScale;
+    float dz = imageLoad(chopZField, ivec2(x, y)).r * sign * pc.displacementScale;
 
     // Jacobian determinant for foam detection
     // Approximate partial derivatives via finite differences on displacement
@@ -59,8 +60,13 @@ void main() {
     float Jxz = dxdz * derivScale;
     float jacobian = Jxx * Jzz - Jxz * Jxz;
 
-    // Foam where Jacobian < threshold (wave folding), wide smooth falloff
-    float foam = smoothstep(pc.foamThreshold + 0.5, pc.foamThreshold - 0.2, jacobian);
+    // Foam only on strong wave crests that are actually folding
+    float displacementMag = length(vec3(dx, dy, dz));
+    float foam = 0.0;
+    if (displacementMag > 1.0 && jacobian < pc.foamThreshold) {
+        float rawFoam = smoothstep(pc.foamThreshold, pc.foamThreshold - 0.5, jacobian);
+        foam = rawFoam * smoothstep(1.0, 3.0, displacementMag);
+    }
 
     // Store displacement (Dx, Dy, Dz, foam)
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));

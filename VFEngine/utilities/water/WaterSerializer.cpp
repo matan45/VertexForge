@@ -64,6 +64,7 @@ namespace water
         writeLE(file, o.choppiness);
         writeLE(file, o.gravity);
         writeLE(file, o.foamThreshold);
+        writeLE(file, o.displacementScale);
 
         return file.good();
     }

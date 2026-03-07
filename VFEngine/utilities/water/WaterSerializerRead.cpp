@@ -84,6 +84,8 @@ namespace water
             o.choppiness = readLE<float>(file);
             o.gravity = readLE<float>(file);
             o.foamThreshold = readLE<float>(file);
+            if (file.good())
+                o.displacementScale = readLE<float>(file);
         }
 
         return file.good();

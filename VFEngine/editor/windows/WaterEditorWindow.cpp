@@ -140,7 +140,7 @@ namespace windows
             createOcean();
         }
         ImGui::PopStyleColor(3);
-        ImGui::TextDisabled("Creates large water grid with FFT ocean waves enabled");
+        ImGui::TextDisabled("Creates large water grid with ocean waves enabled");
 
         ImGui::Spacing();
 
@@ -162,61 +162,65 @@ namespace windows
 
     void WaterEditorWindow::drawSettingsSection()
     {
-        if (ImGui::CollapsingHeader("Wave Settings", ImGuiTreeNodeFlags_DefaultOpen))
+        // Gerstner wave settings — only shown when Ocean FFT is disabled
+        if (!oceanConfig.enabled)
         {
-            ImGui::Indent();
-
-            ImGui::Text("Wave Speed");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::DragFloat("##WaveSpeed", &globalSettings.waveSpeed, 0.01f, 0.0f, 10.0f, "%.2f"))
+            if (ImGui::CollapsingHeader("Wave Settings (Gerstner)", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                settingsDirty = true;
+                ImGui::Indent();
+
+                ImGui::Text("Wave Speed");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##WaveSpeed", &globalSettings.waveSpeed, 0.01f, 0.0f, 10.0f, "%.2f"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Wave Amplitude");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##WaveAmplitude", &globalSettings.waveAmplitude, 0.01f, 0.0f, 10.0f, "%.2f"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Wave Frequency");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##WaveFrequency", &globalSettings.waveFrequency, 0.01f, 0.0f, 10.0f, "%.2f"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Text("Wave Direction");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderFloat("##WaveDirection", &globalSettings.waveDirectionDegrees, 0.0f, 360.0f, "%.0f deg"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Spacing();
+
+                ImGui::Text("DuDv Tiling");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##DuDvTiling", &globalSettings.dudvTiling, 0.1f, 0.5f, 20.0f, "%.1f"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Text("DuDv Strength");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##DuDvStrength", &globalSettings.dudvStrength, 0.001f, 0.0f, 0.1f, "%.3f"))
+                {
+                    settingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+
+                ImGui::Unindent();
             }
-            ImGui::PopItemWidth();
-
-            ImGui::Text("Wave Amplitude");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::DragFloat("##WaveAmplitude", &globalSettings.waveAmplitude, 0.01f, 0.0f, 10.0f, "%.2f"))
-            {
-                settingsDirty = true;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Text("Wave Frequency");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::DragFloat("##WaveFrequency", &globalSettings.waveFrequency, 0.01f, 0.0f, 10.0f, "%.2f"))
-            {
-                settingsDirty = true;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Text("Wave Direction");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::SliderFloat("##WaveDirection", &globalSettings.waveDirectionDegrees, 0.0f, 360.0f, "%.0f deg"))
-            {
-                settingsDirty = true;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Spacing();
-
-            ImGui::Text("DuDv Tiling");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::DragFloat("##DuDvTiling", &globalSettings.dudvTiling, 0.1f, 0.5f, 20.0f, "%.1f"))
-            {
-                settingsDirty = true;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Text("DuDv Strength");
-            ImGui::PushItemWidth(-1);
-            if (ImGui::DragFloat("##DuDvStrength", &globalSettings.dudvStrength, 0.001f, 0.0f, 0.1f, "%.3f"))
-            {
-                settingsDirty = true;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Unindent();
         }
 
         if (ImGui::CollapsingHeader("Visual Settings", ImGuiTreeNodeFlags_DefaultOpen))
@@ -345,25 +349,25 @@ namespace windows
 
     void WaterEditorWindow::drawOceanFFTSection()
     {
-        if (ImGui::CollapsingHeader("Ocean FFT"))
+        if (ImGui::CollapsingHeader("Ocean"))
         {
             ImGui::Indent();
 
             auto& dispatcher = events::EventDispatcher::instance();
 
-            if (ImGui::Checkbox("Enable Ocean FFT", &oceanConfig.enabled))
+            if (ImGui::Checkbox("Enable Ocean", &oceanConfig.enabled))
             {
                 events::water::SetOceanFFTEnabledCommand cmd;
                 cmd.enabled = oceanConfig.enabled;
                 dispatcher.execute(cmd);
             }
-            ImGui::TextDisabled("Replaces Gerstner waves with FFT-based ocean simulation");
+            ImGui::TextDisabled("Replaces Gerstner waves with ocean simulation");
 
             if (oceanConfig.enabled)
             {
                 ImGui::Spacing();
 
-                ImGui::Text("FFT Resolution");
+                ImGui::Text("Resolution");
                 ImGui::PushItemWidth(-1);
                 static const uint32_t resolutions[] = {64, 128, 256, 512};
                 int resIndex = 2;
@@ -426,6 +430,13 @@ namespace windows
                 ImGui::PopItemWidth();
                 ImGui::TextDisabled("Lower = more foam");
 
+                ImGui::Text("Wave Height Scale");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##OceanDisplacementScale", &oceanConfig.displacementScale, 0.1f, 0.1f, 50.0f, "%.1f"))
+                    oceanConfigDirty = true;
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Multiplier for wave height (1.0 = default)");
+
                 ImGui::Spacing();
 
                 if (ImGui::Button("Apply Ocean", ImVec2(100, 0)))
@@ -480,6 +491,7 @@ namespace windows
         oceanConfig.choppiness = 0.8f;
         oceanConfig.gravity = 9.81f;
         oceanConfig.foamThreshold = -0.1f;
+        oceanConfig.displacementScale = 1.0f;
 
         auto& dispatcher = events::EventDispatcher::instance();
 

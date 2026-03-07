@@ -55,6 +55,7 @@ namespace serialization
             j["oceanChoppiness"] = water.oceanChoppiness;
             j["oceanGravity"] = water.oceanGravity;
             j["oceanFoamThreshold"] = water.oceanFoamThreshold;
+            j["oceanDisplacementScale"] = water.oceanDisplacementScale;
         }
 
         return j;
@@ -138,6 +139,8 @@ namespace serialization
             water.oceanGravity = it->get<float>();
         if (auto it = j.find("oceanFoamThreshold"); it != j.end() && it->is_number())
             water.oceanFoamThreshold = it->get<float>();
+        if (auto it = j.find("oceanDisplacementScale"); it != j.end() && it->is_number())
+            water.oceanDisplacementScale = it->get<float>();
     }
 
     json SceneSerialization::serializeWaterTile(const components::WaterTileComponent& tile)

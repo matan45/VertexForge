@@ -70,6 +70,7 @@ namespace services
         oceanSettings.choppiness = oceanConfig.choppiness;
         oceanSettings.gravity = oceanConfig.gravity;
         oceanSettings.foamThreshold = oceanConfig.foamThreshold;
+        oceanSettings.displacementScale = oceanConfig.displacementScale;
 
         bool success = water::WaterSerializer::save(
             path,
@@ -104,6 +105,7 @@ namespace services
         mutableComp.oceanChoppiness = oceanConfig.choppiness;
         mutableComp.oceanGravity = oceanConfig.gravity;
         mutableComp.oceanFoamThreshold = oceanConfig.foamThreshold;
+        mutableComp.oceanDisplacementScale = oceanConfig.displacementScale;
 
         events::water::WaterSavedNotification notification;
         notification.waterEntity = waterEntity;
@@ -199,6 +201,7 @@ namespace services
         oceanConfig.choppiness = o.choppiness;
         oceanConfig.gravity = o.gravity;
         oceanConfig.foamThreshold = o.foamThreshold;
+        oceanConfig.displacementScale = o.displacementScale;
         oceanConfig.enabled = o.enabled;
         oceanFFTEnabled = o.enabled;
         oceanConfigVersion++;

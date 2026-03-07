@@ -702,6 +702,7 @@ namespace render::water
         pc.choppiness = config.choppiness;
         pc.patchSize = config.patchSize;
         pc.foamThreshold = config.foamThreshold;
+        pc.displacementScale = config.displacementScale;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, mergePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, mergePipelineLayout, 0, mergeDescSet, nullptr);
