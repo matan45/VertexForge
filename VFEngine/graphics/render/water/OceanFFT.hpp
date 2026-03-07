@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <array>
+#include <vector>
 #include <cstdint>
 
 namespace core
@@ -20,7 +21,7 @@ namespace render::water
         float patchSize = 100.0f;
         float windSpeed = 20.0f;
         float windDirection = 45.0f;
-        float amplitude = 0.0003f;
+        float amplitude = 0.002f;
         float choppiness = 1.5f;
         float gravity = 9.81f;
         float foamThreshold = 0.3f;
@@ -136,6 +137,12 @@ namespace render::water
 
         vk::Sampler outputSampler;
 
+        // GPU readback for CPU-side displacement sampling (physics)
+        vk::Buffer readbackBuffer;
+        vk::DeviceMemory readbackMemory;
+        std::vector<glm::vec4> cpuDisplacementData;
+        bool readbackReady = false;
+
         bool initialized = false;
         bool spectrumDirty = true;
         bool firstDispatch = true;
@@ -165,6 +172,10 @@ namespace render::water
         [[nodiscard]] bool isInitialized() const { return initialized; }
         [[nodiscard]] const OceanFFTConfig& getConfig() const { return config; }
 
+        // CPU-side displacement readback for physics
+        void readbackDisplacementData();
+        [[nodiscard]] float sampleHeightAt(const glm::vec2& worldXZ) const;
+
     private:
         void createTextures();
         void createSampler();
@@ -181,6 +192,10 @@ namespace render::water
         void dispatchMerge(vk::CommandBuffer cmd);
 
         void insertComputeBarrier(vk::CommandBuffer cmd);
+
+        void createReadbackBuffer();
+        void destroyReadbackBuffer();
+        void recordReadbackCopy(vk::CommandBuffer cmd);
 
         void destroyTextures();
         void destroyPipelines();

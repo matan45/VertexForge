@@ -373,6 +373,8 @@ namespace render::gpudriven
         bool isOceanEnabled() const { return water.oceanEnabled; }
         void updateOceanConfig(const render::water::OceanFFTConfig& config);
         void dispatchOceanFFT(vk::CommandBuffer cmd, float time);
+        void readbackOceanDisplacement();
+        float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 

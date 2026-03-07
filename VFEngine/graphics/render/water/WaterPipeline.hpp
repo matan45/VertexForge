@@ -71,7 +71,8 @@ namespace render::water
         vk::DescriptorSetLayout cachedShadowTextureLayout;
 
         // Ocean FFT texture support
-        vk::DescriptorSetLayout oceanTextureLayout;
+        vk::DescriptorSetLayout oceanTextureLayout;       // Currently active layout (dummy or external)
+        vk::DescriptorSetLayout oceanDummyLayout;         // Our owned dummy layout
         vk::DescriptorPool oceanDummyPool;
         vk::DescriptorSet oceanDummyDescSet;
         vk::Image oceanDummyImage;

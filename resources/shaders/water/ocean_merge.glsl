@@ -26,10 +26,10 @@ void main() {
     // Apply sign correction (-1)^(x+y) for standard FFT ordering
     float sign = ((x + y) % 2u == 0u) ? 1.0 : -1.0;
 
-    float N2 = float(pc.N * pc.N);
-    float dy = imageLoad(heightField, ivec2(x, y)).r * sign / N2;
-    float dx = imageLoad(chopXField, ivec2(x, y)).r * sign / N2;
-    float dz = imageLoad(chopZField, ivec2(x, y)).r * sign / N2;
+    // No /N^2 normalization: Phillips spectrum is designed for unnormalized DFT (Tessendorf)
+    float dy = imageLoad(heightField, ivec2(x, y)).r * sign;
+    float dx = imageLoad(chopXField, ivec2(x, y)).r * sign;
+    float dz = imageLoad(chopZField, ivec2(x, y)).r * sign;
 
     // Jacobian determinant for foam detection
     // Approximate partial derivatives via finite differences on displacement
@@ -43,12 +43,12 @@ void main() {
     float signYP = ((x + (y + 1u)) % 2u == 0u) ? 1.0 : -1.0;
     float signYM = ((x + (y + pc.N - 1u)) % 2u == 0u) ? 1.0 : -1.0;
 
-    float dxdx = (imageLoad(chopXField, ivec2(xp, y)).r * signXP -
-                  imageLoad(chopXField, ivec2(xm, y)).r * signXM) / N2;
-    float dzdz = (imageLoad(chopZField, ivec2(x, yp)).r * signYP -
-                  imageLoad(chopZField, ivec2(x, ym)).r * signYM) / N2;
-    float dxdz = (imageLoad(chopXField, ivec2(x, yp)).r * signYP -
-                  imageLoad(chopXField, ivec2(x, ym)).r * signYM) / N2;
+    float dxdx = imageLoad(chopXField, ivec2(xp, y)).r * signXP -
+                 imageLoad(chopXField, ivec2(xm, y)).r * signXM;
+    float dzdz = imageLoad(chopZField, ivec2(x, yp)).r * signYP -
+                 imageLoad(chopZField, ivec2(x, ym)).r * signYM;
+    float dxdz = imageLoad(chopXField, ivec2(x, yp)).r * signYP -
+                 imageLoad(chopXField, ivec2(x, ym)).r * signYM;
 
     // Jacobian = (1 + dDx/dx)(1 + dDz/dz) - (dDx/dz)^2
     float texelSize = pc.patchSize / float(pc.N);
@@ -64,10 +64,10 @@ void main() {
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));
 
     // Compute normal from height gradients
-    float dyDx = (imageLoad(heightField, ivec2(xp, y)).r * signXP -
-                  imageLoad(heightField, ivec2(xm, y)).r * signXM) / N2;
-    float dyDz = (imageLoad(heightField, ivec2(x, yp)).r * signYP -
-                  imageLoad(heightField, ivec2(x, ym)).r * signYM) / N2;
+    float dyDx = imageLoad(heightField, ivec2(xp, y)).r * signXP -
+                 imageLoad(heightField, ivec2(xm, y)).r * signXM;
+    float dyDz = imageLoad(heightField, ivec2(x, yp)).r * signYP -
+                 imageLoad(heightField, ivec2(x, ym)).r * signYM;
 
     float scale = 1.0 / (2.0 * texelSize);
     vec3 normal = normalize(vec3(-dyDx * scale, 1.0, -dyDz * scale));

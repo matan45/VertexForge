@@ -43,6 +43,7 @@ namespace windows
         void drawOceanFFTSection();
         void drawInfoSection();
         void createWater();
+        void createOcean();
         void deleteWater();
         void applySettings();
         void applyOceanConfig();

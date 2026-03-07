@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <functional>
 #include <glm/glm.hpp>
 #include <cstdint>
 
@@ -48,5 +49,7 @@ namespace services
         virtual bool isOceanFFTEnabled() const = 0;
         virtual OceanFFTConfigData getOceanFFTConfig() const = 0;
         virtual uint32_t getOceanFFTConfigVersion() const = 0;
+        virtual float getOceanHeightAt(const glm::vec2& worldXZ) const = 0;
+        virtual void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) = 0;
     };
 }

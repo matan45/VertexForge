@@ -72,7 +72,13 @@ namespace render::water
         cachedShadowTextureLayout = config.shadowTextureLayout;
 
         if (config.oceanTextureLayout)
+        {
             oceanTextureLayout = config.oceanTextureLayout;
+        }
+        else
+        {
+            oceanTextureLayout = oceanDummyLayout;
+        }
 
         if (graphicsPipeline)
         {
@@ -166,12 +172,11 @@ namespace render::water
         {
             vkDevice.destroyDescriptorPool(oceanDummyPool);
             oceanDummyPool = nullptr;
-            // We also own the layout when we created the dummy
-            if (oceanTextureLayout)
-            {
-                vkDevice.destroyDescriptorSetLayout(oceanTextureLayout);
-                oceanTextureLayout = nullptr;
-            }
+        }
+        if (oceanDummyLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(oceanDummyLayout);
+            oceanDummyLayout = nullptr;
         }
         oceanTextureLayout = nullptr;
         hasOceanTextureLayout = false;
@@ -495,7 +500,8 @@ namespace render::water
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
-        oceanTextureLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        oceanDummyLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        oceanTextureLayout = oceanDummyLayout;
 
         // Create descriptor pool + set
         vk::DescriptorPoolSize poolSize{};
@@ -511,7 +517,7 @@ namespace render::water
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = oceanDummyPool;
         allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &oceanTextureLayout;
+        allocInfo.pSetLayouts = &oceanDummyLayout;
         oceanDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
         // Update with dummy texture

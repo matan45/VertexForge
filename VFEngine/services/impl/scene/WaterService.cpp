@@ -318,6 +318,7 @@ namespace services
         data.physicsEnabled = comp.physicsEnabled;
         data.isActive = comp.isActive;
         data.visibleTileCount = comp.visibleTileCount;
+        data.savePath = comp.savePath;
 
         auto gridIt = waterGrids.find(entity.id);
         if (gridIt != waterGrids.end())
@@ -494,12 +495,25 @@ namespace services
 
     bool WaterService::isPositionInWater(const glm::vec3& worldPos) const
     {
+        // Check if position is within any water grid tile
+        bool inTile = false;
         for (const auto& [entityId, grid] : waterGrids)
         {
-            if (grid->isPositionInWater(worldPos))
-                return true;
+            // Check tile existence (XZ bounds)
+            int32_t tileX = static_cast<int32_t>(std::floor(worldPos.x / grid->getConfig().worldTileSize));
+            int32_t tileZ = static_cast<int32_t>(std::floor(worldPos.z / grid->getConfig().worldTileSize));
+            if (grid->getTile(water::TileCoord(tileX, tileZ)))
+            {
+                inTile = true;
+                break;
+            }
         }
-        return false;
+        if (!inTile)
+            return false;
+
+        // Use getWaterHeightAt which includes ocean displacement
+        float waterHeight = getWaterHeightAt(glm::vec2(worldPos.x, worldPos.z));
+        return worldPos.y <= waterHeight;
     }
 
     float WaterService::getWaterHeightAt(const glm::vec2& worldXZ) const
@@ -514,6 +528,13 @@ namespace services
             if (h > maxHeight)
                 maxHeight = h;
         }
+
+        // Add ocean FFT displacement if active
+        if (oceanFFTEnabled && oceanHeightSampler)
+        {
+            maxHeight += oceanHeightSampler(worldXZ);
+        }
+
         return maxHeight;
     }
 
@@ -628,6 +649,7 @@ namespace services
             [this](const events::water::SetOceanFFTConfigCommand& cmd)
             {
                 oceanConfig = cmd.config;
+                oceanFFTEnabled = cmd.config.enabled;
                 oceanConfigVersion++;
 
                 events::water::OceanFFTConfigChangedNotification notification;

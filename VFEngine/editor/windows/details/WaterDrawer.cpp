@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/WaterEvents.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows::details {
 
@@ -49,6 +50,39 @@ namespace windows::details {
             ImGui::Text("Tile Count: %u", data.tileCount);
             ImGui::Text("Water Height: %.2f", data.defaultWaterHeight);
             ImGui::Text("Physics: %s", data.physicsEnabled ? "Enabled" : "Disabled");
+
+            ImGui::Separator();
+            ImGui::Text("Save");
+
+            if (!data.savePath.empty())
+            {
+                std::filesystem::path p(data.savePath);
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "File: %s", p.filename().string().c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("Not saved");
+            }
+
+            if (!data.savePath.empty())
+            {
+                if (ImGui::Button("Save"))
+                {
+                    startSave(handle, data.savePath);
+                }
+                ImGui::SameLine();
+            }
+
+            if (ImGui::Button("Save As..."))
+            {
+                startSaveAs(handle);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Load..."))
+            {
+                startLoad();
+            }
 
             ImGui::Separator();
             ImGui::Text("Grid Expansion");
@@ -178,6 +212,53 @@ namespace windows::details {
         ImGui::PopID();
 
         return true;
+    }
+
+    void WaterDrawer::startSave(services::EntityHandle handle, const std::string& path)
+    {
+        events::water::SaveWaterCommand cmd;
+        cmd.waterEntity = handle;
+        cmd.path = path;
+        bool result = events::EventDispatcher::instance().execute(cmd);
+
+        if (result)
+        {
+            statusMessage = "Saved successfully";
+            statusFrameCounter = 180;
+        }
+        else
+        {
+            statusMessage = "Failed to save water";
+            statusFrameCounter = 300;
+        }
+    }
+
+    void WaterDrawer::startSaveAs(services::EntityHandle handle)
+    {
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Water (*.vfWater)", L"*.vfWater"}
+        };
+
+        std::string path = fileDialog.saveFileDialog(fileTypes, L"vfWater");
+        if (!path.empty())
+        {
+            startSave(handle, path);
+        }
+    }
+
+    void WaterDrawer::startLoad()
+    {
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Water (*.vfWater)", L"*.vfWater"}
+        };
+
+        std::string path = fileDialog.openFileDialog(fileTypes);
+        if (!path.empty())
+        {
+            events::water::LoadWaterCommand cmd;
+            cmd.path = path;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
 }

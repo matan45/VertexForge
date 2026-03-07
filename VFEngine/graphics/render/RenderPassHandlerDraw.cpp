@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "RenderPassHandler.hpp"
+#include <iostream>
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
 #include "ClearColor.hpp"
@@ -168,6 +169,13 @@ namespace render
             if (wantOcean && !oceanFFTInitialized)
             {
                 auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                std::cout << "[OceanFFT] INIT: enabled=" << cfgData.enabled
+                          << " res=" << cfgData.resolution
+                          << " amp=" << cfgData.amplitude
+                          << " wind=" << cfgData.windSpeed
+                          << " patch=" << cfgData.patchSize
+                          << " chop=" << cfgData.choppiness
+                          << " ver=" << version << std::endl;
                 render::water::OceanFFTConfig cfg;
                 cfg.resolution = cfgData.resolution;
                 cfg.patchSize = cfgData.patchSize;
@@ -180,15 +188,29 @@ namespace render
                 gpuDrivenRenderer->initOceanFFT(cfg);
                 oceanFFTInitialized = true;
                 lastOceanConfigVersion = version;
+
+                // Wire CPU-side ocean height sampling for physics
+                auto* renderer = gpuDrivenRenderer.get();
+                waterRenderProvider->setOceanHeightSampler(
+                    [renderer](const glm::vec2& pos) { return renderer->getOceanHeightAt(pos); });
             }
             else if (!wantOcean && oceanFFTInitialized)
             {
+                std::cout << "[OceanFFT] CLEANUP: disabling ocean" << std::endl;
                 gpuDrivenRenderer->cleanupOceanFFT();
                 oceanFFTInitialized = false;
+                waterRenderProvider->setOceanHeightSampler(nullptr);
             }
             else if (wantOcean && oceanFFTInitialized && version != lastOceanConfigVersion)
             {
                 auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                std::cout << "[OceanFFT] UPDATE: res=" << cfgData.resolution
+                          << " amp=" << cfgData.amplitude
+                          << " wind=" << cfgData.windSpeed
+                          << " patch=" << cfgData.patchSize
+                          << " chop=" << cfgData.choppiness
+                          << " foam=" << cfgData.foamThreshold
+                          << " ver=" << version << std::endl;
                 render::water::OceanFFTConfig cfg;
                 cfg.resolution = cfgData.resolution;
                 cfg.patchSize = cfgData.patchSize;
@@ -283,6 +305,8 @@ namespace render
 
         if (oceanFFTInitialized)
         {
+            // Read previous frame's displacement data for CPU-side physics
+            gpuDrivenRenderer->readbackOceanDisplacement();
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 

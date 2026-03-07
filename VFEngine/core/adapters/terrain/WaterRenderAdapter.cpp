@@ -4,6 +4,21 @@
 
 namespace core
 {
+    void WaterRenderAdapter::setWaterService(services::WaterService* service)
+    {
+        waterService = service;
+        // Forward the ocean height sampler if we already have one
+        if (waterService && oceanHeightSampler)
+            waterService->setOceanHeightSampler(oceanHeightSampler);
+    }
+
+    void WaterRenderAdapter::setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler)
+    {
+        oceanHeightSampler = std::move(sampler);
+        if (waterService && oceanHeightSampler)
+            waterService->setOceanHeightSampler(oceanHeightSampler);
+    }
+
     std::vector<water::WaterTile*> WaterRenderAdapter::getVisibleWaterTiles(
         const math::Frustum& frustum,
         const glm::vec3& cameraPosition)
@@ -78,5 +93,12 @@ namespace core
     {
         if (!waterService) return 0;
         return waterService->getOceanFFTConfigVersion();
+    }
+
+    float WaterRenderAdapter::getOceanHeightAt(const glm::vec2& worldXZ) const
+    {
+        if (oceanHeightSampler)
+            return oceanHeightSampler(worldXZ);
+        return 0.0f;
     }
 }

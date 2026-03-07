@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <iostream>
 
 // Windows defines MemoryBarrier as a macro, which conflicts with vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -42,8 +43,11 @@ namespace render::water
         updateDescriptorSets();
         transitionImagesInitial();
 
+        createReadbackBuffer();
+
         spectrumDirty = true;
         firstDispatch = true;
+        readbackReady = false;
         initialized = true;
 
         vfLogInfo("OceanFFT: Initialized ({}x{}, patch={}, wind={})",
@@ -73,6 +77,7 @@ namespace render::water
 
         if (outputSampler) { vkDevice.destroySampler(outputSampler); outputSampler = nullptr; }
 
+        destroyReadbackBuffer();
         destroyTextures();
 
         initialized = false;
@@ -104,6 +109,9 @@ namespace render::water
     void OceanFFT::dispatch(vk::CommandBuffer cmd, float time)
     {
         if (!initialized) return;
+
+        static int debugFrameCount = 0;
+        debugFrameCount++;
 
         // Transition output images back to General for compute writes
         // On first dispatch they're already in General from transitionImagesInitial
@@ -148,6 +156,31 @@ namespace render::water
         insertComputeBarrier(cmd);
 
         dispatchMerge(cmd);
+
+        // Copy displacement to staging buffer for CPU-side physics readback
+        recordReadbackCopy(cmd);
+
+        // One-time readback to verify compute output
+        if (debugFrameCount == 5)
+        {
+            // Insert barrier so we can read back
+            vk::MemoryBarrier memBar{};
+            memBar.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            memBar.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                                vk::PipelineStageFlagBits::eTransfer,
+                                {}, memBar, {}, {});
+
+            std::cout << "[OceanFFT] DEBUG: dispatch completed frame " << debugFrameCount
+                      << " time=" << time
+                      << " N=" << config.resolution
+                      << " amp=" << config.amplitude
+                      << " wind=" << config.windSpeed
+                      << " displacementImg=" << (bool)displacementImage
+                      << " normalImg=" << (bool)normalImage
+                      << " h0Img=" << (bool)h0Image
+                      << std::endl;
+        }
     }
 
     void OceanFFT::insertBarrier(vk::CommandBuffer cmd)
@@ -218,13 +251,13 @@ namespace render::water
             }
         }
 
-        // Displacement: RGBA16F (storage + sampled)
+        // Displacement: RGBA16F (storage + sampled + transfer src for CPU readback)
         {
             core::ImageInfoRequest req(vkDevice, device.getPhysicalDevice(),
                 N, N, 1, 1,
                 vk::Format::eR16G16B16A16Sfloat,
                 vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
             core::ImageUtilities::createImage(req, displacementImage, displacementMemory);
 
@@ -588,6 +621,17 @@ namespace render::water
         pc.cutoffLow = config.patchSize / 2000.0f; // Small wave cutoff
         pc.seed = 42;
 
+        std::cout << "[OceanFFT] SPECTRUM: N=" << pc.N
+                  << " patch=" << pc.patchSize
+                  << " wind=" << pc.windSpeed
+                  << " windDir=(" << pc.windDirX << "," << pc.windDirZ << ")"
+                  << " amp=" << pc.amplitude
+                  << " gravity=" << pc.gravity
+                  << " cutoff=" << pc.cutoffLow
+                  << " pipeline=" << (bool)spectrumPipeline
+                  << " descSet=" << (bool)spectrumDescSet
+                  << std::endl;
+
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, spectrumPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, spectrumPipelineLayout, 0, spectrumDescSet, nullptr);
         cmd.pushConstants(spectrumPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(pc), &pc);
@@ -711,6 +755,174 @@ namespace render::water
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eComputeShader,
             {}, memBarrier, {}, {});
+    }
+
+    void OceanFFT::createReadbackBuffer()
+    {
+        uint32_t N = config.resolution;
+        // RGBA16F = 8 bytes per pixel
+        vk::DeviceSize bufferSize = N * N * 8;
+
+        core::BufferInfoRequest req(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            bufferSize,
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        core::BufferUtilities::createBuffer(req, readbackBuffer, readbackMemory);
+    }
+
+    void OceanFFT::destroyReadbackBuffer()
+    {
+        if (readbackBuffer)
+        {
+            core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), readbackBuffer, readbackMemory);
+            readbackBuffer = nullptr;
+            readbackMemory = nullptr;
+        }
+        cpuDisplacementData.clear();
+        readbackReady = false;
+    }
+
+    void OceanFFT::recordReadbackCopy(vk::CommandBuffer cmd)
+    {
+        uint32_t N = config.resolution;
+
+        // Barrier: compute write → transfer read
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+        barrier.oldLayout = vk::ImageLayout::eGeneral;
+        barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+        barrier.image = displacementImage;
+        barrier.subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eTransfer,
+            {}, {}, {}, barrier);
+
+        // Copy image to buffer
+        vk::BufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = vk::Offset3D{0, 0, 0};
+        region.imageExtent = vk::Extent3D{N, N, 1};
+
+        cmd.copyImageToBuffer(displacementImage, vk::ImageLayout::eTransferSrcOptimal,
+                              readbackBuffer, region);
+
+        // Barrier: transfer → back to general for next frame's compute
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+        barrier.newLayout = vk::ImageLayout::eGeneral;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, barrier);
+
+        readbackReady = true;
+    }
+
+    void OceanFFT::readbackDisplacementData()
+    {
+        if (!initialized || !readbackReady || !readbackBuffer)
+            return;
+
+        uint32_t N = config.resolution;
+        vk::DeviceSize bufferSize = N * N * 8; // RGBA16F = 8 bytes per pixel
+
+        void* mapped = device.getLogicalDevice().mapMemory(readbackMemory, 0, bufferSize);
+        if (!mapped)
+            return;
+
+        const uint16_t* halfData = static_cast<const uint16_t*>(mapped);
+        cpuDisplacementData.resize(N * N);
+
+        for (uint32_t i = 0; i < N * N; ++i)
+        {
+            // Convert half-float to float manually
+            auto halfToFloat = [](uint16_t h) -> float
+            {
+                uint32_t sign = (h >> 15) & 0x1;
+                uint32_t exp = (h >> 10) & 0x1F;
+                uint32_t mant = h & 0x3FF;
+
+                if (exp == 0)
+                {
+                    if (mant == 0) return sign ? -0.0f : 0.0f;
+                    // Denormalized
+                    float f = std::ldexp(static_cast<float>(mant), -24);
+                    return sign ? -f : f;
+                }
+                if (exp == 31)
+                {
+                    if (mant == 0) return sign ? -INFINITY : INFINITY;
+                    return NAN;
+                }
+
+                float f = std::ldexp(static_cast<float>(mant | 0x400), static_cast<int>(exp) - 25);
+                return sign ? -f : f;
+            };
+
+            cpuDisplacementData[i] = glm::vec4(
+                halfToFloat(halfData[i * 4 + 0]),  // dx
+                halfToFloat(halfData[i * 4 + 1]),  // dy
+                halfToFloat(halfData[i * 4 + 2]),  // dz
+                halfToFloat(halfData[i * 4 + 3])   // foam
+            );
+        }
+
+        device.getLogicalDevice().unmapMemory(readbackMemory);
+    }
+
+    float OceanFFT::sampleHeightAt(const glm::vec2& worldXZ) const
+    {
+        if (cpuDisplacementData.empty() || config.patchSize <= 0.0f)
+            return 0.0f;
+
+        uint32_t N = config.resolution;
+
+        // World position to UV (repeating patch)
+        float u = worldXZ.x / config.patchSize;
+        float v = worldXZ.y / config.patchSize;
+
+        // Wrap to [0, 1)
+        u = u - std::floor(u);
+        v = v - std::floor(v);
+
+        // UV to texel coordinates (bilinear)
+        float fx = u * N - 0.5f;
+        float fy = v * N - 0.5f;
+
+        int x0 = static_cast<int>(std::floor(fx));
+        int y0 = static_cast<int>(std::floor(fy));
+        float fracX = fx - x0;
+        float fracY = fy - y0;
+
+        // Wrap texel indices
+        auto wrap = [N](int c) -> uint32_t { return static_cast<uint32_t>(((c % static_cast<int>(N)) + N) % N); };
+        uint32_t x0w = wrap(x0), x1w = wrap(x0 + 1);
+        uint32_t y0w = wrap(y0), y1w = wrap(y0 + 1);
+
+        // Bilinear interpolation of dy (y component = index 1)
+        float h00 = cpuDisplacementData[y0w * N + x0w].y;
+        float h10 = cpuDisplacementData[y0w * N + x1w].y;
+        float h01 = cpuDisplacementData[y1w * N + x0w].y;
+        float h11 = cpuDisplacementData[y1w * N + x1w].y;
+
+        float h0 = h00 + fracX * (h10 - h00);
+        float h1 = h01 + fracX * (h11 - h01);
+
+        return h0 + fracY * (h1 - h0);
     }
 
     void OceanFFT::destroyTextures()

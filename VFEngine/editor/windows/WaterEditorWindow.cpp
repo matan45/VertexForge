@@ -132,6 +132,18 @@ namespace windows
 
         ImGui::Spacing();
 
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.3f, 0.6f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.4f, 0.7f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.05f, 0.2f, 0.5f, 1.0f));
+        if (ImGui::Button("Create Ocean", ImVec2(-1, 30)))
+        {
+            createOcean();
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::TextDisabled("Creates large water grid with FFT ocean waves enabled");
+
+        ImGui::Spacing();
+
         if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
         {
             resetCreationDefaults();
@@ -375,7 +387,7 @@ namespace windows
 
                 ImGui::Text("Amplitude");
                 ImGui::PushItemWidth(-1);
-                if (ImGui::DragFloat("##OceanAmplitude", &oceanConfig.amplitude, 0.00001f, 0.00001f, 0.01f, "%.5f"))
+                if (ImGui::DragFloat("##OceanAmplitude", &oceanConfig.amplitude, 0.00001f, 0.00001f, 0.1f, "%.6f"))
                     oceanConfigDirty = true;
                 ImGui::PopItemWidth();
 
@@ -383,7 +395,7 @@ namespace windows
 
                 ImGui::Text("Wind Speed (m/s)");
                 ImGui::PushItemWidth(-1);
-                if (ImGui::DragFloat("##OceanWindSpeed", &oceanConfig.windSpeed, 0.1f, 0.1f, 100.0f, "%.1f"))
+                if (ImGui::DragFloat("##OceanWindSpeed", &oceanConfig.windSpeed, 0.01f, 0.1f, 100.0f, "%.2f"))
                     oceanConfigDirty = true;
                 ImGui::PopItemWidth();
 
@@ -435,6 +447,50 @@ namespace windows
         events::water::SetOceanFFTConfigCommand cmd;
         cmd.config = oceanConfig;
         events::EventDispatcher::instance().execute(cmd);
+        oceanConfigDirty = false;
+    }
+
+    void WaterEditorWindow::createOcean()
+    {
+        // Create water with ocean-friendly defaults
+        services::WaterCreationData config;
+        config.tilesX = 10;
+        config.tilesZ = 10;
+        config.worldTileSize = 100.0f;
+        config.waterHeight = waterHeight;
+        config.waveIntensity = 1.0f;
+        config.physicsEnabled = physicsEnabled;
+        config.shallowColor = glm::vec4(0.0f, 0.4f, 0.6f, 0.7f);
+        config.deepColor = glm::vec4(0.0f, 0.05f, 0.2f, 0.95f);
+
+        events::water::CreateWaterCommand cmd;
+        cmd.config = config;
+        events::EventDispatcher::instance().execute(cmd);
+
+        refreshWaterState();
+
+        // Auto-enable ocean FFT
+        oceanConfig = services::OceanFFTConfigData{};
+        oceanConfig.enabled = true;
+        oceanConfig.resolution = 256;
+        oceanConfig.patchSize = 100.0f;
+        oceanConfig.amplitude = 0.002f;
+        oceanConfig.windSpeed = 20.0f;
+        oceanConfig.windDirection = 45.0f;
+        oceanConfig.choppiness = 1.5f;
+        oceanConfig.gravity = 9.81f;
+        oceanConfig.foamThreshold = 0.3f;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::water::SetOceanFFTEnabledCommand enableCmd;
+        enableCmd.enabled = true;
+        dispatcher.execute(enableCmd);
+
+        events::water::SetOceanFFTConfigCommand cfgCmd;
+        cfgCmd.config = oceanConfig;
+        dispatcher.execute(cfgCmd);
+
         oceanConfigDirty = false;
     }
 

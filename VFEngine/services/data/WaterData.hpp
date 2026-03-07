@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <string>
 
 namespace services
 {
@@ -37,6 +38,8 @@ namespace services
         uint32_t tileCount = 0;
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
+
+        std::string savePath;
     };
 
     struct WaterTileData
@@ -75,7 +78,7 @@ namespace services
         float patchSize = 100.0f;
         float windSpeed = 20.0f;
         float windDirection = 45.0f;
-        float amplitude = 0.0003f;
+        float amplitude = 0.002f;
         float choppiness = 1.5f;
         float gravity = 9.81f;
         float foamThreshold = 0.3f;

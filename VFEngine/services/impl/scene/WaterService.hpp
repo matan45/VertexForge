@@ -10,6 +10,7 @@
 #include "water/WaterWorldStreamer.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -55,6 +56,9 @@ namespace services
         bool oceanFFTEnabled = false;
         uint32_t oceanConfigVersion = 0;
 
+        // CPU-side ocean height sampling (set by render side via callback)
+        std::function<float(const glm::vec2&)> oceanHeightSampler;
+
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
         std::unique_ptr<::events::SubscriptionToken> triggerEnterSubscription;
@@ -66,6 +70,7 @@ namespace services
         ~WaterService() override;
 
         void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) { oceanHeightSampler = std::move(sampler); }
 
         void registerEventHandlers() override;
 
