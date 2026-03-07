@@ -141,6 +141,8 @@ namespace render::gpudriven {
         }
 
         // Default texture is always at index 0
+        defaultImageView = imageView;
+        defaultSampler = sampler;
         updateDescriptor(0, imageView, sampler);
         defaultTextureSet = true;
 
@@ -203,12 +205,9 @@ namespace render::gpudriven {
             return;
         }
 
-        // Update descriptor to point to default texture to avoid dangling references
+        // Reset descriptor to default texture to avoid stale data
         if (defaultTextureSet) {
-            // Re-read default texture descriptor info and write it to the freed slot
-            // Since we can't read back descriptor info, we just leave it as-is.
-            // The slot is marked free and won't be sampled because no object references it.
-            // When re-used, registerTexture() will overwrite with the new texture.
+            updateDescriptor(index, defaultImageView, defaultSampler);
         }
 
         freeIndices.push_back(index);

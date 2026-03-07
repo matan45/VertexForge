@@ -214,15 +214,6 @@ namespace resource {
 		}
 	}
 
-	void AssetLifecycleManager::processRelease(const std::string& path)
-	{
-		// Internal helper — caller must hold registryMutex
-		auto it = registry.find(path);
-		if (it != registry.end()) {
-			registry.erase(it);
-		}
-	}
-
 	void AssetLifecycleManager::setReleaseCallback(ReleaseCallback callback)
 	{
 		std::scoped_lock lock(registryMutex);

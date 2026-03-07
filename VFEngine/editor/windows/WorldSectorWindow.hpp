@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "world/WorldTypes.hpp"
 #include <string>
+#include <vector>
 
 namespace windows
 {
@@ -27,6 +28,14 @@ namespace windows
         int loadedSectors = 0;
         int unloadedSectors = 0;
         int loadingSectors = 0;
+
+        // Cached grid data (refreshed at REFRESH_INTERVAL)
+        struct CachedSectorInfo {
+            world::SectorCoord coord;
+            bool exists = false;
+            world::SectorState state = world::SectorState::Unloaded;
+        };
+        std::vector<CachedSectorInfo> cachedGrid;
 
     public:
         explicit WorldSectorWindow() = default;

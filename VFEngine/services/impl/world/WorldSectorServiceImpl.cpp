@@ -17,6 +17,7 @@
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include "resource/AssetLifecycleHelpers.hpp"
 #include "print/Log.hpp"
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -31,6 +32,19 @@ namespace
             || entity.hasComponent<components::WaterTileComponent>()
             || entity.hasComponent<components::IBLComponent>()
             || entity.hasComponent<components::CameraComponent>();
+    }
+
+    // O(N) lookup — consider replacing with a UUID→entity cache if this becomes a bottleneck
+    entt::entity findEntityByUUID(uint64_t uuid)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto uuidView = registry.view<components::UUIDComponent>();
+        for (auto entity : uuidView)
+        {
+            if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                return entity;
+        }
+        return entt::null;
     }
 }
 
@@ -48,18 +62,13 @@ namespace services
                 (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
             );
 
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto uuidView = registry.view<components::UUIDComponent>();
-            for (auto entity : uuidView)
+            auto entity = findEntityByUUID(uuid);
+            if (entity != entt::null)
             {
-                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                scene::Entity sceneEntity(entity);
+                if (sceneEntity.hasComponent<components::TransformComponent>())
                 {
-                    scene::Entity sceneEntity(entity);
-                    if (sceneEntity.hasComponent<components::TransformComponent>())
-                    {
-                        assignPos = sceneEntity.getComponent<components::TransformComponent>().position;
-                    }
-                    break;
+                    assignPos = sceneEntity.getComponent<components::TransformComponent>().position;
                 }
             }
 
@@ -76,128 +85,46 @@ namespace services
 
         entityLoader.setOnEntityPostLoad([](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
         {
-            // Find the entity by UUID and acquire all its assets
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto uuidView = registry.view<components::UUIDComponent>();
-            for (auto entity : uuidView)
+            auto entity = findEntityByUUID(uuid);
+            if (entity != entt::null)
             {
-                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                scene::Entity sceneEntity(entity);
+                auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+                resource::acquireEntityAssets(sceneEntity, lifecycle);
+
+                // Publish mesh notification so rendering picks it up
+                if (!meshPath.empty())
                 {
-                    scene::Entity sceneEntity(entity);
-                    auto& lifecycle = resource::AssetLifecycleManager::instance();
+                    ::events::scene::MeshDataChangedNotification meshNotif;
+                    meshNotif.entity = internal::toHandle(entity);
+                    meshNotif.meshPath = meshPath;
+                    meshNotif.animatorPath = animatorPath;
+                    ::events::EventDispatcher::instance().publish(meshNotif);
+                }
 
-                    // Mesh + animator
-                    if (sceneEntity.hasComponent<components::MeshComponent>())
+                // Create physics body if entity has physics components (for play-mode streaming)
+                if (sceneEntity.hasComponent<components::RigidBodyComponent>())
+                {
+                    const auto& rigidBody = sceneEntity.getComponent<components::RigidBodyComponent>();
+                    const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+
+                    ::events::physics::AddRigidBodyCommand cmd;
+                    cmd.entity = internal::toHandle(entity);
+
+                    switch (rigidBody.type)
                     {
-                        const auto& mesh = sceneEntity.getComponent<components::MeshComponent>();
-                        if (!mesh.meshPath.empty()) lifecycle.acquire(mesh.meshPath, resource::AssetType::Mesh);
-                        if (!mesh.animatorPath.empty()) lifecycle.acquire(mesh.animatorPath, resource::AssetType::Animator);
+                    case components::RigidBodyType::Static:   cmd.rigidBody.type = services::RigidBodyData::Type::Static; break;
+                    case components::RigidBodyType::Kinematic: cmd.rigidBody.type = services::RigidBodyData::Type::Kinematic; break;
+                    default:                                   cmd.rigidBody.type = services::RigidBodyData::Type::Dynamic; break;
                     }
+                    cmd.rigidBody.mass = rigidBody.mass;
+                    cmd.rigidBody.linearDamping = rigidBody.linearDamping;
+                    cmd.rigidBody.angularDamping = rigidBody.angularDamping;
 
-                    // Materials
-                    if (sceneEntity.hasComponent<components::MaterialComponent>())
-                    {
-                        const auto& mat = sceneEntity.getComponent<components::MaterialComponent>();
-                        if (!mat.defaultMaterial.empty()) lifecycle.acquire(mat.defaultMaterial, resource::AssetType::Material);
-                        for (const auto& [name, path] : mat.subMeshMaterials)
-                        {
-                            if (!path.empty()) lifecycle.acquire(path, resource::AssetType::Material);
-                        }
-                    }
-
-                    // Audio 2D
-                    if (sceneEntity.hasComponent<components::AudioSource2DComponent>())
-                    {
-                        const auto& audio = sceneEntity.getComponent<components::AudioSource2DComponent>();
-                        if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
-                    }
-
-                    // Audio 3D
-                    if (sceneEntity.hasComponent<components::AudioSource3DComponent>())
-                    {
-                        const auto& audio = sceneEntity.getComponent<components::AudioSource3DComponent>();
-                        if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
-                    }
-
-                    // VFX
-                    if (sceneEntity.hasComponent<components::VFXComponent>())
-                    {
-                        const auto& vfx = sceneEntity.getComponent<components::VFXComponent>();
-                        if (!vfx.vfxPath.empty()) lifecycle.acquire(vfx.vfxPath, resource::AssetType::VFX);
-                    }
-
-                    // Animator (standalone)
-                    if (sceneEntity.hasComponent<components::AnimatorComponent>())
-                    {
-                        const auto& anim = sceneEntity.getComponent<components::AnimatorComponent>();
-                        if (!anim.animatorPath.empty()) lifecycle.acquire(anim.animatorPath, resource::AssetType::Animator);
-                    }
-
-                    // Publish mesh notification so rendering picks it up
-                    if (!meshPath.empty())
-                    {
-                        ::events::scene::MeshDataChangedNotification meshNotif;
-                        meshNotif.entity = internal::toHandle(entity);
-                        meshNotif.meshPath = meshPath;
-                        meshNotif.animatorPath = animatorPath;
-                        ::events::EventDispatcher::instance().publish(meshNotif);
-                    }
-
-                    // Create physics body if entity has physics components (for play-mode streaming)
-                    if (sceneEntity.hasComponent<components::RigidBodyComponent>())
-                    {
-                        const auto& rigidBody = sceneEntity.getComponent<components::RigidBodyComponent>();
-                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
-
-                        ::events::physics::AddRigidBodyCommand cmd;
-                        cmd.entity = internal::toHandle(entity);
-
-                        switch (rigidBody.type)
-                        {
-                        case components::RigidBodyType::Static:   cmd.rigidBody.type = services::RigidBodyData::Type::Static; break;
-                        case components::RigidBodyType::Kinematic: cmd.rigidBody.type = services::RigidBodyData::Type::Kinematic; break;
-                        default:                                   cmd.rigidBody.type = services::RigidBodyData::Type::Dynamic; break;
-                        }
-                        cmd.rigidBody.mass = rigidBody.mass;
-                        cmd.rigidBody.linearDamping = rigidBody.linearDamping;
-                        cmd.rigidBody.angularDamping = rigidBody.angularDamping;
-
-                        if (sceneEntity.hasComponent<components::ColliderComponent>())
-                        {
-                            const auto& collider = sceneEntity.getComponent<components::ColliderComponent>();
-                            switch (collider.shape)
-                            {
-                            case components::ColliderShape::Box:          cmd.collider.shape = services::ColliderData::Shape::Box; break;
-                            case components::ColliderShape::Sphere:       cmd.collider.shape = services::ColliderData::Shape::Sphere; break;
-                            case components::ColliderShape::Capsule:      cmd.collider.shape = services::ColliderData::Shape::Capsule; break;
-                            case components::ColliderShape::ConvexMesh:   cmd.collider.shape = services::ColliderData::Shape::ConvexMesh; break;
-                            case components::ColliderShape::TriangleMesh: cmd.collider.shape = services::ColliderData::Shape::TriangleMesh; break;
-                            }
-                            cmd.collider.size = collider.size * glm::abs(transform.scale);
-                            cmd.collider.height = collider.height;
-                            cmd.collider.isTrigger = collider.isTrigger;
-                            cmd.collider.offset = collider.offset;
-                            cmd.collider.collisionLayer = collider.collisionLayer;
-                            if (!collider.meshPath.empty())
-                                cmd.collider.meshPath = collider.meshPath;
-                            else if (!meshPath.empty())
-                                cmd.collider.meshPath = meshPath;
-                        }
-                        else
-                        {
-                            cmd.collider.shape = services::ColliderData::Shape::Box;
-                            cmd.collider.size = glm::abs(transform.scale);
-                        }
-
-                        ::events::EventDispatcher::instance().execute(cmd);
-                    }
-                    else if (sceneEntity.hasComponent<components::ColliderComponent>())
+                    if (sceneEntity.hasComponent<components::ColliderComponent>())
                     {
                         const auto& collider = sceneEntity.getComponent<components::ColliderComponent>();
-                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
-
-                        ::events::physics::AddColliderCommand cmd;
-                        cmd.entity = internal::toHandle(entity);
                         switch (collider.shape)
                         {
                         case components::ColliderShape::Box:          cmd.collider.shape = services::ColliderData::Shape::Box; break;
@@ -215,11 +142,41 @@ namespace services
                             cmd.collider.meshPath = collider.meshPath;
                         else if (!meshPath.empty())
                             cmd.collider.meshPath = meshPath;
-
-                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                    else
+                    {
+                        cmd.collider.shape = services::ColliderData::Shape::Box;
+                        cmd.collider.size = glm::abs(transform.scale);
                     }
 
-                    break;
+                    ::events::EventDispatcher::instance().execute(cmd);
+                }
+                else if (sceneEntity.hasComponent<components::ColliderComponent>())
+                {
+                    const auto& collider = sceneEntity.getComponent<components::ColliderComponent>();
+                    const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+
+                    ::events::physics::AddColliderCommand cmd;
+                    cmd.entity = internal::toHandle(entity);
+                    switch (collider.shape)
+                    {
+                    case components::ColliderShape::Box:          cmd.collider.shape = services::ColliderData::Shape::Box; break;
+                    case components::ColliderShape::Sphere:       cmd.collider.shape = services::ColliderData::Shape::Sphere; break;
+                    case components::ColliderShape::Capsule:      cmd.collider.shape = services::ColliderData::Shape::Capsule; break;
+                    case components::ColliderShape::ConvexMesh:   cmd.collider.shape = services::ColliderData::Shape::ConvexMesh; break;
+                    case components::ColliderShape::TriangleMesh: cmd.collider.shape = services::ColliderData::Shape::TriangleMesh; break;
+                    }
+                    cmd.collider.size = collider.size * glm::abs(transform.scale);
+                    cmd.collider.height = collider.height;
+                    cmd.collider.isTrigger = collider.isTrigger;
+                    cmd.collider.offset = collider.offset;
+                    cmd.collider.collisionLayer = collider.collisionLayer;
+                    if (!collider.meshPath.empty())
+                        cmd.collider.meshPath = collider.meshPath;
+                    else if (!meshPath.empty())
+                        cmd.collider.meshPath = meshPath;
+
+                    ::events::EventDispatcher::instance().execute(cmd);
                 }
             }
         });
@@ -367,9 +324,6 @@ namespace services
                     int loadedCount = 0;
                     int totalStaticEntities = 0;
 
-                    auto& registry = scene::EntityRegistry::getRegistry();
-                    auto uuidView = registry.view<components::UUIDComponent>();
-
                     // Remove static sector entities from scene; keep dynamic ones alive
                     sectorManager.forEachSector([&](world::WorldSector& sector)
                     {
@@ -382,15 +336,12 @@ namespace services
                         for (uint64_t uuid : sector.entityUUIDs)
                         {
                             bool isDynamic = false;
-                            for (auto entity : uuidView)
+                            auto ent = findEntityByUUID(uuid);
+                            if (ent != entt::null)
                             {
-                                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
-                                {
-                                    scene::Entity sceneEntity(entity);
-                                    if (sceneEntity.hasComponent<components::TransformComponent>())
-                                        isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
-                                    break;
-                                }
+                                scene::Entity sceneEntity(ent);
+                                if (sceneEntity.hasComponent<components::TransformComponent>())
+                                    isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
                             }
                             if (!isDynamic)
                                 staticUUIDs.push_back(uuid);
@@ -780,16 +731,19 @@ namespace services
         }
 
         sector->entityUUIDs.clear();
+        std::vector<std::pair<std::string, std::string>> entityNamesAndJson;
+        entityNamesAndJson.reserve(entityData.size());
         for (const auto& data : entityData)
         {
             if (data.contains("uuid") && data["uuid"].is_number_unsigned())
             {
                 sector->entityUUIDs.push_back(data["uuid"].get<uint64_t>());
             }
+            entityNamesAndJson.emplace_back(data.value("name", "Unnamed"), data.dump());
         }
 
-        // Queue deferred entity loading (reads file again internally, budgeted per-frame)
-        entityLoader.queueSectorLoad(coord, sector->filePath);
+        // Queue deferred entity loading using pre-parsed data (avoids reading file twice)
+        entityLoader.queueSectorLoadFromData(coord, entityNamesAndJson);
 
         // State stays Loading until all entities are processed (checked in update())
         sector->dirty = false; // Just loaded from disk — nothing to save
@@ -810,22 +764,16 @@ namespace services
         std::vector<uint64_t> staticUUIDs;
         std::vector<uint64_t> dynamicUUIDs;
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto uuidView = registry.view<components::UUIDComponent>();
-
         for (uint64_t uuid : sector->entityUUIDs)
         {
             bool isDynamic = false;
-            for (auto entity : uuidView)
+            auto ent = findEntityByUUID(uuid);
+            if (ent != entt::null)
             {
-                if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
+                scene::Entity sceneEntity(ent);
+                if (sceneEntity.hasComponent<components::TransformComponent>())
                 {
-                    scene::Entity sceneEntity(entity);
-                    if (sceneEntity.hasComponent<components::TransformComponent>())
-                    {
-                        isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
-                    }
-                    break;
+                    isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
                 }
             }
 

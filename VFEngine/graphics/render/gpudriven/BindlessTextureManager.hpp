@@ -27,6 +27,8 @@ namespace render::gpudriven {
 
         bool initialized = false;
         bool defaultTextureSet = false;
+        vk::ImageView defaultImageView;
+        vk::Sampler defaultSampler;
 
     public:
         explicit BindlessTextureManager(core::Device& device);

@@ -348,6 +348,16 @@ namespace render::gpudriven
             meshInfo.submeshCount++;
         }
 
+        if (!freeMeshSlots.empty()) {
+            size_t slot = freeMeshSlots.back();
+            freeMeshSlots.pop_back();
+            meshPathToIndex[meshPath] = slot;
+            registeredMeshes[slot] = std::move(meshInfo);
+            vfLogInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes (reused slot {})",
+                       meshPath, header.numSubmeshes, slot);
+            return &registeredMeshes[slot];
+        }
+
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
@@ -488,8 +498,9 @@ namespace render::gpudriven
 
         meshPathToIndex.erase(pathIt);
 
-        // Clear the mesh info but don't remove from vector to avoid invalidating other indices
+        // Clear the mesh info and track slot for reuse
         meshInfo = MergedMeshInfo{};
+        freeMeshSlots.push_back(meshIdx);
 
         vfLogInfo("MergedMeshBuffer::freeMesh: Freed mesh '{}'", meshPath);
     }

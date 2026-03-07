@@ -50,8 +50,6 @@ namespace resource {
 		AssetLifecycleManager() = default;
 		~AssetLifecycleManager() = default;
 
-		void processRelease(const std::string& path);
-
 		struct DependencyInfo {
 			std::string childPath;
 			AssetType childType;

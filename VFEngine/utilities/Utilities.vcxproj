@@ -143,6 +143,7 @@
     <ClInclude Include="print\LogEntry.hpp" />
     <ClInclude Include="rendertexture\RenderTextureTypes.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
+    <ClInclude Include="resource\AssetLifecycleHelpers.hpp" />
     <ClInclude Include="resource\AssetLifecycleManager.hpp" />
     <ClInclude Include="resource\AssetTypes.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />

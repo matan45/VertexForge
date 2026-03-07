@@ -104,6 +104,7 @@ namespace render::gpudriven
         static constexpr uint32_t vertexStride = 64;
 
         std::vector<MergedMeshInfo> registeredMeshes;
+        std::vector<size_t> freeMeshSlots;
         std::unordered_map<std::string, size_t> meshPathToIndex;
 
         std::vector<SubmeshLocation> allSubmeshLocations;

@@ -130,80 +130,71 @@ namespace windows
         ImGui::Spacing();
 
         auto& dispatcher = events::EventDispatcher::instance();
-
         int range = 8;
-        for (int z = range; z >= -range; --z)
+        int gridWidth = range * 2 + 1;
+
+        for (size_t i = 0; i < cachedGrid.size(); ++i)
         {
-            for (int x = -range; x <= range; ++x)
+            const auto& info = cachedGrid[i];
+            int x = info.coord.x;
+            int z = info.coord.z;
+
+            ImGui::PushID(x * 1000 + z);
+
+            if (!info.exists)
             {
-                world::SectorCoord coord(x, z);
-
-                events::world::DoesSectorExistQuery existQuery;
-                existQuery.coord = coord;
-                bool exists = dispatcher.query(existQuery);
-
-                ImGui::PushID(x * 1000 + z);
-
-                if (!exists)
-                {
-                    // Empty slot — dim, non-interactive
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
-                    ImGui::Button("##empty", ImVec2(40, 20));
-                    ImGui::PopStyleColor(3);
-                }
-                else
-                {
-                    events::world::GetSectorStateQuery stateQuery;
-                    stateQuery.coord = coord;
-                    auto state = dispatcher.query(stateQuery);
-
-                    ImVec4 color;
-                    switch (state)
-                    {
-                    case world::SectorState::Loaded:
-                        color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-                        break;
-                    case world::SectorState::Loading:
-                        color = ImVec4(0.9f, 0.9f, 0.2f, 1.0f);
-                        break;
-                    case world::SectorState::Unloading:
-                        color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-                        break;
-                    default:
-                        color = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
-                        break;
-                    }
-
-                    ImGui::PushStyleColor(ImGuiCol_Button, color);
-
-                    char label[32];
-                    snprintf(label, sizeof(label), "%d,%d", x, z);
-                    if (ImGui::Button(label, ImVec2(40, 20)))
-                    {
-                        if (state == world::SectorState::Loaded)
-                        {
-                            events::world::UnloadSectorCommand cmd;
-                            cmd.coord = coord;
-                            dispatcher.execute(cmd);
-                        }
-                        else if (state == world::SectorState::Unloaded)
-                        {
-                            events::world::LoadSectorCommand cmd;
-                            cmd.coord = coord;
-                            dispatcher.execute(cmd);
-                        }
-                    }
-
-                    ImGui::PopStyleColor();
-                }
-
-                ImGui::PopID();
-
-                if (x < range)
-                    ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                ImGui::Button("##empty", ImVec2(40, 20));
+                ImGui::PopStyleColor(3);
             }
+            else
+            {
+                ImVec4 color;
+                switch (info.state)
+                {
+                case world::SectorState::Loaded:
+                    color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                    break;
+                case world::SectorState::Loading:
+                    color = ImVec4(0.9f, 0.9f, 0.2f, 1.0f);
+                    break;
+                case world::SectorState::Unloading:
+                    color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+                    break;
+                default:
+                    color = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
+                    break;
+                }
+
+                ImGui::PushStyleColor(ImGuiCol_Button, color);
+
+                char label[32];
+                snprintf(label, sizeof(label), "%d,%d", x, z);
+                if (ImGui::Button(label, ImVec2(40, 20)))
+                {
+                    if (info.state == world::SectorState::Loaded)
+                    {
+                        events::world::UnloadSectorCommand cmd;
+                        cmd.coord = info.coord;
+                        dispatcher.execute(cmd);
+                    }
+                    else if (info.state == world::SectorState::Unloaded)
+                    {
+                        events::world::LoadSectorCommand cmd;
+                        cmd.coord = info.coord;
+                        dispatcher.execute(cmd);
+                    }
+                }
+
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::PopID();
+
+            if ((i + 1) % gridWidth != 0)
+                ImGui::SameLine();
         }
     }
 
@@ -265,33 +256,43 @@ namespace windows
         if (!isWorld)
         {
             totalSectors = loadedSectors = unloadedSectors = loadingSectors = 0;
+            cachedGrid.clear();
             return;
         }
 
-        // Count states by querying a reasonable grid range
         totalSectors = 0;
         loadedSectors = 0;
         unloadedSectors = 0;
         loadingSectors = 0;
+        cachedGrid.clear();
 
         int range = 8;
-        for (int z = -range; z <= range; ++z)
+        for (int z = range; z >= -range; --z)
         {
             for (int x = -range; x <= range; ++x)
             {
-                events::world::GetSectorStateQuery query;
-                query.coord = world::SectorCoord(x, z);
-                auto state = dispatcher.query(query);
+                CachedSectorInfo info;
+                info.coord = world::SectorCoord(x, z);
 
-                if (state != world::SectorState::Unloaded || true) // Count all sectors in range
+                events::world::DoesSectorExistQuery existQuery;
+                existQuery.coord = info.coord;
+                info.exists = dispatcher.query(existQuery);
+
+                if (info.exists)
                 {
-                    totalSectors++;
-                    switch (state)
-                    {
-                    case world::SectorState::Loaded: loadedSectors++; break;
-                    case world::SectorState::Loading: loadingSectors++; break;
-                    default: unloadedSectors++; break;
-                    }
+                    events::world::GetSectorStateQuery stateQuery;
+                    stateQuery.coord = info.coord;
+                    info.state = dispatcher.query(stateQuery);
+                }
+
+                cachedGrid.push_back(info);
+
+                totalSectors++;
+                switch (info.state)
+                {
+                case world::SectorState::Loaded: loadedSectors++; break;
+                case world::SectorState::Loading: loadingSectors++; break;
+                default: unloadedSectors++; break;
                 }
             }
         }

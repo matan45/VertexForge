@@ -7,7 +7,7 @@
 #include <limits>
 #include <functional>
 #include <string>
-
+#include <utility>
 namespace scene
 {
     class SceneGraphSystem;
@@ -27,6 +27,7 @@ namespace world
         SectorEntityLoader() = default;
 
         void queueSectorLoad(const SectorCoord& coord, const std::string& sectorFilePath);
+        void queueSectorLoadFromData(const SectorCoord& coord, const std::vector<std::pair<std::string, std::string>>& entityNamesAndJson);
         void queueSectorUnload(const SectorCoord& coord, const std::vector<uint64_t>& uuids);
 
         void update(scene::SceneGraphSystem& sceneGraph, int maxEntitiesPerFrame = 8);

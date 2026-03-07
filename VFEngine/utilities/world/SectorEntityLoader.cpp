@@ -30,6 +30,18 @@ namespace world
         }
     }
 
+    void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, const std::vector<std::pair<std::string, std::string>>& entityNamesAndJson)
+    {
+        for (const auto& [name, json] : entityNamesAndJson)
+        {
+            PendingLoad load;
+            load.coord = coord;
+            load.entityName = name;
+            load.rawJson = json;
+            pendingLoads.push_back(std::move(load));
+        }
+    }
+
     void SectorEntityLoader::queueSectorUnload(const SectorCoord& coord, const std::vector<uint64_t>& uuids)
     {
         for (uint64_t uuid : uuids)
@@ -164,13 +176,17 @@ namespace world
                 loadedThisFrame.insert(uuid);
 
                 // Notify service layer to acquire assets and publish mesh notifications
-                if (onEntityPostLoad && newEntity.hasComponent<components::MeshComponent>())
+                if (onEntityPostLoad)
                 {
-                    const auto& meshComp = newEntity.getComponent<components::MeshComponent>();
-                    if (!meshComp.meshPath.empty())
+                    std::string meshPath;
+                    std::string animatorPath;
+                    if (newEntity.hasComponent<components::MeshComponent>())
                     {
-                        onEntityPostLoad(uuid, meshComp.meshPath, meshComp.animatorPath);
+                        const auto& meshComp = newEntity.getComponent<components::MeshComponent>();
+                        meshPath = meshComp.meshPath;
+                        animatorPath = meshComp.animatorPath;
                     }
+                    onEntityPostLoad(uuid, meshPath, animatorPath);
                 }
 
                 if (onEntityLoaded)

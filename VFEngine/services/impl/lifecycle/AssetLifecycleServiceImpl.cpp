@@ -1,5 +1,6 @@
 #include "AssetLifecycleServiceImpl.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include "resource/AssetLifecycleHelpers.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/lifecycle/AssetLifecycleEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
@@ -94,47 +95,7 @@ namespace services {
 
 				auto& lifecycle = resource::AssetLifecycleManager::instance();
 				scene::Entity entity(enttEntity);
-
-				if (entity.hasComponent<components::MeshComponent>())
-				{
-					auto& mesh = entity.getComponent<components::MeshComponent>();
-					if (!mesh.meshPath.empty()) lifecycle.release(mesh.meshPath);
-					if (!mesh.animatorPath.empty()) lifecycle.release(mesh.animatorPath);
-				}
-
-				if (entity.hasComponent<components::MaterialComponent>())
-				{
-					auto& mat = entity.getComponent<components::MaterialComponent>();
-					if (!mat.defaultMaterial.empty()) lifecycle.release(mat.defaultMaterial);
-					for (const auto& [name, path] : mat.subMeshMaterials)
-					{
-						if (!path.empty()) lifecycle.release(path);
-					}
-				}
-
-				if (entity.hasComponent<components::AudioSource2DComponent>())
-				{
-					auto& audio = entity.getComponent<components::AudioSource2DComponent>();
-					if (!audio.audioFilePath.empty()) lifecycle.release(audio.audioFilePath);
-				}
-
-				if (entity.hasComponent<components::AudioSource3DComponent>())
-				{
-					auto& audio = entity.getComponent<components::AudioSource3DComponent>();
-					if (!audio.audioFilePath.empty()) lifecycle.release(audio.audioFilePath);
-				}
-
-				if (entity.hasComponent<components::VFXComponent>())
-				{
-					auto& vfx = entity.getComponent<components::VFXComponent>();
-					if (!vfx.vfxPath.empty()) lifecycle.release(vfx.vfxPath);
-				}
-
-				if (entity.hasComponent<components::AnimatorComponent>())
-				{
-					auto& anim = entity.getComponent<components::AnimatorComponent>();
-					if (!anim.animatorPath.empty()) lifecycle.release(anim.animatorPath);
-				}
+				resource::releaseEntityAssets(entity, lifecycle);
 			});
 	}
 
@@ -143,51 +104,11 @@ namespace services {
 		auto& registry = scene::EntityRegistry::getRegistry();
 		auto& lifecycle = resource::AssetLifecycleManager::instance();
 
-		auto meshView = registry.view<components::MeshComponent>();
-		for (auto entity : meshView)
+		auto view = registry.view<components::UUIDComponent>();
+		for (auto entity : view)
 		{
-			auto& mesh = meshView.get<components::MeshComponent>(entity);
-			if (!mesh.meshPath.empty()) lifecycle.acquire(mesh.meshPath, resource::AssetType::Mesh);
-			if (!mesh.animatorPath.empty()) lifecycle.acquire(mesh.animatorPath, resource::AssetType::Animator);
-		}
-
-		auto matView = registry.view<components::MaterialComponent>();
-		for (auto entity : matView)
-		{
-			auto& mat = matView.get<components::MaterialComponent>(entity);
-			if (!mat.defaultMaterial.empty()) lifecycle.acquire(mat.defaultMaterial, resource::AssetType::Material);
-			for (const auto& [name, path] : mat.subMeshMaterials)
-			{
-				if (!path.empty()) lifecycle.acquire(path, resource::AssetType::Material);
-			}
-		}
-
-		auto audio2dView = registry.view<components::AudioSource2DComponent>();
-		for (auto entity : audio2dView)
-		{
-			auto& audio = audio2dView.get<components::AudioSource2DComponent>(entity);
-			if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
-		}
-
-		auto audio3dView = registry.view<components::AudioSource3DComponent>();
-		for (auto entity : audio3dView)
-		{
-			auto& audio = audio3dView.get<components::AudioSource3DComponent>(entity);
-			if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
-		}
-
-		auto vfxView = registry.view<components::VFXComponent>();
-		for (auto entity : vfxView)
-		{
-			auto& vfx = vfxView.get<components::VFXComponent>(entity);
-			if (!vfx.vfxPath.empty()) lifecycle.acquire(vfx.vfxPath, resource::AssetType::VFX);
-		}
-
-		auto animView = registry.view<components::AnimatorComponent>();
-		for (auto entity : animView)
-		{
-			auto& anim = animView.get<components::AnimatorComponent>(entity);
-			if (!anim.animatorPath.empty()) lifecycle.acquire(anim.animatorPath, resource::AssetType::Animator);
+			scene::Entity sceneEntity(entity);
+			resource::acquireEntityAssets(sceneEntity, lifecycle);
 		}
 	}
 
