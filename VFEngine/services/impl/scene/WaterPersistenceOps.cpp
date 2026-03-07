@@ -59,10 +59,23 @@ namespace services
         int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
         gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
 
+        // Build ocean FFT settings from service state
+        water::OceanFFTSettings oceanSettings;
+        oceanSettings.enabled = oceanFFTEnabled;
+        oceanSettings.resolution = oceanConfig.resolution;
+        oceanSettings.patchSize = oceanConfig.patchSize;
+        oceanSettings.windSpeed = oceanConfig.windSpeed;
+        oceanSettings.windDirection = oceanConfig.windDirection;
+        oceanSettings.amplitude = oceanConfig.amplitude;
+        oceanSettings.choppiness = oceanConfig.choppiness;
+        oceanSettings.gravity = oceanConfig.gravity;
+        oceanSettings.foamThreshold = oceanConfig.foamThreshold;
+
         bool success = water::WaterSerializer::save(
             path,
             *gridIt->second,
             settings,
+            oceanSettings,
             boundsMinX, boundsMinZ,
             boundsMaxX, boundsMaxZ,
             comp.physicsEnabled);
@@ -73,7 +86,7 @@ namespace services
             return false;
         }
 
-        // Update savePath and bounds on the component
+        // Update savePath, bounds, and ocean config on the component
         auto& mutableComp = registry.get<components::WaterComponent>(ent);
         mutableComp.savePath = path;
         mutableComp.gridMinX = boundsMinX;
@@ -81,6 +94,16 @@ namespace services
         mutableComp.gridMaxX = boundsMaxX;
         mutableComp.gridMaxZ = boundsMaxZ;
         mutableComp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
+
+        mutableComp.oceanFFTEnabled = oceanFFTEnabled;
+        mutableComp.oceanResolution = oceanConfig.resolution;
+        mutableComp.oceanPatchSize = oceanConfig.patchSize;
+        mutableComp.oceanWindSpeed = oceanConfig.windSpeed;
+        mutableComp.oceanWindDirection = oceanConfig.windDirection;
+        mutableComp.oceanAmplitude = oceanConfig.amplitude;
+        mutableComp.oceanChoppiness = oceanConfig.choppiness;
+        mutableComp.oceanGravity = oceanConfig.gravity;
+        mutableComp.oceanFoamThreshold = oceanConfig.foamThreshold;
 
         events::water::WaterSavedNotification notification;
         notification.waterEntity = waterEntity;
@@ -166,11 +189,27 @@ namespace services
         waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
         waterComp.visibleTileCount = 0;
 
+        // Restore ocean FFT config from loaded data
+        const auto& o = header.oceanSettings;
+        oceanConfig.resolution = o.resolution;
+        oceanConfig.patchSize = o.patchSize;
+        oceanConfig.windSpeed = o.windSpeed;
+        oceanConfig.windDirection = o.windDirection;
+        oceanConfig.amplitude = o.amplitude;
+        oceanConfig.choppiness = o.choppiness;
+        oceanConfig.gravity = o.gravity;
+        oceanConfig.foamThreshold = o.foamThreshold;
+        oceanConfig.enabled = o.enabled;
+        oceanFFTEnabled = o.enabled;
+        oceanConfigVersion++;
+
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
 
         createTileEntities(parentHandle, *grid);
 
         waterGrids[parentHandle.id] = std::move(grid);
+        populateDefinitionMap(parentHandle.id, *waterGrids[parentHandle.id]);
+        waterStreamers[parentHandle.id] = std::make_unique<water::WaterWorldStreamer>();
         globalSettingsDirty = true;
 
         events::water::WaterLoadedNotification notification;

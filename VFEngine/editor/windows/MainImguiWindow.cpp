@@ -19,6 +19,7 @@ namespace windows
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
         menuBar.setWaterEditorWindow(&waterEditorWindow);
+        menuBar.setOceanEditorWindow(&oceanEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
         menuBar.setLightBakeWindow(&lightBakeWindow);
 
@@ -85,6 +86,7 @@ namespace windows
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
             waterEditorWindow.draw();
+            oceanEditorWindow.draw();
             navmeshWindow.draw();
             lightBakeWindow.draw();
             sculptToolPanel.draw();

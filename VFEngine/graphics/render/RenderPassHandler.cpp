@@ -50,6 +50,12 @@ namespace render
         {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
+
+        if (oceanFFTInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanupOceanFFT();
+            oceanFFTInitialized = false;
+        }
     }
 
     void RenderPassHandler::init()

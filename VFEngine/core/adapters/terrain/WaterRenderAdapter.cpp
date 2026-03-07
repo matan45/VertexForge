@@ -1,5 +1,6 @@
 #include "WaterRenderAdapter.hpp"
 #include "../../services/impl/scene/WaterService.hpp"
+#include "../../services/data/WaterData.hpp"
 
 namespace core
 {
@@ -60,5 +61,22 @@ namespace core
     void WaterRenderAdapter::setMaxDrawDistance(float distance)
     {
         if (waterService) waterService->setMaxDrawDistance(distance);
+    }
+
+    bool WaterRenderAdapter::isOceanFFTEnabled() const
+    {
+        return waterService && waterService->isOceanFFTEnabled();
+    }
+
+    services::OceanFFTConfigData WaterRenderAdapter::getOceanFFTConfig() const
+    {
+        if (!waterService) return {};
+        return waterService->getOceanFFTConfig();
+    }
+
+    uint32_t WaterRenderAdapter::getOceanFFTConfigVersion() const
+    {
+        if (!waterService) return 0;
+        return waterService->getOceanFFTConfigVersion();
     }
 }

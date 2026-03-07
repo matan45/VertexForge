@@ -71,6 +71,21 @@ namespace water
         s.dudvStrength = readLE<float>(file);
         s.waveDirectionDegrees = readLE<float>(file);
 
+        // Ocean FFT settings (added in v1.1.0)
+        if (outHeader.versionMinor >= 1)
+        {
+            auto& o = outHeader.oceanSettings;
+            o.enabled = readLE<uint8_t>(file) != 0;
+            o.resolution = readLE<uint32_t>(file);
+            o.patchSize = readLE<float>(file);
+            o.windSpeed = readLE<float>(file);
+            o.windDirection = readLE<float>(file);
+            o.amplitude = readLE<float>(file);
+            o.choppiness = readLE<float>(file);
+            o.gravity = readLE<float>(file);
+            o.foamThreshold = readLE<float>(file);
+        }
+
         return file.good();
     }
 

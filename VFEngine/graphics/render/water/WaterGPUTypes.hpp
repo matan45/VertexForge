@@ -32,8 +32,13 @@ namespace render::water
         float dudvTiling;               // 4
         float dudvStrength;             // 4
         float waveDirection;            // 4 (angle in radians)
+        // Ocean FFT fields (64 bytes offset)
+        uint32_t oceanEnabled;          // 4 (0 or 1)
+        float oceanChoppiness;          // 4
+        float oceanPatchSize;           // 4
+        float oceanFoamThreshold;       // 4
     };
-    static_assert(sizeof(WaterPushConstants) == 64);
+    static_assert(sizeof(WaterPushConstants) == 80);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

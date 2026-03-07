@@ -53,6 +53,18 @@ namespace water
         writeLE(file, s.dudvStrength);
         writeLE(file, s.waveDirectionDegrees);
 
+        // Ocean FFT settings (added in v1.1.0)
+        const auto& o = header.oceanSettings;
+        writeLE<uint8_t>(file, o.enabled ? 1 : 0);
+        writeLE(file, o.resolution);
+        writeLE(file, o.patchSize);
+        writeLE(file, o.windSpeed);
+        writeLE(file, o.windDirection);
+        writeLE(file, o.amplitude);
+        writeLE(file, o.choppiness);
+        writeLE(file, o.gravity);
+        writeLE(file, o.foamThreshold);
+
         return file.good();
     }
 
@@ -71,6 +83,7 @@ namespace water
         std::string_view path,
         const WaterGrid& grid,
         const WaterGlobalSettings& globalSettings,
+        const OceanFFTSettings& oceanSettings,
         int32_t gridMinX, int32_t gridMinZ,
         int32_t gridMaxX, int32_t gridMaxZ,
         bool physicsEnabled)
@@ -97,6 +110,7 @@ namespace water
         header.gridMaxZ = gridMaxZ;
         header.physicsEnabled = physicsEnabled;
         header.globalSettings = globalSettings;
+        header.oceanSettings = oceanSettings;
 
         if (!writeHeader(file, header))
         {

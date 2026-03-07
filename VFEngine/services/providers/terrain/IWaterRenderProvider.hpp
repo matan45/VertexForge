@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <glm/glm.hpp>
+#include <cstdint>
 
 namespace math
 {
@@ -17,6 +18,8 @@ namespace water
 
 namespace services
 {
+    struct OceanFFTConfigData;
+
     class IWaterRenderProvider
     {
     public:
@@ -40,5 +43,10 @@ namespace services
 
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;
+
+        // Ocean FFT
+        virtual bool isOceanFFTEnabled() const = 0;
+        virtual OceanFFTConfigData getOceanFFTConfig() const = 0;
+        virtual uint32_t getOceanFFTConfigVersion() const = 0;
     };
 }

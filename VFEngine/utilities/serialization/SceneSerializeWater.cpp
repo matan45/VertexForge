@@ -44,6 +44,17 @@ namespace serialization
             j["dudvStrength"] = water.dudvStrength;
             j["waveDirectionDegrees"] = water.waveDirectionDegrees;
             j["physicsEnabled"] = water.physicsEnabled;
+
+            // Ocean FFT
+            j["oceanFFTEnabled"] = water.oceanFFTEnabled;
+            j["oceanResolution"] = water.oceanResolution;
+            j["oceanPatchSize"] = water.oceanPatchSize;
+            j["oceanWindSpeed"] = water.oceanWindSpeed;
+            j["oceanWindDirection"] = water.oceanWindDirection;
+            j["oceanAmplitude"] = water.oceanAmplitude;
+            j["oceanChoppiness"] = water.oceanChoppiness;
+            j["oceanGravity"] = water.oceanGravity;
+            j["oceanFoamThreshold"] = water.oceanFoamThreshold;
         }
 
         return j;
@@ -107,6 +118,26 @@ namespace serialization
             water.waveDirectionDegrees = it->get<float>();
         if (auto it = j.find("physicsEnabled"); it != j.end() && it->is_boolean())
             water.physicsEnabled = it->get<bool>();
+
+        // Ocean FFT
+        if (auto it = j.find("oceanFFTEnabled"); it != j.end() && it->is_boolean())
+            water.oceanFFTEnabled = it->get<bool>();
+        if (auto it = j.find("oceanResolution"); it != j.end() && it->is_number_unsigned())
+            water.oceanResolution = it->get<uint32_t>();
+        if (auto it = j.find("oceanPatchSize"); it != j.end() && it->is_number())
+            water.oceanPatchSize = it->get<float>();
+        if (auto it = j.find("oceanWindSpeed"); it != j.end() && it->is_number())
+            water.oceanWindSpeed = it->get<float>();
+        if (auto it = j.find("oceanWindDirection"); it != j.end() && it->is_number())
+            water.oceanWindDirection = it->get<float>();
+        if (auto it = j.find("oceanAmplitude"); it != j.end() && it->is_number())
+            water.oceanAmplitude = it->get<float>();
+        if (auto it = j.find("oceanChoppiness"); it != j.end() && it->is_number())
+            water.oceanChoppiness = it->get<float>();
+        if (auto it = j.find("oceanGravity"); it != j.end() && it->is_number())
+            water.oceanGravity = it->get<float>();
+        if (auto it = j.find("oceanFoamThreshold"); it != j.end() && it->is_number())
+            water.oceanFoamThreshold = it->get<float>();
     }
 
     json SceneSerialization::serializeWaterTile(const components::WaterTileComponent& tile)

@@ -13,6 +13,13 @@ namespace windows::details {
         int pendingTileZ = 0;
         std::string statusMessage;
         int statusFrameCounter = 0;
+
+        // Streaming UI state
+        float streamingLoadRadius = 200.0f;
+        float streamingUnloadRadius = 250.0f;
+        int streamingMaxLoads = 4;
+        int streamingMaxUnloads = 4;
+        bool streamingConfigLoaded = false;
     };
 
 }

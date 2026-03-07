@@ -101,6 +101,77 @@ namespace windows::details {
                 }
             }
 
+            ImGui::Separator();
+
+            // Streaming section
+            if (ImGui::CollapsingHeader("Streaming"))
+            {
+                ImGui::Indent();
+
+                events::water::IsWaterStreamingEnabledQuery enabledQuery;
+                enabledQuery.waterEntity = handle;
+                bool streamingEnabled = dispatcher.query(enabledQuery);
+
+                if (ImGui::Checkbox("Enable Streaming", &streamingEnabled))
+                {
+                    events::water::SetWaterStreamingEnabledCommand cmd;
+                    cmd.waterEntity = handle;
+                    cmd.enabled = streamingEnabled;
+                    dispatcher.execute(cmd);
+                }
+
+                if (streamingEnabled)
+                {
+                    if (!streamingConfigLoaded)
+                    {
+                        events::water::GetWaterStreamingConfigQuery cfgQuery;
+                        cfgQuery.waterEntity = handle;
+                        auto cfg = dispatcher.query(cfgQuery);
+                        streamingLoadRadius = cfg.loadRadius;
+                        streamingUnloadRadius = cfg.unloadRadius;
+                        streamingMaxLoads = cfg.maxLoadsPerFrame;
+                        streamingMaxUnloads = cfg.maxUnloadsPerFrame;
+                        streamingConfigLoaded = true;
+                    }
+
+                    bool configChanged = false;
+                    if (ImGui::SliderFloat("Load Radius", &streamingLoadRadius, 10.0f, 1000.0f, "%.0f"))
+                        configChanged = true;
+                    if (ImGui::SliderFloat("Unload Radius", &streamingUnloadRadius, 10.0f, 1500.0f, "%.0f"))
+                    {
+                        if (streamingUnloadRadius < streamingLoadRadius)
+                            streamingUnloadRadius = streamingLoadRadius * 1.25f;
+                        configChanged = true;
+                    }
+                    if (ImGui::SliderInt("Max Loads/Frame", &streamingMaxLoads, 1, 16))
+                        configChanged = true;
+                    if (ImGui::SliderInt("Max Unloads/Frame", &streamingMaxUnloads, 1, 16))
+                        configChanged = true;
+
+                    if (configChanged)
+                    {
+                        events::water::SetWaterStreamingConfigCommand cmd;
+                        cmd.waterEntity = handle;
+                        cmd.loadRadius = streamingLoadRadius;
+                        cmd.unloadRadius = streamingUnloadRadius;
+                        cmd.maxLoadsPerFrame = streamingMaxLoads;
+                        cmd.maxUnloadsPerFrame = streamingMaxUnloads;
+                        dispatcher.execute(cmd);
+                    }
+
+                    events::water::GetWaterStreamingStatsQuery statsQuery;
+                    statsQuery.waterEntity = handle;
+                    auto [loaded, total] = dispatcher.query(statsQuery);
+                    ImGui::Text("Loaded: %u / %u tiles", loaded, total);
+                }
+                else
+                {
+                    streamingConfigLoaded = false;
+                }
+
+                ImGui::Unindent();
+            }
+
             ImGui::Unindent(10.0f);
         }
 

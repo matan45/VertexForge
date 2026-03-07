@@ -277,6 +277,7 @@
     <ClInclude Include="render\volumetric\VolumetricRayMarch.hpp" />
     <ClInclude Include="render\volumetric\VolumetricTemporalFilter.hpp" />
     <ClInclude Include="render\volumetric\VolumetricTypes.hpp" />
+    <ClInclude Include="render\water\OceanFFT.hpp" />
     <ClInclude Include="render\water\WaterGPUTypes.hpp" />
     <ClInclude Include="render\water\WaterMeshBuffer.hpp" />
     <ClInclude Include="render\water\WaterPipeline.hpp" />
@@ -475,6 +476,7 @@
     <ClCompile Include="render\volumetric\VolumetricPipeline.cpp" />
     <ClCompile Include="render\volumetric\VolumetricRayMarch.cpp" />
     <ClCompile Include="render\volumetric\VolumetricTemporalFilter.cpp" />
+    <ClCompile Include="render\water\OceanFFT.cpp" />
     <ClCompile Include="render\water\WaterMeshBuffer.cpp" />
     <ClCompile Include="render\water\WaterPipeline.cpp" />
   </ItemGroup>
@@ -549,6 +551,10 @@
     <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_temporal.glsl" />
+    <None Include="..\..\resources\shaders\water\ocean_fft.glsl" />
+    <None Include="..\..\resources\shaders\water\ocean_merge.glsl" />
+    <None Include="..\..\resources\shaders\water\ocean_spectrum.glsl" />
+    <None Include="..\..\resources\shaders\water\ocean_time_evolve.glsl" />
     <None Include="..\..\resources\shaders\water\water.glsl" />
   </ItemGroup>
   <ItemGroup>

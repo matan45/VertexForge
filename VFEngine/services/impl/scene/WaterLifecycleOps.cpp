@@ -58,6 +58,8 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         waterGrids[parentHandle.id] = std::move(grid);
+        populateDefinitionMap(parentHandle.id, *waterGrids[parentHandle.id]);
+        waterStreamers[parentHandle.id] = std::make_unique<water::WaterWorldStreamer>();
 
         events::water::WaterCreatedNotification notification;
         notification.waterEntity = parentHandle;
@@ -125,6 +127,8 @@ namespace services
             return false;
 
         waterGrids.erase(waterEntity.id);
+        definitionMaps.erase(waterEntity.id);
+        waterStreamers.erase(waterEntity.id);
         globalSettingsDirty = true;
 
         scene::Entity waterEnt(entity);
@@ -151,6 +155,8 @@ namespace services
         if (it != waterGrids.end())
         {
             waterGrids.erase(it);
+            definitionMaps.erase(entity.id);
+            waterStreamers.erase(entity.id);
             globalSettingsDirty = true;
 
             events::water::WaterDeletedNotification notification;
@@ -164,16 +170,24 @@ namespace services
         entitiesInWater.clear();
         globalSettingsDirty = true;
 
+        oceanFFTEnabled = false;
+        oceanConfig = OceanFFTConfigData{};
+        oceanConfigVersion++;
+
         if (waterGrids.empty())
             return;
 
         waterGrids.clear();
+        definitionMaps.clear();
+        waterStreamers.clear();
         vfLogInfo("WaterService: Cleared all water on scene clear");
     }
 
     void WaterService::rebuildWaterFromComponents()
     {
         waterGrids.clear();
+        definitionMaps.clear();
+        waterStreamers.clear();
         entitiesInWater.clear();
         globalSettingsDirty = true;
 
@@ -254,6 +268,23 @@ namespace services
                     waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
 
                     waterGrids[waterHandle.id] = std::move(grid);
+                    populateDefinitionMap(waterHandle.id, *waterGrids[waterHandle.id]);
+                    waterStreamers[waterHandle.id] = std::make_unique<water::WaterWorldStreamer>();
+
+                    // Restore ocean FFT config from .vfWater file
+                    const auto& o = header.oceanSettings;
+                    oceanConfig.resolution = o.resolution;
+                    oceanConfig.patchSize = o.patchSize;
+                    oceanConfig.windSpeed = o.windSpeed;
+                    oceanConfig.windDirection = o.windDirection;
+                    oceanConfig.amplitude = o.amplitude;
+                    oceanConfig.choppiness = o.choppiness;
+                    oceanConfig.gravity = o.gravity;
+                    oceanConfig.foamThreshold = o.foamThreshold;
+                    oceanConfig.enabled = o.enabled;
+                    oceanFFTEnabled = o.enabled;
+                    oceanConfigVersion++;
+
                     vfLogInfo("WaterService: Rebuilt water from .vfWater file: {}", waterComp.savePath);
                     continue;
                 }
@@ -307,6 +338,21 @@ namespace services
             waterComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
 
             waterGrids[waterHandle.id] = std::move(grid);
+            populateDefinitionMap(waterHandle.id, *waterGrids[waterHandle.id]);
+            waterStreamers[waterHandle.id] = std::make_unique<water::WaterWorldStreamer>();
+
+            // Restore ocean FFT config from inline component data
+            oceanConfig.resolution = waterComp.oceanResolution;
+            oceanConfig.patchSize = waterComp.oceanPatchSize;
+            oceanConfig.windSpeed = waterComp.oceanWindSpeed;
+            oceanConfig.windDirection = waterComp.oceanWindDirection;
+            oceanConfig.amplitude = waterComp.oceanAmplitude;
+            oceanConfig.choppiness = waterComp.oceanChoppiness;
+            oceanConfig.gravity = waterComp.oceanGravity;
+            oceanConfig.foamThreshold = waterComp.oceanFoamThreshold;
+            oceanConfig.enabled = waterComp.oceanFFTEnabled;
+            oceanFFTEnabled = waterComp.oceanFFTEnabled;
+            oceanConfigVersion++;
         }
 
         if (!waterGrids.empty())
@@ -336,6 +382,13 @@ namespace services
 
         float tileSize = grid.getConfig().worldTileSize;
         createTileEntity(waterEntity, tile, tileSize);
+
+        // Keep definition map in sync
+        water::WaterTileDefinition def;
+        def.waterHeight = tile->waterHeight;
+        def.waveIntensity = tile->waveIntensity;
+        def.physicsEnabled = tile->physicsEnabled;
+        definitionMaps[waterEntity.id].addDefinition(coord, def);
 
         // Update component bounds
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -397,6 +450,7 @@ namespace services
         }
 
         grid.removeTile(coord);
+        definitionMaps[waterEntity.id].removeDefinition(coord);
 
         // Update component bounds
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -428,11 +482,19 @@ namespace services
             return;
 
         std::vector<std::unique_ptr<water::WaterGrid>> grids;
+        std::vector<water::WaterDefinitionMap> defMaps;
+        std::vector<std::unique_ptr<water::WaterWorldStreamer>> streamers;
         for (auto& [id, grid] : waterGrids)
         {
             grids.push_back(std::move(grid));
+            auto defIt = definitionMaps.find(id);
+            defMaps.push_back(defIt != definitionMaps.end() ? std::move(defIt->second) : water::WaterDefinitionMap{});
+            auto streamerIt = waterStreamers.find(id);
+            streamers.push_back(streamerIt != waterStreamers.end() ? std::move(streamerIt->second) : nullptr);
         }
         waterGrids.clear();
+        definitionMaps.clear();
+        waterStreamers.clear();
         entitiesInWater.clear();
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -446,6 +508,9 @@ namespace services
 
             uint64_t newId = internal::toHandle(entity).id;
             waterGrids[newId] = std::move(grids[gridIndex]);
+            definitionMaps[newId] = std::move(defMaps[gridIndex]);
+            if (streamers[gridIndex])
+                waterStreamers[newId] = std::move(streamers[gridIndex]);
 
             if (physicsProvider)
             {

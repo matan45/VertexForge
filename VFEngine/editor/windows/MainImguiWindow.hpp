@@ -11,6 +11,7 @@
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
+#include "OceanEditorWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
@@ -43,6 +44,7 @@ namespace windows
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
+        OceanEditorWindow oceanEditorWindow;
         NavmeshWindow navmeshWindow;
         LightBakeWindow lightBakeWindow;
         SculptToolPanel sculptToolPanel;

@@ -21,8 +21,10 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/data/WaterData.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
+#include "water/OceanFFT.hpp"
 
 namespace
 {
@@ -157,6 +159,50 @@ namespace render
             gpuDrivenRenderer->updateWater(visibleTiles, settings, tileConfig);
         }
 
+        // Sync ocean FFT state from service layer
+        if (waterRenderProvider && gpuDrivenRenderer)
+        {
+            bool wantOcean = waterRenderProvider->isOceanFFTEnabled();
+            uint32_t version = waterRenderProvider->getOceanFFTConfigVersion();
+
+            if (wantOcean && !oceanFFTInitialized)
+            {
+                auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                render::water::OceanFFTConfig cfg;
+                cfg.resolution = cfgData.resolution;
+                cfg.patchSize = cfgData.patchSize;
+                cfg.windSpeed = cfgData.windSpeed;
+                cfg.windDirection = cfgData.windDirection;
+                cfg.amplitude = cfgData.amplitude;
+                cfg.choppiness = cfgData.choppiness;
+                cfg.gravity = cfgData.gravity;
+                cfg.foamThreshold = cfgData.foamThreshold;
+                gpuDrivenRenderer->initOceanFFT(cfg);
+                oceanFFTInitialized = true;
+                lastOceanConfigVersion = version;
+            }
+            else if (!wantOcean && oceanFFTInitialized)
+            {
+                gpuDrivenRenderer->cleanupOceanFFT();
+                oceanFFTInitialized = false;
+            }
+            else if (wantOcean && oceanFFTInitialized && version != lastOceanConfigVersion)
+            {
+                auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                render::water::OceanFFTConfig cfg;
+                cfg.resolution = cfgData.resolution;
+                cfg.patchSize = cfgData.patchSize;
+                cfg.windSpeed = cfgData.windSpeed;
+                cfg.windDirection = cfgData.windDirection;
+                cfg.amplitude = cfgData.amplitude;
+                cfg.choppiness = cfgData.choppiness;
+                cfg.gravity = cfgData.gravity;
+                cfg.foamThreshold = cfgData.foamThreshold;
+                gpuDrivenRenderer->updateOceanConfig(cfg);
+                lastOceanConfigVersion = version;
+            }
+        }
+
         // Consume and discard RTT frustums so they don't persist across frames.
         // renderAll() re-populates them each frame during play mode.
         additionalTerrainFrustums.clear();
@@ -234,6 +280,11 @@ namespace render
     {
         updateGPUDrivenHiZ();
         gpuDrivenRenderer->dispatchCompute(commandBuffer);
+
+        if (oceanFFTInitialized)
+        {
+            gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
+        }
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);

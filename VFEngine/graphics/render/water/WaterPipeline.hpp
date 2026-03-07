@@ -14,6 +14,7 @@ namespace core
 namespace render::water
 {
     class WaterMeshBuffer;
+    class OceanFFT;
 
     struct WaterPipelineLayoutConfig
     {
@@ -23,6 +24,7 @@ namespace render::water
         vk::DescriptorSetLayout cullingOutputLayout;
         vk::DescriptorSetLayout shadowDataLayout;
         vk::DescriptorSetLayout shadowTextureLayout;
+        vk::DescriptorSetLayout oceanTextureLayout; // Optional: from OceanFFT
         vk::RenderPass renderPass;
     };
 
@@ -34,6 +36,7 @@ namespace render::water
         vk::DescriptorSet cullingOutputDescSet;
         vk::DescriptorSet shadowDataDescSet;
         vk::DescriptorSet shadowTextureDescSet;
+        vk::DescriptorSet oceanTextureDescSet; // Optional: from OceanFFT
     };
 
     class WaterPipeline
@@ -67,6 +70,16 @@ namespace render::water
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
 
+        // Ocean FFT texture support
+        vk::DescriptorSetLayout oceanTextureLayout;
+        vk::DescriptorPool oceanDummyPool;
+        vk::DescriptorSet oceanDummyDescSet;
+        vk::Image oceanDummyImage;
+        vk::DeviceMemory oceanDummyMemory;
+        vk::ImageView oceanDummyView;
+        vk::Sampler oceanDummySampler;
+        bool hasOceanTextureLayout = false;
+
         bool initialized = false;
         uint32_t lastDescriptorTileCount = 0;
 
@@ -90,6 +103,7 @@ namespace render::water
         void createWaterTileDescriptor();
         void createDuDvTexture();
         void createDuDvDescriptor();
+        void createOceanDummyTexture();
         void createGraphicsPipeline(const WaterPipelineLayoutConfig& config);
     };
 }

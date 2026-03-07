@@ -361,6 +361,10 @@ namespace render::gpudriven
 
             if (water.pipeline)
             {
+                vk::DescriptorSetLayout oceanLayout{};
+                if (water.oceanFFT && water.oceanFFT->isInitialized())
+                    oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
                 water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
@@ -368,6 +372,7 @@ namespace render::gpudriven
                     lightCullingPipeline->getDescriptorSetLayout(),
                     shadowSystem->getShadowDataLayout(),
                     shadowSystem->getShadowTextureLayout(),
+                    oceanLayout,
                     cachedRenderPass
                 });
             }

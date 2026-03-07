@@ -14,6 +14,7 @@
 #include "../water/WaterPipeline.hpp"
 #include "../water/WaterMeshBuffer.hpp"
 #include "../water/WaterGPUTypes.hpp"
+#include "../water/OceanFFT.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -106,6 +107,10 @@ namespace render::gpudriven
             int32_t selectedCoordX = 0;
             int32_t selectedCoordZ = 0;
             bool hasSelectedTile = false;
+
+            // Ocean FFT
+            std::unique_ptr<render::water::OceanFFT> oceanFFT;
+            bool oceanEnabled = false;
         };
 
         struct LightCullingState
@@ -361,6 +366,13 @@ namespace render::gpudriven
 
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }
+
+        void initOceanFFT(const render::water::OceanFFTConfig& config);
+        void cleanupOceanFFT();
+        void setOceanEnabled(bool enabled);
+        bool isOceanEnabled() const { return water.oceanEnabled; }
+        void updateOceanConfig(const render::water::OceanFFTConfig& config);
+        void dispatchOceanFFT(vk::CommandBuffer cmd, float time);
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 

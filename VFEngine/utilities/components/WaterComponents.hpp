@@ -42,6 +42,17 @@ namespace components
         uint32_t visibleTileCount = 0;
 
         std::string savePath;
+
+        // Ocean FFT settings
+        bool oceanFFTEnabled = false;
+        uint32_t oceanResolution = 256;
+        float oceanPatchSize = 100.0f;
+        float oceanWindSpeed = 20.0f;
+        float oceanWindDirection = 45.0f;
+        float oceanAmplitude = 0.0003f;
+        float oceanChoppiness = 1.5f;
+        float oceanGravity = 9.81f;
+        float oceanFoamThreshold = 0.3f;
     };
 
     struct WaterTileComponent

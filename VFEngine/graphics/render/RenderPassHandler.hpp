@@ -148,6 +148,9 @@ namespace render
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IWaterRenderProvider* waterRenderProvider = nullptr;
 
+        mutable uint32_t lastOceanConfigVersion = 0;
+        mutable bool oceanFFTInitialized = false;
+
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
         mutable bool lightOcclusionInitialized = false;

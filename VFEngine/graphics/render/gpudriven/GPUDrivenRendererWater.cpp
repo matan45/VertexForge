@@ -20,6 +20,11 @@ namespace render::gpudriven
             render::water::WATER_DEFAULT_SUBDIVISIONS
         );
 
+        // Ocean texture layout (from OceanFFT if initialized, otherwise WaterPipeline creates dummy)
+        vk::DescriptorSetLayout oceanLayout{};
+        if (water.oceanFFT && water.oceanFFT->isInitialized())
+            oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
         water.pipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
         water.pipeline->init({
             iblDescriptorSetLayout,
@@ -28,6 +33,7 @@ namespace render::gpudriven
             lightCullingPipeline->getDescriptorSetLayout(),
             shadowSystem->getShadowDataLayout(),
             shadowSystem->getShadowTextureLayout(),
+            oceanLayout,
             renderPass
         });
 
@@ -84,13 +90,32 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline || water.tileData.empty())
             return;
 
+        // Set ocean push constant fields
+        if (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
+        {
+            const auto& cfg = water.oceanFFT->getConfig();
+            water.cachedPushConstants.oceanEnabled = 1;
+            water.cachedPushConstants.oceanChoppiness = cfg.choppiness;
+            water.cachedPushConstants.oceanPatchSize = cfg.patchSize;
+            water.cachedPushConstants.oceanFoamThreshold = cfg.foamThreshold;
+        }
+        else
+        {
+            water.cachedPushConstants.oceanEnabled = 0;
+            water.cachedPushConstants.oceanChoppiness = 0.0f;
+            water.cachedPushConstants.oceanPatchSize = 1.0f;
+            water.cachedPushConstants.oceanFoamThreshold = 0.0f;
+        }
+
         render::water::WaterRenderDescriptors waterDescriptors{
             iblDescriptorSet,
             lightBufferManager->getDescriptorSet(),
             clusterGridManager->getDescriptorSet(),
             lightCullingPipeline->getDescriptorSet(),
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
-            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
+            (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
+                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{}
         };
         water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
     }
@@ -110,5 +135,45 @@ namespace render::gpudriven
     void GPUDrivenRenderer::clearSelectedWaterTile()
     {
         water.hasSelectedTile = false;
+    }
+
+    void GPUDrivenRenderer::initOceanFFT(const render::water::OceanFFTConfig& config)
+    {
+        if (!water.oceanFFT)
+            water.oceanFFT = std::make_unique<render::water::OceanFFT>(device);
+
+        water.oceanFFT->init(config);
+        water.oceanEnabled = true;
+        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized");
+    }
+
+    void GPUDrivenRenderer::cleanupOceanFFT()
+    {
+        water.oceanEnabled = false;
+        if (water.oceanFFT)
+        {
+            water.oceanFFT->cleanup();
+            water.oceanFFT.reset();
+        }
+    }
+
+    void GPUDrivenRenderer::setOceanEnabled(bool enabled)
+    {
+        water.oceanEnabled = enabled && water.oceanFFT && water.oceanFFT->isInitialized();
+    }
+
+    void GPUDrivenRenderer::updateOceanConfig(const render::water::OceanFFTConfig& config)
+    {
+        if (water.oceanFFT && water.oceanFFT->isInitialized())
+            water.oceanFFT->updateConfig(config);
+    }
+
+    void GPUDrivenRenderer::dispatchOceanFFT(vk::CommandBuffer cmd, float time)
+    {
+        if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
+            return;
+
+        water.oceanFFT->dispatch(cmd, time);
+        water.oceanFFT->insertBarrier(cmd);
     }
 }

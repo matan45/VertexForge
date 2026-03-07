@@ -11,6 +11,7 @@
 #include "../../events/terrain/WaterEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
 
 namespace services
 {
@@ -41,6 +42,17 @@ namespace services
         dispatcher.unregisterQueryHandler<events::water::GetWaterTileDataQuery>();
         dispatcher.unregisterQueryHandler<events::water::HasWaterTileComponentQuery>();
 
+        dispatcher.unregisterCommandHandler<events::water::SetOceanFFTEnabledCommand>();
+        dispatcher.unregisterCommandHandler<events::water::SetOceanFFTConfigCommand>();
+        dispatcher.unregisterQueryHandler<events::water::GetOceanFFTConfigQuery>();
+        dispatcher.unregisterQueryHandler<events::water::IsOceanFFTEnabledQuery>();
+
+        dispatcher.unregisterCommandHandler<events::water::SetWaterStreamingEnabledCommand>();
+        dispatcher.unregisterCommandHandler<events::water::SetWaterStreamingConfigCommand>();
+        dispatcher.unregisterQueryHandler<events::water::GetWaterStreamingConfigQuery>();
+        dispatcher.unregisterQueryHandler<events::water::IsWaterStreamingEnabledQuery>();
+        dispatcher.unregisterQueryHandler<events::water::GetWaterStreamingStatsQuery>();
+
         if (triggerEnterSubscription && triggerEnterSubscription->isValid())
         {
             dispatcher.unsubscribe(*triggerEnterSubscription);
@@ -70,6 +82,8 @@ namespace services
 
         registerWaterCoreHandlers(dispatcher);
         registerWaterQueryHandlers(dispatcher);
+        registerOceanFFTHandlers(dispatcher);
+        registerStreamingHandlers(dispatcher);
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
@@ -368,6 +382,60 @@ namespace services
 
         for (auto& [entityId, grid] : waterGrids)
         {
+            // Run water streaming before visibility query
+            auto streamerIt = waterStreamers.find(entityId);
+            if (streamerIt != waterStreamers.end() && streamerIt->second && streamerIt->second->isEnabled())
+            {
+                auto defIt = definitionMaps.find(entityId);
+                if (defIt != definitionMaps.end())
+                {
+                    EntityHandle waterHandle{entityId};
+                    float tileSize = grid->getConfig().worldTileSize;
+
+                    streamerIt->second->update(
+                        cameraPosition, tileSize, defIt->second, *grid, waterStreamingActions);
+
+                    for (const auto& action : waterStreamingActions)
+                    {
+                        if (action.isLoad)
+                        {
+                            const auto* def = defIt->second.getDefinition(action.coord);
+                            if (def)
+                            {
+                                water::WaterTile* tile = grid->getOrCreateTile(action.coord);
+                                if (tile)
+                                {
+                                    tile->updateHeight(def->waterHeight, tileSize);
+                                    tile->waveIntensity = def->waveIntensity;
+                                    tile->physicsEnabled = def->physicsEnabled;
+                                    createTileEntity(waterHandle, tile, tileSize);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Remove tile entity and grid tile
+                            scene::Entity parentEntity(internal::fromHandle(waterHandle));
+                            for (auto& child : parentEntity.getChildren())
+                            {
+                                if (!child.hasComponent<components::WaterTileComponent>())
+                                    continue;
+                                const auto& tileComp = child.getComponent<components::WaterTileComponent>();
+                                if (tileComp.tileX == action.coord.x && tileComp.tileZ == action.coord.z)
+                                {
+                                    EntityHandle tileHandle = internal::toHandle(child.getHandle());
+                                    if (physicsProvider)
+                                        physicsProvider->removeWaterSensorBody(tileHandle);
+                                    sceneGraph->removeEntity(child);
+                                    break;
+                                }
+                            }
+                            grid->removeTile(action.coord);
+                        }
+                    }
+                }
+            }
+
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
             if (distanceCullingEnabled && maxWaterDistSq > 0.0f)
@@ -545,5 +613,124 @@ namespace services
         comp.waveDirectionDegrees = settings.waveDirectionDegrees;
 
         globalSettingsDirty = true;
+    }
+
+    void WaterService::registerOceanFFTHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::water::SetOceanFFTEnabledCommand>(
+            [this](const events::water::SetOceanFFTEnabledCommand& cmd)
+            {
+                oceanFFTEnabled = cmd.enabled;
+                oceanConfigVersion++;
+            });
+
+        dispatcher.registerCommandHandler<events::water::SetOceanFFTConfigCommand>(
+            [this](const events::water::SetOceanFFTConfigCommand& cmd)
+            {
+                oceanConfig = cmd.config;
+                oceanConfigVersion++;
+
+                events::water::OceanFFTConfigChangedNotification notification;
+                notification.config = oceanConfig;
+                events::EventDispatcher::instance().publish(notification);
+            });
+
+        dispatcher.registerQueryHandler<events::water::GetOceanFFTConfigQuery>(
+            [this](const events::water::GetOceanFFTConfigQuery&)
+            {
+                return oceanConfig;
+            });
+
+        dispatcher.registerQueryHandler<events::water::IsOceanFFTEnabledQuery>(
+            [this](const events::water::IsOceanFFTEnabledQuery&)
+            {
+                return oceanFFTEnabled;
+            });
+    }
+
+    void WaterService::registerStreamingHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::water::SetWaterStreamingEnabledCommand>(
+            [this](const events::water::SetWaterStreamingEnabledCommand& cmd)
+            {
+                auto it = waterStreamers.find(cmd.waterEntity.id);
+                if (it != waterStreamers.end() && it->second)
+                    it->second->setEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::water::SetWaterStreamingConfigCommand>(
+            [this](const events::water::SetWaterStreamingConfigCommand& cmd)
+            {
+                auto it = waterStreamers.find(cmd.waterEntity.id);
+                if (it != waterStreamers.end() && it->second)
+                {
+                    water::WaterStreamingConfig config;
+                    config.loadRadius = cmd.loadRadius;
+                    config.unloadRadius = cmd.unloadRadius;
+                    config.maxLoadsPerFrame = cmd.maxLoadsPerFrame;
+                    config.maxUnloadsPerFrame = cmd.maxUnloadsPerFrame;
+                    it->second->setConfig(config);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::water::GetWaterStreamingConfigQuery>(
+            [this](const events::water::GetWaterStreamingConfigQuery& query)
+            {
+                auto it = waterStreamers.find(query.waterEntity.id);
+                if (it != waterStreamers.end() && it->second)
+                {
+                    const auto& cfg = it->second->getConfig();
+                    events::water::WaterStreamingConfigData data;
+                    data.loadRadius = cfg.loadRadius;
+                    data.unloadRadius = cfg.unloadRadius;
+                    data.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+                    data.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+                    return data;
+                }
+                return events::water::WaterStreamingConfigData{};
+            });
+
+        dispatcher.registerQueryHandler<events::water::IsWaterStreamingEnabledQuery>(
+            [this](const events::water::IsWaterStreamingEnabledQuery& query)
+            {
+                auto it = waterStreamers.find(query.waterEntity.id);
+                if (it != waterStreamers.end() && it->second)
+                    return it->second->isEnabled();
+                return false;
+            });
+
+        dispatcher.registerQueryHandler<events::water::GetWaterStreamingStatsQuery>(
+            [this](const events::water::GetWaterStreamingStatsQuery& query)
+                -> std::pair<uint32_t, uint32_t>
+            {
+                uint32_t loaded = 0;
+                uint32_t total = 0;
+
+                auto gridIt = waterGrids.find(query.waterEntity.id);
+                if (gridIt != waterGrids.end())
+                    loaded = static_cast<uint32_t>(gridIt->second->getTileCount());
+
+                auto defIt = definitionMaps.find(query.waterEntity.id);
+                if (defIt != definitionMaps.end())
+                    total = static_cast<uint32_t>(defIt->second.size());
+
+                return {loaded, total};
+            });
+    }
+
+    void WaterService::populateDefinitionMap(uint64_t entityId, const water::WaterGrid& grid)
+    {
+        auto& defMap = definitionMaps[entityId];
+        defMap.clear();
+
+        for (const auto* tile : grid.getAllTiles())
+        {
+            if (!tile) continue;
+            water::WaterTileDefinition def;
+            def.waterHeight = tile->waterHeight;
+            def.waveIntensity = tile->waveIntensity;
+            def.physicsEnabled = tile->physicsEnabled;
+            defMap.addDefinition(tile->coord, def);
+        }
     }
 }

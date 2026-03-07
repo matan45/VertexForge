@@ -35,7 +35,16 @@ layout(push_constant) uniform PushConstants {
     float dudvTiling;
     float dudvStrength;
     float waveDirection;
+    // Ocean FFT fields
+    uint oceanEnabled;
+    float oceanChoppiness;
+    float oceanPatchSize;
+    float oceanFoamThreshold;
 } pc;
+
+// Ocean FFT displacement and normal textures (set 8)
+layout(set = 8, binding = 0) uniform sampler2D oceanDisplacementMap;
+layout(set = 8, binding = 1) uniform sampler2D oceanNormalMap;
 
 const float PI = 3.14159265358979;
 
@@ -70,37 +79,50 @@ void main() {
         tileOrigin.z + inPosition.z * tileSize
     );
 
-    float time = camera.u_Time * pc.waveSpeed;
-    float amp = pc.waveAmplitude * waveIntensity;
+    if (pc.oceanEnabled != 0u) {
+        // Ocean FFT path: sample displacement and normal from compute output
+        vec2 oceanUV = worldPos.xz / pc.oceanPatchSize;
+        vec4 disp = texture(oceanDisplacementMap, oceanUV);
+        worldPos.x += disp.x;
+        worldPos.y += disp.y;
+        worldPos.z += disp.z;
 
-    vec2 dir1 = rotateDir(vec2(1.0, 0.3), pc.waveDirection);
-    vec2 dir2 = rotateDir(vec2(-0.4, 1.0), pc.waveDirection);
-    vec2 dir3 = rotateDir(vec2(0.6, -0.8), pc.waveDirection);
+        vec3 oceanNorm = texture(oceanNormalMap, oceanUV).xyz;
+        fragNormal = normalize(oceanNorm);
+    } else {
+        // Gerstner wave path (original)
+        float time = camera.u_Time * pc.waveSpeed;
+        float amp = pc.waveAmplitude * waveIntensity;
 
-    float freq = pc.waveFrequency;
-    vec3 wave1 = gerstnerWave(worldPos.xz, dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
-    vec3 wave2 = gerstnerWave(worldPos.xz, dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
-    vec3 wave3 = gerstnerWave(worldPos.xz, dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
+        vec2 dir1 = rotateDir(vec2(1.0, 0.3), pc.waveDirection);
+        vec2 dir2 = rotateDir(vec2(-0.4, 1.0), pc.waveDirection);
+        vec2 dir3 = rotateDir(vec2(0.6, -0.8), pc.waveDirection);
 
-    worldPos += wave1 + wave2 + wave3;
+        float freq = pc.waveFrequency;
+        vec3 wave1 = gerstnerWave(worldPos.xz, dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
+        vec3 wave2 = gerstnerWave(worldPos.xz, dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
+        vec3 wave3 = gerstnerWave(worldPos.xz, dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
 
-    // Compute normal via finite differences
-    float eps = 0.1;
-    vec2 baseXZ = worldPos.xz;
+        worldPos += wave1 + wave2 + wave3;
 
-    vec3 posX = vec3(worldPos.x + eps, waterHeight, worldPos.z);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
-    posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
+        // Compute normal via finite differences
+        float eps = 0.1;
+        vec2 baseXZ = worldPos.xz;
 
-    vec3 posZ = vec3(worldPos.x, waterHeight, worldPos.z + eps);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
-    posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
+        vec3 posX = vec3(worldPos.x + eps, waterHeight, worldPos.z);
+        posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
+        posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
+        posX += gerstnerWave(baseXZ + vec2(eps, 0.0), dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
 
-    vec3 tangentX = posX - worldPos;
-    vec3 tangentZ = posZ - worldPos;
-    fragNormal = normalize(cross(tangentZ, tangentX));
+        vec3 posZ = vec3(worldPos.x, waterHeight, worldPos.z + eps);
+        posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir1, 0.25 * amp, 8.0 / freq, 2.0, time);
+        posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir2, 0.15 * amp, 5.0 / freq, 1.5, time);
+        posZ += gerstnerWave(baseXZ + vec2(0.0, eps), dir3, 0.1 * amp, 12.0 / freq, 3.0, time);
+
+        vec3 tangentX = posX - worldPos;
+        vec3 tangentZ = posZ - worldPos;
+        fragNormal = normalize(cross(tangentZ, tangentX));
+    }
 
     fragWorldPos = worldPos;
     fragTexCoord = inTexCoord;
@@ -155,6 +177,9 @@ layout(set = 7, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 7, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 7, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
+layout(set = 8, binding = 0) uniform sampler2D frag_oceanDisplacementMap;
+layout(set = 8, binding = 1) uniform sampler2D frag_oceanNormalMap;
+
 layout(push_constant) uniform PushConstants {
     vec4 shallowColor;
     vec4 deepColor;
@@ -166,6 +191,10 @@ layout(push_constant) uniform PushConstants {
     float dudvTiling;
     float dudvStrength;
     float waveDirection;
+    uint oceanEnabled;
+    float oceanChoppiness;
+    float oceanPatchSize;
+    float oceanFoamThreshold;
 } pc;
 
 const int MAX_SHADOW_VIEWS = 272;
@@ -430,6 +459,14 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
 
     vec3 color = mix(waterColor, specular, fresnel) * ambientShadowFactor + directLighting;
+
+    // Ocean foam blending
+    if (pc.oceanEnabled != 0u) {
+        vec2 oceanUV = fragWorldPos.xz / pc.oceanPatchSize;
+        float foam = texture(frag_oceanDisplacementMap, oceanUV).w;
+        vec3 foamColor = vec3(0.9, 0.95, 1.0);
+        color = mix(color, foamColor, foam * 0.7);
+    }
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));

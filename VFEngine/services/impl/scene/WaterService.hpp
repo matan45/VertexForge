@@ -2,9 +2,12 @@
 
 #include "../../interfaces/terrain/IWaterService.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../data/WaterData.hpp"
 #include "../../events/terrain/WaterEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "water/WaterTypes.hpp"
+#include "water/WaterDefinitionMap.hpp"
+#include "water/WaterWorldStreamer.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -37,6 +40,9 @@ namespace services
         IPhysicsProvider* physicsProvider = nullptr;
 
         std::unordered_map<uint64_t, std::unique_ptr<water::WaterGrid>> waterGrids;
+        std::unordered_map<uint64_t, water::WaterDefinitionMap> definitionMaps;
+        std::unordered_map<uint64_t, std::unique_ptr<water::WaterWorldStreamer>> waterStreamers;
+        std::vector<water::WaterStreamingAction> waterStreamingActions;
         std::unordered_set<EntityHandle, EntityHandle::Hash> entitiesInWater;
 
         mutable water::WaterGlobalSettings cachedGlobalSettings;
@@ -44,6 +50,10 @@ namespace services
 
         bool distanceCullingEnabled = false;
         float maxWaterDistSq = 0.0f;
+
+        OceanFFTConfigData oceanConfig;
+        bool oceanFFTEnabled = false;
+        uint32_t oceanConfigVersion = 0;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
@@ -88,6 +98,11 @@ namespace services
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxWaterDistSq = distance * distance; }
 
+        // Ocean FFT
+        bool isOceanFFTEnabled() const { return oceanFFTEnabled; }
+        OceanFFTConfigData getOceanFFTConfig() const { return oceanConfig; }
+        uint32_t getOceanFFTConfigVersion() const { return oceanConfigVersion; }
+
         void setWaterTileHeight(EntityHandle waterEntity, int32_t tileX, int32_t tileZ, float height);
         void setWaterGlobalSettings(EntityHandle waterEntity, const WaterGlobalSettingsData& settings);
 
@@ -103,6 +118,10 @@ namespace services
     private:
         void registerWaterCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerWaterQueryHandlers(::events::EventDispatcher& dispatcher);
+        void registerOceanFFTHandlers(::events::EventDispatcher& dispatcher);
+        void registerStreamingHandlers(::events::EventDispatcher& dispatcher);
+
+        void populateDefinitionMap(uint64_t entityId, const water::WaterGrid& grid);
 
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);
         void createTileEntity(EntityHandle parentHandle, water::WaterTile* tile, float tileSize);

@@ -36,5 +36,9 @@ namespace core
 
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;
+
+        bool isOceanFFTEnabled() const override;
+        services::OceanFFTConfigData getOceanFFTConfig() const override;
+        uint32_t getOceanFFTConfigVersion() const override;
     };
 }

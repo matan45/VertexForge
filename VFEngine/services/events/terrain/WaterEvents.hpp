@@ -5,6 +5,7 @@
 #include "../../data/WaterData.hpp"
 #include <glm/glm.hpp>
 #include <optional>
+#include <utility>
 
 namespace events::water
 {
@@ -123,7 +124,84 @@ namespace events::water
         std::string_view getName() const override { return "LoadWater"; }
     };
 
+    // === Water Streaming Commands ===
+
+    struct SetWaterStreamingEnabledCommand : ICommand<> {
+        services::EntityHandle waterEntity;
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetWaterStreamingEnabled"; }
+    };
+
+    struct SetWaterStreamingConfigCommand : ICommand<> {
+        services::EntityHandle waterEntity;
+        float loadRadius = 200.0f;
+        float unloadRadius = 250.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+
+        std::string_view getName() const override { return "SetWaterStreamingConfig"; }
+    };
+
+    // === Water Streaming Queries ===
+
+    struct WaterStreamingConfigData
+    {
+        float loadRadius = 200.0f;
+        float unloadRadius = 250.0f;
+        int maxLoadsPerFrame = 4;
+        int maxUnloadsPerFrame = 4;
+    };
+
+    struct GetWaterStreamingConfigQuery : IQuery<WaterStreamingConfigData> {
+        services::EntityHandle waterEntity;
+
+        std::string_view getName() const override { return "GetWaterStreamingConfig"; }
+    };
+
+    struct IsWaterStreamingEnabledQuery : IQuery<bool> {
+        services::EntityHandle waterEntity;
+
+        std::string_view getName() const override { return "IsWaterStreamingEnabled"; }
+    };
+
+    struct GetWaterStreamingStatsQuery : IQuery<std::pair<uint32_t, uint32_t>> {
+        services::EntityHandle waterEntity;
+
+        std::string_view getName() const override { return "GetWaterStreamingStats"; }
+    };
+
+    // === Ocean FFT Commands ===
+
+    struct SetOceanFFTEnabledCommand : ICommand<void> {
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetOceanFFTEnabled"; }
+    };
+
+    struct SetOceanFFTConfigCommand : ICommand<void> {
+        services::OceanFFTConfigData config;
+
+        std::string_view getName() const override { return "SetOceanFFTConfig"; }
+    };
+
+    // === Ocean FFT Queries ===
+
+    struct GetOceanFFTConfigQuery : IQuery<services::OceanFFTConfigData> {
+        std::string_view getName() const override { return "GetOceanFFTConfig"; }
+    };
+
+    struct IsOceanFFTEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsOceanFFTEnabled"; }
+    };
+
     // === Notifications ===
+
+    struct OceanFFTConfigChangedNotification : INotification {
+        services::OceanFFTConfigData config;
+
+        std::string_view getName() const override { return "OceanFFTConfigChanged"; }
+    };
 
     struct WaterCreatedNotification : INotification {
         services::EntityHandle waterEntity;

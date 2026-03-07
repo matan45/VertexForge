@@ -14,7 +14,7 @@ namespace water
 
     static constexpr std::array<char, 4> WATER_MAGIC = {'V', 'F', 'W', 'T'};
     static constexpr uint32_t WATER_FORMAT_VERSION_MAJOR = 1;
-    static constexpr uint32_t WATER_FORMAT_VERSION_MINOR = 0;
+    static constexpr uint32_t WATER_FORMAT_VERSION_MINOR = 1;
     static constexpr uint32_t WATER_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_WATER_TILES = 10000;
 
@@ -35,6 +35,7 @@ namespace water
         bool physicsEnabled = true;
 
         WaterGlobalSettings globalSettings;
+        OceanFFTSettings oceanSettings;
     };
 
     struct WaterTileData
@@ -60,6 +61,7 @@ namespace water
             std::string_view path,
             const WaterGrid& grid,
             const WaterGlobalSettings& globalSettings,
+            const OceanFFTSettings& oceanSettings,
             int32_t gridMinX, int32_t gridMinZ,
             int32_t gridMaxX, int32_t gridMaxZ,
             bool physicsEnabled);
