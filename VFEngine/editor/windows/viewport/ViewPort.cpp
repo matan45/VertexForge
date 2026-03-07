@@ -177,6 +177,10 @@ namespace windows
         meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
         dispatcher.execute(meshCameraCmd);
 
+        events::render::CameraPositionUpdatedNotification camPosNotif;
+        camPosNotif.position = camera.position;
+        dispatcher.publish(camPosNotif);
+
         events::audio::SetListenerPositionCommand listenerCmd;
         listenerCmd.position = camera.position;
         listenerCmd.forward = camera.forward;

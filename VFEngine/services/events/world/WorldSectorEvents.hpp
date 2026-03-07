@@ -58,6 +58,11 @@ namespace events::world
         std::string_view getName() const override { return "UnloadSector"; }
     };
 
+    struct ClearWorldCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "ClearWorld"; }
+    };
+
     struct UpdateWorldStreamingCommand : ICommand<>
     {
         glm::vec3 cameraPos{0.0f};
@@ -81,6 +86,13 @@ namespace events::world
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "GetSectorState"; }
+    };
+
+    struct DoesSectorExistQuery : IQuery<bool>
+    {
+        ::world::SectorCoord coord;
+
+        std::string_view getName() const override { return "DoesSectorExist"; }
     };
 
     struct IsWorldModeQuery : IQuery<bool>

@@ -165,6 +165,11 @@ namespace handlers {
                     meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
                     events::EventDispatcher::instance().execute(meshCameraCmd);
 
+                    // Broadcast camera position for world sector streaming
+                    events::render::CameraPositionUpdatedNotification camPosNotif;
+                    camPosNotif.position = cameraPos;
+                    events::EventDispatcher::instance().publish(camPosNotif);
+
                     // Push camera to IBL skybox renderer
                     events::render::UpdateIBLCameraCommand iblCameraCmd;
                     iblCameraCmd.viewMatrix = camComp.viewMatrix;

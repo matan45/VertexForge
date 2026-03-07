@@ -39,6 +39,8 @@ namespace services
         bool saveWorld(const std::string& filePath);
         bool loadWorld(const std::string& filePath);
 
+        void clearWorld();
+
         bool saveSector(const world::SectorCoord& coord, const std::string& filePath);
         bool loadSector(const world::SectorCoord& coord);
         bool unloadSector(const world::SectorCoord& coord);
@@ -60,6 +62,17 @@ namespace services
         std::vector<world::SectorStreamingAction> streamingActions;
 
         ::events::SubscriptionToken transformChangedToken;
+        ::events::SubscriptionToken editorModeChangedToken;
+        ::events::SubscriptionToken cameraPositionToken;
+
+        ::events::SubscriptionToken sceneLoadedToken;
+        ::events::SubscriptionToken sceneClearedToken;
+
+        glm::vec3 cachedCameraPos{0.0f};
+
+        // Saved state for play/stop transitions
+        world::WorldDefinition savedWorldDefinition;
+        std::string savedWorldPath;
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);

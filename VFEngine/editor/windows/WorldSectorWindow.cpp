@@ -68,6 +68,12 @@ namespace windows
                         dispatcher.execute(cmd);
                     }
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear World"))
+                {
+                    events::world::ClearWorldCommand cmd;
+                    dispatcher.execute(cmd);
+                }
             }
             else
             {
@@ -108,67 +114,80 @@ namespace windows
 
     void WorldSectorWindow::drawSectorGrid()
     {
-        ImGui::TextDisabled("Color: Green=Loaded, Gray=Unloaded, Yellow=Loading, Red=Unloading");
+        ImGui::TextDisabled("Color: Green=Loaded, Gray=Unloaded, Yellow=Loading");
+        ImGui::TextDisabled("Only sectors with saved data are shown as clickable.");
         ImGui::Spacing();
 
-        // Simple grid visualization using buttons
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Find bounds of sectors
-        int minX = 0, maxX = 0, minZ = 0, maxZ = 0;
-        bool first = true;
-
-        // We iterate a reasonable range. For now, show -8 to +8 range
         int range = 8;
         for (int z = range; z >= -range; --z)
         {
             for (int x = -range; x <= range; ++x)
             {
                 world::SectorCoord coord(x, z);
-                events::world::GetSectorStateQuery query;
-                query.coord = coord;
-                auto state = dispatcher.query(query);
 
-                ImVec4 color;
-                switch (state)
-                {
-                case world::SectorState::Loaded:
-                    color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-                    break;
-                case world::SectorState::Loading:
-                    color = ImVec4(0.9f, 0.9f, 0.2f, 1.0f);
-                    break;
-                case world::SectorState::Unloading:
-                    color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-                    break;
-                default:
-                    color = ImVec4(0.3f, 0.3f, 0.3f, 0.5f);
-                    break;
-                }
+                events::world::DoesSectorExistQuery existQuery;
+                existQuery.coord = coord;
+                bool exists = dispatcher.query(existQuery);
 
                 ImGui::PushID(x * 1000 + z);
-                ImGui::PushStyleColor(ImGuiCol_Button, color);
 
-                char label[32];
-                snprintf(label, sizeof(label), "%d,%d", x, z);
-                if (ImGui::Button(label, ImVec2(40, 20)))
+                if (!exists)
                 {
-                    // Manual load/unload toggle
-                    if (state == world::SectorState::Loaded)
+                    // Empty slot — dim, non-interactive
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 0.3f));
+                    ImGui::Button("##empty", ImVec2(40, 20));
+                    ImGui::PopStyleColor(3);
+                }
+                else
+                {
+                    events::world::GetSectorStateQuery stateQuery;
+                    stateQuery.coord = coord;
+                    auto state = dispatcher.query(stateQuery);
+
+                    ImVec4 color;
+                    switch (state)
                     {
-                        events::world::UnloadSectorCommand cmd;
-                        cmd.coord = coord;
-                        dispatcher.execute(cmd);
+                    case world::SectorState::Loaded:
+                        color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                        break;
+                    case world::SectorState::Loading:
+                        color = ImVec4(0.9f, 0.9f, 0.2f, 1.0f);
+                        break;
+                    case world::SectorState::Unloading:
+                        color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+                        break;
+                    default:
+                        color = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
+                        break;
                     }
-                    else if (state == world::SectorState::Unloaded)
+
+                    ImGui::PushStyleColor(ImGuiCol_Button, color);
+
+                    char label[32];
+                    snprintf(label, sizeof(label), "%d,%d", x, z);
+                    if (ImGui::Button(label, ImVec2(40, 20)))
                     {
-                        events::world::LoadSectorCommand cmd;
-                        cmd.coord = coord;
-                        dispatcher.execute(cmd);
+                        if (state == world::SectorState::Loaded)
+                        {
+                            events::world::UnloadSectorCommand cmd;
+                            cmd.coord = coord;
+                            dispatcher.execute(cmd);
+                        }
+                        else if (state == world::SectorState::Unloaded)
+                        {
+                            events::world::LoadSectorCommand cmd;
+                            cmd.coord = coord;
+                            dispatcher.execute(cmd);
+                        }
                     }
+
+                    ImGui::PopStyleColor();
                 }
 
-                ImGui::PopStyleColor();
                 ImGui::PopID();
 
                 if (x < range)

@@ -9,6 +9,10 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "../../events/editor/EditorModeEvents.hpp"
+#include "../../events/render/RenderEvents.hpp"
+#include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "print/Log.hpp"
@@ -50,31 +54,86 @@ namespace services
 
         entityLoader.setOnEntityPostLoad([](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
         {
-            resource::AssetLifecycleManager::instance().acquire(meshPath, resource::AssetType::Mesh);
-
-            // Find the entity by UUID and publish mesh notification
+            // Find the entity by UUID and acquire all its assets
             auto& registry = scene::EntityRegistry::getRegistry();
             auto uuidView = registry.view<components::UUIDComponent>();
             for (auto entity : uuidView)
             {
                 if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
                 {
-                    ::events::scene::MeshDataChangedNotification meshNotif;
-                    meshNotif.entity = internal::toHandle(entity);
-                    meshNotif.meshPath = meshPath;
-                    meshNotif.animatorPath = animatorPath;
-                    ::events::EventDispatcher::instance().publish(meshNotif);
+                    scene::Entity sceneEntity(entity);
+                    auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+                    // Mesh + animator
+                    if (sceneEntity.hasComponent<components::MeshComponent>())
+                    {
+                        const auto& mesh = sceneEntity.getComponent<components::MeshComponent>();
+                        if (!mesh.meshPath.empty()) lifecycle.acquire(mesh.meshPath, resource::AssetType::Mesh);
+                        if (!mesh.animatorPath.empty()) lifecycle.acquire(mesh.animatorPath, resource::AssetType::Animator);
+                    }
+
+                    // Materials
+                    if (sceneEntity.hasComponent<components::MaterialComponent>())
+                    {
+                        const auto& mat = sceneEntity.getComponent<components::MaterialComponent>();
+                        if (!mat.defaultMaterial.empty()) lifecycle.acquire(mat.defaultMaterial, resource::AssetType::Material);
+                        for (const auto& [name, path] : mat.subMeshMaterials)
+                        {
+                            if (!path.empty()) lifecycle.acquire(path, resource::AssetType::Material);
+                        }
+                    }
+
+                    // Audio 2D
+                    if (sceneEntity.hasComponent<components::AudioSource2DComponent>())
+                    {
+                        const auto& audio = sceneEntity.getComponent<components::AudioSource2DComponent>();
+                        if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
+                    }
+
+                    // Audio 3D
+                    if (sceneEntity.hasComponent<components::AudioSource3DComponent>())
+                    {
+                        const auto& audio = sceneEntity.getComponent<components::AudioSource3DComponent>();
+                        if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, resource::AssetType::Audio);
+                    }
+
+                    // VFX
+                    if (sceneEntity.hasComponent<components::VFXComponent>())
+                    {
+                        const auto& vfx = sceneEntity.getComponent<components::VFXComponent>();
+                        if (!vfx.vfxPath.empty()) lifecycle.acquire(vfx.vfxPath, resource::AssetType::VFX);
+                    }
+
+                    // Animator (standalone)
+                    if (sceneEntity.hasComponent<components::AnimatorComponent>())
+                    {
+                        const auto& anim = sceneEntity.getComponent<components::AnimatorComponent>();
+                        if (!anim.animatorPath.empty()) lifecycle.acquire(anim.animatorPath, resource::AssetType::Animator);
+                    }
+
+                    // Publish mesh notification so rendering picks it up
+                    if (!meshPath.empty())
+                    {
+                        ::events::scene::MeshDataChangedNotification meshNotif;
+                        meshNotif.entity = internal::toHandle(entity);
+                        meshNotif.meshPath = meshPath;
+                        meshNotif.animatorPath = animatorPath;
+                        ::events::EventDispatcher::instance().publish(meshNotif);
+                    }
+
                     break;
                 }
             }
         });
 
-        entityLoader.setOnEntityPreUnload([](uint64_t, const std::string& meshPath)
+        // Publish EntityDeletedNotification before entity is destroyed so
+        // AssetLifecycleServiceImpl releases all asset types (mesh, material, audio, VFX, animator).
+        // SceneGraphSystem::removeEntity() doesn't publish this — only HierarchyService does.
+        entityLoader.setOnEntityPreDestroy([](uint64_t entityHandleId)
         {
-            if (!meshPath.empty())
-            {
-                resource::AssetLifecycleManager::instance().release(meshPath);
-            }
+            ::events::scene::EntityDeletedNotification notif;
+            notif.entity = services::EntityHandle{ entityHandleId };
+            ::events::EventDispatcher::instance().publish(notif);
         });
     }
 
@@ -118,6 +177,12 @@ namespace services
                 return unloadSector(cmd.coord);
             });
 
+        dispatcher.registerCommandHandler<::events::world::ClearWorldCommand>(
+            [this](const ::events::world::ClearWorldCommand&)
+            {
+                clearWorld();
+            });
+
         dispatcher.registerCommandHandler<::events::world::UpdateWorldStreamingCommand>(
             [this](const ::events::world::UpdateWorldStreamingCommand&)
             {
@@ -140,6 +205,13 @@ namespace services
                 return sector->state;
             });
 
+        dispatcher.registerQueryHandler<::events::world::DoesSectorExistQuery>(
+            [this](const ::events::world::DoesSectorExistQuery& q)
+            {
+                const auto* sector = sectorManager.getSector(q.coord);
+                return sector != nullptr && !sector->filePath.empty();
+            });
+
         dispatcher.registerQueryHandler<::events::world::IsWorldModeQuery>(
             [this](const ::events::world::IsWorldModeQuery&)
             {
@@ -150,6 +222,63 @@ namespace services
             [this](const ::events::world::GetWorldStreamingStatsQuery&)
             {
                 return streamer.getConfig();
+            });
+
+        // Handle play/stop transitions — snapshot restore creates new entity handles
+        editorModeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
+            [this](const ::events::editor::EditorModeChangedNotification& notif)
+            {
+                if (!worldMode) return;
+
+                if (notif.currentMode == services::EditorMode::Play)
+                {
+                    // Entering play mode — save world state, clear sector tracking
+                    savedWorldDefinition = worldDefinition;
+                    savedWorldPath = currentWorldPath;
+                    entityLoader.clear();
+                    sectorManager.clear();
+                }
+                else if (notif.currentMode == services::EditorMode::Edit)
+                {
+                    // Returning to edit mode — snapshot was restored, re-assign entities to sectors
+                    entityLoader.clear();
+                    sectorManager.clear();
+                    sectorManager.setConfig(savedWorldDefinition.sectorConfig);
+                    worldDefinition = savedWorldDefinition;
+                    currentWorldPath = savedWorldPath;
+
+                    // Re-register known sectors
+                    for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
+                    {
+                        auto& sector = sectorManager.getOrCreateSector(coord);
+                        sector.filePath = sectorPath;
+                        sector.state = world::SectorState::Unloaded;
+                    }
+
+                    // Re-assign live entities to their sectors
+                    auto& root = sceneGraph->GetRoot();
+                    for (auto& child : root.getChildren())
+                    {
+                        if (isManagedBySeparateSystem(child))
+                            continue;
+
+                        if (child.hasComponent<components::TransformComponent>())
+                        {
+                            const auto& transform = child.getComponent<components::TransformComponent>();
+                            uint64_t uuid = child.getUUID().getValue();
+                            sectorManager.assignEntityToSector(uuid, transform.position);
+                        }
+                    }
+
+                    // Mark sectors that have entities as Loaded
+                    sectorManager.forEachSector([](world::WorldSector& sector)
+                    {
+                        if (!sector.entityUUIDs.empty())
+                        {
+                            sector.state = world::SectorState::Loaded;
+                        }
+                    });
+                }
             });
 
         // Subscribe to transform changes for cross-sector entity migration
@@ -171,6 +300,43 @@ namespace services
                     onTransformChanged(uuid, notif.newTransform.position);
                 }
             });
+
+        // Cache camera position from viewport (editor camera isn't in ECS)
+        cameraPositionToken = dispatcher.subscribe<::events::render::CameraPositionUpdatedNotification>(
+            [this](const ::events::render::CameraPositionUpdatedNotification& notif)
+            {
+                cachedCameraPos = notif.position;
+            });
+
+        // Auto-load world when a scene with WorldSectorComponent is loaded
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                auto& root = sceneGraph->GetRoot();
+                if (root.hasComponent<components::WorldSectorComponent>())
+                {
+                    const auto& wsComp = root.getComponent<components::WorldSectorComponent>();
+                    if (!wsComp.worldFilePath.empty())
+                    {
+                        loadWorld(wsComp.worldFilePath);
+                    }
+                }
+            });
+
+        // Clear world state when scene is cleared (new scene)
+        sceneClearedToken = dispatcher.subscribe<::events::scene::SceneClearedNotification>(
+            [this](const ::events::scene::SceneClearedNotification&)
+            {
+                if (worldMode)
+                {
+                    entityLoader.clear();
+                    sectorManager.clear();
+                    worldDefinition = {};
+                    streamer.setEnabled(false);
+                    worldMode = false;
+                    currentWorldPath.clear();
+                }
+            });
     }
 
     void WorldSectorServiceImpl::update()
@@ -178,42 +344,8 @@ namespace services
         if (!worldMode)
             return;
 
-        // Read camera position from the ECS registry
-        glm::vec3 cameraPos(0.0f);
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Try WorldTransformComponent first (valid after scene graph update in runtime)
-        auto worldCamView = registry.view<components::CameraComponent, components::WorldTransformComponent>();
-        bool foundCamera = false;
-        for (auto entity : worldCamView)
-        {
-            auto& camComp = worldCamView.get<components::CameraComponent>(entity);
-            if (camComp.isPrimary)
-            {
-                auto& wt = worldCamView.get<components::WorldTransformComponent>(entity);
-                cameraPos = glm::vec3(wt.worldMatrix[3]);
-                foundCamera = true;
-                break;
-            }
-        }
-
-        // Fall back to local TransformComponent (editor edit mode)
-        if (!foundCamera)
-        {
-            auto localCamView = registry.view<components::CameraComponent, components::TransformComponent>();
-            for (auto entity : localCamView)
-            {
-                auto& camComp = localCamView.get<components::CameraComponent>(entity);
-                if (camComp.isPrimary)
-                {
-                    cameraPos = localCamView.get<components::TransformComponent>(entity).position;
-                    break;
-                }
-            }
-        }
-
-        // Run distance-based streaming decisions
-        streamer.update(cameraPos, sectorManager, streamingActions);
+        // Use cached camera position (updated by CameraPositionUpdatedNotification from viewport)
+        streamer.update(cachedCameraPos, sectorManager, streamingActions);
 
         for (const auto& action : streamingActions)
         {
@@ -249,8 +381,11 @@ namespace services
         worldMode = true;
         currentWorldPath = filePath;
 
-        // Assign existing entities to sectors (skip terrain/water/IBL/camera — they have their own systems)
+        // Tag root entity so the world auto-loads with the scene
         auto& root = sceneGraph->GetRoot();
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = filePath;
+
+        // Assign existing entities to sectors (skip terrain/water/IBL/camera — they have their own systems)
         for (auto& child : root.getChildren())
         {
             if (isManagedBySeparateSystem(child))
@@ -263,6 +398,12 @@ namespace services
                 sectorManager.assignEntityToSector(uuid, transform.position);
             }
         }
+
+        // Mark all sectors as Loaded since entities are already live in the scene
+        sectorManager.forEachSector([](world::WorldSector& sector)
+        {
+            sector.state = world::SectorState::Loaded;
+        });
 
         return saveWorld(filePath);
     }
@@ -437,6 +578,30 @@ namespace services
         ::events::world::SectorUnloadedNotification notif;
         notif.coord = coord;
         ::events::EventDispatcher::instance().publish(notif);
+    }
+
+    void WorldSectorServiceImpl::clearWorld()
+    {
+        if (!worldMode)
+            return;
+
+        // Clear pending load/unload queues
+        entityLoader.clear();
+
+        // Clear sector manager (entities remain in scene, just no longer tracked by sectors)
+        sectorManager.clear();
+
+        // Remove WorldSectorComponent from root so scene won't auto-load world next time
+        auto& root = sceneGraph->GetRoot();
+        if (root.hasComponent<components::WorldSectorComponent>())
+        {
+            root.removeComponent<components::WorldSectorComponent>();
+        }
+
+        worldDefinition = {};
+        streamer.setEnabled(false);
+        worldMode = false;
+        currentWorldPath.clear();
     }
 
     void WorldSectorServiceImpl::onTransformChanged(uint64_t uuid, const glm::vec3& newPosition)

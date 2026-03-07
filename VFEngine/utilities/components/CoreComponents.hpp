@@ -54,6 +54,11 @@ namespace components
         std::string fileName;
     };
 
+    struct WorldSectorComponent
+    {
+        std::string worldFilePath;
+    };
+
     struct TransformComponent
     {
         glm::vec3 position{0.0f};

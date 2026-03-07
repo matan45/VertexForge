@@ -19,6 +19,13 @@ namespace serialization
             componentsJson["ibl"] = serializeIBL(entity.getComponent<components::IBLComponent>());
         }
 
+        if (entity.hasComponent<components::WorldSectorComponent>())
+        {
+            json wsJson;
+            wsJson["worldFilePath"] = entity.getComponent<components::WorldSectorComponent>().worldFilePath;
+            componentsJson["worldSector"] = wsJson;
+        }
+
         if (entity.hasComponent<components::MeshComponent>())
         {
             componentsJson["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
@@ -267,6 +274,16 @@ namespace serialization
             if (!iblFileName.empty())
             {
                 entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
+            }
+        }
+
+        if (componentsJson.contains("worldSector"))
+        {
+            const auto& wsJson = componentsJson["worldSector"];
+            if (wsJson.contains("worldFilePath") && wsJson["worldFilePath"].is_string())
+            {
+                entity.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+                    wsJson["worldFilePath"].get<std::string>();
             }
         }
 

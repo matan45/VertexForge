@@ -58,11 +58,10 @@ namespace world
                 {
                     scene::Entity sceneEntity(entity);
 
-                    // Notify service layer to release assets before destruction
-                    if (onEntityPreUnload && sceneEntity.hasComponent<components::MeshComponent>())
+                    // Notify service layer before destroying (for EntityDeletedNotification)
+                    if (onEntityPreDestroy)
                     {
-                        const auto& meshComp = sceneEntity.getComponent<components::MeshComponent>();
-                        onEntityPreUnload(pending.uuid, meshComp.meshPath);
+                        onEntityPreDestroy(static_cast<uint64_t>(static_cast<uint32_t>(entity)));
                     }
 
                     sceneGraph.removeEntity(sceneEntity);
@@ -94,6 +93,28 @@ namespace world
             try
             {
                 nlohmann::json entityJson = nlohmann::json::parse(pending.rawJson);
+
+                // Skip if an entity with this UUID already exists (prevents duplicates)
+                if (entityJson.contains("uuid") && entityJson["uuid"].is_number_unsigned())
+                {
+                    uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
+                    auto& reg = scene::EntityRegistry::getRegistry();
+                    auto uuidView = reg.view<components::UUIDComponent>();
+                    bool alreadyExists = false;
+                    for (auto ent : uuidView)
+                    {
+                        if (uuidView.get<components::UUIDComponent>(ent).id.getValue() == uuidValue)
+                        {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
+                    if (alreadyExists)
+                    {
+                        ++processed;
+                        continue;
+                    }
+                }
 
                 scene::Entity newEntity(pending.entityName);
 
