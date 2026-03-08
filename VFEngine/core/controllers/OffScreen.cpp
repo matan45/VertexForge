@@ -500,4 +500,18 @@ namespace controllers {
 			offScreenController->clearAdditionalWaterFrustums();
 		}
 	}
+
+	OffScreen::ImposterBakeResult OffScreen::bakeImposter(const std::string& meshPath, const std::string& outputPath)
+	{
+		if (!offScreenController)
+		{
+			return {false, "", "No OffScreenController available"};
+		}
+		auto controllerResult = offScreenController->bakeImposter(meshPath, outputPath);
+		ImposterBakeResult result;
+		result.success = controllerResult.success;
+		result.outputPath = controllerResult.outputPath;
+		result.errorMessage = controllerResult.errorMessage;
+		return result;
+	}
 }

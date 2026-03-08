@@ -1,5 +1,5 @@
 #include "BillboardRenderAdapter.hpp"
-#include "../../../graphics/controllers/OffScreenController.hpp"
+#include "../../controllers/OffScreen.hpp"
 #include "print/Log.hpp"
 
 namespace core::adapters

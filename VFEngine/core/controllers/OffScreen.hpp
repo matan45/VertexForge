@@ -174,5 +174,13 @@ namespace controllers
 
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
+
+        struct ImposterBakeResult
+        {
+            bool success = false;
+            std::string outputPath;
+            std::string errorMessage;
+        };
+        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath);
     };
 }

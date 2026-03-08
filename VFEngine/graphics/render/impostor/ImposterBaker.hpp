@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../../../import/types/ImposterAtlasGenerator.hpp"
-#include "../../../import/types/ImposterSerializer.hpp"
 #include <string>
 #include <vector>
 #include <functional>
@@ -24,11 +22,20 @@ namespace render::impostor
 {
     using BakeProgressCallback = std::function<void(float progress)>;
 
+    struct BakeAtlasConfig
+    {
+        uint32_t horizontalAngles = 8;
+        uint32_t verticalAngles = 3;
+        uint32_t viewResolution = 256;
+        float meshScale = 1.0f;
+        bool generateNormalMap = true;
+    };
+
     struct ImposterBakeRequest
     {
         std::string meshPath;
         std::string outputPath;          // .vfImposter output
-        importTypes::ImposterAtlasConfig config;
+        BakeAtlasConfig config;
         BakeProgressCallback progressCallback;
     };
 
@@ -53,7 +60,6 @@ namespace render::impostor
 
         void init(core::Device& device, core::SwapChain& swapChain);
 
-        // Set the render pass handler for GPU rendering (must be set before bake())
         void setRenderPassHandler(render::RenderPassHandler* handler) { renderPassHandler = handler; }
 
         ImposterBakeResult bake(const ImposterBakeRequest& request);
@@ -63,11 +69,30 @@ namespace render::impostor
         core::SwapChain* swapChainPtr = nullptr;
         render::RenderPassHandler* renderPassHandler = nullptr;
 
-        // Read back pixels from a rendered color image into CPU buffer (srcImage is VkImage cast to void*)
+        // Internal view info for atlas layout
+        struct ViewInfo
+        {
+            float horizontalAngle;
+            float verticalAngle;
+            glm::vec4 uvRect; // x,y = offset, z,w = size in atlas UV space
+        };
+
+        struct AtlasLayout
+        {
+            uint32_t atlasWidth = 0;
+            uint32_t atlasHeight = 0;
+            std::vector<ViewInfo> views;
+        };
+
+        static AtlasLayout generateAtlasLayout(const BakeAtlasConfig& config);
+        bool saveAtlas(const std::string& filePath, const AtlasLayout& layout,
+                       const BakeAtlasConfig& config,
+                       const std::vector<uint8_t>& colorData,
+                       const std::vector<uint8_t>& normalData);
+
         bool readbackImage(void* srcImage, uint32_t width, uint32_t height,
                            std::vector<uint8_t>& outPixels);
 
-        // Compute view matrix for a given orbital camera angle
         static glm::mat4 computeOrbitalView(float horizontalAngle, float verticalAngle,
                                               float distance, const glm::vec3& target);
     };

@@ -4,7 +4,7 @@
 
 namespace controllers
 {
-    class OffScreenController;
+    class OffScreen;
 }
 
 namespace core::adapters
@@ -15,7 +15,7 @@ namespace core::adapters
         BillboardRenderAdapter() = default;
         ~BillboardRenderAdapter() override = default;
 
-        void setOffScreenController(controllers::OffScreenController* controller)
+        void setOffScreenController(controllers::OffScreen* controller)
         {
             offScreen = controller;
         }
@@ -31,7 +31,7 @@ namespace core::adapters
                                                     const std::string& outputPath) override;
 
     private:
-        controllers::OffScreenController* offScreen = nullptr;
+        controllers::OffScreen* offScreen = nullptr;
         bool billboardEnabled = true;
         float maxDistance = 500.0f;
     };

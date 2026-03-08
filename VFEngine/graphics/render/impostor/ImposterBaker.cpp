@@ -9,15 +9,166 @@
 #include "../RenderPassHandler.hpp"
 #include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
 #include <cmath>
 #include <cstring>
+#include <fstream>
+#include <filesystem>
+#include <array>
 
 namespace render::impostor
 {
+    // .vfImposter binary format constants
+    static constexpr std::array<char, 4> IMPOSTER_MAGIC = { 'V', 'F', 'I', 'M' };
+    static constexpr uint32_t IMPOSTER_FORMAT_VERSION = 1;
+
     void ImposterBaker::init(core::Device& device, core::SwapChain& swapChain)
     {
         devicePtr = &device;
         swapChainPtr = &swapChain;
+    }
+
+    ImposterBaker::AtlasLayout ImposterBaker::generateAtlasLayout(const BakeAtlasConfig& config)
+    {
+        AtlasLayout layout;
+
+        uint32_t totalViews = config.horizontalAngles * config.verticalAngles;
+        uint32_t cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(totalViews))));
+        uint32_t rows = static_cast<uint32_t>(std::ceil(static_cast<double>(totalViews) / cols));
+
+        layout.atlasWidth = cols * config.viewResolution;
+        layout.atlasHeight = rows * config.viewResolution;
+
+        float invAtlasW = 1.0f / static_cast<float>(layout.atlasWidth);
+        float invAtlasH = 1.0f / static_cast<float>(layout.atlasHeight);
+        float viewUvW = static_cast<float>(config.viewResolution) * invAtlasW;
+        float viewUvH = static_cast<float>(config.viewResolution) * invAtlasH;
+
+        float vertStep = (config.verticalAngles > 1)
+            ? (glm::pi<float>() / 3.0f) / static_cast<float>(config.verticalAngles - 1)
+            : 0.0f;
+        float horizStep = glm::two_pi<float>() / static_cast<float>(config.horizontalAngles);
+
+        layout.views.reserve(totalViews);
+
+        for (uint32_t v = 0; v < config.verticalAngles; ++v)
+        {
+            float vertAngle = static_cast<float>(v) * vertStep;
+
+            for (uint32_t h = 0; h < config.horizontalAngles; ++h)
+            {
+                float horizAngle = static_cast<float>(h) * horizStep;
+
+                uint32_t viewIndex = v * config.horizontalAngles + h;
+                uint32_t col = viewIndex % cols;
+                uint32_t row = viewIndex / cols;
+
+                float uvX = static_cast<float>(col * config.viewResolution) * invAtlasW;
+                float uvY = static_cast<float>(row * config.viewResolution) * invAtlasH;
+
+                ViewInfo view;
+                view.horizontalAngle = horizAngle;
+                view.verticalAngle = vertAngle;
+                view.uvRect = glm::vec4(uvX, uvY, viewUvW, viewUvH);
+
+                layout.views.push_back(view);
+            }
+        }
+
+        return layout;
+    }
+
+    bool ImposterBaker::saveAtlas(const std::string& filePath, const AtlasLayout& layout,
+                                   const BakeAtlasConfig& config,
+                                   const std::vector<uint8_t>& colorData,
+                                   const std::vector<uint8_t>& normalData)
+    {
+        if (layout.atlasWidth == 0 || layout.atlasHeight == 0 || layout.views.empty())
+        {
+            vfLogError("ImposterBaker: Cannot save empty atlas data");
+            return false;
+        }
+
+        namespace fs = std::filesystem;
+        fs::path path(filePath);
+        if (path.has_parent_path())
+        {
+            std::error_code ec;
+            fs::create_directories(path.parent_path(), ec);
+            if (ec)
+            {
+                vfLogError("ImposterBaker: Failed to create directory {}: {}",
+                           path.parent_path().string(), ec.message());
+                return false;
+            }
+        }
+
+        std::ofstream file(filePath, std::ios::binary);
+        if (!file.is_open())
+        {
+            vfLogError("ImposterBaker: Failed to open file for writing: {}", filePath);
+            return false;
+        }
+
+        // Header
+        file.write(IMPOSTER_MAGIC.data(), 4);
+        uint32_t version = IMPOSTER_FORMAT_VERSION;
+        file.write(reinterpret_cast<const char*>(&version), sizeof(uint32_t));
+        file.write(reinterpret_cast<const char*>(&layout.atlasWidth), sizeof(uint32_t));
+        file.write(reinterpret_cast<const char*>(&layout.atlasHeight), sizeof(uint32_t));
+
+        uint32_t viewCount = static_cast<uint32_t>(layout.views.size());
+        file.write(reinterpret_cast<const char*>(&viewCount), sizeof(uint32_t));
+
+        uint8_t hasNormalMap = config.generateNormalMap ? 1 : 0;
+        file.write(reinterpret_cast<const char*>(&hasNormalMap), sizeof(uint8_t));
+
+        file.write(reinterpret_cast<const char*>(&config.horizontalAngles), sizeof(uint32_t));
+        file.write(reinterpret_cast<const char*>(&config.verticalAngles), sizeof(uint32_t));
+        file.write(reinterpret_cast<const char*>(&config.viewResolution), sizeof(uint32_t));
+
+        // View infos
+        for (const auto& view : layout.views)
+        {
+            file.write(reinterpret_cast<const char*>(&view.horizontalAngle), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&view.verticalAngle), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&view.uvRect.x), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&view.uvRect.y), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&view.uvRect.z), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&view.uvRect.w), sizeof(float));
+        }
+
+        // Color data
+        size_t pixelDataSize = static_cast<size_t>(layout.atlasWidth) * layout.atlasHeight * 4;
+        if (colorData.size() != pixelDataSize)
+        {
+            vfLogError("ImposterBaker: Color data size mismatch. Expected {}, got {}",
+                       pixelDataSize, colorData.size());
+            return false;
+        }
+        file.write(reinterpret_cast<const char*>(colorData.data()),
+                   static_cast<std::streamsize>(pixelDataSize));
+
+        // Normal data
+        if (hasNormalMap)
+        {
+            if (normalData.size() != pixelDataSize)
+            {
+                vfLogError("ImposterBaker: Normal data size mismatch. Expected {}, got {}",
+                           pixelDataSize, normalData.size());
+                return false;
+            }
+            file.write(reinterpret_cast<const char*>(normalData.data()),
+                       static_cast<std::streamsize>(pixelDataSize));
+        }
+
+        if (!file.good())
+        {
+            vfLogError("ImposterBaker: Write error saving atlas to {}", filePath);
+            return false;
+        }
+
+        return true;
     }
 
     glm::mat4 ImposterBaker::computeOrbitalView(float horizontalAngle, float verticalAngle,
@@ -59,16 +210,14 @@ namespace render::impostor
         bufferReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(bufferReq, stagingBuffer, stagingMemory);
 
-        // Record commands: transition image → copy to buffer → transition back
+        // Record commands: transition image -> copy to buffer -> transition back
         auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, cmdPool);
 
-        // Transition from shader-read to transfer-src
         core::ImageUtilities::transitionImageLayout(cmd.get(), srcImage,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        // Copy image to staging buffer
         vk::BufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -82,7 +231,6 @@ namespace render::impostor
 
         cmd->copyImageToBuffer(srcImage, vk::ImageLayout::eTransferSrcOptimal, stagingBuffer, 1, &region);
 
-        // Transition back to shader-read
         core::ImageUtilities::transitionImageLayout(cmd.get(), srcImage,
             vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -95,7 +243,6 @@ namespace render::impostor
         std::memcpy(outPixels.data(), mapped, imageSize);
         vkDevice.unmapMemory(stagingMemory);
 
-        // Cleanup staging
         core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingMemory);
 
         return true;
@@ -126,17 +273,17 @@ namespace render::impostor
         if (request.progressCallback) request.progressCallback(0.0f);
 
         // Generate atlas layout
-        auto atlasData = importTypes::ImposterAtlasGenerator::generateAtlasLayout(request.config);
+        auto layout = generateAtlasLayout(request.config);
 
-        if (atlasData.views.empty())
+        if (layout.views.empty())
         {
             result.errorMessage = "Failed to generate atlas layout";
             return result;
         }
 
-        result.atlasWidth = atlasData.atlasWidth;
-        result.atlasHeight = atlasData.atlasHeight;
-        result.viewCount = static_cast<uint32_t>(atlasData.views.size());
+        result.atlasWidth = layout.atlasWidth;
+        result.atlasHeight = layout.atlasHeight;
+        result.viewCount = static_cast<uint32_t>(layout.views.size());
 
         uint32_t viewRes = request.config.viewResolution;
 
@@ -145,22 +292,23 @@ namespace render::impostor
         // Create a dedicated viewport for baking at view resolution
         RenderTextureViewPort bakeViewport(*devicePtr, *swapChainPtr);
         bakeViewport.init(viewRes, viewRes);
-        bakeViewport.setClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f)); // Transparent background
+        bakeViewport.setClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
 
         if (request.progressCallback) request.progressCallback(0.1f);
 
-        // Ensure atlas colorData is allocated
-        size_t atlasPixelCount = static_cast<size_t>(atlasData.atlasWidth) * atlasData.atlasHeight * 4;
-        atlasData.colorData.resize(atlasPixelCount, 0);
+        // Allocate atlas pixel buffers
+        size_t atlasPixelCount = static_cast<size_t>(layout.atlasWidth) * layout.atlasHeight * 4;
+        std::vector<uint8_t> colorData(atlasPixelCount, 0);
+        std::vector<uint8_t> normalData;
         if (request.config.generateNormalMap)
         {
-            atlasData.normalData.resize(atlasPixelCount, 0);
+            normalData.resize(atlasPixelCount, 0);
         }
 
-        // Camera setup: orthographic projection fitting the mesh
+        // Camera setup
         float orthoSize = request.config.meshScale * 1.5f;
         float cameraDistance = request.config.meshScale * 5.0f;
-        glm::vec3 meshCenter(0.0f); // Assume mesh is centered at origin
+        glm::vec3 meshCenter(0.0f);
         float nearPlane = 0.01f;
         float farPlane = cameraDistance * 3.0f;
 
@@ -171,12 +319,13 @@ namespace render::impostor
         );
 
         // Render each view
-        uint32_t totalViews = static_cast<uint32_t>(atlasData.views.size());
+        uint32_t totalViews = static_cast<uint32_t>(layout.views.size());
+        uint32_t cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(totalViews))));
+
         for (uint32_t i = 0; i < totalViews; ++i)
         {
-            const auto& viewInfo = atlasData.views[i];
+            const auto& viewInfo = layout.views[i];
 
-            // Compute camera view matrix from orbital angles
             glm::mat4 view = computeOrbitalView(
                 viewInfo.horizontalAngle,
                 viewInfo.verticalAngle,
@@ -190,24 +339,20 @@ namespace render::impostor
                 cameraDistance * std::cos(viewInfo.verticalAngle) * std::cos(viewInfo.horizontalAngle)
             );
 
-            // Render the scene from this angle
             bakeViewport.render(renderPassHandler, view, projection, cameraPos, nearPlane, farPlane);
-
-            // Wait for GPU to finish
             devicePtr->getLogicalDevice().waitIdle();
 
-            // Read back the rendered pixels
             vk::Image renderedImage = bakeViewport.getLastRenderedImage();
             std::vector<uint8_t> viewPixels;
 
             if (static_cast<VkImage>(renderedImage) != VK_NULL_HANDLE &&
                 readbackImage(static_cast<VkImage>(renderedImage), viewRes, viewRes, viewPixels))
             {
-                // Copy this view's pixels into the atlas at the correct position
-                uint32_t atlasX = static_cast<uint32_t>(viewInfo.uvRect.x * atlasData.atlasWidth);
-                uint32_t atlasY = static_cast<uint32_t>(viewInfo.uvRect.y * atlasData.atlasHeight);
-                uint32_t viewW = static_cast<uint32_t>(viewInfo.uvRect.z * atlasData.atlasWidth);
-                uint32_t viewH = static_cast<uint32_t>(viewInfo.uvRect.w * atlasData.atlasHeight);
+                // Copy view pixels into atlas at correct position
+                uint32_t atlasX = static_cast<uint32_t>(viewInfo.uvRect.x * layout.atlasWidth);
+                uint32_t atlasY = static_cast<uint32_t>(viewInfo.uvRect.y * layout.atlasHeight);
+                uint32_t viewW = static_cast<uint32_t>(viewInfo.uvRect.z * layout.atlasWidth);
+                uint32_t viewH = static_cast<uint32_t>(viewInfo.uvRect.w * layout.atlasHeight);
 
                 uint32_t copyW = std::min(viewW, viewRes);
                 uint32_t copyH = std::min(viewH, viewRes);
@@ -215,12 +360,12 @@ namespace render::impostor
                 for (uint32_t row = 0; row < copyH; ++row)
                 {
                     size_t srcOffset = static_cast<size_t>(row) * viewRes * 4;
-                    size_t dstOffset = (static_cast<size_t>(atlasY + row) * atlasData.atlasWidth + atlasX) * 4;
+                    size_t dstOffset = (static_cast<size_t>(atlasY + row) * layout.atlasWidth + atlasX) * 4;
 
                     if (srcOffset + copyW * 4 <= viewPixels.size() &&
-                        dstOffset + copyW * 4 <= atlasData.colorData.size())
+                        dstOffset + copyW * 4 <= colorData.size())
                     {
-                        std::memcpy(&atlasData.colorData[dstOffset], &viewPixels[srcOffset], copyW * 4);
+                        std::memcpy(&colorData[dstOffset], &viewPixels[srcOffset], copyW * 4);
                     }
                 }
             }
@@ -238,10 +383,9 @@ namespace render::impostor
 
         if (request.progressCallback) request.progressCallback(0.9f);
 
-        // Cleanup bake viewport
         bakeViewport.cleanUp();
 
-        // Save to .vfImposter
+        // Determine output path
         std::string outputPath = request.outputPath;
         if (outputPath.empty())
         {
@@ -254,7 +398,8 @@ namespace render::impostor
             outputPath += ".vfImposter";
         }
 
-        if (importTypes::ImposterSerializer::save(outputPath, atlasData))
+        // Save atlas
+        if (saveAtlas(outputPath, layout, request.config, colorData, normalData))
         {
             result.success = true;
             result.outputPath = outputPath;
