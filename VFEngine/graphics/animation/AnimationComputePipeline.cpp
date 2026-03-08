@@ -242,6 +242,13 @@ namespace animation
         if (!initialized || entityCount == 0)
             return;
 
+        if (!skeletonBuffer || !clipHeaderBuffer || !channelHeaderBuffer ||
+            !positionKeyBuffer || !rotationKeyBuffer || !scaleKeyBuffer)
+        {
+            vfLogError("AnimationComputePipeline: dispatch() called without uploadAnimationData()");
+            return;
+        }
+
         // Update descriptors if needed
         if (descriptorsNeedUpdate)
         {

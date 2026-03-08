@@ -22,7 +22,7 @@ namespace windows
         CachedStats stats;
 
     public:
-        explicit AnimationDebugWindow() = default;
+        AnimationDebugWindow() = default;
         ~AnimationDebugWindow() override = default;
 
         void draw() override;

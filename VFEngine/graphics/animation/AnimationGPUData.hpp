@@ -43,6 +43,7 @@ namespace animation
         float time;
         glm::vec4 rotation;  // quaternion (x, y, z, w)
     };
+    static_assert(sizeof(GPURotationKey) == 20);
 
     struct GPUScaleKey
     {
@@ -72,6 +73,7 @@ namespace animation
         uint32_t channelHeaderOffset;
         glm::mat4 globalInverseTransform;
     };
+    static_assert(sizeof(GPUAnimClipHeader) == 80);
 
     // Aggregated GPU animation data for upload
     struct AnimationGPUUploadData

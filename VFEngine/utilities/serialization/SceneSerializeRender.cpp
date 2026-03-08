@@ -584,9 +584,9 @@ namespace serialization
 
         j["shadows"] = {
             {"enabled", settings.shadows.enabled},
-            {"quality", shadowQualityToString(settings.shadows.quality)},
+            {"quality", shadowQualityToStr(settings.shadows.quality)},
             {"cascadeCount", settings.shadows.cascadeCount},
-            {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
+            {"cascadeSplitMode", cascadeSplitModeToStr(settings.shadows.cascadeSplitMode)},
             {"shadowBias", settings.shadows.shadowBias},
             {"slopeBias", settings.shadows.slopeBias},
             {"normalBias", settings.shadows.normalBias},

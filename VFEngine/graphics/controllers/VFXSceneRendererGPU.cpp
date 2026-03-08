@@ -846,14 +846,16 @@ namespace controllers
         else if (dist < LOD1_DIST)
         {
             lod = 1;
-            // Smooth transition from LOD0 to LOD1
-            float t = std::clamp((dist - LOD0_DIST) / LOD_TRANSITION_ZONE, 0.0f, 1.0f);
+            // Smooth transition from LOD0 to LOD1, clamped to not exceed LOD1 boundary
+            float zoneEnd = std::min(LOD0_DIST + LOD_TRANSITION_ZONE, LOD1_DIST);
+            float t = std::clamp((dist - LOD0_DIST) / (zoneEnd - LOD0_DIST), 0.0f, 1.0f);
             multiplier = glm::mix(1.0f, 0.5f, t);
         }
         else if (dist < LOD2_DIST)
         {
             lod = 2;
-            float t = std::clamp((dist - LOD1_DIST) / LOD_TRANSITION_ZONE, 0.0f, 1.0f);
+            float zoneEnd = std::min(LOD1_DIST + LOD_TRANSITION_ZONE, LOD2_DIST);
+            float t = std::clamp((dist - LOD1_DIST) / (zoneEnd - LOD1_DIST), 0.0f, 1.0f);
             multiplier = glm::mix(0.5f, 0.25f, t);
         }
         else

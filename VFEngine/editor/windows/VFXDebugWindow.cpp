@@ -3,6 +3,7 @@
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "imgui.h"
 #include "print/Log.hpp"
+#include <stdexcept>
 
 namespace windows
 {
@@ -75,7 +76,7 @@ namespace windows
     {
         try
         {
-            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto& dispatcher = events::EventDispatcher::instance();
             services::events::vfxruntime::GetVFXBudgetStatsQuery query;
             auto result = dispatcher.query(query);
 
@@ -90,9 +91,9 @@ namespace windows
             stats.poolUsedSlots = result.poolUsedSlots;
             stats.poolTotalSlots = result.poolTotalSlots;
         }
-        catch (...)
+        catch (const std::exception& e)
         {
-            vfLogError("VFXDebugWindow: Failed to refresh budget stats");
+            vfLogError("VFXDebugWindow: Failed to refresh budget stats: {}", e.what());
         }
     }
 }

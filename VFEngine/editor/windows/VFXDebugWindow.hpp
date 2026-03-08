@@ -27,7 +27,7 @@ namespace windows
         CachedStats stats;
 
     public:
-        explicit VFXDebugWindow() = default;
+        VFXDebugWindow() = default;
         ~VFXDebugWindow() override = default;
 
         void draw() override;

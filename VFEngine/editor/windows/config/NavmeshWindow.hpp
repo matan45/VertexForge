@@ -20,6 +20,10 @@ namespace windows
         // Streaming config cache
         events::navmesh::NavmeshStreamingConfig streamingConfig;
 
+        // Tile status cache (refreshed on notification, not every frame)
+        std::vector<events::navmesh::NavmeshTileStatusInfo> cachedTileStatuses;
+        bool tileStatusDirty = true;
+
         void drawBakeSettings();
         void drawAgentSection();
         void drawRegionSection();

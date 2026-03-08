@@ -1,5 +1,7 @@
 #include "AnimationLOD.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -37,27 +39,7 @@ namespace animation
         state.distanceSquared = distanceSquared;
         AnimationLODLevel newLOD = computeLODLevel(distanceSquared);
 
-        if (newLOD != state.currentLOD)
-        {
-            state.previousLOD = state.currentLOD;
-            state.currentLOD = newLOD;
-            state.inTransition = true;
-            state.lodTransitionAlpha = 0.0f;
-        }
-
-        if (state.inTransition)
-        {
-            // Smooth transition over configurable frame count
-            float transitionSpeed = config.transitionBlendFrames > 0.0f
-                ? 1.0f / config.transitionBlendFrames
-                : 1.0f;
-            state.lodTransitionAlpha += transitionSpeed;
-            if (state.lodTransitionAlpha >= 1.0f)
-            {
-                state.lodTransitionAlpha = 1.0f;
-                state.inTransition = false;
-            }
-        }
+        state.currentLOD = newLOD;
 
         state.framesSinceLastEval++;
     }
@@ -71,15 +53,33 @@ namespace animation
 
         const auto& poseA = state.cachedPoseA;
         const auto& poseB = state.cachedPoseB;
-        size_t boneCount = std::min(poseA.size(), poseB.size());
-        outMatrices.resize(boneCount);
+        size_t minCount = std::min(poseA.size(), poseB.size());
+        size_t maxCount = std::max(poseA.size(), poseB.size());
+        outMatrices.resize(maxCount, glm::mat4(1.0f));
 
         t = std::clamp(t, 0.0f, 1.0f);
 
-        for (size_t i = 0; i < boneCount; ++i)
+        for (size_t i = 0; i < minCount; ++i)
         {
-            // Simple matrix lerp for bone matrices (sufficient for interpolation between close poses)
-            outMatrices[i] = poseA[i] * (1.0f - t) + poseB[i] * t;
+            // Decompose both matrices into T/R/S, SLERP rotation, lerp the rest
+            glm::vec3 scaleA, transA, skewA;
+            glm::vec4 perspA;
+            glm::quat rotA;
+            glm::decompose(poseA[i], scaleA, rotA, transA, skewA, perspA);
+
+            glm::vec3 scaleB, transB, skewB;
+            glm::vec4 perspB;
+            glm::quat rotB;
+            glm::decompose(poseB[i], scaleB, rotB, transB, skewB, perspB);
+
+            glm::vec3 interpTrans = glm::mix(transA, transB, t);
+            glm::quat interpRot = glm::slerp(rotA, rotB, t);
+            glm::vec3 interpScale = glm::mix(scaleA, scaleB, t);
+
+            glm::mat4 T = glm::translate(glm::mat4(1.0f), interpTrans);
+            glm::mat4 R = glm::mat4_cast(interpRot);
+            glm::mat4 S = glm::scale(glm::mat4(1.0f), interpScale);
+            outMatrices[i] = T * R * S;
         }
     }
 

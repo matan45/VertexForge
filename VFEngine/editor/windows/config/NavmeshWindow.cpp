@@ -13,6 +13,7 @@ namespace windows
         bakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
             [this](const events::navmesh::NavmeshBakeCompleteNotification&)
             {
+                tileStatusDirty = true;
                 auto& d = events::EventDispatcher::instance();
                 bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
                 if (showNavmesh)
@@ -24,6 +25,7 @@ namespace windows
         tileUpdatedToken = dispatcher.subscribe<events::navmesh::NavmeshTileUpdatedNotification>(
             [this](const events::navmesh::NavmeshTileUpdatedNotification&)
             {
+                tileStatusDirty = true;
                 auto& d = events::EventDispatcher::instance();
                 bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
                 if (showNavmesh)
@@ -280,7 +282,12 @@ namespace windows
             ImGui::Indent();
 
             auto& dispatcher = events::EventDispatcher::instance();
-            auto tileStatuses = dispatcher.query(events::navmesh::GetNavmeshTileStatusQuery{});
+            if (tileStatusDirty)
+            {
+                cachedTileStatuses = dispatcher.query(events::navmesh::GetNavmeshTileStatusQuery{});
+                tileStatusDirty = false;
+            }
+            const auto& tileStatuses = cachedTileStatuses;
 
             if (tileStatuses.empty())
             {

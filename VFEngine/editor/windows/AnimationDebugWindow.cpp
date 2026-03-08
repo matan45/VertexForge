@@ -3,6 +3,7 @@
 #include "events/animation/AnimationBudgetEvents.hpp"
 #include "imgui.h"
 #include "print/Log.hpp"
+#include <stdexcept>
 
 namespace windows
 {
@@ -50,7 +51,7 @@ namespace windows
     {
         try
         {
-            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto& dispatcher = events::EventDispatcher::instance();
             services::events::animation::GetAnimationBudgetStatsQuery query;
             auto result = dispatcher.query(query);
 
@@ -60,9 +61,9 @@ namespace windows
                 stats.lodCounts[i] = result.lodCounts[i];
             stats.pendingStreamingInits = result.pendingStreamingInits;
         }
-        catch (...)
+        catch (const std::exception& e)
         {
-            vfLogError("AnimationDebugWindow: Failed to refresh budget stats");
+            vfLogError("AnimationDebugWindow: Failed to refresh budget stats: {}", e.what());
         }
     }
 }

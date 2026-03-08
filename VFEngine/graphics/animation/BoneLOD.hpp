@@ -44,18 +44,15 @@ namespace animation
             return sets;
         }
 
-        // Compute depth for each bone
+        // Compute depth for each bone in O(n) using topological order
+        // (Assimp guarantees parents come before children)
         std::vector<int> depths(boneCount, 0);
         for (size_t i = 0; i < boneCount; ++i)
         {
-            int depth = 0;
-            int idx = static_cast<int>(i);
-            while (idx >= 0)
-            {
-                idx = skeleton.bones[idx].parentIndex;
-                ++depth;
-            }
-            depths[i] = depth;
+            int parent = skeleton.bones[i].parentIndex;
+            depths[i] = (parent >= 0 && parent < static_cast<int>(boneCount))
+                ? depths[parent] + 1
+                : 0;
         }
 
         // Detail bone name keywords (case-insensitive check via lowercase)

@@ -87,6 +87,7 @@ namespace animation
             {
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::MeshComponent>();
+                std::lock_guard<std::mutex> lock(pendingInitMutex);
                 for (auto entity : view)
                 {
                     const auto& meshComp = view.get<components::MeshComponent>(entity);
@@ -115,6 +116,7 @@ namespace animation
                 }
 
                 // Remove invalid entities from pending queue
+                std::lock_guard<std::mutex> lock(pendingInitMutex);
                 pendingInitQueue.erase(
                     std::remove_if(pendingInitQueue.begin(), pendingInitQueue.end(),
                         [&registry](const PendingAnimatorInit& pending) {
@@ -159,7 +161,10 @@ namespace animation
             sectorUnloadedToken = {};
         }
 
-        pendingInitQueue.clear();
+        {
+            std::lock_guard<std::mutex> lock(pendingInitMutex);
+            pendingInitQueue.clear();
+        }
         clearAll();
         initialized = false;
     }
@@ -178,17 +183,21 @@ namespace animation
 
     void RuntimeAnimatorSystem::processPendingStreamingInits()
     {
-        if (pendingInitQueue.empty())
-            return;
+        std::vector<PendingAnimatorInit> batch;
+        {
+            std::lock_guard<std::mutex> lock(pendingInitMutex);
+            if (pendingInitQueue.empty())
+                return;
+
+            // Take up to maxInitPerFrame items from the back
+            uint32_t count = std::min(maxInitPerFrame, static_cast<uint32_t>(pendingInitQueue.size()));
+            batch.assign(pendingInitQueue.end() - count, pendingInitQueue.end());
+            pendingInitQueue.erase(pendingInitQueue.end() - count, pendingInitQueue.end());
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        uint32_t initCount = 0;
-
-        while (!pendingInitQueue.empty() && initCount < maxInitPerFrame)
+        for (auto& pending : batch)
         {
-            auto pending = pendingInitQueue.back();
-            pendingInitQueue.pop_back();
-
             if (!registry.valid(pending.entity))
                 continue;
 
@@ -196,7 +205,6 @@ namespace animation
                 continue;
 
             initializeEntityAnimator(pending.entity, pending.animatorPath);
-            ++initCount;
         }
     }
 
@@ -660,7 +668,8 @@ namespace animation
         if (socketIdx < 0 && skeleton)
         {
             socketIdx = skeleton->getSocketIndex(attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty())
+            if (socketIdx < 0 && !attachment.socketName.empty() &&
+                registry.all_of<components::MeshComponent>(attachment.parentEntity))
             {
                 const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
                 skeletonDataCache.erase(meshComp.meshPath);
@@ -1129,9 +1138,9 @@ namespace animation
         uint32_t quantizedTime = static_cast<uint32_t>(normalizedTime * 20.0f);
 
         uint64_t key = std::hash<std::string>{}(animatorPath);
-        key ^= static_cast<uint64_t>(stateId) << 32;
-        key ^= static_cast<uint64_t>(lodLevel) << 40;
-        key ^= static_cast<uint64_t>(quantizedTime) << 48;
+        key = key * 0x9E3779B97F4A7C15ULL + static_cast<uint64_t>(stateId);
+        key = key * 0x9E3779B97F4A7C15ULL + static_cast<uint64_t>(lodLevel);
+        key = key * 0x9E3779B97F4A7C15ULL + static_cast<uint64_t>(quantizedTime);
         return key;
     }
 }

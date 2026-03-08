@@ -54,7 +54,13 @@ namespace render::vfx
             }
         }
 
-        // Fallback: allocate directly from buffer manager
+        // Fallback: allocate directly from buffer manager (cap at 2x warm slots)
+        if (slots.size() >= targetWarmSlots * 2)
+        {
+            vfLogWarning("VFXEmitterPool: Pool capped at {} slots (2x warm target)", slots.size());
+            return result;
+        }
+
         auto allocation = bufferManager.allocateEmitter(particlesPerSlot);
         if (allocation.emitterIndex != UINT32_MAX)
         {
@@ -83,6 +89,7 @@ namespace render::vfx
                 return;
             }
         }
+        vfLogWarning("VFXEmitterPool::release: emitter index {} not found or already released", emitterIndex);
     }
 
     void VFXEmitterPool::reset()

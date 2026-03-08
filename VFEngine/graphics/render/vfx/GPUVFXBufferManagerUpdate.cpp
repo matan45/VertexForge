@@ -9,6 +9,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !configMapped)
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterConfig: invalid emitterIndex {}", emitterIndex);
             return;
         }
 
@@ -20,6 +22,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !stateStagingMapped[currentFrameIndex])
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterState: invalid emitterIndex {}", emitterIndex);
             return;
         }
 
@@ -31,6 +35,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !lutMapped)
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterLUT: invalid emitterIndex {}", emitterIndex);
             return;
         }
 

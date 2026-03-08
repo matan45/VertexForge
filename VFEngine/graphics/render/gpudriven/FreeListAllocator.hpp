@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <algorithm>
+#include <mutex>
 
 namespace render::gpudriven {
 
@@ -13,6 +14,7 @@ namespace render::gpudriven {
         FreeListAllocator() = default;
 
         void reset(uint32_t maxCapacity) {
+            std::lock_guard<std::mutex> lock(mtx);
             capacity = maxCapacity;
             usedCount = 0;
             reservedCount = 0;
@@ -21,6 +23,7 @@ namespace render::gpudriven {
 
         uint32_t allocate(uint32_t count) {
             if (count == 0) return 0;
+            std::lock_guard<std::mutex> lock(mtx);
 
             // First try to find a free block that fits
             for (auto it = freeList.begin(); it != freeList.end(); ++it) {
@@ -48,11 +51,13 @@ namespace render::gpudriven {
 
         void free(uint32_t offset, uint32_t count) {
             if (count == 0) return;
+            std::lock_guard<std::mutex> lock(mtx);
             freeList.push_back({offset, count});
             defragment();
         }
 
         void markUsed(uint32_t count) {
+            std::lock_guard<std::mutex> lock(mtx);
             if (reservedCount >= count) {
                 reservedCount -= count;
                 usedCount += count;
@@ -66,6 +71,7 @@ namespace render::gpudriven {
         uint32_t getFreeBlockCount() const { return static_cast<uint32_t>(freeList.size()); }
 
         float getFragmentationPercent() const {
+            std::lock_guard<std::mutex> lock(mtx);
             if (freeList.empty()) return 0.0f;
             uint32_t totalFree = 0;
             uint32_t largestFree = 0;
@@ -85,6 +91,7 @@ namespace render::gpudriven {
         };
 
         std::vector<FreeBlock> freeList;
+        mutable std::mutex mtx;
         uint32_t capacity = 0;
         uint32_t usedCount = 0;
         uint32_t reservedCount = 0;

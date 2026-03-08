@@ -19,13 +19,11 @@ namespace animation
     {
         float distanceThresholds[4] = {25.0f, 75.0f, 150.0f, 300.0f};
         uint32_t updateIntervals[4] = {1, 2, 6, 0};  // 0 = frozen
-        float transitionBlendFrames = 4.0f;
     };
 
     struct EntityAnimationLODState
     {
         AnimationLODLevel currentLOD = AnimationLODLevel::LOD0;
-        AnimationLODLevel previousLOD = AnimationLODLevel::LOD0;
         uint32_t framesSinceLastEval = 0;
         float distanceSquared = 0.0f;
 
@@ -34,10 +32,6 @@ namespace animation
         std::vector<glm::mat4> cachedPoseB;
         bool hasCachedPoseA = false;
         bool hasCachedPoseB = false;
-
-        // LOD transition smoothing
-        float lodTransitionAlpha = 1.0f;
-        bool inTransition = false;
     };
 
     class AnimationLODManager

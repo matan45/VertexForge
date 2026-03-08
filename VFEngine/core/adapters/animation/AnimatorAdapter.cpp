@@ -161,7 +161,7 @@ namespace core
         config.lod0Interval = lodCfg.updateIntervals[0];
         config.lod1Interval = lodCfg.updateIntervals[1];
         config.lod2Interval = lodCfg.updateIntervals[2];
-        config.maxStreamingInitPerFrame = 4;
+        config.maxStreamingInitPerFrame = animSys.getMaxStreamingInitPerFrame();
         return config;
     }
 

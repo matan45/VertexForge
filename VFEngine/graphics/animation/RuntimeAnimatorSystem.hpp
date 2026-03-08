@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 #include <unordered_map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace animation
@@ -46,6 +47,7 @@ namespace animation
             std::string animatorPath;
         };
         std::vector<PendingAnimatorInit> pendingInitQueue;
+        mutable std::mutex pendingInitMutex;
         uint32_t maxInitPerFrame = 4;
 
         events::SubscriptionToken sectorLoadedToken;
@@ -100,7 +102,8 @@ namespace animation
         uint32_t getActiveInstanceGroupCount() const { return activeInstanceGroupCount; }
 
         void setMaxStreamingInitPerFrame(uint32_t count) { maxInitPerFrame = count; }
-        uint32_t getPendingInitCount() const { return static_cast<uint32_t>(pendingInitQueue.size()); }
+        uint32_t getMaxStreamingInitPerFrame() const { return maxInitPerFrame; }
+        uint32_t getPendingInitCount() const { std::lock_guard<std::mutex> lock(pendingInitMutex); return static_cast<uint32_t>(pendingInitQueue.size()); }
 
         const std::vector<glm::mat4>* getCachedSocketTransforms(entt::entity entity) const;
 

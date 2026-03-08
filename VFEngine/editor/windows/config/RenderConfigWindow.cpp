@@ -692,17 +692,22 @@ namespace windows
             ImGui::Text("Update Intervals (frames)");
             ImGui::Spacing();
 
-            int intervals[3] = {
-                static_cast<int>(settings.animationLOD.lod0Interval),
+            ImGui::TextDisabled("LOD 0 Interval: 1 (every frame)");
+
+            int intervals[2] = {
                 static_cast<int>(settings.animationLOD.lod1Interval),
                 static_cast<int>(settings.animationLOD.lod2Interval)
             };
-            changed |= ImGui::SliderInt("LOD 0 Interval##anim", &intervals[0], 1, 1);
-            changed |= ImGui::SliderInt("LOD 1 Interval##anim", &intervals[1], 1, 4);
-            changed |= ImGui::SliderInt("LOD 2 Interval##anim", &intervals[2], 2, 16);
-            settings.animationLOD.lod0Interval = static_cast<uint32_t>(intervals[0]);
-            settings.animationLOD.lod1Interval = static_cast<uint32_t>(intervals[1]);
-            settings.animationLOD.lod2Interval = static_cast<uint32_t>(intervals[2]);
+            changed |= ImGui::SliderInt("LOD 1 Interval##anim", &intervals[0], 1, 4);
+            changed |= ImGui::SliderInt("LOD 2 Interval##anim", &intervals[1], 2, 16);
+            settings.animationLOD.lod1Interval = static_cast<uint32_t>(intervals[0]);
+            settings.animationLOD.lod2Interval = static_cast<uint32_t>(intervals[1]);
+
+            // Enforce interval ordering
+            if (settings.animationLOD.lod1Interval < settings.animationLOD.lod0Interval)
+                settings.animationLOD.lod1Interval = settings.animationLOD.lod0Interval;
+            if (settings.animationLOD.lod2Interval < settings.animationLOD.lod1Interval)
+                settings.animationLOD.lod2Interval = settings.animationLOD.lod1Interval;
 
             ImGui::Spacing();
             int maxInit = static_cast<int>(settings.animationLOD.maxStreamingInitPerFrame);
