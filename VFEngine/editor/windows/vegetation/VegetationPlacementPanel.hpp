@@ -1,6 +1,9 @@
 #pragma once
 
 #include "events/EventTypes.hpp"
+#include <string>
+#include <vector>
+#include <cstdint>
 
 namespace windows
 {
@@ -14,7 +17,11 @@ namespace windows
         float minScale = 0.8f;
         float maxScale = 1.2f;
         float randomRotation = 1.0f;
-        int selectedSpecies = 0;
+        uint32_t selectedSpeciesId = 0;
+
+        // Temp storage for combo rendering
+        std::vector<uint32_t> speciesIds;
+        std::vector<std::string> speciesNames;
 
         events::SubscriptionToken modeToken;
         bool subscribed = false;
@@ -29,5 +36,6 @@ namespace windows
 
     private:
         void subscribe();
+        void sendBrushParams();
     };
 }

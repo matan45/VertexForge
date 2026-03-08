@@ -5,8 +5,10 @@
 
 namespace services
 {
-    VegetationServiceImpl::VegetationServiceImpl(IVegetationProvider* vegetationProvider)
+    VegetationServiceImpl::VegetationServiceImpl(IVegetationProvider* vegetationProvider,
+                                                   IVegetationRenderProvider* vegetationRenderProvider)
         : provider(vegetationProvider)
+        , renderProvider(vegetationRenderProvider)
     {
     }
 
@@ -63,18 +65,31 @@ namespace services
             [this](const auto&)
             {
                 provider->clearAllSpecies();
+                if (renderProvider)
+                {
+                    renderProvider->clearAllSpecies();
+                }
             });
 
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const auto&)
             {
                 provider->clearAllSpecies();
+                if (renderProvider)
+                {
+                    renderProvider->clearAllSpecies();
+                }
             });
     }
 
     uint32_t VegetationServiceImpl::addSpecies(const vegetation::VegetationSpeciesConfig& config)
     {
         uint32_t id = provider->addSpecies(config);
+
+        if (renderProvider)
+        {
+            renderProvider->updateSpecies(id, config);
+        }
 
         events::vegetation::VegetationSpeciesChangedNotification notification;
         notification.speciesId = id;
@@ -87,6 +102,11 @@ namespace services
     {
         provider->removeSpecies(speciesId);
 
+        if (renderProvider)
+        {
+            renderProvider->removeSpecies(speciesId);
+        }
+
         events::vegetation::VegetationSpeciesChangedNotification notification;
         notification.speciesId = speciesId;
         events::EventDispatcher::instance().publish(notification);
@@ -95,6 +115,11 @@ namespace services
     void VegetationServiceImpl::updateSpecies(uint32_t speciesId, const vegetation::VegetationSpeciesConfig& config)
     {
         provider->updateSpecies(speciesId, config);
+
+        if (renderProvider)
+        {
+            renderProvider->updateSpecies(speciesId, config);
+        }
 
         events::vegetation::VegetationSpeciesChangedNotification notification;
         notification.speciesId = speciesId;

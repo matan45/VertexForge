@@ -20,6 +20,7 @@ namespace vegetation
 
         [[nodiscard]] bool isEmpty() const { return instances.empty(); }
         [[nodiscard]] size_t getInstanceCount() const { return instances.size(); }
+        [[nodiscard]] const std::vector<VegetationInstance>& getInstances() const { return instances; }
 
         void addInstance(const VegetationInstance& instance);
         void removeInstancesInRadius(const glm::vec3& center, float radius);

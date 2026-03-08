@@ -428,7 +428,8 @@ namespace handlers
     void EditorHandler::createVegetationServices()
     {
         vegetationService = std::make_shared<services::VegetationServiceImpl>(
-            bootstrap->getVegetationProvider());
+            bootstrap->getVegetationProvider(),
+            bootstrap->getVegetationRenderProvider());
         grassService = std::make_shared<services::GrassServiceImpl>();
         vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();

@@ -18,6 +18,7 @@
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
+#include "vegetation/VegetationSpecies.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
@@ -186,6 +187,16 @@ namespace render::gpudriven
 
             // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
+
+            // Species data cache for billboard rendering of placed vegetation
+            struct CachedSpeciesData
+            {
+                uint32_t bindlessTextureIndex = 0;
+                glm::vec2 billboardSize{2.0f, 4.0f};
+                std::string imposterAtlasPath;
+                bool hasImposter = false;
+            };
+            std::unordered_map<uint32_t, CachedSpeciesData> cachedSpecies;
         };
 
         struct ImposterViewInfo
@@ -501,6 +512,9 @@ namespace render::gpudriven
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void updateVegetationSpecies(uint32_t speciesId, const ::vegetation::VegetationSpeciesConfig& config);
+        void removeVegetationSpecies(uint32_t speciesId);
+        void clearAllVegetationSpecies();
         void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
         void cleanupVegetation();

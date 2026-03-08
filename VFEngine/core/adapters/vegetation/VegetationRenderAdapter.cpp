@@ -26,4 +26,19 @@ namespace core::adapters
     {
         if (removeTileCallback) removeTileCallback(coordX, coordZ);
     }
+
+    void VegetationRenderAdapter::updateSpecies(uint32_t speciesId, const vegetation::VegetationSpeciesConfig& config)
+    {
+        if (updateSpeciesCallback) updateSpeciesCallback(speciesId, config);
+    }
+
+    void VegetationRenderAdapter::removeSpecies(uint32_t speciesId)
+    {
+        if (removeSpeciesCallback) removeSpeciesCallback(speciesId);
+    }
+
+    void VegetationRenderAdapter::clearAllSpecies()
+    {
+        if (clearAllSpeciesCallback) clearAllSpeciesCallback();
+    }
 }

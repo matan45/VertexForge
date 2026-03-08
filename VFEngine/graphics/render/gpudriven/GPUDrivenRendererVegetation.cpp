@@ -105,6 +105,67 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::updateVegetationSpecies(uint32_t speciesId,
+                                                      const ::vegetation::VegetationSpeciesConfig& config)
+    {
+        auto& cached = vegetation.cachedSpecies[speciesId];
+
+        // Load imposter atlas if path changed
+        if (!config.imposterAtlasPath.empty() && config.imposterAtlasPath != cached.imposterAtlasPath)
+        {
+            // Unload old atlas if different
+            if (cached.hasImposter && !cached.imposterAtlasPath.empty())
+            {
+                unloadImposterAtlas(cached.imposterAtlasPath);
+            }
+
+            uint32_t bindlessIdx = loadImposterAtlas(config.imposterAtlasPath);
+            cached.bindlessTextureIndex = bindlessIdx;
+            cached.hasImposter = (bindlessIdx != 0 && bindlessIdx != 0xFFFFFFFF);
+        }
+        else if (config.imposterAtlasPath.empty() && cached.hasImposter)
+        {
+            // Atlas removed
+            if (!cached.imposterAtlasPath.empty())
+            {
+                unloadImposterAtlas(cached.imposterAtlasPath);
+            }
+            cached.bindlessTextureIndex = 0;
+            cached.hasImposter = false;
+        }
+
+        cached.imposterAtlasPath = config.imposterAtlasPath;
+
+        // Estimate billboard size from species scale
+        float avgScale = (config.minScale + config.maxScale) * 0.5f;
+        cached.billboardSize = glm::vec2(avgScale * 2.0f, avgScale * 4.0f);
+    }
+
+    void GPUDrivenRenderer::removeVegetationSpecies(uint32_t speciesId)
+    {
+        auto it = vegetation.cachedSpecies.find(speciesId);
+        if (it != vegetation.cachedSpecies.end())
+        {
+            if (it->second.hasImposter && !it->second.imposterAtlasPath.empty())
+            {
+                unloadImposterAtlas(it->second.imposterAtlasPath);
+            }
+            vegetation.cachedSpecies.erase(it);
+        }
+    }
+
+    void GPUDrivenRenderer::clearAllVegetationSpecies()
+    {
+        for (auto& [id, cached] : vegetation.cachedSpecies)
+        {
+            if (cached.hasImposter && !cached.imposterAtlasPath.empty())
+            {
+                unloadImposterAtlas(cached.imposterAtlasPath);
+            }
+        }
+        vegetation.cachedSpecies.clear();
+    }
+
     void GPUDrivenRenderer::updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
                                                        const glm::vec3& cameraPosition)
     {
@@ -176,6 +237,31 @@ namespace render::gpudriven
         }
         if (vegetation.vegetationStreamManager)
         {
+            vegetation.vegetationStreamManager->clearBillboardRequests();
+
+            // Generate billboard requests from tile placement data
+            for (const auto* tile : visibleTiles)
+            {
+                if (!tile) continue;
+                if (tile->vegetationPlacement.getInstanceCount() == 0) continue;
+
+                for (const auto& instance : tile->vegetationPlacement.getInstances())
+                {
+                    auto speciesIt = vegetation.cachedSpecies.find(instance.speciesId);
+                    if (speciesIt == vegetation.cachedSpecies.end()) continue;
+
+                    const auto& species = speciesIt->second;
+                    if (!species.hasImposter) continue;
+
+                    render::vegetation::VegetationBillboardRequest req;
+                    req.position = instance.position;
+                    req.scale = instance.scale;
+                    req.bindlessTextureIndex = species.bindlessTextureIndex;
+                    req.size = species.billboardSize * instance.scale;
+                    vegetation.vegetationStreamManager->addBillboardRequest(req);
+                }
+            }
+
             vegetation.vegetationStreamManager->update(cameraPosition);
 
             // Build billboard instances from vegetation impostor requests and merge with billboard system
