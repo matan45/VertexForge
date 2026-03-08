@@ -188,6 +188,13 @@ namespace render::gpudriven
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
         };
 
+        struct ImposterViewInfo
+        {
+            float horizontalAngle;
+            float verticalAngle;
+            glm::vec4 uvRect; // xy = offset, zw = size
+        };
+
         struct ImposterTexture
         {
             vk::Image image;
@@ -197,6 +204,10 @@ namespace render::gpudriven
             uint32_t bindlessIndex = 0;
             uint32_t width = 0;
             uint32_t height = 0;
+            uint32_t hAngles = 0;
+            uint32_t vAngles = 0;
+            uint32_t atlasCols = 0; // Number of columns in the atlas grid layout
+            std::vector<ImposterViewInfo> views;
         };
 
         struct BillboardState
@@ -506,6 +517,13 @@ namespace render::gpudriven
         uint32_t loadImposterAtlas(const std::string& imposterPath);
         void unloadImposterAtlas(const std::string& imposterPath);
         bool hasImposterAtlas(const std::string& imposterPath) const;
+
+        // Get impostor GPU resources (for registering with other pipelines)
+        const ImposterTexture* getImposterTexture(const std::string& imposterPath) const
+        {
+            auto it = billboard.loadedImposters.find(imposterPath);
+            return (it != billboard.loadedImposters.end()) ? &it->second : nullptr;
+        }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 

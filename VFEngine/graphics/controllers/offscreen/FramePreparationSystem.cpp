@@ -7,7 +7,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/billboard/BillboardPipeline.hpp"
-#include "../../render/gpudriven/BillboardGPUTypes.hpp"
+
 #include "../../render/text/TextTypes.hpp"
 #include "../../render/text/TextPipeline.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -210,6 +210,22 @@ namespace controllers::offscreen
             return renderData;
         };
 
+        // Check if entity should be replaced by billboard impostor at current distance
+        glm::mat4 invViewMat = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+        glm::vec3 meshCameraPos = glm::vec3(invViewMat[3]);
+
+        auto shouldUseBillboardInstead = [&](entt::entity entity, const components::WorldTransformComponent& wt) -> bool {
+            if (!registry.all_of<components::BillboardComponent>(entity)) return false;
+            const auto& bb = registry.get<components::BillboardComponent>(entity);
+            if (bb.imposterPath.empty()) return false;
+            if (bb.sizeMode != components::BillboardSizeMode::WorldSpace) return false;
+
+            glm::vec3 pos = glm::vec3(wt.worldMatrix[3]);
+            float distSq = glm::dot(pos - meshCameraPos, pos - meshCameraPos);
+            float bbDistSq = bb.billboardDistance * bb.billboardDistance;
+            return distSq > bbDistSq;
+        };
+
         if (useGPUDrivenCulling)
         {
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
@@ -232,6 +248,8 @@ namespace controllers::offscreen
                 {
                     continue;
                 }
+
+                if (shouldUseBillboardInstead(entity, worldTransform)) continue;
 
                 meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
@@ -267,6 +285,8 @@ namespace controllers::offscreen
                     continue;
                 }
 
+                if (shouldUseBillboardInstead(entity, worldTransform)) continue;
+
                 meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
         }
@@ -292,6 +312,8 @@ namespace controllers::offscreen
                 {
                     continue;
                 }
+
+                if (shouldUseBillboardInstead(entity, worldTransform)) continue;
 
                 if (frustumReady)
                 {
@@ -363,6 +385,71 @@ namespace controllers::offscreen
                 continue;
             }
 
+            // Check if this entity should show impostor billboard instead of editor icon
+            if (!billboard.editorOnly && billboard.sizeMode == components::BillboardSizeMode::WorldSpace
+                && !billboard.imposterPath.empty())
+            {
+                // Impostor billboard — only show when beyond billboardDistance
+                glm::vec3 pos = glm::vec3(worldTransform.worldMatrix[3]);
+                glm::mat4 bbInvView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+                glm::vec3 camPos = glm::vec3(bbInvView[3]);
+                float distSq = glm::dot(pos - camPos, pos - camPos);
+                float bbDistSq = billboard.billboardDistance * billboard.billboardDistance;
+                if (distSq > bbDistSq && distSq < billboard.maxRenderDistance * billboard.maxRenderDistance)
+                {
+                    // Load impostor atlas via GPU-driven renderer (creates VkImage/View/Sampler)
+                    auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+                    if (gpuRenderer)
+                    {
+                        gpuRenderer->loadImposterAtlas(billboard.imposterPath);
+                        const auto* impTex = gpuRenderer->getImposterTexture(billboard.imposterPath);
+                        if (impTex && !impTex->views.empty())
+                        {
+                            // Register impostor texture with billboard pipeline as external texture
+                            auto* bbPipeline = renderHandler->getBillboardPipeline();
+                            if (bbPipeline)
+                            {
+                                bbPipeline->registerExternalTexture(billboard.imposterPath,
+                                    impTex->imageView, impTex->sampler);
+                            }
+
+                            // Select best view based on camera angle
+                            glm::vec3 toCamera = camPos - pos;
+                            float hAngle = std::atan2(toCamera.x, toCamera.z); // horizontal angle around Y
+                            if (hAngle < 0.0f) hAngle += glm::two_pi<float>();
+
+                            // Find closest horizontal view
+                            uint32_t bestView = 0;
+                            float bestDot = -1.0f;
+                            for (uint32_t i = 0; i < impTex->views.size(); ++i)
+                            {
+                                float viewAngle = impTex->views[i].horizontalAngle;
+                                float diff = std::abs(hAngle - viewAngle);
+                                if (diff > glm::pi<float>()) diff = glm::two_pi<float>() - diff;
+                                float score = 1.0f - diff; // higher = closer match
+                                if (score > bestDot)
+                                {
+                                    bestDot = score;
+                                    bestView = i;
+                                }
+                            }
+
+                            render::billboard::BillboardRenderData renderData;
+                            renderData.worldPosition = pos;
+                            renderData.atlasIndex = bestView;
+                            renderData.size = billboard.size;
+                            renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
+                            renderData.entityId = static_cast<uint32_t>(entity);
+                            renderData.colorTint = billboard.colorTint;
+                            renderData.texturePath = billboard.imposterPath;
+                            renderData.atlasGridSize = static_cast<float>(impTex->atlasCols);
+                            billboardDrawList.push_back(renderData);
+                        }
+                    }
+                }
+                continue; // Skip normal billboard processing for impostor entities
+            }
+
             // Non-editor billboards (custom textured) always render
             render::billboard::BillboardRenderData renderData;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
@@ -372,7 +459,7 @@ namespace controllers::offscreen
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
             renderData.texturePath = billboard.texturePath;
-            
+
             if (billboard.renderTextureSource != entt::null
                 && registry.valid(billboard.renderTextureSource)
                 && registry.all_of<components::RenderTextureComponent>(billboard.renderTextureSource))
@@ -388,57 +475,6 @@ namespace controllers::offscreen
         }
 
         renderHandler->setBillboardDrawList(std::move(billboardDrawList));
-
-        // Collect WorldSpace billboards with impostor atlases for GPU-driven rendering
-        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
-        if (gpuRenderer && gpuRenderer->isBillboardRenderingEnabled())
-        {
-            glm::vec3 cameraPos = gpuRenderer->getCachedCameraPosition();
-            std::vector<render::gpudriven::BillboardInstanceGPU> gpuInstances;
-
-            for (auto entity : view)
-            {
-                if (registry.all_of<components::NameComponent>(entity))
-                {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive) continue;
-                }
-
-                const auto& bb = view.get<components::BillboardComponent>(entity);
-                const auto& wt = view.get<components::WorldTransformComponent>(entity);
-
-                // Only WorldSpace billboards with an imposter atlas go to GPU pipeline
-                if (bb.sizeMode != components::BillboardSizeMode::WorldSpace) continue;
-                if (bb.imposterPath.empty()) continue;
-
-                glm::vec3 pos = glm::vec3(wt.worldMatrix[3]);
-                float distSq = glm::dot(pos - cameraPos, pos - cameraPos);
-
-                // Only render billboard between billboardDistance and maxRenderDistance
-                float minDistSq = bb.billboardDistance * bb.billboardDistance;
-                float maxDistSq = bb.maxRenderDistance * bb.maxRenderDistance;
-                if (distSq < minDistSq || distSq > maxDistSq) continue;
-
-                // Load impostor atlas on demand (returns cached index if already loaded)
-                uint32_t bindlessIdx = gpuRenderer->loadImposterAtlas(bb.imposterPath);
-                if (bindlessIdx == 0 || bindlessIdx == 0xFFFFFFFF) continue;
-
-                render::gpudriven::BillboardInstanceGPU inst{};
-                float scale = glm::length(glm::vec3(wt.worldMatrix[0]));
-                inst.positionAndScale = glm::vec4(pos, scale);
-                inst.atlasUVRect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f); // Full atlas
-                inst.colorTint = bb.colorTint;
-                inst.bindlessTextureIndex = bindlessIdx;
-                inst.flags = 1; // Axis-aligned (Y-up)
-                inst.entityId = static_cast<uint32_t>(entity);
-                inst.rotation = 0.0f;
-                inst.size = bb.size;
-
-                gpuInstances.push_back(inst);
-            }
-
-            gpuRenderer->updateBillboards(gpuInstances);
-        }
     }
 
     void FramePreparationSystem::prepareText(const FrameContext& ctx)

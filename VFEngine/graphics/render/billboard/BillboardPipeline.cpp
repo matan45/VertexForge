@@ -451,6 +451,7 @@ namespace render::billboard
                 batch.texturePath = path;
                 batch.firstInstance = static_cast<uint32_t>(orderedBillboards.size());
                 batch.instanceCount = static_cast<uint32_t>(batchBillboards.size());
+                batch.atlasGridSize = batchBillboards.front().atlasGridSize;
                 customBatches.push_back(std::move(batch));
 
                 orderedBillboards.insert(orderedBillboards.end(),
@@ -536,7 +537,7 @@ namespace render::billboard
 
             BillboardPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
-            pushConstants.atlasGridSize = 1.0f;
+            pushConstants.atlasGridSize = batch.atlasGridSize;
 
             commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
                                          0, sizeof(BillboardPushConstants), &pushConstants);

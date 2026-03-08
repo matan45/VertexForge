@@ -37,12 +37,15 @@ void main() {
 
     bool visible = (globalIdx < instanceCount);
 
-    if (visible) {
-        payload.instanceIndices[tid] = globalIdx;
-    }
-
     uvec4 ballot = subgroupBallot(visible);
     uint count = subgroupBallotBitCount(ballot);
+
+    // Compact visible instance indices into contiguous payload slots
+    // so mesh work group N reads payload.instanceIndices[N]
+    if (visible) {
+        uint compactIdx = subgroupBallotExclusiveBitCount(ballot);
+        payload.instanceIndices[compactIdx] = globalIdx;
+    }
 
     if (tid == 0) {
         EmitMeshTasksEXT(count, 1, 1);
