@@ -239,6 +239,11 @@ namespace render::gpudriven
             }
         }
         vegetation.registeredTileKeys.clear();
+
+        // Clear cached tile pointers to prevent dangling pointer access
+        // in dispatchGrassCompute on the next frame
+        vegetation.cachedVisibleTiles.clear();
+        vegetation.currentGrassInstanceCount = 0;
     }
 
     void GPUDrivenRenderer::markVegetationTileDirty(int32_t coordX, int32_t coordZ)
