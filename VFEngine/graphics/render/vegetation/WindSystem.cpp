@@ -74,6 +74,9 @@ namespace render::vegetation
         write.pBufferInfo = &bufferInfo;
 
         logicalDevice.updateDescriptorSets(write, {});
+
+        // Initialize buffer with default (zeroed) wind data
+        std::memcpy(mapped, &data, sizeof(GPUWindData));
     }
 
     void WindSystem::update(float deltaTime, const ::vegetation::WindConfig& config)

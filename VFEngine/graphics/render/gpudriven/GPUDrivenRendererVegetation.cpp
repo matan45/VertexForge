@@ -372,10 +372,10 @@ namespace render::gpudriven
             pushConstants.maxInstances = vegetation.grassInstanceCapacity;
             pushConstants.slopeLimit = 0.8f;
             pushConstants.densityMultiplier = 1.0f;
-            pushConstants.heightMin = 0.2f;
-            pushConstants.heightMax = 0.8f;
-            pushConstants.widthMin = 0.02f;
-            pushConstants.widthMax = 0.05f;
+            pushConstants.heightMin = 1.0f;
+            pushConstants.heightMax = 3.0f;
+            pushConstants.widthMin = 0.1f;
+            pushConstants.widthMax = 0.3f;
             pushConstants.time = cachedCamera.time;
 
             vegetation.grassComputePipeline->dispatch(cmd, texelCount, pushConstants);
@@ -393,16 +393,15 @@ namespace render::gpudriven
             0, nullptr,
             0, nullptr);
 
-        // Read back instance count from counter buffer
-        if (vegetation.grassCounterMapped)
-        {
-            uint32_t count = 0;
-            std::memcpy(&count, vegetation.grassCounterMapped, sizeof(uint32_t));
-            vegetation.currentGrassInstanceCount = std::min(count, vegetation.grassInstanceCapacity);
-        }
+        // We cannot read back the counter here — the GPU hasn't executed the compute
+        // shader yet (we're still recording the command buffer). Instead, estimate
+        // the max possible instance count. The task shader reads the actual count
+        // from the counter buffer on the GPU side and self-limits.
+        uint32_t maxPossibleInstances = tilesWithDensity * maxTexelCount * 4; // up to 4 blades per texel
+        vegetation.currentGrassInstanceCount = std::min(maxPossibleInstances, vegetation.grassInstanceCapacity);
 
         // Update mesh pipeline descriptors with the instance buffer
-        if (vegetation.grassMeshPipeline && vegetation.currentGrassInstanceCount > 0)
+        if (vegetation.grassMeshPipeline)
         {
             vegetation.grassMeshPipeline->updateGrassDataDescriptors(
                 vegetation.grassInstanceBuffer,

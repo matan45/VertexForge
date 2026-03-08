@@ -386,6 +386,14 @@ namespace render::gpudriven
                     cachedRenderPass
                 });
             }
+
+            if (vegetation.grassMeshPipeline && vegetation.grassMeshPipeline->isInitialized())
+            {
+                vegetation.grassMeshPipeline->recreate(
+                    cachedIBLLayout,
+                    vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    cachedRenderPass);
+            }
         }
         else
         {

@@ -2,7 +2,7 @@
 #version 460 core
 #extension GL_EXT_mesh_shader : require
 
-layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 7, max_primitives = 5) out;
 
 // Same bindings as task shader
@@ -70,12 +70,10 @@ vec3 calculateWindDisp(vec3 worldPos, float vertexHeight, vec4 windDirSpeed, vec
 }
 
 void main() {
-    uint tid = gl_LocalInvocationID.x;
+    uint gid = gl_WorkGroupID.x;
 
-    if (tid >= gl_NumWorkGroups.x) return; // Safety
-
-    uint instanceIdx = payload.instanceIndices[tid];
-    float dist = payload.distanceToCamera[tid];
+    uint instanceIdx = payload.instanceIndices[gid];
+    float dist = payload.distanceToCamera[gid];
 
     // Read instance data
     uint base = instanceIdx * 3;

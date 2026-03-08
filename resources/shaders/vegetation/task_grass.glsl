@@ -50,18 +50,10 @@ void main() {
         vec4 posAndRot = grassInstances[instanceIdx * 3];
         vec3 worldPos = posAndRot.xyz;
 
-        // Distance culling
+        // Distance culling only — skip frustum check for now
         dist = distance(worldPos, cameraPos);
         if (dist < fadeEndDistance) {
-            // Simple frustum check (sphere test)
-            vec4 clipPos = projection * view * vec4(worldPos, 1.0);
-            float w = clipPos.w;
-            // Conservative - grass is small, just check if roughly in view
-            if (clipPos.x > -w * 1.5 && clipPos.x < w * 1.5 &&
-                clipPos.y > -w * 1.5 && clipPos.y < w * 1.5 &&
-                clipPos.z > 0.0) {
-                visible = true;
-            }
+            visible = true;
         }
     }
 

@@ -25,6 +25,7 @@
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
 #include "water/OceanFFT.hpp"
+#include "vegetation/WindConfig.hpp"
 
 namespace
 {
@@ -135,6 +136,12 @@ namespace render
 
             // Sync vegetation streaming with visible terrain tiles
             gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, currentCameraPosition);
+
+            // Update wind system with default config (no wind by default)
+            {
+                ::vegetation::WindConfig windConfig;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
         }
 
         if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
