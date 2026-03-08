@@ -487,7 +487,8 @@ namespace controllers
     }
 
     OffScreenController::ImposterBakeResult OffScreenController::bakeImposter(
-        const std::string& meshPath, const std::string& outputPath)
+        const std::string& meshPath, const std::string& outputPath,
+        const glm::vec3& meshCenter, float meshScale)
     {
         ImposterBakeResult result;
 
@@ -505,6 +506,8 @@ namespace controllers
         render::impostor::ImposterBakeRequest request;
         request.meshPath = meshPath;
         request.outputPath = outputPath;
+        request.config.meshScale = meshScale;
+        request.config.meshCenter = meshCenter;
 
         auto bakeResult = baker.bake(request);
         result.success = bakeResult.success;

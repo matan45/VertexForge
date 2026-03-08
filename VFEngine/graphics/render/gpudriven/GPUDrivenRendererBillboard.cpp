@@ -65,18 +65,6 @@ namespace render::gpudriven
             return;
         }
 
-        static int uploadLog = 0;
-        if (uploadLog++ % 300 == 0)
-        {
-            for (size_t i = 0; i < instances.size() && i < 3; ++i)
-            {
-                const auto& inst = instances[i];
-                vfLogInfo("GPU Billboard instance[{}]: pos=({:.1f},{:.1f},{:.1f}), scale={:.2f}, size=({:.1f},{:.1f}), bindless={}, flags={}",
-                    i, inst.positionAndScale.x, inst.positionAndScale.y, inst.positionAndScale.z,
-                    inst.positionAndScale.w, inst.size.x, inst.size.y, inst.bindlessTextureIndex, inst.flags);
-            }
-        }
-
         billboard.bufferManager->uploadInstances(instances);
 
         // Re-update descriptors in case buffer was recreated
@@ -89,22 +77,10 @@ namespace render::gpudriven
     void GPUDrivenRenderer::renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                                   uint32_t screenWidth, uint32_t screenHeight)
     {
-        if (!initialized || !billboard.initialized || !billboard.renderingEnabled)
-        {
-            static bool loggedSkip = false;
-            if (!loggedSkip) { vfLogWarning("GPU Billboard DRAW skipped: init={}, bbInit={}, enabled={}",
-                initialized, billboard.initialized, billboard.renderingEnabled); loggedSkip = true; }
-            return;
-        }
+        if (!initialized || !billboard.initialized || !billboard.renderingEnabled) return;
 
         uint32_t count = billboard.bufferManager->getInstanceCount();
         if (count == 0) return;
-
-        static bool loggedFirstDraw = false;
-        if (!loggedFirstDraw) {
-            vfLogWarning("GPU Billboard FIRST DRAW: count={}, pipeline={}", count, billboard.meshShaderPipeline->isInitialized());
-            loggedFirstDraw = true;
-        }
 
         // Update shared descriptor sets
         billboard.meshShaderPipeline->updateSharedDescriptors(
@@ -130,22 +106,6 @@ namespace render::gpudriven
 
         cmd.setViewport(0, 1, &viewport);
         cmd.setScissor(0, 1, &scissor);
-
-        static int billboardDrawLog = 0;
-        if (billboardDrawLog++ % 300 == 0)
-        {
-            std::string imposterPaths;
-            for (const auto& [path, tex] : billboard.loadedImposters)
-            {
-                imposterPaths += path + " (bindless=" + std::to_string(tex.bindlessIndex) + ") ";
-            }
-            vfLogInfo("GPU Billboard DRAW: dispatching {} instances, pipeline={}, viewport={}x{}, imposters=[{}]",
-                count,
-                billboard.meshShaderPipeline->isInitialized(),
-                static_cast<uint32_t>(dispatchWidth),
-                static_cast<uint32_t>(dispatchHeight),
-                imposterPaths);
-        }
 
         billboard.meshShaderPipeline->dispatch(cmd, count);
 

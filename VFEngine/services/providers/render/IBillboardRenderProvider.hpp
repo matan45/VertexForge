@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include <glm/glm.hpp>
 
 namespace services
 {
@@ -34,6 +35,8 @@ namespace services
         virtual BillboardRenderStats getBillboardStats() const = 0;
 
         virtual ImposterBakeResult bakeImposter(const std::string& meshPath,
-                                                  const std::string& outputPath) = 0;
+                                                  const std::string& outputPath,
+                                                  const glm::vec3& meshCenter = glm::vec3(0.0f),
+                                                  float meshScale = 1.0f) = 0;
     };
 }

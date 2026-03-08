@@ -4,10 +4,14 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/BillboardEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "events/scene/ComponentMediaEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
+#include <algorithm>
+#include <cmath>
 
 namespace windows::details
 {
@@ -287,9 +291,44 @@ namespace windows::details
             }
             outputPath += ".vfImposter";
 
+            // Compute mesh center and scale from bounding box + entity transform
+            glm::vec3 bakeMeshCenter(0.0f);
+            float bakeMeshScale = 1.0f;
+
+            events::scene::GetWorldTransformQuery transformQuery;
+            transformQuery.entity = handle;
+            auto transformOpt = dispatcher.query(transformQuery);
+
+            events::render::GetMeshBoundingBoxQuery bbQuery;
+            bbQuery.meshPath = meshPath;
+            auto bbOpt = dispatcher.query(bbQuery);
+
+            if (bbOpt.has_value() && transformOpt.has_value())
+            {
+                auto& bb = *bbOpt;
+                auto& transform = *transformOpt;
+
+                // Mesh BB center in local space, offset by entity world position
+                glm::vec3 bbCenter = (bb.min + bb.max) * 0.5f;
+                bakeMeshCenter = transform.position + bbCenter * transform.scale;
+
+                // Scale = half the max extent of the scaled bounding box
+                glm::vec3 extent = (bb.max - bb.min) * 0.5f * transform.scale;
+                bakeMeshScale = std::max({std::abs(extent.x), std::abs(extent.y), std::abs(extent.z)});
+            }
+            else if (bbOpt.has_value())
+            {
+                auto& bb = *bbOpt;
+                bakeMeshCenter = (bb.min + bb.max) * 0.5f;
+                glm::vec3 extent = (bb.max - bb.min) * 0.5f;
+                bakeMeshScale = std::max({std::abs(extent.x), std::abs(extent.y), std::abs(extent.z)});
+            }
+
             events::render::BakeImposterCommand cmd;
             cmd.meshPath = meshPath;
             cmd.outputPath = outputPath;
+            cmd.meshCenter = bakeMeshCenter;
+            cmd.meshScale = bakeMeshScale;
             auto result = dispatcher.execute(cmd);
 
             if (result.success)

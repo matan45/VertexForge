@@ -3,6 +3,7 @@
 #include "../EventTypes.hpp"
 #include "../../providers/render/IBillboardRenderProvider.hpp"
 #include <string>
+#include <glm/glm.hpp>
 
 namespace events::render
 {
@@ -27,6 +28,8 @@ namespace events::render
     {
         std::string meshPath;
         std::string outputPath;
+        glm::vec3 meshCenter{0.0f};
+        float meshScale = 1.0f;
         std::string_view getName() const override { return "BakeImposterCommand"; }
     };
 }

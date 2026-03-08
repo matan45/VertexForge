@@ -187,9 +187,6 @@ namespace render::gpudriven
 
         if (!instanceDataDescriptorSet || !cameraDescriptorSet || !bindlessTextureDescriptorSet)
         {
-            static bool loggedMissing = false;
-            if (!loggedMissing) { vfLogWarning("BillboardMeshShaderPipeline::dispatch: missing descriptor set (inst={}, cam={}, tex={})",
-                (bool)instanceDataDescriptorSet, (bool)cameraDescriptorSet, (bool)bindlessTextureDescriptorSet); loggedMissing = true; }
             return;
         }
 

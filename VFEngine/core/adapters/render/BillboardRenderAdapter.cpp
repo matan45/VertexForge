@@ -31,7 +31,9 @@ namespace core::adapters
     }
 
     services::ImposterBakeResult BillboardRenderAdapter::bakeImposter(const std::string& meshPath,
-                                                                        const std::string& outputPath)
+                                                                        const std::string& outputPath,
+                                                                        const glm::vec3& meshCenter,
+                                                                        float meshScale)
     {
         if (!offScreen)
         {
@@ -41,7 +43,7 @@ namespace core::adapters
             return result;
         }
 
-        auto controllerResult = offScreen->bakeImposter(meshPath, outputPath);
+        auto controllerResult = offScreen->bakeImposter(meshPath, outputPath, meshCenter, meshScale);
 
         services::ImposterBakeResult result;
         result.success = controllerResult.success;

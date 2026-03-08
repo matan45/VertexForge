@@ -322,6 +322,8 @@ namespace render::gpudriven
         {
             terrain.meshBuffer->clear();
         }
+
+        clearVegetationData();
     }
 
     void GPUDrivenRenderer::evictTerrainTile(int32_t coordX, int32_t coordZ)

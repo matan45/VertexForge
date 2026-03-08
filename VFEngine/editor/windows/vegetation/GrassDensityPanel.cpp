@@ -37,7 +37,13 @@ namespace windows
         if (!subscribed) subscribe();
         if (!visible) return;
 
-        ImGui::Begin("Grass Density Brush", &visible);
+        ImGui::SetNextWindowSize(ImVec2(300, 0), ImGuiCond_FirstUseEver);
+
+        if (!ImGui::Begin("Grass Density Brush", &visible))
+        {
+            ImGui::End();
+            return;
+        }
 
         // Brush type
         const char* brushTypes[] = {"Paint", "Erase", "Smooth", "Fill"};
@@ -77,6 +83,13 @@ namespace windows
         drawGrassConfigSection();
 
         ImGui::End();
+
+        if (!visible)
+        {
+            events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
+            cmd.active = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     void GrassDensityPanel::drawGrassConfigSection()

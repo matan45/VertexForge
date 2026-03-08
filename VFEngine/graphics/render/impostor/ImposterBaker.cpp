@@ -308,7 +308,7 @@ namespace render::impostor
         // Camera setup
         float orthoSize = request.config.meshScale * 1.5f;
         float cameraDistance = request.config.meshScale * 5.0f;
-        glm::vec3 meshCenter(0.0f);
+        glm::vec3 meshCenter = request.config.meshCenter;
         float nearPlane = 0.01f;
         float farPlane = cameraDistance * 3.0f;
 

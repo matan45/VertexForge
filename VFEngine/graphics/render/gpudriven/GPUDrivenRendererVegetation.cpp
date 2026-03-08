@@ -221,6 +221,26 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::clearVegetationData()
+    {
+        // Remove all registered vegetation tiles and free their GPU buffers
+        for (uint64_t key : vegetation.registeredTileKeys)
+        {
+            int32_t coordX = static_cast<int32_t>(key >> 32);
+            int32_t coordZ = static_cast<int32_t>(key & 0xFFFFFFFF);
+
+            if (vegetation.grassStreamManager)
+            {
+                vegetation.grassStreamManager->removeTile(coordX, coordZ);
+            }
+            if (vegetation.vegetationStreamManager)
+            {
+                vegetation.vegetationStreamManager->removeTile(coordX, coordZ);
+            }
+        }
+        vegetation.registeredTileKeys.clear();
+    }
+
     void GPUDrivenRenderer::markVegetationTileDirty(int32_t coordX, int32_t coordZ)
     {
         if (vegetation.grassStreamManager)

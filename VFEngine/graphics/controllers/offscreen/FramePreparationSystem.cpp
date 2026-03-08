@@ -18,6 +18,8 @@
 #include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
+#include <cmath>
+#include <glm/gtc/constants.hpp>
 
 namespace controllers::offscreen
 {
@@ -365,6 +367,9 @@ namespace controllers::offscreen
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
 
+        glm::mat4 bbInvView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+        glm::vec3 billboardCameraPos = glm::vec3(bbInvView[3]);
+
         for (auto entity : view)
         {
             if (registry.all_of<components::NameComponent>(entity))
@@ -391,8 +396,7 @@ namespace controllers::offscreen
             {
                 // Impostor billboard — only show when beyond billboardDistance
                 glm::vec3 pos = glm::vec3(worldTransform.worldMatrix[3]);
-                glm::mat4 bbInvView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
-                glm::vec3 camPos = glm::vec3(bbInvView[3]);
+                glm::vec3 camPos = billboardCameraPos;
                 float distSq = glm::dot(pos - camPos, pos - camPos);
                 float bbDistSq = billboard.billboardDistance * billboard.billboardDistance;
                 if (distSq > bbDistSq && distSq < billboard.maxRenderDistance * billboard.maxRenderDistance)

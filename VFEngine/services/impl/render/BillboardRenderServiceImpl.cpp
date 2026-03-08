@@ -44,7 +44,7 @@ namespace services
         dispatcher.registerCommandHandler<events::render::BakeImposterCommand>(
             [this](const events::render::BakeImposterCommand& cmd) -> ImposterBakeResult
             {
-                return provider->bakeImposter(cmd.meshPath, cmd.outputPath);
+                return provider->bakeImposter(cmd.meshPath, cmd.outputPath, cmd.meshCenter, cmd.meshScale);
             }
         );
     }

@@ -499,6 +499,7 @@ namespace render::gpudriven
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
+        void clearVegetationData();
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
         void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);

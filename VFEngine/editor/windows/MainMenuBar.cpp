@@ -26,7 +26,6 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/project/ExportEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
-#include "vegetation/GrassDensityPanel.hpp"
 #include "vegetation/VegetationPlacementPanel.hpp"
 #include "vegetation/VegetationSpeciesPanel.hpp"
 #include <imgui.h>
@@ -288,14 +287,7 @@ namespace windows
     {
         if (ImGui::BeginMenu("Vegetation"))
         {
-            if (ImGui::MenuItem("Grass Density"))
-            {
-                if (grassDensityPanel)
-                {
-                    grassDensityPanel->setVisible(true);
-                }
-            }
-            else if (ImGui::MenuItem("Placement"))
+            if (ImGui::MenuItem("Placement"))
             {
                 if (vegetationPlacementPanel)
                 {

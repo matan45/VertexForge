@@ -22,7 +22,6 @@ namespace windows
     class WorldSectorWindow;
     class VFXDebugWindow;
     class AnimationDebugWindow;
-    class GrassDensityPanel;
     class VegetationPlacementPanel;
     class VegetationSpeciesPanel;
 
@@ -51,7 +50,6 @@ namespace windows
         WorldSectorWindow* worldSectorWindow = nullptr;
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
-        GrassDensityPanel* grassDensityPanel = nullptr;
         VegetationPlacementPanel* vegetationPlacementPanel = nullptr;
         VegetationSpeciesPanel* vegetationSpeciesPanel = nullptr;
 
@@ -122,11 +120,6 @@ namespace windows
         void setAnimationDebugWindow(AnimationDebugWindow* window)
         {
             animationDebugWindow = window;
-        }
-
-        void setGrassDensityPanel(GrassDensityPanel* panel)
-        {
-            grassDensityPanel = panel;
         }
 
         void setVegetationPlacementPanel(VegetationPlacementPanel* panel)

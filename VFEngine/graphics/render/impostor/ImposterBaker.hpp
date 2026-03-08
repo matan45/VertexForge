@@ -28,6 +28,7 @@ namespace render::impostor
         uint32_t verticalAngles = 3;
         uint32_t viewResolution = 256;
         float meshScale = 1.0f;
+        glm::vec3 meshCenter{0.0f};
         bool generateNormalMap = true;
     };
 

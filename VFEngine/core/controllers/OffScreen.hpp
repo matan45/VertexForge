@@ -181,6 +181,7 @@ namespace controllers
             std::string outputPath;
             std::string errorMessage;
         };
-        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath);
+        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath,
+                                        const glm::vec3& meshCenter = glm::vec3(0.0f), float meshScale = 1.0f);
     };
 }
