@@ -52,11 +52,22 @@ namespace animation
         shader->readShader("../../resources/shaders/animation/bone_evaluate.glsl");
 
         // Create compute pipeline
-        auto computeStage = shader->getComputeShaderStageInfo();
+        const auto& stages = shader->getShaderStages();
+        if (stages.empty())
+        {
+            vfLogError("AnimationComputePipeline: Failed to load compute shader");
+            return;
+        }
         vk::ComputePipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stage = computeStage;
+        pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
-        computePipeline = vkDevice.createComputePipeline(nullptr, pipelineInfo).value;
+        auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
+        if (result.result != vk::Result::eSuccess)
+        {
+            vfLogError("AnimationComputePipeline: Failed to create compute pipeline");
+            return;
+        }
+        computePipeline = result.value;
 
         // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
@@ -237,14 +248,14 @@ namespace animation
             vk::Device vkDevice = device.getLogicalDevice();
 
             std::array<vk::DescriptorBufferInfo, 8> bufferInfos{};
-            bufferInfos[0] = {requestBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[1] = {skeletonBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[2] = {clipHeaderBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[3] = {channelHeaderBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[4] = {positionKeyBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[5] = {rotationKeyBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[6] = {scaleKeyBuffer, 0, VK_WHOLE_SIZE};
-            bufferInfos[7] = {outputBoneBuffer, 0, VK_WHOLE_SIZE};
+            bufferInfos[0] = vk::DescriptorBufferInfo(requestBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[1] = vk::DescriptorBufferInfo(skeletonBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[2] = vk::DescriptorBufferInfo(clipHeaderBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[3] = vk::DescriptorBufferInfo(channelHeaderBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[4] = vk::DescriptorBufferInfo(positionKeyBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[5] = vk::DescriptorBufferInfo(rotationKeyBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[6] = vk::DescriptorBufferInfo(scaleKeyBuffer, 0, VK_WHOLE_SIZE);
+            bufferInfos[7] = vk::DescriptorBufferInfo(outputBoneBuffer, 0, VK_WHOLE_SIZE);
 
             std::array<vk::WriteDescriptorSet, 8> writes{};
             for (uint32_t i = 0; i < 8; ++i)
