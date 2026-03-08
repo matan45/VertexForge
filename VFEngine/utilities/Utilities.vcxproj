@@ -284,6 +284,7 @@
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerializeCore.cpp" />
     <ClCompile Include="serialization\SceneSerializeDispatch.cpp" />
+    <ClCompile Include="serialization\SceneSerializeGrass.cpp" />
     <ClCompile Include="serialization\SceneSerializeIK.cpp" />
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />

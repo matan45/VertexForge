@@ -120,6 +120,12 @@ namespace serialization
                 entity.getComponent<components::TerrainTileComponent>());
         }
 
+        if (entity.hasComponent<components::GrassComponent>())
+        {
+            componentsJson["grass"] = serializeGrass(
+                entity.getComponent<components::GrassComponent>());
+        }
+
         if (entity.hasComponent<components::WaterComponent>())
         {
             componentsJson["water"] = serializeWater(
@@ -417,6 +423,12 @@ namespace serialization
         {
             auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
             deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
+        }
+
+        if (componentsJson.contains("grass"))
+        {
+            auto& grassComp = entity.addOrReplaceComponent<components::GrassComponent>();
+            deserializeGrass(componentsJson["grass"], grassComp);
         }
 
         if (componentsJson.contains("water"))

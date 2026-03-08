@@ -1,5 +1,5 @@
 #pragma once
-#include "vegetation/GrassConfig.hpp"
+#include "../vegetation/GrassConfig.hpp"
 #include <cstdint>
 
 namespace components

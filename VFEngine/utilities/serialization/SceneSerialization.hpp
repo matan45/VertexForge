@@ -155,6 +155,9 @@ namespace serialization
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
 
+        static json serializeGrass(const components::GrassComponent& grass);
+        static void deserializeGrass(const json& j, components::GrassComponent& grass);
+
         static json serializeWater(const components::WaterComponent& water);
         static void deserializeWater(const json& j, components::WaterComponent& water);
 
