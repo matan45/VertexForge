@@ -6,12 +6,11 @@ namespace vegetation
     struct VegetationSpeciesConfig
     {
         std::string name;
-        std::string meshPathLOD0;           // Full detail mesh
-        std::string meshPathLOD1;           // Simplified mesh (empty = no LOD1)
-        std::string imposterAtlasPath;      // Billboard imposter atlas (empty = no LOD2)
+        std::string meshPath;               // .vfMesh (contains LOD0-3 internally)
+        std::string materialPath;           // .vfMat or .vfMatInstance
+        std::string imposterAtlasPath;      // Billboard imposter atlas (empty = no imposter LOD)
 
-        float lodDistance0to1 = 50.0f;       // Distance for LOD0 -> LOD1 transition
-        float lodDistance1to2 = 150.0f;      // Distance for LOD1 -> LOD2 transition
+        float imposterDistance = 150.0f;     // Distance to switch from mesh to imposter billboard
         float maxRenderDistance = 500.0f;    // Beyond this, not rendered
 
         float minScale = 0.8f;

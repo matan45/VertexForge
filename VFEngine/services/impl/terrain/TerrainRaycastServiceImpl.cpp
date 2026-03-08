@@ -8,6 +8,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/vegetation/VegetationBrushEvents.hpp"
 
 namespace services
 {
@@ -49,6 +50,16 @@ namespace services
         {
             dispatcher.unsubscribe(holeBrushParamsToken);
         }
+
+        if (vegBrushModeToken.isValid())
+        {
+            dispatcher.unsubscribe(vegBrushModeToken);
+        }
+
+        if (vegBrushParamsToken.isValid())
+        {
+            dispatcher.unsubscribe(vegBrushParamsToken);
+        }
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()
@@ -58,7 +69,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive && !holeModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !vegBrushModeActive) || !provider)
                 {
                     return;
                 }
@@ -195,6 +206,45 @@ namespace services
             [this](const events::holeBrush::HoleBrushParamsChangedNotification& n)
             {
                 if (holeModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        static_cast<float>(n.params.shape));
+                }
+            });
+
+        vegBrushModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
+            [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    vegBrushModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::vegetationBrush::GetDensityBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff),
+                            static_cast<float>(brushParams.shape));
+                    }
+                }
+                else
+                {
+                    vegBrushModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
+                }
+            });
+
+        vegBrushParamsToken = dispatcher.subscribe<events::vegetationBrush::DensityBrushParamsChangedNotification>(
+            [this](const events::vegetationBrush::DensityBrushParamsChangedNotification& n)
+            {
+                if (vegBrushModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

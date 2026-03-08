@@ -161,6 +161,15 @@ namespace render::gpudriven
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
 
+            // Per-tile staging buffers for compute dispatch (reused each frame)
+            vk::Buffer tileDensityBuffer;
+            vk::DeviceMemory tileDensityBufferMemory;
+            vk::Buffer tileHeightBuffer;
+            vk::DeviceMemory tileHeightBufferMemory;
+            vk::Buffer tileHoleBuffer;
+            vk::DeviceMemory tileHoleBufferMemory;
+            uint32_t tileStagingCapacity = 0; // current capacity in texels
+
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
 
@@ -445,6 +454,7 @@ namespace render::gpudriven
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void ensureTileStagingBuffers(uint32_t texelCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
         void cleanupVegetation();
 

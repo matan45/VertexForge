@@ -159,7 +159,7 @@ namespace render::vegetation
     void GrassComputePipeline::dispatch(vk::CommandBuffer cmd, uint32_t texelCount,
                                          const GrassComputePushConstants& pushConstants)
     {
-        if (!initialized || texelCount == 0) return;
+        if (!initialized || texelCount == 0 || descriptorsNeedUpdate) return;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, descriptorSet, {});

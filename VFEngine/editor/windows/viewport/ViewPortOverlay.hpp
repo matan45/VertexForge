@@ -15,7 +15,8 @@ namespace windows
         Translate = 4,
         Sculpt = 5,
         Paint = 6,
-        Hole = 7
+        Hole = 7,
+        Vegetation = 8
     };
 
     class ViewPortOverlay

@@ -1,6 +1,7 @@
 #include "VegetationSpeciesPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/VegetationEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -65,11 +66,55 @@ namespace windows
                     changed = true;
                 }
 
-                changed |= ImGui::DragFloat("LOD0->1 Dist", &config.lodDistance0to1, 1.0f, 1.0f, 1000.0f);
-                changed |= ImGui::DragFloat("LOD1->2 Dist", &config.lodDistance1to2, 1.0f, 1.0f, 2000.0f);
+                // Mesh path (contains LOD0-3 internally)
+                ImGui::Text("Mesh: %s", config.meshPath.empty() ? "(none)" : config.meshPath.c_str());
+                ImGui::SameLine();
+                if (ImGui::Button("Browse##Mesh"))
+                {
+                    nfd::FileDialog dialog;
+                    std::string path = dialog.openFileDialog(
+                        {{L"VF Mesh Files (*.vfMesh)", L"*.vfMesh"}});
+                    if (!path.empty())
+                    {
+                        config.meshPath = path;
+                        changed = true;
+                    }
+                }
+
+                // Material path
+                ImGui::Text("Material: %s", config.materialPath.empty() ? "(none)" : config.materialPath.c_str());
+                ImGui::SameLine();
+                if (ImGui::Button("Browse##Mat"))
+                {
+                    nfd::FileDialog dialog;
+                    std::string path = dialog.openFileDialog(
+                        {{L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}});
+                    if (!path.empty())
+                    {
+                        config.materialPath = path;
+                        changed = true;
+                    }
+                }
+
+                // Imposter atlas path (read-only, generated)
+                ImGui::Text("Imposter: %s", config.imposterAtlasPath.empty() ? "(none - Generate below)" : config.imposterAtlasPath.c_str());
+
+                ImGui::Separator();
+                ImGui::Text("Distances");
+                changed |= ImGui::DragFloat("Imposter Dist", &config.imposterDistance, 1.0f, 1.0f, 2000.0f);
                 changed |= ImGui::DragFloat("Max Render Dist", &config.maxRenderDistance, 1.0f, 1.0f, 5000.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Properties");
+                changed |= ImGui::DragFloat("Min Scale", &config.minScale, 0.01f, 0.1f, 5.0f);
+                changed |= ImGui::DragFloat("Max Scale", &config.maxScale, 0.01f, 0.1f, 5.0f);
                 changed |= ImGui::DragFloat("Wind Strength", &config.windStrength, 0.01f, 0.0f, 5.0f);
                 changed |= ImGui::Checkbox("Has Collision", &config.hasCollision);
+                if (config.hasCollision)
+                {
+                    changed |= ImGui::DragFloat("Collision Radius", &config.collisionRadius, 0.01f, 0.01f, 5.0f);
+                    changed |= ImGui::DragFloat("Collision Height", &config.collisionHeight, 0.1f, 0.1f, 50.0f);
+                }
 
                 if (changed)
                 {
