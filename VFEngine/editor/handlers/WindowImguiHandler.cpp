@@ -13,8 +13,6 @@
 #include "../windows/import/SceneLoadProgressWindow.hpp"
 #include "../windows/config/NavmeshWindow.hpp"
 #include "../windows/AssetLifecycleWindow.hpp"
-#include "../windows/VFXDebugWindow.hpp"
-#include "../windows/AnimationDebugWindow.hpp"
 
 namespace handlers
 {
@@ -41,8 +39,6 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneLoadProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::NavmeshWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::AssetLifecycleWindow>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::VFXDebugWindow>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::AnimationDebugWindow>());
     }
 
     void WindowImguiHandler::cleanUp() const

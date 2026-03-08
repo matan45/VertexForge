@@ -15,6 +15,8 @@
 #include "lighting/LightBakeWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
+#include "VFXDebugWindow.hpp"
+#include "AnimationDebugWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
@@ -49,6 +51,8 @@ namespace windows
         LightBakeWindow lightBakeWindow;
         AssetLifecycleWindow assetLifecycleWindow;
         WorldSectorWindow worldSectorWindow;
+        VFXDebugWindow vfxDebugWindow;
+        AnimationDebugWindow animationDebugWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;

@@ -23,6 +23,8 @@ namespace windows
         menuBar.setLightBakeWindow(&lightBakeWindow);
         menuBar.setAssetLifecycleWindow(&assetLifecycleWindow);
         menuBar.setWorldSectorWindow(&worldSectorWindow);
+        menuBar.setVFXDebugWindow(&vfxDebugWindow);
+        menuBar.setAnimationDebugWindow(&animationDebugWindow);
 
         subscribeToEvents();
     }
@@ -91,6 +93,8 @@ namespace windows
             lightBakeWindow.draw();
             assetLifecycleWindow.draw();
             worldSectorWindow.draw();
+            vfxDebugWindow.draw();
+            animationDebugWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();

@@ -14,6 +14,8 @@
 #include "lighting/LightBakeWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
+#include "VFXDebugWindow.hpp"
+#include "AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -352,6 +354,22 @@ namespace windows
                 if (assetLifecycleWindow)
                 {
                     assetLifecycleWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("VFX Stats"))
+            {
+                if (vfxDebugWindow)
+                {
+                    vfxDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Animation Stats"))
+            {
+                if (animationDebugWindow)
+                {
+                    animationDebugWindow->show();
                 }
             }
 

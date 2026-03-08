@@ -20,6 +20,8 @@ namespace windows
     class LightBakeWindow;
     class AssetLifecycleWindow;
     class WorldSectorWindow;
+    class VFXDebugWindow;
+    class AnimationDebugWindow;
 
     class MainMenuBar
     {
@@ -44,6 +46,8 @@ namespace windows
         LightBakeWindow* lightBakeWindow = nullptr;
         AssetLifecycleWindow* assetLifecycleWindow = nullptr;
         WorldSectorWindow* worldSectorWindow = nullptr;
+        VFXDebugWindow* vfxDebugWindow = nullptr;
+        AnimationDebugWindow* animationDebugWindow = nullptr;
 
     public:
         MainMenuBar();
@@ -102,6 +106,16 @@ namespace windows
         void setWorldSectorWindow(WorldSectorWindow* window)
         {
             worldSectorWindow = window;
+        }
+
+        void setVFXDebugWindow(VFXDebugWindow* window)
+        {
+            vfxDebugWindow = window;
+        }
+
+        void setAnimationDebugWindow(AnimationDebugWindow* window)
+        {
+            animationDebugWindow = window;
         }
 
     private:
