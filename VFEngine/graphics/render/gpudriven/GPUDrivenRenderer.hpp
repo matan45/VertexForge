@@ -23,6 +23,7 @@
 #include "../shadow/ShadowSystem.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
+#include "vegetation/GrassConfig.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../vegetation/VegetationStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
@@ -154,8 +155,7 @@ namespace render::gpudriven
             bool vegetationRenderingEnabled = true;
             bool grassInitialized = false;
 
-            float grassFadeStart = 100.0f;
-            float grassFadeEnd = 150.0f;
+            ::vegetation::GrassRenderConfig grassConfig;
 
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
@@ -457,7 +457,7 @@ namespace render::gpudriven
                                        const glm::vec3& cameraPosition);
         void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
-        void setGrassFadeDistances(float start, float end) { vegetation.grassFadeStart = start; vegetation.grassFadeEnd = end; }
+        void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);

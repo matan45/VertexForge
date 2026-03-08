@@ -326,6 +326,7 @@ namespace render
 
     void RenderPassHandler::setGrassRenderProvider(services::IGrassRenderProvider* provider)
     {
+        grassRenderProvider = provider;
         if (provider && gpuDrivenRenderer)
         {
             auto* renderer = gpuDrivenRenderer.get();

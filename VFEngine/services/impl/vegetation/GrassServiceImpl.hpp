@@ -16,5 +16,7 @@ namespace services
     private:
         void setGrassConfig(EntityHandle entityId, const vegetation::GrassRenderConfig& config);
         vegetation::GrassRenderConfig getGrassConfig(EntityHandle entityId) const;
+        void setGlobalGrassConfig(const vegetation::GrassRenderConfig& config);
+        vegetation::GrassRenderConfig getGlobalGrassConfig() const;
     };
 }

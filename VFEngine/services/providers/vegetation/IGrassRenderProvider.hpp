@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <glm/glm.hpp>
+#include "vegetation/GrassConfig.hpp"
 
 namespace services
 {
@@ -19,6 +20,8 @@ namespace services
         virtual void markTileDirty(int32_t coordX, int32_t coordZ) = 0;
         virtual void addTile(int32_t coordX, int32_t coordZ) = 0;
         virtual void removeTile(int32_t coordX, int32_t coordZ) = 0;
+
+        virtual vegetation::GrassRenderConfig getGrassRenderConfig() const = 0;
 
         // Callbacks for wiring to renderer (set by RenderPassHandler)
         virtual void setAddTileCallback(TileCallback) {}

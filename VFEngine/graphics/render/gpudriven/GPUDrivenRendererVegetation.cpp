@@ -424,12 +424,12 @@ namespace render::gpudriven
             pushConstants.vertexSpacing = info.tile->config.getVertexSpacing();
             pushConstants.verticesPerSide = info.tile->config.getVertexCount();
             pushConstants.maxInstances = vegetation.grassInstanceCapacity;
-            pushConstants.slopeLimit = 0.8f;
-            pushConstants.densityMultiplier = 1.0f;
-            pushConstants.heightMin = 1.0f;
-            pushConstants.heightMax = 3.0f;
-            pushConstants.widthMin = 0.1f;
-            pushConstants.widthMax = 0.3f;
+            pushConstants.slopeLimit = vegetation.grassConfig.slopeLimit;
+            pushConstants.densityMultiplier = vegetation.grassConfig.densityMultiplier;
+            pushConstants.heightMin = vegetation.grassConfig.heightMin;
+            pushConstants.heightMax = vegetation.grassConfig.heightMax;
+            pushConstants.widthMin = vegetation.grassConfig.widthMin;
+            pushConstants.widthMax = vegetation.grassConfig.widthMax;
             pushConstants.time = cachedCamera.time;
 
             vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
@@ -504,8 +504,10 @@ namespace render::gpudriven
         vegetation.grassMeshPipeline->dispatch(
             cmd,
             vegetation.currentGrassInstanceCount,
-            vegetation.grassFadeStart,
-            vegetation.grassFadeEnd
+            vegetation.grassConfig.fadeStartDistance,
+            vegetation.grassConfig.fadeEndDistance,
+            vegetation.grassConfig.baseColor,
+            vegetation.grassConfig.tipColor
         );
     }
 

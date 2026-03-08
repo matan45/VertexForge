@@ -10,13 +10,13 @@ layout(std430, set = 0, binding = 0) readonly buffer GrassInstanceBuffer {
     vec4 grassInstances[];
 };
 
+// Camera — matches CameraUBO (240 bytes): view, projection, cameraPos, time, frustumPlanes[6]
 layout(set = 1, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
-    float nearPlane;
-    float farPlane;
     float time;
+    vec4 frustumPlanes[6];
 };
 
 // Wind UBO
@@ -26,6 +26,8 @@ layout(set = 2, binding = 0) uniform WindUBO {
 };
 
 layout(push_constant) uniform PushConstants {
+    vec4 baseColor;
+    vec4 tipColor;
     float fadeStartDistance;
     float fadeEndDistance;
 };

@@ -1,4 +1,6 @@
 #include "GrassRenderAdapter.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/VegetationComponents.hpp"
 
 namespace core::adapters
 {
@@ -25,5 +27,17 @@ namespace core::adapters
     void GrassRenderAdapter::removeTile(int32_t coordX, int32_t coordZ)
     {
         if (removeTileCallback) removeTileCallback(coordX, coordZ);
+    }
+
+    vegetation::GrassRenderConfig GrassRenderAdapter::getGrassRenderConfig() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::GrassComponent>(entity);
+            return comp.config;
+        }
+        return {};
     }
 }

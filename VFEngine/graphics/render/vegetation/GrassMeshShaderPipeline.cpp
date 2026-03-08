@@ -149,7 +149,9 @@ namespace render::vegetation
     void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
                                             uint32_t instanceCount,
                                             float fadeStartDistance,
-                                            float fadeEndDistance)
+                                            float fadeEndDistance,
+                                            const glm::vec4& baseColor,
+                                            const glm::vec4& tipColor)
     {
         if (!initialized || instanceCount == 0 || !graphicsPipeline) return;
 
@@ -167,7 +169,7 @@ namespace render::vegetation
         };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
 
-        GrassMeshPushConstants pc{fadeStartDistance, fadeEndDistance};
+        GrassMeshPushConstants pc{baseColor, tipColor, fadeStartDistance, fadeEndDistance};
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |
                           vk::ShaderStageFlagBits::eMeshEXT |

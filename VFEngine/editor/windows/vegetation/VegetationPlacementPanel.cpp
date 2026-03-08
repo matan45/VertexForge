@@ -21,11 +21,9 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        modeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
-            [this](const auto& n)
-            {
-                visible = n.isActive;
-            });
+        // VegetationPlacementPanel is for tree/vegetation scattering (VK-712).
+        // It will be wired to its own placement mode when implemented.
+        // For now, do not auto-show during grass brush mode.
 
         subscribed = true;
     }

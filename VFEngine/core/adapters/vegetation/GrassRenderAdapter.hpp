@@ -17,6 +17,8 @@ namespace core::adapters
         void addTile(int32_t coordX, int32_t coordZ) override;
         void removeTile(int32_t coordX, int32_t coordZ) override;
 
+        vegetation::GrassRenderConfig getGrassRenderConfig() const override;
+
         void setAddTileCallback(TileCallback cb) override { addTileCallback = std::move(cb); }
         void setRemoveTileCallback(TileCallback cb) override { removeTileCallback = std::move(cb); }
         void setMarkDirtyCallback(TileCallback cb) override { markDirtyCallback = std::move(cb); }

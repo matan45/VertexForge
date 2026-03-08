@@ -21,6 +21,7 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/data/WaterData.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
@@ -137,7 +138,20 @@ namespace render
             // Sync vegetation streaming with visible terrain tiles
             gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, currentCameraPosition);
 
-            // Update wind system with default config (no wind by default)
+            // Push grass render config from provider to renderer and update wind
+            if (grassRenderProvider)
+            {
+                auto grassConfig = grassRenderProvider->getGrassRenderConfig();
+                gpuDrivenRenderer->setGrassRenderConfig(grassConfig);
+
+                ::vegetation::WindConfig windConfig;
+                windConfig.direction = grassConfig.windDirection;
+                windConfig.speed = grassConfig.windSpeed * grassConfig.windStrength;
+                windConfig.gustStrength = grassConfig.gustStrength;
+                windConfig.gustFrequency = grassConfig.gustFrequency;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
+            else
             {
                 ::vegetation::WindConfig windConfig;
                 gpuDrivenRenderer->updateWind(0.016f, windConfig);

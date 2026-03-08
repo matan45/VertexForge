@@ -12,6 +12,8 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unregisterCommandHandler<events::vegetation::SetGrassConfigCommand>();
         dispatcher.unregisterQueryHandler<events::vegetation::GetGrassConfigQuery>();
+        dispatcher.unregisterCommandHandler<events::vegetation::SetGlobalGrassConfigCommand>();
+        dispatcher.unregisterQueryHandler<events::vegetation::GetGlobalGrassConfigQuery>();
     }
 
     void GrassServiceImpl::registerEventHandlers()
@@ -26,6 +28,16 @@ namespace services
         dispatcher.registerQueryHandler<events::vegetation::GetGrassConfigQuery>(
             [this](const events::vegetation::GetGrassConfigQuery& query) {
                 return getGrassConfig(query.entityId);
+            });
+
+        dispatcher.registerCommandHandler<events::vegetation::SetGlobalGrassConfigCommand>(
+            [this](const events::vegetation::SetGlobalGrassConfigCommand& cmd) {
+                setGlobalGrassConfig(cmd.config);
+            });
+
+        dispatcher.registerQueryHandler<events::vegetation::GetGlobalGrassConfigQuery>(
+            [this](const events::vegetation::GetGlobalGrassConfigQuery&) {
+                return getGlobalGrassConfig();
             });
     }
 
@@ -63,5 +75,44 @@ namespace services
 
         const auto& comp = registry.get<components::GrassComponent>(entity);
         return comp.config;
+    }
+
+    void GrassServiceImpl::setGlobalGrassConfig(const vegetation::GrassRenderConfig& config)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+
+        entt::entity target = entt::null;
+        for (auto entity : view)
+        {
+            target = entity;
+            break;
+        }
+
+        if (target == entt::null)
+        {
+            // Create a dedicated grass config entity
+            target = registry.create();
+            registry.emplace<components::GrassComponent>(target);
+        }
+
+        auto& comp = registry.get<components::GrassComponent>(target);
+        comp.config = config;
+
+        events::vegetation::GrassConfigChangedNotification notification;
+        notification.entityId = internal::toHandle(target);
+        events::EventDispatcher::instance().publish(notification);
+    }
+
+    vegetation::GrassRenderConfig GrassServiceImpl::getGlobalGrassConfig() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::GrassComponent>(entity);
+            return comp.config;
+        }
+        return {};
     }
 }

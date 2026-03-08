@@ -157,6 +157,15 @@ namespace services
             dispatcher.execute(cmd);
         }
 
+        // Deactivate hole mode if active
+        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+        if (holeActive)
+        {
+            events::hole::SetHoleModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+
         // Get selected entity and verify it is a terrain
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value())

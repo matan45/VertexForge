@@ -16,6 +16,8 @@ namespace render::vegetation
 {
     struct GrassMeshPushConstants
     {
+        glm::vec4 baseColor;
+        glm::vec4 tipColor;
         float fadeStartDistance;
         float fadeEndDistance;
     };
@@ -74,7 +76,9 @@ namespace render::vegetation
         void dispatch(vk::CommandBuffer cmd,
                       uint32_t instanceCount,
                       float fadeStartDistance,
-                      float fadeEndDistance);
+                      float fadeEndDistance,
+                      const glm::vec4& baseColor,
+                      const glm::vec4& tipColor);
 
         bool isInitialized() const { return initialized; }
 

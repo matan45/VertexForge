@@ -26,4 +26,17 @@ namespace events::vegetation
 
         std::string_view getName() const override { return "GrassConfigChanged"; }
     };
+
+    // Global versions — operate on first entity with GrassComponent (no entity handle needed)
+    struct SetGlobalGrassConfigCommand : ICommand<void>
+    {
+        ::vegetation::GrassRenderConfig config;
+
+        std::string_view getName() const override { return "SetGlobalGrassConfig"; }
+    };
+
+    struct GetGlobalGrassConfigQuery : IQuery<::vegetation::GrassRenderConfig>
+    {
+        std::string_view getName() const override { return "GetGlobalGrassConfig"; }
+    };
 }

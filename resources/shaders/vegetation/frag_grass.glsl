@@ -9,17 +9,15 @@ layout(location = 3) in float inAlpha;
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
+    vec4 baseColor;
+    vec4 tipColor;
     float fadeStartDistance;
     float fadeEndDistance;
 };
 
-// Grass colors - could come from UBO; hardcoded defaults for now
-const vec3 grassBaseColor = vec3(0.1, 0.35, 0.05);
-const vec3 grassTipColor = vec3(0.3, 0.6, 0.15);
-
 void main() {
-    // Gradient from base to tip
-    vec3 color = mix(grassBaseColor, grassTipColor, inUV.y);
+    // Gradient from base to tip using config colors
+    vec3 color = mix(baseColor.rgb, tipColor.rgb, inUV.y);
 
     // Simple lighting (hemisphere)
     vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));

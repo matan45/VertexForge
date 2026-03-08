@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events/EventTypes.hpp"
+#include "vegetation/GrassConfig.hpp"
 
 namespace windows
 {
@@ -14,6 +15,10 @@ namespace windows
         float brushOpacity = 1.0f;
         int falloffIndex = 2;
         int shapeIndex = 0;
+
+        // Grass render config (cached from ECS)
+        vegetation::GrassRenderConfig grassConfig;
+        bool configLoaded = false;
 
         events::SubscriptionToken modeToken;
         events::SubscriptionToken brushTypeToken;
@@ -31,5 +36,7 @@ namespace windows
 
     private:
         void subscribe();
+        void drawGrassConfigSection();
+        void pushGrassConfig();
     };
 }

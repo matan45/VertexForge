@@ -149,6 +149,7 @@ namespace render
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IWaterRenderProvider* waterRenderProvider = nullptr;
+        services::IGrassRenderProvider* grassRenderProvider = nullptr;
 
         mutable uint32_t lastOceanConfigVersion = 0;
         mutable bool oceanFFTInitialized = false;
