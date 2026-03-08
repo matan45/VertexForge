@@ -1,6 +1,7 @@
 #type TASK
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_KHR_shader_subgroup_ballot : require
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 

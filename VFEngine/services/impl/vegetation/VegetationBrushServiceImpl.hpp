@@ -33,9 +33,6 @@ namespace services
         vegetation::DensityBrushType getDensityBrushType() const;
         vegetation::PlacementBrushType getPlacementBrushType() const;
 
-        void applyDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
-        void applyPlacementBrush(const glm::vec3& worldPosition, float deltaTime);
-
         void publishDensityParamsChanged();
         void publishPlacementParamsChanged();
         void publishDensityTypeChanged();

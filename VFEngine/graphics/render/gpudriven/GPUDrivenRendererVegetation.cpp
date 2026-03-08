@@ -13,6 +13,11 @@
 #include "vegetation/WindConfig.hpp"
 #include "print/Log.hpp"
 
+// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 namespace render::gpudriven
 {
     static uint64_t makeTileKey(int32_t x, int32_t z)
@@ -109,6 +114,9 @@ namespace render::gpudriven
                                                        const glm::vec3& cameraPosition)
     {
         if (!initialized || !vegetation.grassInitialized) return;
+
+        // Cache visible tiles for grass compute dispatch later in the frame
+        vegetation.cachedVisibleTiles.assign(visibleTiles.begin(), visibleTiles.end());
 
         // Sync vegetation tiles with visible terrain tiles.
         // Auto-register tiles that appear and auto-remove tiles that disappear.
@@ -216,6 +224,90 @@ namespace render::gpudriven
         if (vegetation.vegetationStreamManager)
         {
             vegetation.vegetationStreamManager->markTileDirty(coordX, coordZ);
+        }
+    }
+
+    void GPUDrivenRenderer::dispatchGrassCompute(vk::CommandBuffer cmd,
+                                                 const std::vector<terrain::TerrainTile*>& visibleTiles)
+    {
+        if (!initialized || !vegetation.grassInitialized) return;
+        if (!vegetation.grassRenderingEnabled) return;
+        if (!vegetation.grassComputePipeline || !vegetation.grassComputePipeline->isInitialized()) return;
+
+        // Reset counter to 0
+        if (vegetation.grassCounterMapped)
+        {
+            std::memset(vegetation.grassCounterMapped, 0, sizeof(uint32_t));
+        }
+
+        // Count tiles that have density data
+        uint32_t totalTexels = 0;
+        for (const auto* tile : visibleTiles)
+        {
+            if (!tile || !tile->vegetationDensity.isInitialized()) continue;
+            totalTexels += static_cast<uint32_t>(tile->vegetationDensity.getTexelCount());
+        }
+
+        if (totalTexels == 0)
+        {
+            vegetation.currentGrassInstanceCount = 0;
+            return;
+        }
+
+        // For now, dispatch per-tile. Each tile fills the shared instance buffer
+        // with an atomic counter to track the next write offset.
+        for (const auto* tile : visibleTiles)
+        {
+            if (!tile || !tile->vegetationDensity.isInitialized()) continue;
+
+            uint32_t texelCount = static_cast<uint32_t>(tile->vegetationDensity.getTexelCount());
+            if (texelCount == 0) continue;
+
+            vegetation::GrassComputePushConstants pushConstants{};
+            pushConstants.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            pushConstants.tileWorldSize = tile->config.worldTileSize;
+            pushConstants.vertexSpacing = tile->config.getVertexSpacing();
+            pushConstants.verticesPerSide = tile->config.getVertexCount();
+            pushConstants.maxInstances = vegetation.grassInstanceCapacity;
+            pushConstants.slopeLimit = 0.8f;
+            pushConstants.densityMultiplier = 1.0f;
+            pushConstants.heightMin = 0.2f;
+            pushConstants.heightMax = 0.8f;
+            pushConstants.widthMin = 0.02f;
+            pushConstants.widthMax = 0.05f;
+            pushConstants.time = cachedCamera.time;
+
+            vegetation.grassComputePipeline->dispatch(cmd, texelCount, pushConstants);
+        }
+
+        // Memory barrier: compute writes → vertex/fragment reads
+        vk::MemoryBarrier barrier(
+            vk::AccessFlagBits::eShaderWrite,
+            vk::AccessFlagBits::eShaderRead);
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eTaskShaderEXT | vk::PipelineStageFlagBits::eMeshShaderEXT,
+            vk::DependencyFlags{},
+            1, &barrier,
+            0, nullptr,
+            0, nullptr);
+
+        // Read back instance count from counter buffer
+        if (vegetation.grassCounterMapped)
+        {
+            uint32_t count = 0;
+            std::memcpy(&count, vegetation.grassCounterMapped, sizeof(uint32_t));
+            vegetation.currentGrassInstanceCount = std::min(count, vegetation.grassInstanceCapacity);
+        }
+
+        // Update mesh pipeline descriptors with the instance buffer
+        if (vegetation.grassMeshPipeline && vegetation.currentGrassInstanceCount > 0)
+        {
+            vegetation.grassMeshPipeline->updateGrassDataDescriptors(
+                vegetation.grassInstanceBuffer,
+                vegetation.grassCounterBuffer);
         }
     }
 

@@ -163,6 +163,9 @@ namespace render::gpudriven
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
+
+            // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
+            std::vector<terrain::TerrainTile*> cachedVisibleTiles;
         };
 
         struct LightCullingState
@@ -442,6 +445,7 @@ namespace render::gpudriven
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
         void cleanupVegetation();
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);

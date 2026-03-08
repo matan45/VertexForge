@@ -223,7 +223,7 @@ namespace render::vegetation
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
         shader = std::make_unique<core::Shader>(*devicePtr);
-        shader->readShader("../../resources/shaders/vegetation/grass_placement.comp");
+        shader->readShader("../../resources/shaders/vegetation/grass_placement.glsl");
 
         const auto& stages = shader->getShaderStages();
         if (stages.empty())

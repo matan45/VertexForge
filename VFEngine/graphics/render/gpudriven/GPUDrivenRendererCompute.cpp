@@ -288,6 +288,12 @@ namespace render::gpudriven
 
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
 
+        // Dispatch grass compute: generate instances from density maps
+        if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
+        {
+            dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
+        }
+
         // Volumetric fog runs AFTER shadow passes so that:
         // 1. Shadow texture descriptor set is finalized (no updates after binding)
         // 2. Shadow maps are rendered and available for sampling

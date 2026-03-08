@@ -46,18 +46,7 @@ namespace services
                 setPlacementBrushType(cmd.type);
             });
 
-        // Apply brush commands
-        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationDensityBrushCommand>(
-            [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
-            {
-                applyDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
-            });
-
-        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationPlacementBrushCommand>(
-            [this](const events::vegetationBrush::ApplyVegetationPlacementBrushCommand& cmd)
-            {
-                applyPlacementBrush(cmd.worldPosition, cmd.deltaTime);
-            });
+        // Apply brush commands are handled by TerrainService (which has grid access)
 
         // Queries
         dispatcher.registerQueryHandler<events::vegetationBrush::GetDensityBrushParamsQuery>(
@@ -156,42 +145,6 @@ namespace services
     vegetation::PlacementBrushType VegetationBrushServiceImpl::getPlacementBrushType() const
     {
         return currentPlacementBrushType;
-    }
-
-    void VegetationBrushServiceImpl::applyDensityBrush(
-        const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
-    {
-        if (!vegetationModeActive)
-        {
-            return;
-        }
-
-        // Actual brush application on terrain tiles will be wired later
-        // when TerrainService is modified to support vegetation density maps.
-        // For now, publish notification so other systems can react.
-
-        events::vegetationBrush::VegetationDensityBrushAppliedNotification notification;
-        notification.position = worldPosition;
-        notification.type = currentDensityBrushType;
-        events::EventDispatcher::instance().publish(notification);
-    }
-
-    void VegetationBrushServiceImpl::applyPlacementBrush(
-        const glm::vec3& worldPosition, float deltaTime)
-    {
-        if (!vegetationModeActive)
-        {
-            return;
-        }
-
-        // Actual brush application on terrain tiles will be wired later
-        // when TerrainService is modified to support vegetation placement data.
-        // For now, publish notification so other systems can react.
-
-        events::vegetationBrush::VegetationPlacementBrushAppliedNotification notification;
-        notification.position = worldPosition;
-        notification.type = currentPlacementBrushType;
-        events::EventDispatcher::instance().publish(notification);
     }
 
     void VegetationBrushServiceImpl::publishDensityParamsChanged()
