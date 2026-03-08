@@ -58,6 +58,52 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawDistanceSettings(data);
             ImGui::Spacing();
+
+            if (!data.imposterPath.empty())
+            {
+                std::string filename = data.imposterPath;
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                    filename = filename.substr(lastSlash + 1);
+                ImGui::Text("Impostor: %s", filename.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("No impostor selected");
+            }
+
+            if (ImGui::Button("Select Impostor##Billboard"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"VF Impostor Files (*.vfImposter)", L"*.vfImposter"}});
+                if (!path.empty())
+                {
+                    std::ifstream file(path);
+                    if (file.good())
+                    {
+                        file.close();
+                        data.imposterPath = path;
+                        changed = true;
+                    }
+                    else
+                    {
+                        vfLogError("Selected impostor file does not exist or cannot be read: {}", path);
+                    }
+                }
+            }
+
+            ImGui::SameLine();
+            bool imposterEmpty = data.imposterPath.empty();
+            if (imposterEmpty) ImGui::BeginDisabled();
+            if (ImGui::Button("Clear##BillboardImposter"))
+            {
+                data.imposterPath = "";
+                changed = true;
+            }
+            if (imposterEmpty) ImGui::EndDisabled();
+
+            ImGui::SameLine();
             drawBakeImpostor(handle);
 
             if (changed)
@@ -249,6 +295,20 @@ namespace windows::details
             if (result.success)
             {
                 vfLogInfo("Impostor baked: {}", result.outputPath);
+
+                // Set the imposter path on the billboard component
+                events::scene::GetBillboardDataQuery bbQuery;
+                bbQuery.entity = handle;
+                auto bbDataOpt = dispatcher.query(bbQuery);
+                if (bbDataOpt.has_value())
+                {
+                    auto bbData = *bbDataOpt;
+                    bbData.imposterPath = result.outputPath;
+                    events::scene::SetBillboardDataCommand setCmd;
+                    setCmd.entity = handle;
+                    setCmd.billboardData = bbData;
+                    dispatcher.execute(setCmd);
+                }
             }
             else
             {

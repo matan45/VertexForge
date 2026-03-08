@@ -56,6 +56,8 @@ namespace controllers
         gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
         gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
         gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
+        gpuDriven->setCategoryDistance(5, settings.distanceCulling.billboardDistance);
+        gpuDriven->setCategoryDistance(6, settings.distanceCulling.waterDistance);
         gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
 
         renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);

@@ -102,6 +102,7 @@ namespace services {
         data.renderTextureSourceName = comp.renderTextureSourceName;
         data.billboardDistance = comp.billboardDistance;
         data.maxRenderDistance = comp.maxRenderDistance;
+        data.imposterPath = comp.imposterPath;
         return data;
     }
 
@@ -127,6 +128,7 @@ namespace services {
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;
         comp.billboardDistance = billboardData.billboardDistance;
         comp.maxRenderDistance = billboardData.maxRenderDistance;
+        comp.imposterPath = billboardData.imposterPath;
 
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;

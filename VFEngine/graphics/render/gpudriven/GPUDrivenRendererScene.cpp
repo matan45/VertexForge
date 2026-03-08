@@ -7,6 +7,7 @@
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "../../core/Texture.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
@@ -637,6 +638,24 @@ namespace render::gpudriven
         if (registered)
         {
             materials.registeredPaths.insert(materialPath);
+
+            // Register texture dependencies so textures stay alive while material is tracked
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (lifecycle.isTracked(materialPath))
+            {
+                auto addDep = [&](const std::string& texPath) {
+                    if (!texPath.empty())
+                        lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
+                };
+                addDep(pbrValues.albedoTexturePath);
+                addDep(pbrValues.normalTexturePath);
+                addDep(pbrValues.ormTexturePath);
+                addDep(pbrValues.metallicTexturePath);
+                addDep(pbrValues.roughnessTexturePath);
+                addDep(pbrValues.aoTexturePath);
+                addDep(pbrValues.emissionTexturePath);
+                addDep(pbrValues.heightTexturePath);
+            }
         }
 
         return registered;

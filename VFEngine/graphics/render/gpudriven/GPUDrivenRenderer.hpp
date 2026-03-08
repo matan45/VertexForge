@@ -188,6 +188,17 @@ namespace render::gpudriven
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
         };
 
+        struct ImposterTexture
+        {
+            vk::Image image;
+            vk::DeviceMemory memory;
+            vk::ImageView imageView;
+            vk::Sampler sampler;
+            uint32_t bindlessIndex = 0;
+            uint32_t width = 0;
+            uint32_t height = 0;
+        };
+
         struct BillboardState
         {
             std::unique_ptr<BillboardBufferManager> bufferManager;
@@ -197,6 +208,7 @@ namespace render::gpudriven
             BillboardRenderStats stats;
             bool renderingEnabled = true;
             bool initialized = false;
+            std::unordered_map<std::string, ImposterTexture> loadedImposters;
         };
 
         struct LightCullingState
@@ -489,6 +501,11 @@ namespace render::gpudriven
         void setBillboardRenderingEnabled(bool enabled) { billboard.renderingEnabled = enabled; }
         bool isBillboardRenderingEnabled() const { return billboard.renderingEnabled; }
         const BillboardRenderStats& getBillboardStats() const { return billboard.stats; }
+
+        // Load a .vfImposter atlas and register its texture. Returns bindless texture index.
+        uint32_t loadImposterAtlas(const std::string& imposterPath);
+        void unloadImposterAtlas(const std::string& imposterPath);
+        bool hasImposterAtlas(const std::string& imposterPath) const;
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 

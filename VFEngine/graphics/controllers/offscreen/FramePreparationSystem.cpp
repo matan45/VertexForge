@@ -7,6 +7,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/billboard/BillboardPipeline.hpp"
+#include "../../render/gpudriven/BillboardGPUTypes.hpp"
 #include "../../render/text/TextTypes.hpp"
 #include "../../render/text/TextPipeline.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -387,6 +388,57 @@ namespace controllers::offscreen
         }
 
         renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+
+        // Collect WorldSpace billboards with impostor atlases for GPU-driven rendering
+        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+        if (gpuRenderer && gpuRenderer->isBillboardRenderingEnabled())
+        {
+            glm::vec3 cameraPos = gpuRenderer->getCachedCameraPosition();
+            std::vector<render::gpudriven::BillboardInstanceGPU> gpuInstances;
+
+            for (auto entity : view)
+            {
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    const auto& nameComp = registry.get<components::NameComponent>(entity);
+                    if (!nameComp.isActive) continue;
+                }
+
+                const auto& bb = view.get<components::BillboardComponent>(entity);
+                const auto& wt = view.get<components::WorldTransformComponent>(entity);
+
+                // Only WorldSpace billboards with an imposter atlas go to GPU pipeline
+                if (bb.sizeMode != components::BillboardSizeMode::WorldSpace) continue;
+                if (bb.imposterPath.empty()) continue;
+
+                glm::vec3 pos = glm::vec3(wt.worldMatrix[3]);
+                float distSq = glm::dot(pos - cameraPos, pos - cameraPos);
+
+                // Only render billboard between billboardDistance and maxRenderDistance
+                float minDistSq = bb.billboardDistance * bb.billboardDistance;
+                float maxDistSq = bb.maxRenderDistance * bb.maxRenderDistance;
+                if (distSq < minDistSq || distSq > maxDistSq) continue;
+
+                // Load impostor atlas on demand (returns cached index if already loaded)
+                uint32_t bindlessIdx = gpuRenderer->loadImposterAtlas(bb.imposterPath);
+                if (bindlessIdx == 0 || bindlessIdx == 0xFFFFFFFF) continue;
+
+                render::gpudriven::BillboardInstanceGPU inst{};
+                float scale = glm::length(glm::vec3(wt.worldMatrix[0]));
+                inst.positionAndScale = glm::vec4(pos, scale);
+                inst.atlasUVRect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f); // Full atlas
+                inst.colorTint = bb.colorTint;
+                inst.bindlessTextureIndex = bindlessIdx;
+                inst.flags = 1; // Axis-aligned (Y-up)
+                inst.entityId = static_cast<uint32_t>(entity);
+                inst.rotation = 0.0f;
+                inst.size = bb.size;
+
+                gpuInstances.push_back(inst);
+            }
+
+            gpuRenderer->updateBillboards(gpuInstances);
+        }
     }
 
     void FramePreparationSystem::prepareText(const FrameContext& ctx)

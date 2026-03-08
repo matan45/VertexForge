@@ -249,6 +249,7 @@ namespace services
         std::string renderTextureSourceName;
         float billboardDistance = 100.0f;  // Distance at which mesh transitions to billboard
         float maxRenderDistance = 1000.0f; // Maximum render distance for billboard
+        std::string imposterPath;          // Path to .vfImposter atlas (baked from mesh)
     };
 
     struct TextData
