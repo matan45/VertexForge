@@ -108,6 +108,11 @@ namespace events::vegetationBrush
         std::string_view getName() const override { return "GetVegetationBrushTargetEntity"; }
     };
 
+    struct GetVegetationPlacementTargetEntityQuery : IQuery<std::optional<services::EntityHandle>>
+    {
+        std::string_view getName() const override { return "GetVegetationPlacementTargetEntity"; }
+    };
+
     // ---- Notifications ----
 
     struct VegetationDensityBrushAppliedNotification : INotification

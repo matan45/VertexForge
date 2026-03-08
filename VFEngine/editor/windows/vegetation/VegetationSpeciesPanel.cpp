@@ -129,6 +129,8 @@ namespace windows
 
                 ImGui::Separator();
                 ImGui::Text("Distances");
+                changed |= ImGui::DragFloat("LOD1 Dist", &config.lod1Distance, 1.0f, 1.0f, 2000.0f);
+                changed |= ImGui::DragFloat("LOD2 Dist", &config.lod2Distance, 1.0f, 1.0f, 2000.0f);
                 changed |= ImGui::DragFloat("Imposter Dist", &config.imposterDistance, 1.0f, 1.0f, 2000.0f);
                 changed |= ImGui::DragFloat("Max Render Dist", &config.maxRenderDistance, 1.0f, 1.0f, 5000.0f);
 

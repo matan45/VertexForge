@@ -9,9 +9,9 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
 
         if (vegetationModeToken.isValid())
-        {
             dispatcher.unsubscribe(vegetationModeToken);
-        }
+        if (placementModeToken.isValid())
+            dispatcher.unsubscribe(placementModeToken);
     }
 
     void VegetationBrushServiceImpl::registerEventHandlers()
@@ -79,6 +79,12 @@ namespace services
             {
                 vegetationModeActive = n.isActive;
             });
+
+        placementModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
+            [this](const events::vegetationBrush::VegetationPlacementModeChangedNotification& n)
+            {
+                placementModeActive = n.isActive;
+            });
     }
 
     void VegetationBrushServiceImpl::setDensityParams(const vegetation::DensityBrushParams& params)
@@ -95,7 +101,7 @@ namespace services
 
     void VegetationBrushServiceImpl::setPlacementParams(const vegetation::PlacementBrushParams& params)
     {
-        if (!vegetationModeActive)
+        if (!placementModeActive)
         {
             return;
         }
@@ -118,7 +124,7 @@ namespace services
 
     void VegetationBrushServiceImpl::setPlacementBrushType(vegetation::PlacementBrushType type)
     {
-        if (!vegetationModeActive)
+        if (!placementModeActive)
         {
             return;
         }

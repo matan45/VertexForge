@@ -13,8 +13,10 @@ namespace services
         vegetation::DensityBrushType currentDensityBrushType = vegetation::DensityBrushType::Paint;
         vegetation::PlacementBrushType currentPlacementBrushType = vegetation::PlacementBrushType::Scatter;
         bool vegetationModeActive = false;
+        bool placementModeActive = false;
 
         ::events::SubscriptionToken vegetationModeToken;
+        ::events::SubscriptionToken placementModeToken;
 
     public:
         VegetationBrushServiceImpl() = default;

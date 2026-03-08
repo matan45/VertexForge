@@ -15,6 +15,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/VegetationEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
@@ -546,23 +547,47 @@ namespace services
     void TerrainService::applyVegetationPlacementBrush(
         const glm::vec3& worldPosition, float deltaTime)
     {
+        vfLogInfo("PlacementBrush: called at ({}, {}, {})", worldPosition.x, worldPosition.y, worldPosition.z);
+
         if (saveInProgress.load(std::memory_order_acquire))
+        {
+            vfLogInfo("PlacementBrush: blocked by saveInProgress");
             return;
+        }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationBrushTargetEntityQuery{});
+        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationPlacementTargetEntityQuery{});
         if (!targetEntity.has_value())
+        {
+            vfLogInfo("PlacementBrush: no target entity");
             return;
+        }
 
         auto gridIt = terrainGrids.find(targetEntity->id);
         if (gridIt == terrainGrids.end())
+        {
+            vfLogInfo("PlacementBrush: grid not found for entity {}", targetEntity->id);
             return;
+        }
 
         terrain::TerrainGrid* grid = gridIt->second.get();
 
         auto brushParams = dispatcher.query(events::vegetationBrush::GetPlacementBrushParamsQuery{});
         auto brushType = dispatcher.query(events::vegetationBrush::GetPlacementBrushTypeQuery{});
+
+        // Auto-resolve species ID if not set (default 0 is never a valid species)
+        if (brushParams.speciesId == 0)
+        {
+            auto allSpecies = dispatcher.query(events::vegetation::GetAllVegetationSpeciesQuery{});
+            if (!allSpecies.empty())
+            {
+                brushParams.speciesId = allSpecies.begin()->first;
+            }
+        }
+
+        vfLogInfo("PlacementBrush: brushType={}, radius={}, density={}, speciesId={}",
+            static_cast<int>(brushType), brushParams.radius, brushParams.density, brushParams.speciesId);
 
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();

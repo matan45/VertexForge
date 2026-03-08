@@ -593,6 +593,7 @@
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vegetation\frag_grass.glsl" />
     <None Include="..\..\resources\shaders\vegetation\frag_imposter.glsl" />
+    <None Include="..\..\resources\shaders\vegetation\frag_vegetation.glsl" />
     <None Include="..\..\resources\shaders\vegetation\grass_placement.glsl" />
     <None Include="..\..\resources\shaders\vegetation\mesh_grass.glsl" />
     <None Include="..\..\resources\shaders\vegetation\mesh_imposter.glsl" />

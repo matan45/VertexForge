@@ -15,7 +15,7 @@ namespace render::vegetation
     class ImposterPipeline
     {
     public:
-        ImposterPipeline() = default;
+        ImposterPipeline();
         ~ImposterPipeline();
 
         ImposterPipeline(const ImposterPipeline&) = delete;
@@ -35,7 +35,8 @@ namespace render::vegetation
         // Set 0 descriptors: visible LOD2 buffer + count + tree instances
         void updateInstanceDescriptors(vk::Buffer visibleBuffer,
                                         vk::Buffer visibleCountBuffer,
-                                        vk::Buffer treeInstanceBuffer);
+                                        vk::Buffer treeInstanceBuffer,
+                                        vk::DeviceSize countBufferOffset = 0);
 
         // Set 3 descriptor: imposter config buffer
         void updateImposterConfigDescriptor(vk::Buffer imposterConfigBuffer);

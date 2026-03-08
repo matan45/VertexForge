@@ -294,6 +294,14 @@ namespace render::gpudriven
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
         }
 
+        // Dispatch vegetation tree LOD: upload instances, cull + LOD select
+        if (vegetation.treeLODInitialized && vegetation.vegetationRenderingEnabled &&
+            vegetation.currentTreeInstanceCount > 0)
+        {
+            uploadTreeInstances(cmd);
+            dispatchVegetationCullLOD(cmd);
+        }
+
         // Volumetric fog runs AFTER shadow passes so that:
         // 1. Shadow texture descriptor set is finalized (no updates after binding)
         // 2. Shadow maps are rendered and available for sampling

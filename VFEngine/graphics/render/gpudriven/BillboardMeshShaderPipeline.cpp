@@ -252,7 +252,7 @@ namespace render::gpudriven
             binding.binding = 0;
             binding.descriptorType = vk::DescriptorType::eUniformBuffer;
             binding.descriptorCount = 1;
-            binding.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
+            binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = 1;

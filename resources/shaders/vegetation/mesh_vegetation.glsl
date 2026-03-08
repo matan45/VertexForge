@@ -17,6 +17,7 @@ layout(location = 0) out vec3 fragWorldPos[];
 layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragInstanceIndex[];
+layout(location = 4) flat out uint fragMaterialTexIndex[];
 
 // Must match TreeInstanceGPU in VegetationGPUTypes.hpp
 struct TreeInstance {
@@ -60,9 +61,11 @@ layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
 };
 
 struct VegetationPayload {
-    uint instanceIndices[32];
-    uint lodLevels[32];
-    uint instanceCount;
+    uint instanceIndex;
+    uint baseMeshletIndex;
+    uint meshletCount;
+    uint baseVertexOffset;
+    uint materialTextureIndex;
 };
 
 taskPayloadSharedEXT VegetationPayload payload;
@@ -80,24 +83,96 @@ uvec3 unpackPrimitive(uint packed) {
 }
 
 void main() {
-    uint payloadIndex = gl_WorkGroupID.x;
-    if (payloadIndex >= payload.instanceCount) {
+    uint meshletLocalIdx = gl_WorkGroupID.x;
+    if (meshletLocalIdx >= payload.meshletCount) {
         SetMeshOutputsEXT(0, 0);
         return;
     }
 
-    // Placeholder - actual implementation will:
-    // 1. Load meshlet data from merged buffer using instance's mesh reference
-    // 2. Transform vertices by instance modelMatrix
-    // 3. Apply wind displacement using calculateWindDisplacement() from wind_common.glsl
-    // 4. Emit vertices and primitives
-    //
-    // Wind application example (to be used when meshlet data is available):
-    //   vec3 worldPos = (modelMatrix * vec4(localPos, 1.0)).xyz;
-    //   float vertexHeight = (localPos.y - meshMinY) / (meshMaxY - meshMinY);
-    //   vec3 windOffset = calculateWindDisplacement(worldPos, vertexHeight,
-    //                                               windDirectionAndSpeed, windGustParams);
-    //   worldPos += windOffset;
+    uint globalMeshletIndex = payload.baseMeshletIndex + meshletLocalIdx;
+    uint instanceIdx = payload.instanceIndex;
+    TreeInstance inst = allInstances[instanceIdx];
 
-    SetMeshOutputsEXT(0, 0);
+    GPUMeshlet meshlet = meshlets[globalMeshletIndex];
+
+    uint vertexCount, primitiveCount;
+    unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
+    SetMeshOutputsEXT(vertexCount, primitiveCount);
+
+    mat4 modelMatrix = inst.modelMatrix;
+    mat3 normalMatrix = mat3(transpose(inverse(modelMatrix)));
+    mat4 viewProjection = camera.projection * camera.view;
+
+    // Compute mesh bounding box Y range for wind height factor
+    // Use bounding sphere as approximation: bottom = center.y - radius, top = center.y + radius
+    float meshMinY = inst.boundingSphere.y - inst.boundingSphere.w;
+    float meshMaxY = inst.boundingSphere.y + inst.boundingSphere.w;
+    float meshHeightRange = max(meshMaxY - meshMinY, 0.001);
+
+    // Load vertices
+    uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
+    for (uint iter = 0; iter < numIterations; iter++) {
+        uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        if (localVertexIndex < vertexCount) {
+            uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
+            uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
+
+            // Vertex stride is 16 floats (64 bytes): pos(3) + normal(3) + uv(2) + bone(8)
+            uint baseIdx = globalVertexIndex * 16;
+
+            vec3 position = vec3(
+                vertexData[baseIdx + 0],
+                vertexData[baseIdx + 1],
+                vertexData[baseIdx + 2]
+            );
+            vec3 normal = vec3(
+                vertexData[baseIdx + 3],
+                vertexData[baseIdx + 4],
+                vertexData[baseIdx + 5]
+            );
+
+            sharedPositions[localVertexIndex] = position;
+            sharedNormals[localVertexIndex] = normal;
+            sharedTexCoords[localVertexIndex] = vec2(
+                vertexData[baseIdx + 6],
+                vertexData[baseIdx + 7]
+            );
+        }
+    }
+
+    barrier();
+
+    // Transform and emit vertices
+    for (uint iter = 0; iter < numIterations; iter++) {
+        uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        if (localVertexIndex < vertexCount) {
+            vec3 localPos = sharedPositions[localVertexIndex];
+            vec4 worldPos4 = modelMatrix * vec4(localPos, 1.0);
+            vec3 worldPos = worldPos4.xyz;
+
+            // Apply wind displacement based on vertex height
+            float vertexHeight = clamp((worldPos.y - meshMinY) / meshHeightRange, 0.0, 1.0);
+            vec3 windOffset = calculateWindDisplacement(worldPos, vertexHeight,
+                                                         windDirectionAndSpeed, windGustParams);
+            worldPos += windOffset;
+
+            fragWorldPos[localVertexIndex] = worldPos;
+            fragNormal[localVertexIndex] = normalize(normalMatrix * sharedNormals[localVertexIndex]);
+            fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
+            fragInstanceIndex[localVertexIndex] = instanceIdx;
+            fragMaterialTexIndex[localVertexIndex] = payload.materialTextureIndex;
+            gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * vec4(worldPos, 1.0);
+        }
+    }
+
+    // Emit primitives
+    uint numPrimIterations = (primitiveCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
+    for (uint iter = 0; iter < numPrimIterations; iter++) {
+        uint localPrimIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        if (localPrimIndex < primitiveCount) {
+            uint packedPrimitive = meshletPrimitives[meshlet.primitiveOffset + localPrimIndex];
+            uvec3 indices = unpackPrimitive(packedPrimitive);
+            gl_PrimitiveTriangleIndicesEXT[localPrimIndex] = indices;
+        }
+    }
 }

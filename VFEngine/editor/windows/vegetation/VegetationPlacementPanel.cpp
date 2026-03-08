@@ -25,6 +25,7 @@ namespace windows
             [this](const auto& n)
             {
                 visible = n.isActive;
+                if (n.isActive) needsInitialParamSend = true;
             });
 
         subscribed = true;
@@ -112,6 +113,23 @@ namespace windows
                 currentIdx = 0;
                 selectedSpeciesId = speciesIds[0];
                 paramsChanged = true;
+            }
+
+            // Send params when mode first activates to ensure correct species ID
+            if (needsInitialParamSend && !speciesIds.empty())
+            {
+                if (currentIdx >= 0) selectedSpeciesId = speciesIds[currentIdx];
+                paramsChanged = true;
+                needsInitialParamSend = false;
+            }
+
+            // Ensure params are sent when mode first activates
+            if (needsInitialParamSend && !speciesIds.empty())
+            {
+                if (currentIdx >= 0)
+                    selectedSpeciesId = speciesIds[currentIdx];
+                paramsChanged = true;
+                needsInitialParamSend = false;
             }
 
             if (ImGui::BeginCombo("Active Species", currentIdx >= 0

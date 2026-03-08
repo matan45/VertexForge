@@ -46,6 +46,12 @@ namespace services
                 return isActive();
             });
 
+        dispatcher.registerQueryHandler<events::vegetationBrush::GetVegetationPlacementTargetEntityQuery>(
+            [this](const events::vegetationBrush::GetVegetationPlacementTargetEntityQuery&)
+            {
+                return getTargetEntity();
+            });
+
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {

@@ -19,6 +19,9 @@
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "vegetation/VegetationSpecies.hpp"
+#include "../vegetation/VegetationCullLODPipeline.hpp"
+#include "../vegetation/VegetationMeshShaderPipeline.hpp"
+#include "../vegetation/ImposterPipeline.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
@@ -188,6 +191,34 @@ namespace render::gpudriven
             // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
 
+            // --- Vegetation LOD pipeline (tree mesh + imposter) ---
+            std::unique_ptr<render::vegetation::VegetationCullLODPipeline> cullLODPipeline;
+            std::unique_ptr<render::vegetation::VegetationMeshShaderPipeline> vegMeshPipeline;
+            std::unique_ptr<render::vegetation::ImposterPipeline> imposterPipeline;
+
+            // GPU buffers for tree LOD pipeline
+            vk::Buffer treeInstanceBuffer;
+            vk::DeviceMemory treeInstanceBufferMemory;
+            vk::Buffer treeInstanceCountBuffer;       // single uint32_t
+            vk::DeviceMemory treeInstanceCountBufferMemory;
+            vk::Buffer visibleLOD0Buffer;
+            vk::DeviceMemory visibleLOD0BufferMemory;
+            vk::Buffer visibleLOD1Buffer;
+            vk::DeviceMemory visibleLOD1BufferMemory;
+            vk::Buffer visibleLOD2Buffer;
+            vk::DeviceMemory visibleLOD2BufferMemory;
+            vk::Buffer lodCountersBuffer;             // 3 x uint32_t (lod0Count, lod1Count, lod2Count)
+            vk::DeviceMemory lodCountersBufferMemory;
+            vk::Buffer imposterConfigBuffer;          // per-species ImposterConfigGPU[]
+            vk::DeviceMemory imposterConfigBufferMemory;
+            vk::Buffer treeInstanceStagingBuffer;     // host-visible staging for tree instances
+            vk::DeviceMemory treeInstanceStagingMemory;
+            void* treeInstanceStagingMapped = nullptr;
+
+            uint32_t treeInstanceCapacity = 0;
+            uint32_t currentTreeInstanceCount = 0;
+            bool treeLODInitialized = false;
+
             // Species data cache for billboard rendering of placed vegetation
             struct CachedSpeciesData
             {
@@ -195,8 +226,42 @@ namespace render::gpudriven
                 glm::vec2 billboardSize{2.0f, 4.0f};
                 std::string imposterAtlasPath;
                 bool hasImposter = false;
+
+                // Imposter config for GPU
+                float treeHeight = 4.0f;
+                float treeWidth = 2.0f;
+                uint32_t horizontalAngles = 8;
+                uint32_t verticalAngles = 1;
+                uint32_t viewResolution = 256;
+                float atlasWidth = 2048.0f;
+                float atlasHeight = 2048.0f;
+
+                // LOD distances from species config
+                float lod1Distance = 50.0f;
+                float lod2Distance = 100.0f;
+                float imposterDistance = 150.0f;
+                float maxRenderDistance = 500.0f;
+
+                // Material data
+                std::string materialPath;
+                uint32_t materialTextureIndex = 0;  // bindless index for albedo
+                bool hasMaterial = false;
+
+                // Mesh data (from .vfMesh)
+                std::string meshPath;
+                bool hasMesh = false;
+                uint32_t meshletOffset[4] = {};  // per LOD (global offset into shared meshlet buffer)
+                uint32_t meshletCount[4] = {};   // per LOD
+                uint32_t baseVertexOffset = 0;   // global offset into shared vertex buffer
+                uint32_t availableLODMask = 0;   // bits 0-3 for which mesh LODs are loaded
             };
             std::unordered_map<uint32_t, CachedSpeciesData> cachedSpecies;
+            bool imposterConfigDirty = true;
+            bool speciesRenderInfoDirty = true;
+
+            // Species render info GPU buffer
+            vk::Buffer speciesRenderInfoBuffer;
+            vk::DeviceMemory speciesRenderInfoBufferMemory;
         };
 
         struct ImposterViewInfo
@@ -517,6 +582,11 @@ namespace render::gpudriven
         void clearAllVegetationSpecies();
         void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void dispatchVegetationCullLOD(vk::CommandBuffer cmd);
+        void renderVegetationDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void setVegetationRenderingEnabled(bool enabled) { vegetation.vegetationRenderingEnabled = enabled; }
+        bool isVegetationRenderingEnabled() const { return vegetation.vegetationRenderingEnabled; }
         void cleanupVegetation();
 
         // Billboard rendering
@@ -573,6 +643,13 @@ namespace render::gpudriven
         void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void createGrassBuffers(uint32_t maxInstances);
+        void initTreeLODPipeline(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void createTreeLODBuffers(uint32_t maxInstances);
+        void uploadImposterConfigs();
+        void uploadSpeciesRenderInfo();
+        void uploadTreeInstances(vk::CommandBuffer cmd);
+        void loadSpeciesMesh(uint32_t speciesId, const std::string& meshPath);
+        void unloadSpeciesMesh(uint32_t speciesId);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);

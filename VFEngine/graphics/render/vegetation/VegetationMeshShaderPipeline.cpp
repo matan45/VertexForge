@@ -7,6 +7,8 @@
 
 namespace render::vegetation
 {
+    VegetationMeshShaderPipeline::VegetationMeshShaderPipeline() = default;
+
     VegetationMeshShaderPipeline::~VegetationMeshShaderPipeline()
     {
         cleanup();
@@ -17,6 +19,7 @@ namespace render::vegetation
                                              vk::DescriptorSetLayout windLayout,
                                              vk::DescriptorSetLayout meshletDataLayout,
                                              vk::DescriptorSetLayout vertexDataLayout,
+                                             vk::DescriptorSetLayout bindlessTextureLayout,
                                              vk::RenderPass renderPass)
     {
         if (initialized) return;
@@ -24,7 +27,7 @@ namespace render::vegetation
         devicePtr = &device;
 
         createInstanceDataDescriptor();
-        createPipeline(cameraLayout, windLayout, meshletDataLayout, vertexDataLayout, renderPass);
+        createPipeline(cameraLayout, windLayout, meshletDataLayout, vertexDataLayout, bindlessTextureLayout, renderPass);
 
         if (graphicsPipeline)
         {
@@ -81,6 +84,7 @@ namespace render::vegetation
                                                   vk::DescriptorSetLayout windLayout,
                                                   vk::DescriptorSetLayout meshletDataLayout,
                                                   vk::DescriptorSetLayout vertexDataLayout,
+                                                  vk::DescriptorSetLayout bindlessTextureLayout,
                                                   vk::RenderPass renderPass)
     {
         if (!initialized || !devicePtr) return;
@@ -100,34 +104,45 @@ namespace render::vegetation
             pipelineLayout = nullptr;
         }
 
-        createPipeline(cameraLayout, windLayout, meshletDataLayout, vertexDataLayout, renderPass);
+        createPipeline(cameraLayout, windLayout, meshletDataLayout, vertexDataLayout, bindlessTextureLayout, renderPass);
 
         vfLogInfo("VegetationMeshShaderPipeline: Recreated pipeline");
     }
 
     void VegetationMeshShaderPipeline::updateInstanceDescriptors(vk::Buffer visibleBuffer,
                                                                    vk::Buffer visibleCountBuffer,
-                                                                   vk::Buffer treeInstanceBuffer)
+                                                                   vk::Buffer treeInstanceBuffer,
+                                                                   vk::DeviceSize countBufferOffset,
+                                                                   vk::Buffer speciesRenderInfoBuffer)
     {
         if (!initialized || !devicePtr) return;
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        std::array<vk::DescriptorBufferInfo, 3> bufferInfos{};
+        uint32_t writeCount = speciesRenderInfoBuffer ? 4u : 3u;
+
+        std::array<vk::DescriptorBufferInfo, 4> bufferInfos{};
         bufferInfos[0].buffer = visibleBuffer;
         bufferInfos[0].offset = 0;
         bufferInfos[0].range = VK_WHOLE_SIZE;
 
         bufferInfos[1].buffer = visibleCountBuffer;
-        bufferInfos[1].offset = 0;
-        bufferInfos[1].range = VK_WHOLE_SIZE;
+        bufferInfos[1].offset = countBufferOffset;
+        bufferInfos[1].range = sizeof(uint32_t);
 
         bufferInfos[2].buffer = treeInstanceBuffer;
         bufferInfos[2].offset = 0;
         bufferInfos[2].range = VK_WHOLE_SIZE;
 
-        std::array<vk::WriteDescriptorSet, 3> writes{};
-        for (uint32_t i = 0; i < 3; ++i)
+        if (speciesRenderInfoBuffer)
+        {
+            bufferInfos[3].buffer = speciesRenderInfoBuffer;
+            bufferInfos[3].offset = 0;
+            bufferInfos[3].range = VK_WHOLE_SIZE;
+        }
+
+        std::array<vk::WriteDescriptorSet, 4> writes{};
+        for (uint32_t i = 0; i < writeCount; ++i)
         {
             writes[i].dstSet = instanceDataDescriptorSet;
             writes[i].dstBinding = i;
@@ -137,18 +152,20 @@ namespace render::vegetation
             writes[i].pBufferInfo = &bufferInfos[i];
         }
 
-        vkDevice.updateDescriptorSets(writes, {});
+        vkDevice.updateDescriptorSets(writeCount, writes.data(), 0, nullptr);
     }
 
     void VegetationMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet cameraDescSet,
                                                                  vk::DescriptorSet windDescSet,
                                                                  vk::DescriptorSet meshletDescSet,
-                                                                 vk::DescriptorSet vertexDescSet)
+                                                                 vk::DescriptorSet vertexDescSet,
+                                                                 vk::DescriptorSet bindlessTexDescSet)
     {
         cameraDescriptorSet = cameraDescSet;
         windDescriptorSet = windDescSet;
         meshletDescriptorSet = meshletDescSet;
         vertexDescriptorSet = vertexDescSet;
+        bindlessTextureDescriptorSet = bindlessTexDescSet;
     }
 
     void VegetationMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, uint32_t visibleCount)
@@ -172,6 +189,12 @@ namespace render::vegetation
         };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
 
+        if (bindlessTextureDescriptorSet)
+        {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 5,
+                                   {bindlessTextureDescriptorSet}, {});
+        }
+
         uint32_t taskGroups = (visibleCount + 31) / 32;
         cmd.drawMeshTasksEXT(taskGroups, 1, 1);
     }
@@ -180,8 +203,9 @@ namespace render::vegetation
     {
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // Set 0: binding 0 = visible instances, binding 1 = visible count, binding 2 = all tree instances
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        // Set 0: binding 0 = visible instances, binding 1 = visible count,
+        //         binding 2 = all tree instances, binding 3 = species render info
+        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -197,6 +221,11 @@ namespace render::vegetation
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -204,7 +233,7 @@ namespace render::vegetation
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3;
+        poolSize.descriptorCount = 4;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -224,6 +253,7 @@ namespace render::vegetation
                                                         vk::DescriptorSetLayout windLayout,
                                                         vk::DescriptorSetLayout meshletDataLayout,
                                                         vk::DescriptorSetLayout vertexDataLayout,
+                                                        vk::DescriptorSetLayout bindlessTextureLayout,
                                                         vk::RenderPass renderPass)
     {
         if (!loadShaders()) return;
@@ -234,14 +264,16 @@ namespace render::vegetation
         cachedWindLayout = windLayout;
         cachedMeshletDataLayout = meshletDataLayout;
         cachedVertexDataLayout = vertexDataLayout;
+        cachedBindlessTextureLayout = bindlessTextureLayout;
 
-        // 5 descriptor sets matching the shader bindings
-        std::array<vk::DescriptorSetLayout, 5> setLayouts = {
-            instanceDataLayout,     // Set 0: visible + count + tree instances
+        // 6 descriptor sets matching the shader bindings
+        std::array<vk::DescriptorSetLayout, 6> setLayouts = {
+            instanceDataLayout,     // Set 0: visible + count + tree instances + species info
             cameraLayout,           // Set 1: camera UBO
             windLayout,             // Set 2: wind UBO
             meshletDataLayout,      // Set 3: meshlet data
-            vertexDataLayout        // Set 4: vertex data
+            vertexDataLayout,       // Set 4: vertex data
+            bindlessTextureLayout   // Set 5: bindless textures
         };
 
         vk::PipelineLayoutCreateInfo layoutCreateInfo{};
@@ -279,26 +311,28 @@ namespace render::vegetation
         vegShader = std::make_unique<core::Shader>(*devicePtr);
         vegShader->readShader("../../resources/shaders/vegetation/task_vegetation.glsl");
         vegShader->readShader("../../resources/shaders/vegetation/mesh_vegetation.glsl");
+        vegShader->readShader("../../resources/shaders/vegetation/frag_vegetation.glsl");
 
         const auto& stages = vegShader->getShaderStages();
-        if (stages.size() < 2)
+        if (stages.size() < 3)
         {
-            vfLogError("VegetationMeshShaderPipeline: Failed to load shaders (need Task + Mesh): {}",
+            vfLogError("VegetationMeshShaderPipeline: Failed to load shaders (need Task + Mesh + Frag): {}",
                         vegShader->getLastCompilationError());
             return false;
         }
 
-        bool hasTask = false, hasMesh = false;
+        bool hasTask = false, hasMesh = false, hasFrag = false;
         for (const auto& stage : stages)
         {
             if (stage.stage == vk::ShaderStageFlagBits::eTaskEXT) hasTask = true;
             if (stage.stage == vk::ShaderStageFlagBits::eMeshEXT) hasMesh = true;
+            if (stage.stage == vk::ShaderStageFlagBits::eFragment) hasFrag = true;
         }
 
-        if (!hasTask || !hasMesh)
+        if (!hasTask || !hasMesh || !hasFrag)
         {
-            vfLogError("VegetationMeshShaderPipeline: Missing shader stages (Task={}, Mesh={})",
-                        hasTask, hasMesh);
+            vfLogError("VegetationMeshShaderPipeline: Missing shader stages (Task={}, Mesh={}, Frag={})",
+                        hasTask, hasMesh, hasFrag);
             return false;
         }
 

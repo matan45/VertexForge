@@ -21,7 +21,7 @@ namespace render::vegetation
     class VegetationCullLODPipeline
     {
     public:
-        VegetationCullLODPipeline() = default;
+        VegetationCullLODPipeline();
         ~VegetationCullLODPipeline();
 
         VegetationCullLODPipeline(const VegetationCullLODPipeline&) = delete;

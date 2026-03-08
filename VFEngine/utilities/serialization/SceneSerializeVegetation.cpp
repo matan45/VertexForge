@@ -15,6 +15,8 @@ namespace serialization
             j["meshPath"] = config.meshPath;
             j["materialPath"] = config.materialPath;
             j["imposterAtlasPath"] = config.imposterAtlasPath;
+            j["lod1Distance"] = config.lod1Distance;
+            j["lod2Distance"] = config.lod2Distance;
             j["imposterDistance"] = config.imposterDistance;
             j["maxRenderDistance"] = config.maxRenderDistance;
             j["minScale"] = config.minScale;
@@ -47,6 +49,10 @@ namespace serialization
                 config.materialPath = it->get<std::string>();
             if (auto it = speciesJson.find("imposterAtlasPath"); it != speciesJson.end() && it->is_string())
                 config.imposterAtlasPath = it->get<std::string>();
+            if (auto it = speciesJson.find("lod1Distance"); it != speciesJson.end() && it->is_number())
+                config.lod1Distance = it->get<float>();
+            if (auto it = speciesJson.find("lod2Distance"); it != speciesJson.end() && it->is_number())
+                config.lod2Distance = it->get<float>();
             if (auto it = speciesJson.find("imposterDistance"); it != speciesJson.end() && it->is_number())
                 config.imposterDistance = it->get<float>();
             if (auto it = speciesJson.find("maxRenderDistance"); it != speciesJson.end() && it->is_number())

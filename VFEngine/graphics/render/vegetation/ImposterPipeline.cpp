@@ -7,6 +7,8 @@
 
 namespace render::vegetation
 {
+    ImposterPipeline::ImposterPipeline() = default;
+
     ImposterPipeline::~ImposterPipeline()
     {
         cleanup();
@@ -121,7 +123,8 @@ namespace render::vegetation
 
     void ImposterPipeline::updateInstanceDescriptors(vk::Buffer visibleBuffer,
                                                        vk::Buffer visibleCountBuffer,
-                                                       vk::Buffer treeInstanceBuffer)
+                                                       vk::Buffer treeInstanceBuffer,
+                                                       vk::DeviceSize countBufferOffset)
     {
         if (!initialized || !devicePtr) return;
 
@@ -133,8 +136,8 @@ namespace render::vegetation
         bufferInfos[0].range = VK_WHOLE_SIZE;
 
         bufferInfos[1].buffer = visibleCountBuffer;
-        bufferInfos[1].offset = 0;
-        bufferInfos[1].range = VK_WHOLE_SIZE;
+        bufferInfos[1].offset = countBufferOffset;
+        bufferInfos[1].range = sizeof(uint32_t);
 
         bufferInfos[2].buffer = treeInstanceBuffer;
         bufferInfos[2].offset = 0;

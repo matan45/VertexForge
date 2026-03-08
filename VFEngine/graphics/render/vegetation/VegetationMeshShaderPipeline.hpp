@@ -15,7 +15,7 @@ namespace render::vegetation
     class VegetationMeshShaderPipeline
     {
     public:
-        VegetationMeshShaderPipeline() = default;
+        VegetationMeshShaderPipeline();
         ~VegetationMeshShaderPipeline();
 
         VegetationMeshShaderPipeline(const VegetationMeshShaderPipeline&) = delete;
@@ -26,6 +26,7 @@ namespace render::vegetation
                   vk::DescriptorSetLayout windLayout,
                   vk::DescriptorSetLayout meshletDataLayout,
                   vk::DescriptorSetLayout vertexDataLayout,
+                  vk::DescriptorSetLayout bindlessTextureLayout,
                   vk::RenderPass renderPass);
 
         void cleanup();
@@ -34,18 +35,22 @@ namespace render::vegetation
                       vk::DescriptorSetLayout windLayout,
                       vk::DescriptorSetLayout meshletDataLayout,
                       vk::DescriptorSetLayout vertexDataLayout,
+                      vk::DescriptorSetLayout bindlessTextureLayout,
                       vk::RenderPass renderPass);
 
-        // Set 0 descriptors: visible instance buffer + count + tree instance buffer
+        // Set 0 descriptors: visible instance buffer + count + tree instance buffer + species render info
         void updateInstanceDescriptors(vk::Buffer visibleBuffer,
                                         vk::Buffer visibleCountBuffer,
-                                        vk::Buffer treeInstanceBuffer);
+                                        vk::Buffer treeInstanceBuffer,
+                                        vk::DeviceSize countBufferOffset = 0,
+                                        vk::Buffer speciesRenderInfoBuffer = nullptr);
 
         // External descriptor sets (owned elsewhere)
         void updateSharedDescriptors(vk::DescriptorSet cameraDescSet,
                                       vk::DescriptorSet windDescSet,
                                       vk::DescriptorSet meshletDescSet,
-                                      vk::DescriptorSet vertexDescSet);
+                                      vk::DescriptorSet vertexDescSet,
+                                      vk::DescriptorSet bindlessTextureDescSet);
 
         void dispatch(vk::CommandBuffer cmd, uint32_t visibleCount);
 
@@ -68,12 +73,14 @@ namespace render::vegetation
         vk::DescriptorSetLayout cachedWindLayout;
         vk::DescriptorSetLayout cachedMeshletDataLayout;
         vk::DescriptorSetLayout cachedVertexDataLayout;
+        vk::DescriptorSetLayout cachedBindlessTextureLayout;
 
         // External descriptor sets (not owned)
         vk::DescriptorSet cameraDescriptorSet;
         vk::DescriptorSet windDescriptorSet;
         vk::DescriptorSet meshletDescriptorSet;
         vk::DescriptorSet vertexDescriptorSet;
+        vk::DescriptorSet bindlessTextureDescriptorSet;
 
         bool initialized = false;
 
@@ -82,6 +89,7 @@ namespace render::vegetation
                             vk::DescriptorSetLayout windLayout,
                             vk::DescriptorSetLayout meshletDataLayout,
                             vk::DescriptorSetLayout vertexDataLayout,
+                            vk::DescriptorSetLayout bindlessTextureLayout,
                             vk::RenderPass renderPass);
         bool loadShaders();
     };

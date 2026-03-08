@@ -25,6 +25,7 @@ namespace windows
 
         events::SubscriptionToken modeToken;
         bool subscribed = false;
+        bool needsInitialParamSend = true;
 
     public:
         VegetationPlacementPanel() = default;

@@ -6,6 +6,8 @@
 
 namespace render::vegetation
 {
+    VegetationCullLODPipeline::VegetationCullLODPipeline() = default;
+
     VegetationCullLODPipeline::~VegetationCullLODPipeline()
     {
         cleanup();
@@ -229,7 +231,7 @@ namespace render::vegetation
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
         shader = std::make_unique<core::Shader>(*devicePtr);
-        shader->readShader("../../resources/shaders/vegetation/vegetation_cull_lod.comp");
+        shader->readShader("../../resources/shaders/vegetation/vegetation_cull_lod.glsl");
 
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
