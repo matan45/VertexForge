@@ -874,14 +874,6 @@ namespace render::gpudriven
 
             vegetation.currentTreeInstanceCount = static_cast<uint32_t>(treeInstances.size());
 
-            static uint32_t debugLogCounter = 0;
-            if (++debugLogCounter % 300 == 1)  // Log every ~5 seconds at 60fps
-            {
-                vfLogInfo("VegStreaming: visibleTiles={}, placementInstances={}, speciesMiss={}, treeGPU={}, cachedSpecies={}",
-                    visibleTiles.size(), totalPlacementInstances, speciesMissCount,
-                    vegetation.currentTreeInstanceCount, vegetation.cachedSpecies.size());
-            }
-
             // Upload tree instances to staging buffer
             if (vegetation.currentTreeInstanceCount > 0 && vegetation.treeInstanceStagingMapped)
             {

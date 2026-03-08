@@ -547,29 +547,15 @@ namespace services
     void TerrainService::applyVegetationPlacementBrush(
         const glm::vec3& worldPosition, float deltaTime)
     {
-        vfLogInfo("PlacementBrush: called at ({}, {}, {})", worldPosition.x, worldPosition.y, worldPosition.z);
-
-        if (saveInProgress.load(std::memory_order_acquire))
-        {
-            vfLogInfo("PlacementBrush: blocked by saveInProgress");
-            return;
-        }
+        if (saveInProgress.load(std::memory_order_acquire)) return;
 
         auto& dispatcher = events::EventDispatcher::instance();
 
         auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationPlacementTargetEntityQuery{});
-        if (!targetEntity.has_value())
-        {
-            vfLogInfo("PlacementBrush: no target entity");
-            return;
-        }
+        if (!targetEntity.has_value()) return;
 
         auto gridIt = terrainGrids.find(targetEntity->id);
-        if (gridIt == terrainGrids.end())
-        {
-            vfLogInfo("PlacementBrush: grid not found for entity {}", targetEntity->id);
-            return;
-        }
+        if (gridIt == terrainGrids.end()) return;
 
         terrain::TerrainGrid* grid = gridIt->second.get();
 
@@ -585,9 +571,6 @@ namespace services
                 brushParams.speciesId = allSpecies.begin()->first;
             }
         }
-
-        vfLogInfo("PlacementBrush: brushType={}, radius={}, density={}, speciesId={}",
-            static_cast<int>(brushType), brushParams.radius, brushParams.density, brushParams.speciesId);
 
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
