@@ -119,8 +119,8 @@ namespace vegetation
     uint32_t VegetationPlacementBrushApplicator::positionHash(const glm::vec2& pos)
     {
         // Simple hash combining x and y coordinates for deterministic seeding
-        uint32_t hx = std::hash<float>{}(pos.x);
-        uint32_t hy = std::hash<float>{}(pos.y);
+        uint32_t hx = static_cast<uint32_t>(std::hash<float>{}(pos.x));
+        uint32_t hy = static_cast<uint32_t>(std::hash<float>{}(pos.y));
         return hx ^ (hy * 2654435761u);
     }
 }
