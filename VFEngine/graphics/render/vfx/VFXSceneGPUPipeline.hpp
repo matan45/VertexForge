@@ -60,7 +60,7 @@ namespace render::vfx
         vk::Sampler depthSampler;
 
         // Per-emitter texture and rendering config
-        static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
+        static constexpr uint32_t MAX_TEXTURE_SLOTS = 64;
 
         struct EmitterRenderConfig
         {

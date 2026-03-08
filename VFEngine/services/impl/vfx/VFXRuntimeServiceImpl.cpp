@@ -2,6 +2,7 @@
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
+#include <algorithm>
 
 namespace services
 {
@@ -61,6 +62,23 @@ namespace services
             {
                 return isInstancePlaying(query.instanceId);
             });
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXBudgetStatsQuery>(
+            [this](const events::vfxruntime::GetVFXBudgetStatsQuery&)
+            {
+                auto bs = getBudgetStats();
+                events::vfxruntime::VFXBudgetStatsResult result;
+                result.activeEmitters = bs.activeEmitters;
+                result.maxEmitters = bs.maxEmitters;
+                result.allocatedParticles = bs.allocatedParticles;
+                result.maxParticles = bs.maxParticles;
+                std::copy(std::begin(bs.lodCounts), std::end(bs.lodCounts), std::begin(result.lodCounts));
+                result.fragmentationPercent = bs.fragmentationPercent;
+                result.poolWarmSlots = bs.poolWarmSlots;
+                result.poolUsedSlots = bs.poolUsedSlots;
+                result.poolTotalSlots = bs.poolTotalSlots;
+                return result;
+            });
     }
 
     VFXInstanceId VFXRuntimeServiceImpl::createInstance(const VFXRuntimeParams& params)
@@ -109,5 +127,24 @@ namespace services
     bool VFXRuntimeServiceImpl::isInstancePlaying(VFXInstanceId id) const
     {
         return vfxProvider ? vfxProvider->isInstancePlaying(id) : false;
+    }
+
+    VFXRuntimeServiceImpl::BudgetStats VFXRuntimeServiceImpl::getBudgetStats() const
+    {
+        BudgetStats stats{};
+        if (vfxProvider)
+        {
+            auto ps = vfxProvider->getBudgetStats();
+            stats.activeEmitters = ps.activeEmitters;
+            stats.maxEmitters = ps.maxEmitters;
+            stats.allocatedParticles = ps.allocatedParticles;
+            stats.maxParticles = ps.maxParticles;
+            std::copy(std::begin(ps.lodCounts), std::end(ps.lodCounts), std::begin(stats.lodCounts));
+            stats.fragmentationPercent = ps.fragmentationPercent;
+            stats.poolWarmSlots = ps.poolWarmSlots;
+            stats.poolUsedSlots = ps.poolUsedSlots;
+            stats.poolTotalSlots = ps.poolTotalSlots;
+        }
+        return stats;
     }
 }

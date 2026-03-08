@@ -243,8 +243,8 @@ namespace render::vfx
 
     namespace GPUVFXConstants
     {
-        inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;
-        inline constexpr uint32_t MAX_EMITTERS = 64;
+        inline constexpr uint32_t MAX_GPU_PARTICLES = 262144;
+        inline constexpr uint32_t MAX_EMITTERS = 256;
         inline constexpr uint32_t DEFAULT_PARTICLES_PER_EMITTER = 1024;
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;

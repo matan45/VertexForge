@@ -75,6 +75,8 @@ namespace core
         controllerParams.worldTransform = params.worldTransform;
         controllerParams.loop = params.loop;
         controllerParams.entityId = params.entityId;
+        controllerParams.priority = params.priority;
+        controllerParams.cameraRelative = params.cameraRelative;
 
         return renderer->createInstance(controllerParams);
     }
@@ -179,6 +181,25 @@ namespace core
     void VFXRuntimeAdapter::setMaxDrawDistance(float distance)
     {
         if (renderer) renderer->setMaxDrawDistance(distance);
+    }
+
+    services::IVFXRuntimeProvider::BudgetStats VFXRuntimeAdapter::getBudgetStats() const
+    {
+        BudgetStats stats{};
+        if (renderer)
+        {
+            auto rs = renderer->getBudgetStats();
+            stats.activeEmitters = rs.activeEmitters;
+            stats.maxEmitters = rs.maxEmitters;
+            stats.allocatedParticles = rs.allocatedParticles;
+            stats.maxParticles = rs.maxParticles;
+            std::copy(std::begin(rs.lodCounts), std::end(rs.lodCounts), std::begin(stats.lodCounts));
+            stats.fragmentationPercent = rs.fragmentationPercent;
+            stats.poolWarmSlots = rs.poolWarmSlots;
+            stats.poolUsedSlots = rs.poolUsedSlots;
+            stats.poolTotalSlots = rs.poolTotalSlots;
+        }
+        return stats;
     }
 
     void VFXRuntimeAdapter::updateSceneColliders()

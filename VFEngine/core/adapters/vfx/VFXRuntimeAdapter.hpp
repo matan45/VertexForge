@@ -64,5 +64,7 @@ namespace core
 
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;
+
+        BudgetStats getBudgetStats() const override;
     };
 }

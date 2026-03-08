@@ -71,6 +71,13 @@ namespace render::vfx
         std::vector<uint32_t> emitterParticleOffsets;
         std::vector<uint32_t> emitterParticleCounts;
 
+        struct FreeBlock
+        {
+            uint32_t offset;
+            uint32_t count;
+        };
+        std::vector<FreeBlock> freeList;
+
     public:
         explicit GPUVFXBufferManager(core::Device& device);
         ~GPUVFXBufferManager();
@@ -147,12 +154,17 @@ namespace render::vfx
         uint32_t getAllocatedParticleCount() const { return allocatedParticleCount; }
         uint32_t getActiveEmitterCount() const { return activeEmitterCount; }
 
+        uint32_t getFreeBlockCount() const { return static_cast<uint32_t>(freeList.size()); }
+        float getFragmentationPercent() const;
+
         void resetParticleBufferClearedFlag() { particleBufferCleared = false; }
         void resetAllocator()
         {
             allocatedParticleCount = 0;
             activeEmitterCount = 0;
             std::fill(emitterSlots.begin(), emitterSlots.end(), false);
+            freeList.clear();
+            freeList.push_back({0, maxParticles});
         }
 
         void advanceFrame() { currentFrameIndex = (currentFrameIndex + 1) % core::MAX_FRAMES_IN_FLIGHT; }
