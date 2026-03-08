@@ -100,9 +100,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="animation\AnimationBlender.hpp" />
+    <ClInclude Include="animation\AnimationComputePipeline.hpp" />
     <ClInclude Include="animation\AnimationEvaluator.hpp" />
+    <ClInclude Include="animation\AnimationGPUData.hpp" />
+    <ClInclude Include="animation\AnimationLOD.hpp" />
     <ClInclude Include="animation\AnimatorStateMachine.hpp" />
     <ClInclude Include="animation\BlendTree.hpp" />
+    <ClInclude Include="animation\BoneLOD.hpp" />
     <ClInclude Include="animation\IKPostProcess.hpp" />
     <ClInclude Include="animation\IKSolver.hpp" />
     <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
@@ -261,6 +265,7 @@
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
+    <ClInclude Include="render\vfx\VFXEmitterPool.hpp" />
     <ClInclude Include="render\vfx\VFXLUTBaker.hpp" />
     <ClInclude Include="render\vfx\VFXMeshGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXMeshPreviewPipeline.hpp" />
@@ -284,7 +289,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animation\AnimationBlender.cpp" />
+    <ClCompile Include="animation\AnimationComputePipeline.cpp" />
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
+    <ClCompile Include="animation\AnimationLOD.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
     <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
     <ClCompile Include="animation\BlendTree.cpp" />
@@ -456,6 +463,7 @@
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipelineRender.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipelineSetup.cpp" />
+    <ClCompile Include="render\vfx\VFXEmitterPool.cpp" />
     <ClCompile Include="render\vfx\VFXLUTBaker.cpp" />
     <ClCompile Include="render\vfx\VFXMeshGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXMeshGPUPipelineRender.cpp" />
@@ -481,6 +489,7 @@
     <ClCompile Include="render\water\WaterPipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\resources\shaders\animation\bone_evaluate.glsl" />
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />

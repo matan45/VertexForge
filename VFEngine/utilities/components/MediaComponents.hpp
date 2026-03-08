@@ -160,6 +160,8 @@ namespace components
         std::string vfxPath;
         bool autoPlay = true;
         bool loop = true;
+        uint8_t priority = 2; // 0=Critical, 1=High, 2=Normal, 3=Low
+        bool cameraRelative = false;
 
         uint32_t runtimeInstanceId = 0;
         bool isPlaying = false;

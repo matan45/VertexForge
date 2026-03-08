@@ -4,6 +4,7 @@
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/VFXRibbonGPUPipeline.hpp"
+#include "../render/vfx/VFXEmitterPool.hpp"
 #include "../render/vfx/VFXParticleSystem.hpp"
 #include "../render/vfx/VFXLUTBaker.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
@@ -108,6 +109,10 @@ namespace controllers
                 gpuBufferManager->getRibbonHeadBufferSize()
             );
 
+            // Create emitter pool with warm slots for fast streaming reuse
+            emitterPool = std::make_unique<render::vfx::VFXEmitterPool>(*gpuBufferManager, 32);
+            emitterPool->warmUp();
+
             vfLogInfo("GPU VFX mode initialized: {} max particles, {} max emitters",
                        gpuBufferManager->getMaxParticles(),
                        gpuBufferManager->getMaxEmitters());
@@ -123,6 +128,12 @@ namespace controllers
 
     void VFXSceneRenderer::cleanupGPUMode()
     {
+        if (emitterPool)
+        {
+            emitterPool->reset();
+            emitterPool.reset();
+        }
+
         if (gpuRibbonPipeline)
         {
             gpuRibbonPipeline->cleanup();
@@ -227,6 +238,15 @@ namespace controllers
                 continue;
             }
 
+            // Update LOD based on camera distance
+            updateInstanceLOD(instance);
+
+            // Override transform for camera-relative emitters (weather effects)
+            if (instance.cameraRelative)
+            {
+                instance.worldTransform = glm::translate(glm::mat4(1.0f), currentCameraPos);
+            }
+
             // Clamp deltaTime on first active frame to prevent particle burst
             float effectiveDt = deltaTime;
             if (instance.firstFrame)
@@ -242,7 +262,9 @@ namespace controllers
 
             if (instance.active && canSpawn)
             {
-                instance.spawnAccumulator += instance.config.spawnRate * effectiveDt;
+                // Apply LOD spawn rate multiplier
+                float lodAdjustedRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
+                instance.spawnAccumulator += lodAdjustedRate * effectiveDt;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
                 instance.spawnAccumulator -= static_cast<float>(spawnThisFrame);
             }
@@ -255,7 +277,18 @@ namespace controllers
             );
 
             // Set collider count based on collision enabled per emitter
-            gpuConfig.colliderCount = instance.config.collisionEnabled ? sceneColliderCount : 0;
+            // LOD 1+: disable collision
+            gpuConfig.colliderCount = (instance.config.collisionEnabled && instance.currentLOD == 0)
+                                          ? sceneColliderCount : 0;
+
+            // LOD 2+: disable soft particles
+            if (instance.currentLOD >= 2)
+            {
+                gpuConfig.softParticleDistance = 0.0f;
+            }
+
+            // Apply LOD-scaled spawn rate to GPU config
+            gpuConfig.spawnRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
 
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
             {
@@ -531,6 +564,12 @@ namespace controllers
                 continue;
             }
 
+            // Skip compute dispatch for emitters fully outside the frustum
+            if (!isEmitterInFrustum(instance))
+            {
+                continue;
+            }
+
             gpuComputePipeline->dispatch(
                 cmd,
                 instance.gpuEmitterIndex,
@@ -717,6 +756,143 @@ namespace controllers
             notification.vfxAssetPath = vfxPath;
             events::EventDispatcher::instance().publish(notification);
         }
+    }
+
+    void VFXSceneRenderer::extractFrustumPlanes(const glm::mat4& viewProj)
+    {
+        // Extract 6 frustum planes from view-projection matrix (Gribb-Hartmann method)
+        const auto& m = viewProj;
+        // Left
+        frustumPlanes[0] = glm::vec4(m[0][3] + m[0][0], m[1][3] + m[1][0], m[2][3] + m[2][0], m[3][3] + m[3][0]);
+        // Right
+        frustumPlanes[1] = glm::vec4(m[0][3] - m[0][0], m[1][3] - m[1][0], m[2][3] - m[2][0], m[3][3] - m[3][0]);
+        // Bottom
+        frustumPlanes[2] = glm::vec4(m[0][3] + m[0][1], m[1][3] + m[1][1], m[2][3] + m[2][1], m[3][3] + m[3][1]);
+        // Top
+        frustumPlanes[3] = glm::vec4(m[0][3] - m[0][1], m[1][3] - m[1][1], m[2][3] - m[2][1], m[3][3] - m[3][1]);
+        // Near
+        frustumPlanes[4] = glm::vec4(m[0][3] + m[0][2], m[1][3] + m[1][2], m[2][3] + m[2][2], m[3][3] + m[3][2]);
+        // Far
+        frustumPlanes[5] = glm::vec4(m[0][3] - m[0][2], m[1][3] - m[1][2], m[2][3] - m[2][2], m[3][3] - m[3][2]);
+
+        // Normalize planes
+        for (int i = 0; i < 6; ++i)
+        {
+            float len = glm::length(glm::vec3(frustumPlanes[i]));
+            if (len > 0.0f)
+            {
+                frustumPlanes[i] /= len;
+            }
+        }
+        frustumPlanesValid = true;
+    }
+
+    bool VFXSceneRenderer::isEmitterInFrustum(const VFXRuntimeInstance& instance) const
+    {
+        if (!frustumPlanesValid)
+            return true;
+
+        // Camera-relative emitters are always visible
+        if (instance.cameraRelative)
+            return true;
+
+        glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+
+        // Conservative bounding sphere radius based on lifetime, speed, and shape dimensions
+        float maxDim = glm::max(glm::max(
+            std::abs(instance.config.shape.dimensions.x),
+            std::abs(instance.config.shape.dimensions.y)),
+            std::abs(instance.config.shape.dimensions.z));
+        float radius = std::max(
+            instance.config.lifetime * instance.config.startSpeed,
+            maxDim) + 5.0f; // margin to avoid pop-in
+
+        // Test sphere against all 6 planes
+        for (int i = 0; i < 6; ++i)
+        {
+            float dist = glm::dot(glm::vec3(frustumPlanes[i]), emitterPos) + frustumPlanes[i].w;
+            if (dist < -radius)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void VFXSceneRenderer::updateInstanceLOD(VFXRuntimeInstance& instance) const
+    {
+        if (instance.cameraRelative)
+        {
+            instance.currentLOD = 0;
+            instance.lodSpawnMultiplier = 1.0f;
+            return;
+        }
+
+        glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+        float dist = glm::distance(emitterPos, currentCameraPos);
+
+        // Apply per-emitter LOD bias (shifts thresholds)
+        dist -= instance.lodBias;
+        dist = std::max(dist, 0.0f);
+
+        float multiplier = 1.0f;
+        uint8_t lod = 0;
+
+        if (dist < LOD0_DIST)
+        {
+            lod = 0;
+            multiplier = 1.0f;
+        }
+        else if (dist < LOD1_DIST)
+        {
+            lod = 1;
+            // Smooth transition from LOD0 to LOD1, clamped to not exceed LOD1 boundary
+            float zoneEnd = std::min(LOD0_DIST + LOD_TRANSITION_ZONE, LOD1_DIST);
+            float t = std::clamp((dist - LOD0_DIST) / (zoneEnd - LOD0_DIST), 0.0f, 1.0f);
+            multiplier = glm::mix(1.0f, 0.5f, t);
+        }
+        else if (dist < LOD2_DIST)
+        {
+            lod = 2;
+            float zoneEnd = std::min(LOD1_DIST + LOD_TRANSITION_ZONE, LOD2_DIST);
+            float t = std::clamp((dist - LOD1_DIST) / (zoneEnd - LOD1_DIST), 0.0f, 1.0f);
+            multiplier = glm::mix(0.5f, 0.25f, t);
+        }
+        else
+        {
+            lod = 3;
+            multiplier = 0.0f; // No new spawns
+        }
+
+        instance.currentLOD = lod;
+        instance.lodSpawnMultiplier = multiplier;
+    }
+
+    VFXInstanceId VFXSceneRenderer::findLowestPriorityInstance(services::VFXEmitterPriority belowPriority) const
+    {
+        VFXInstanceId worstId = 0;
+        services::VFXEmitterPriority worstPriority = services::VFXEmitterPriority::Critical;
+
+        for (const auto& [id, instance] : instances)
+        {
+            if (!instance.gpuDriven || !instance.active)
+                continue;
+            // Never evict Critical emitters
+            if (instance.priority == services::VFXEmitterPriority::Critical)
+                continue;
+            if (static_cast<uint8_t>(instance.priority) > static_cast<uint8_t>(worstPriority))
+            {
+                worstPriority = instance.priority;
+                worstId = id;
+            }
+        }
+
+        // Only return if found priority is strictly lower (higher numeric value) than requested
+        if (worstId != 0 && static_cast<uint8_t>(worstPriority) > static_cast<uint8_t>(belowPriority))
+        {
+            return worstId;
+        }
+        return 0;
     }
 
     void VFXSceneRenderer::cleanupFinishedSubEmitters(float deltaTime)

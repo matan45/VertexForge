@@ -20,6 +20,8 @@ namespace windows
         void drawShadowDebugSection();
         void drawShadowStatistics();
         void drawTerrainSection();
+        void drawVFXLODSection();
+        void drawAnimationLODSection();
         void loadFromScene();
         void saveToScene();
         void resetToDefaults();

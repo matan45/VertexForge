@@ -13,6 +13,19 @@ namespace windows
         bakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
             [this](const events::navmesh::NavmeshBakeCompleteNotification&)
             {
+                tileStatusDirty = true;
+                auto& d = events::EventDispatcher::instance();
+                bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
+                if (showNavmesh)
+                {
+                    pushNavmeshDebugMesh();
+                }
+            });
+
+        tileUpdatedToken = dispatcher.subscribe<events::navmesh::NavmeshTileUpdatedNotification>(
+            [this](const events::navmesh::NavmeshTileUpdatedNotification&)
+            {
+                tileStatusDirty = true;
                 auto& d = events::EventDispatcher::instance();
                 bool showNavmesh = d.query(events::render::GetShowNavmeshDebugQuery{});
                 if (showNavmesh)
@@ -28,6 +41,10 @@ namespace windows
         if (bakeCompleteToken.isValid())
         {
             dispatcher.unsubscribe(bakeCompleteToken);
+        }
+        if (tileUpdatedToken.isValid())
+        {
+            dispatcher.unsubscribe(tileUpdatedToken);
         }
     }
 
@@ -86,7 +103,10 @@ namespace windows
             drawBakeSettings();
             ImGui::Spacing();
             drawActions();
-
+            ImGui::Spacing();
+            drawTileStatus();
+            ImGui::Spacing();
+            drawStreamingConfig();
 
         }
         ImGui::End();
@@ -227,14 +247,11 @@ namespace windows
 
             if (ImGui::Button("Save Navmesh...", ImVec2(-1, 0)))
             {
-                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
-                };
-                std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfNavmesh");
+                std::string savePath = fileDialog.selectFolderDialog();
                 if (!savePath.empty())
                 {
-                    events::navmesh::SaveNavmeshCommand cmd;
-                    cmd.filePath = savePath;
+                    events::navmesh::SaveNavmeshTiledCommand cmd;
+                    cmd.directory = savePath;
                     dispatcher.execute(cmd);
                 }
             }
@@ -243,19 +260,150 @@ namespace windows
 
             if (ImGui::Button("Load Navmesh...", ImVec2(-1, 0)))
             {
-                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                    {L"VF Navmesh Files (*.vfNavmesh)", L"*.vfNavmesh"}
-                };
-                std::string loadPath = fileDialog.openFileDialog(fileTypes);
+                std::string loadPath = fileDialog.selectFolderDialog();
                 if (!loadPath.empty())
                 {
-                    events::navmesh::LoadNavmeshCommand cmd;
-                    cmd.filePath = loadPath;
+                    events::navmesh::LoadNavmeshTiledCommand cmd;
+                    cmd.directory = loadPath;
                     dispatcher.execute(cmd);
                 }
             }
 
             ImGui::EndDisabled();
+
+            ImGui::Unindent();
+        }
+    }
+
+    void NavmeshWindow::drawTileStatus()
+    {
+        if (ImGui::CollapsingHeader("Tile Status"))
+        {
+            ImGui::Indent();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            if (tileStatusDirty)
+            {
+                cachedTileStatuses = dispatcher.query(events::navmesh::GetNavmeshTileStatusQuery{});
+                tileStatusDirty = false;
+            }
+            const auto& tileStatuses = cachedTileStatuses;
+
+            if (tileStatuses.empty())
+            {
+                ImGui::TextDisabled("No tiles");
+            }
+            else
+            {
+                int loadedCount = 0;
+                int bakedCount = 0;
+                int dirtyCount = 0;
+
+                for (const auto& info : tileStatuses)
+                {
+                    switch (info.status)
+                    {
+                    case events::navmesh::NavmeshTileStatus::Loaded: loadedCount++; break;
+                    case events::navmesh::NavmeshTileStatus::Baked: bakedCount++; break;
+                    case events::navmesh::NavmeshTileStatus::Dirty: dirtyCount++; break;
+                    default: break;
+                    }
+                }
+
+                ImGui::Text("Total: %d | Loaded: %d | Baked: %d | Dirty: %d",
+                    static_cast<int>(tileStatuses.size()), loadedCount, bakedCount, dirtyCount);
+
+                if (ImGui::BeginChild("TileGrid", ImVec2(0, 120), true))
+                {
+                    for (const auto& info : tileStatuses)
+                    {
+                        ImVec4 color;
+                        const char* label;
+                        switch (info.status)
+                        {
+                        case events::navmesh::NavmeshTileStatus::Loaded:
+                            color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+                            label = "Loaded";
+                            break;
+                        case events::navmesh::NavmeshTileStatus::Dirty:
+                            color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                            label = "Dirty";
+                            break;
+                        case events::navmesh::NavmeshTileStatus::Baking:
+                            color = ImVec4(0.0f, 0.5f, 1.0f, 1.0f);
+                            label = "Baking";
+                            break;
+                        case events::navmesh::NavmeshTileStatus::Baked:
+                            color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                            label = "Baked";
+                            break;
+                        default:
+                            color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+                            label = "Not Baked";
+                            break;
+                        }
+
+                        ImGui::TextColored(color, "(%d, %d) %s", info.coord.x, info.coord.z, label);
+
+                        ImGui::SameLine();
+                        char btnLabel[32];
+                        snprintf(btnLabel, sizeof(btnLabel), "Bake##%d_%d", info.coord.x, info.coord.z);
+                        if (ImGui::SmallButton(btnLabel))
+                        {
+                            events::navmesh::BakeTileCommand cmd;
+                            cmd.tileX = info.coord.x;
+                            cmd.tileZ = info.coord.z;
+                            dispatcher.execute(cmd);
+                        }
+                    }
+                }
+                ImGui::EndChild();
+            }
+
+            ImGui::Unindent();
+        }
+    }
+
+    void NavmeshWindow::drawStreamingConfig()
+    {
+        if (ImGui::CollapsingHeader("Streaming"))
+        {
+            ImGui::Indent();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            bool enabled = dispatcher.query(events::navmesh::IsNavmeshStreamingEnabledQuery{});
+            streamingConfig = dispatcher.query(events::navmesh::GetNavmeshStreamingConfigQuery{});
+
+            if (ImGui::Checkbox("Enable Streaming", &enabled))
+            {
+                events::navmesh::SetNavmeshStreamingEnabledCommand cmd;
+                cmd.enabled = enabled;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::PushItemWidth(-1);
+
+            bool changed = false;
+            ImGui::Text("Load Radius");
+            changed |= ImGui::DragFloat("##LoadRadius", &streamingConfig.loadRadius, 1.0f, 32.0f, 2048.0f, "%.0f");
+
+            ImGui::Text("Unload Radius");
+            changed |= ImGui::DragFloat("##UnloadRadius", &streamingConfig.unloadRadius, 1.0f, 32.0f, 2048.0f, "%.0f");
+
+            ImGui::Text("Max Loads/Frame");
+            changed |= ImGui::DragInt("##MaxLoads", &streamingConfig.maxLoadsPerFrame, 1, 1, 16);
+
+            ImGui::Text("Max Unloads/Frame");
+            changed |= ImGui::DragInt("##MaxUnloads", &streamingConfig.maxUnloadsPerFrame, 1, 1, 16);
+
+            ImGui::PopItemWidth();
+
+            if (changed)
+            {
+                events::navmesh::SetNavmeshStreamingConfigCommand cmd;
+                cmd.config = streamingConfig;
+                dispatcher.execute(cmd);
+            }
 
             ImGui::Unindent();
         }

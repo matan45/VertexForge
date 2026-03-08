@@ -22,6 +22,11 @@ namespace services
         virtual bool hasNavmesh() const = 0;
         virtual void clearNavmesh() = 0;
 
+        // Per-tile operations
+        virtual bool bakeSingleTile(int tileX, int tileZ) = 0;
+        virtual bool saveNavmeshTiled(const std::string& directory) = 0;
+        virtual bool loadNavmeshTiled(const std::string& directory) = 0;
+
         virtual navigation::NavPath findPath(const glm::vec3& start, const glm::vec3& end,
                                               float agentRadius = 0.3f, float agentHeight = 2.0f) = 0;
         virtual glm::vec3 getClosestPointOnNavmesh(const glm::vec3& point, float searchRadius = 5.0f) = 0;

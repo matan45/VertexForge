@@ -26,6 +26,7 @@ namespace render::vfx
     class VFXSceneGPUPipeline;
     class VFXMeshGPUPipeline;
     class VFXRibbonGPUPipeline;
+    class VFXEmitterPool;
 }
 
 namespace render::mesh
@@ -43,6 +44,8 @@ namespace controllers
         glm::mat4 worldTransform{1.0f};
         bool loop = true;
         uint32_t entityId = 0;
+        services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
+        bool cameraRelative = false;
     };
 
     struct VFXRuntimeInstance
@@ -54,6 +57,7 @@ namespace controllers
         bool loop = true;
         bool active = true;
         uint32_t entityId = 0;
+        uint64_t uuid = 0;
 
         bool gpuDriven = false;
         uint32_t gpuEmitterIndex = UINT32_MAX;
@@ -62,6 +66,13 @@ namespace controllers
         float spawnAccumulator = 0.0f;
         float emissionTime = 0.0f;
         bool firstFrame = true;
+        services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
+        bool cameraRelative = false;
+
+        // LOD state
+        uint8_t currentLOD = 0;
+        float lodSpawnMultiplier = 1.0f;
+        float lodBias = 0.0f;
     };
 
     class VFXSceneRenderer
@@ -79,6 +90,7 @@ namespace controllers
         std::unique_ptr<render::vfx::VFXMeshGPUPipeline> gpuMeshPipeline;
         std::unique_ptr<render::vfx::VFXRibbonGPUPipeline> gpuRibbonPipeline;
         std::unique_ptr<render::mesh::MeshGPUCache> gpuMeshCache;
+        std::unique_ptr<render::vfx::VFXEmitterPool> emitterPool;
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
         std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
@@ -116,6 +128,16 @@ namespace controllers
 
         bool distanceCullingEnabled = false;
         float maxVFXDistSq = 0.0f;
+
+        // Frustum culling
+        glm::vec4 frustumPlanes[6]{};
+        bool frustumPlanesValid = false;
+
+        // LOD thresholds (distances)
+        float LOD0_DIST = 50.0f;
+        float LOD1_DIST = 100.0f;
+        float LOD2_DIST = 200.0f;
+        float LOD_TRANSITION_ZONE = 10.0f;
 
         std::vector<render::vfx::GPUCollider> sceneColliders;
         uint32_t sceneColliderCount = 0;
@@ -166,6 +188,32 @@ namespace controllers
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }
 
+        struct VFXBudgetStats
+        {
+            uint32_t activeEmitters = 0;
+            uint32_t maxEmitters = 0;
+            uint32_t allocatedParticles = 0;
+            uint32_t maxParticles = 0;
+            uint32_t lodCounts[4] = {0, 0, 0, 0};
+            float fragmentationPercent = 0.0f;
+            uint32_t poolWarmSlots = 0;
+            uint32_t poolUsedSlots = 0;
+            uint32_t poolTotalSlots = 0;
+        };
+
+        VFXBudgetStats getBudgetStats() const;
+
+        struct VFXLODConfig
+        {
+            float lod0Distance = 50.0f;
+            float lod1Distance = 100.0f;
+            float lod2Distance = 200.0f;
+            float transitionZone = 10.0f;
+        };
+
+        VFXLODConfig getLODConfig() const;
+        void setLODConfig(const VFXLODConfig& config);
+
     private:
         void collectAllParticleInstances();
         void updateCPU(float deltaTime);
@@ -178,6 +226,10 @@ namespace controllers
         void processPendingEmitterFrees();
         void processEvents();
         void cleanupFinishedSubEmitters(float deltaTime);
+        void extractFrustumPlanes(const glm::mat4& viewProj);
+        bool isEmitterInFrustum(const VFXRuntimeInstance& instance) const;
+        void updateInstanceLOD(VFXRuntimeInstance& instance) const;
+        VFXInstanceId findLowestPriorityInstance(services::VFXEmitterPriority belowPriority) const;
 
         render::vfx::GPUEmitterConfig toGPUConfig(
             const render::vfx::VFXEmitterConfig& cpuConfig,

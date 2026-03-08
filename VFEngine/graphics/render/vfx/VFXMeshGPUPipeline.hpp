@@ -58,7 +58,7 @@ namespace render::vfx
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
-        static constexpr uint32_t MAX_TEXTURE_SLOTS = 16;
+        static constexpr uint32_t MAX_TEXTURE_SLOTS = 64;
 
         struct EmitterMeshData
         {

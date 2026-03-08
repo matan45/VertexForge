@@ -90,6 +90,16 @@ namespace controllers::offscreen
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
             if (ctx.playModeActive)
             {
+                // Pass frustum culling context to skip bone evaluation for off-screen entities
+                const auto& frustum = ctx.cameraController->getCurrentFrustum();
+                if (frustum.isInitialized())
+                {
+                    // Extract camera position from inverse view matrix
+                    glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+                    glm::vec3 cameraPos = glm::vec3(invView[3]);
+                    animatorSystem.setCullingContext(frustum, cameraPos);
+                }
+
                 animatorSystem.syncWithRegistry();
                 animatorSystem.updateAll(ctx.deltaTime);
             }

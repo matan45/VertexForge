@@ -1,5 +1,6 @@
 #include "AnimatorAdapter.hpp"
 #include "../../graphics/controllers/AnimatorSystemController.hpp"
+#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 
@@ -129,5 +130,54 @@ namespace core
     bool AnimatorAdapter::getRootMotion(services::EntityHandle entity) const
     {
         return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->getRootMotion(e); });
+    }
+
+    AnimatorAdapter::BudgetStats AnimatorAdapter::getBudgetStats() const
+    {
+        BudgetStats stats{};
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        stats.totalAnimators = animSys.getTotalAnimatorCount();
+        stats.culledEntities = animSys.getCulledEntityCount();
+        stats.pendingStreamingInits = animSys.getPendingInitCount();
+
+        const auto& lodMgr = animSys.getLODManager();
+        for (int i = 0; i < 4; ++i)
+        {
+            stats.lodCounts[i] = lodMgr.getLODCount(static_cast<animation::AnimationLODLevel>(i));
+        }
+
+        return stats;
+    }
+
+    AnimatorAdapter::LODConfig AnimatorAdapter::getLODConfig() const
+    {
+        LODConfig config{};
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        const auto& lodCfg = animSys.getLODManager().getConfig();
+        config.lod0Distance = lodCfg.distanceThresholds[0];
+        config.lod1Distance = lodCfg.distanceThresholds[1];
+        config.lod2Distance = lodCfg.distanceThresholds[2];
+        config.lod3Distance = lodCfg.distanceThresholds[3];
+        config.lod0Interval = lodCfg.updateIntervals[0];
+        config.lod1Interval = lodCfg.updateIntervals[1];
+        config.lod2Interval = lodCfg.updateIntervals[2];
+        config.maxStreamingInitPerFrame = animSys.getMaxStreamingInitPerFrame();
+        return config;
+    }
+
+    void AnimatorAdapter::setLODConfig(const LODConfig& config)
+    {
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        animation::AnimationLODConfig lodCfg;
+        lodCfg.distanceThresholds[0] = config.lod0Distance;
+        lodCfg.distanceThresholds[1] = config.lod1Distance;
+        lodCfg.distanceThresholds[2] = config.lod2Distance;
+        lodCfg.distanceThresholds[3] = config.lod3Distance;
+        lodCfg.updateIntervals[0] = config.lod0Interval;
+        lodCfg.updateIntervals[1] = config.lod1Interval;
+        lodCfg.updateIntervals[2] = config.lod2Interval;
+        lodCfg.updateIntervals[3] = 0; // LOD3 is always frozen
+        animSys.getLODManager().setConfig(lodCfg);
+        animSys.setMaxStreamingInitPerFrame(config.maxStreamingInitPerFrame);
     }
 }

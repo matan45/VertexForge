@@ -9,6 +9,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !configMapped)
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterConfig: invalid emitterIndex {}", emitterIndex);
             return;
         }
 
@@ -20,6 +22,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !stateStagingMapped[currentFrameIndex])
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterState: invalid emitterIndex {}", emitterIndex);
             return;
         }
 
@@ -31,6 +35,8 @@ namespace render::vfx
     {
         if (!initialized || emitterIndex >= maxEmitters || !lutMapped)
         {
+            if (initialized && emitterIndex >= maxEmitters)
+                vfLogWarning("GPUVFXBufferManager::updateEmitterLUT: invalid emitterIndex {}", emitterIndex);
             return;
         }
 
@@ -251,25 +257,52 @@ namespace render::vfx
             return allocation;
         }
 
-        if (allocatedParticleCount + particleCount > maxParticles)
+        // Initialize free list if empty (first allocation after init)
+        if (freeList.empty() && allocatedParticleCount == 0)
         {
-            vfLogError("GPUVFXBufferManager::allocateEmitter: Not enough particle budget ({} + {} > {})",
-                        allocatedParticleCount, particleCount, maxParticles);
+            freeList.push_back({0, maxParticles});
+        }
+
+        // First-fit search in free list
+        uint32_t bestIdx = UINT32_MAX;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(freeList.size()); ++i)
+        {
+            if (freeList[i].count >= particleCount)
+            {
+                bestIdx = i;
+                break;
+            }
+        }
+
+        if (bestIdx == UINT32_MAX)
+        {
+            vfLogError("GPUVFXBufferManager::allocateEmitter: No contiguous particle block of size {} available",
+                        particleCount);
             return allocation;
         }
 
+        uint32_t particleOffset = freeList[bestIdx].offset;
+
+        // Split or consume the free block
+        if (freeList[bestIdx].count == particleCount)
+        {
+            freeList.erase(freeList.begin() + bestIdx);
+        }
+        else
+        {
+            freeList[bestIdx].offset += particleCount;
+            freeList[bestIdx].count -= particleCount;
+        }
+
         allocation.emitterIndex = freeSlot;
-        allocation.particleOffset = allocatedParticleCount;
+        allocation.particleOffset = particleOffset;
         allocation.particleCount = particleCount;
 
         emitterSlots[freeSlot] = true;
-        emitterParticleOffsets[freeSlot] = allocatedParticleCount;
+        emitterParticleOffsets[freeSlot] = particleOffset;
         emitterParticleCounts[freeSlot] = particleCount;
         allocatedParticleCount += particleCount;
         activeEmitterCount++;
-
-        vfLogInfo("GPUVFXBufferManager: Allocated emitter {} with {} particles at offset {}",
-                   freeSlot, particleCount, allocation.particleOffset);
 
         return allocation;
     }
@@ -281,9 +314,70 @@ namespace render::vfx
             return;
         }
 
+        uint32_t offset = emitterParticleOffsets[emitterIndex];
+        uint32_t count = emitterParticleCounts[emitterIndex];
+
         emitterSlots[emitterIndex] = false;
+        allocatedParticleCount -= count;
         activeEmitterCount--;
 
-        vfLogInfo("GPUVFXBufferManager: Freed emitter {}", emitterIndex);
+        // Insert free block in sorted order and coalesce adjacent blocks
+        FreeBlock newBlock{offset, count};
+
+        // Find insertion point (sorted by offset)
+        auto insertIt = freeList.begin();
+        while (insertIt != freeList.end() && insertIt->offset < offset)
+        {
+            ++insertIt;
+        }
+
+        insertIt = freeList.insert(insertIt, newBlock);
+
+        // Coalesce with next block
+        auto nextIt = insertIt + 1;
+        if (nextIt != freeList.end() &&
+            insertIt->offset + insertIt->count == nextIt->offset)
+        {
+            insertIt->count += nextIt->count;
+            freeList.erase(nextIt);
+        }
+
+        // Coalesce with previous block
+        if (insertIt != freeList.begin())
+        {
+            auto prevIt = insertIt - 1;
+            if (prevIt->offset + prevIt->count == insertIt->offset)
+            {
+                prevIt->count += insertIt->count;
+                freeList.erase(insertIt);
+            }
+        }
+    }
+
+    float GPUVFXBufferManager::getFragmentationPercent() const
+    {
+        if (freeList.empty() || allocatedParticleCount == 0)
+        {
+            return 0.0f;
+        }
+
+        uint32_t totalFree = 0;
+        uint32_t largestFree = 0;
+        for (const auto& block : freeList)
+        {
+            totalFree += block.count;
+            if (block.count > largestFree)
+            {
+                largestFree = block.count;
+            }
+        }
+
+        if (totalFree == 0)
+        {
+            return 0.0f;
+        }
+
+        // Fragmentation = 1 - (largestFreeBlock / totalFree)
+        return (1.0f - static_cast<float>(largestFree) / static_cast<float>(totalFree)) * 100.0f;
     }
 }

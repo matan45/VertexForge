@@ -20,6 +20,7 @@ namespace resource {
 		HDR = 10,
 		Font = 11,
 		Skeleton = 12,
+		Navmesh = 13,
 		COUNT
 	};
 
@@ -38,6 +39,7 @@ namespace resource {
 		case AssetType::HDR:              return "HDR";
 		case AssetType::Font:             return "Font";
 		case AssetType::Skeleton:         return "Skeleton";
+		case AssetType::Navmesh:          return "Navmesh";
 		default:                          return "Unknown";
 		}
 	}

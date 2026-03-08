@@ -29,7 +29,7 @@ namespace render::gpudriven
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
     constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
-    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
+    constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
     constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)

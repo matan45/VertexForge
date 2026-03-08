@@ -5,6 +5,8 @@
 #include <DetourNavMeshBuilder.h>
 
 #include <cstring>
+#include <cmath>
+#include <glm/glm.hpp>
 
 #include "print/Log.hpp"
 namespace core
@@ -137,7 +139,8 @@ namespace core
 
     static bool createDetourData(const rcConfig& cfg, const types::NavmeshBakeSettings& settings,
                                   rcPolyMesh& pmesh, rcPolyMeshDetail& dmesh,
-                                  unsigned char*& outNavData, int& outNavDataSize)
+                                  unsigned char*& outNavData, int& outNavDataSize,
+                                  int tileX = 0, int tileZ = 0, int tileLayer = 0)
     {
         for (int i = 0; i < pmesh.npolys; ++i)
             pmesh.flags[i] = 1;
@@ -164,6 +167,9 @@ namespace core
         params.cs = cfg.cs;
         params.ch = cfg.ch;
         params.buildBvTree = true;
+        params.tileX = tileX;
+        params.tileY = tileZ;
+        params.tileLayer = tileLayer;
 
         if (!dtCreateNavMeshData(&params, &outNavData, &outNavDataSize))
         {
@@ -173,74 +179,185 @@ namespace core
         return true;
     }
 
-    bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                                       const types::NavmeshBakeSettings& settings)
+    static navigation::NavmeshTileData buildTileData(int tx, int tz,
+                                                       const navigation::NavmeshInputGeometry& geometry,
+                                                       const types::NavmeshBakeSettings& settings)
     {
-        updateProgress(types::NavmeshBakeStatus::Collecting, 0.0f, "Preparing geometry");
+        navigation::NavmeshTileData result;
+        result.x = tx;
+        result.y = tz;
+
+        if (geometry.isEmpty())
+            return result;
 
         const float* verts = geometry.vertices.data();
         const int nVerts = geometry.getVertexCount();
         const int* tris = geometry.triangles.data();
         const int nTris = geometry.getTriangleCount();
-        float bmin[3] = {geometry.boundsMin.x, geometry.boundsMin.y, geometry.boundsMin.z};
-        float bmax[3] = {geometry.boundsMax.x, geometry.boundsMax.y, geometry.boundsMax.z};
+
+        // Use grid-aligned tile bounds, NOT geometry bounds
+        // This ensures adjacent tiles share the exact same edge coordinates
+        const float tileWorldSize = settings.tileSize * settings.cellSize;
+        float bmin[3] = {tx * tileWorldSize, geometry.boundsMin.y, tz * tileWorldSize};
+        float bmax[3] = {(tx + 1) * tileWorldSize, geometry.boundsMax.y, (tz + 1) * tileWorldSize};
 
         rcConfig cfg = createRecastConfig(settings, bmin, bmax);
-        rcContext ctx;
+        cfg.borderSize = cfg.walkableRadius + 3;
+        cfg.width = settings.tileSize + cfg.borderSize * 2;
+        cfg.height = settings.tileSize + cfg.borderSize * 2;
 
-        updateProgress(types::NavmeshBakeStatus::Voxelizing, 0.1f, "Voxelizing geometry");
+        float borderExpand = cfg.borderSize * cfg.cs;
+        cfg.bmin[0] -= borderExpand;
+        cfg.bmin[2] -= borderExpand;
+        cfg.bmax[0] += borderExpand;
+        cfg.bmax[2] += borderExpand;
+
+        rcContext ctx;
 
         rcHeightfield* solid = rasterizeGeometry(ctx, cfg, verts, nVerts, tris, nTris);
         if (!solid)
-        {
-            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed");
-            return false;
-        }
-
-        updateProgress(types::NavmeshBakeStatus::Building, 0.3f, "Building regions");
+            return result;
 
         rcCompactHeightfield* chf = buildCompactField(ctx, cfg, *solid);
         rcFreeHeightField(solid);
         if (!chf)
-        {
-            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed");
-            return false;
-        }
-
-        updateProgress(types::NavmeshBakeStatus::Building, 0.6f, "Building polygon mesh");
+            return result;
 
         rcPolyMesh* pmesh = nullptr;
         rcPolyMeshDetail* dmesh = nullptr;
         if (!buildPolyMeshes(ctx, cfg, *chf, pmesh, dmesh))
         {
             rcFreeCompactHeightfield(chf);
-            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed");
-            return false;
+            return result;
         }
         rcFreeCompactHeightfield(chf);
 
-        updateProgress(types::NavmeshBakeStatus::Building, 0.9f, "Creating Detour navmesh");
-
-        unsigned char* navData = nullptr;
-        int navDataSize = 0;
-        if (!createDetourData(cfg, settings, *pmesh, *dmesh, navData, navDataSize))
+        if (pmesh->nverts == 0 || pmesh->npolys == 0)
         {
             rcFreePolyMesh(pmesh);
             rcFreePolyMeshDetail(dmesh);
-            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed");
-            return false;
+            return result;
+        }
+
+        unsigned char* navData = nullptr;
+        int navDataSize = 0;
+        if (!createDetourData(cfg, settings, *pmesh, *dmesh, navData, navDataSize, tx, tz))
+        {
+            rcFreePolyMesh(pmesh);
+            rcFreePolyMeshDetail(dmesh);
+            return result;
         }
         rcFreePolyMesh(pmesh);
         rcFreePolyMeshDetail(dmesh);
 
-        if (!initializeNavmesh(navData, navDataSize, settings.agentRadius))
+        result.dataSize = static_cast<uint32_t>(navDataSize);
+        result.data.resize(navDataSize);
+        memcpy(result.data.data(), navData, navDataSize);
+        dtFree(navData);
+
+        return result;
+    }
+
+    navigation::NavmeshTileData NavmeshAdapter::buildSingleTile(int tx, int tz,
+                                                                  const navigation::NavmeshInputGeometry& geometry,
+                                                                  const types::NavmeshBakeSettings& settings)
+    {
+        return buildTileData(tx, tz, geometry, settings);
+    }
+
+    bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
+                                       const types::NavmeshBakeSettings& settings)
+    {
+        updateProgress(types::NavmeshBakeStatus::Collecting, 0.0f, "Preparing geometry");
+
+        if (geometry.isEmpty())
         {
-            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed");
+            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "No geometry");
             return false;
         }
 
+        const float tileWorldSize = settings.tileSize * settings.cellSize;
+        const glm::vec3 bmin = geometry.boundsMin;
+        const glm::vec3 bmax = geometry.boundsMax;
+
+        const int tileMinX = static_cast<int>(floorf(bmin.x / tileWorldSize));
+        const int tileMinZ = static_cast<int>(floorf(bmin.z / tileWorldSize));
+        const int tileMaxX = static_cast<int>(floorf(bmax.x / tileWorldSize));
+        const int tileMaxZ = static_cast<int>(floorf(bmax.z / tileWorldSize));
+        const int totalTiles = (tileMaxX - tileMinX + 1) * (tileMaxZ - tileMinZ + 1);
+
+        if (!initTiledNavmesh(settings, bmin, bmax))
+        {
+            updateProgress(types::NavmeshBakeStatus::Failed, 0.0f, "Failed to init tiled navmesh");
+            return false;
+        }
+
+        updateProgress(types::NavmeshBakeStatus::Building, 0.1f, "Building tiles");
+
+        int tilesBuilt = 0;
+        for (int tz = tileMinZ; tz <= tileMaxZ; ++tz)
+        {
+            for (int tx = tileMinX; tx <= tileMaxX; ++tx)
+            {
+                // Compute tile AABB with border overlap for geometry clipping
+                float tileBminX = tx * tileWorldSize;
+                float tileBminZ = tz * tileWorldSize;
+                float tileBmaxX = (tx + 1) * tileWorldSize;
+                float tileBmaxZ = (tz + 1) * tileWorldSize;
+
+                float borderExpand = settings.agentRadius + settings.cellSize * 3.0f;
+                glm::vec3 clipMin(tileBminX - borderExpand, bmin.y, tileBminZ - borderExpand);
+                glm::vec3 clipMax(tileBmaxX + borderExpand, bmax.y, tileBmaxZ + borderExpand);
+
+                // Clip geometry to this tile's expanded bounds
+                navigation::NavmeshInputGeometry tileGeometry;
+                const float* verts = geometry.vertices.data();
+                const int* tris = geometry.triangles.data();
+                const int nTris = geometry.getTriangleCount();
+
+                // Collect triangles that overlap this tile
+                for (int i = 0; i < nTris; ++i)
+                {
+                    int ia = tris[i * 3];
+                    int ib = tris[i * 3 + 1];
+                    int ic = tris[i * 3 + 2];
+
+                    glm::vec3 va(verts[ia * 3], verts[ia * 3 + 1], verts[ia * 3 + 2]);
+                    glm::vec3 vb(verts[ib * 3], verts[ib * 3 + 1], verts[ib * 3 + 2]);
+                    glm::vec3 vc(verts[ic * 3], verts[ic * 3 + 1], verts[ic * 3 + 2]);
+
+                    // Triangle AABB overlap test
+                    glm::vec3 triMin = glm::min(va, glm::min(vb, vc));
+                    glm::vec3 triMax = glm::max(va, glm::max(vb, vc));
+
+                    if (triMax.x < clipMin.x || triMin.x > clipMax.x ||
+                        triMax.z < clipMin.z || triMin.z > clipMax.z)
+                        continue;
+
+                    int baseIdx = tileGeometry.getVertexCount();
+                    tileGeometry.addVertex(va);
+                    tileGeometry.addVertex(vb);
+                    tileGeometry.addVertex(vc);
+                    tileGeometry.addTriangle(baseIdx, baseIdx + 1, baseIdx + 2);
+                }
+
+                if (!tileGeometry.isEmpty())
+                {
+                    auto tileData = buildTileData(tx, tz, tileGeometry, settings);
+                    if (!tileData.data.empty())
+                    {
+                        addNavmeshTile(tileData);
+                    }
+                }
+
+                tilesBuilt++;
+                float progress = 0.1f + 0.85f * (static_cast<float>(tilesBuilt) / totalTiles);
+                updateProgress(types::NavmeshBakeStatus::Building, progress, "Building tiles");
+            }
+        }
+
         updateProgress(types::NavmeshBakeStatus::Complete, 1.0f, "Complete");
-        vfLogInfo("NavmeshAdapter: Navmesh built successfully");
+        vfLogInfo("NavmeshAdapter: Tiled navmesh built ({} tiles)", tilesBuilt);
         return true;
     }
 }

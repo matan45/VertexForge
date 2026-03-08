@@ -23,6 +23,12 @@ namespace components
 
         // Runtime state (not serialized)
         bool isActive = false;
+        bool isSuspended = false;
         int crowdAgentIndex = -1;
+
+        // Stored state for suspend/resume
+        glm::vec3 suspendedPosition{0.0f};
+        glm::vec3 suspendedTarget{0.0f};
+        bool hasSuspendedTarget = false;
     };
 }

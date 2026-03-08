@@ -48,5 +48,31 @@ namespace services
         // Distance culling
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;
+
+        // Budget stats for debug UI
+        struct BudgetStats
+        {
+            uint32_t activeEmitters = 0;
+            uint32_t maxEmitters = 0;
+            uint32_t allocatedParticles = 0;
+            uint32_t maxParticles = 0;
+            uint32_t lodCounts[4] = {0, 0, 0, 0};
+            float fragmentationPercent = 0.0f;
+            uint32_t poolWarmSlots = 0;
+            uint32_t poolUsedSlots = 0;
+            uint32_t poolTotalSlots = 0;
+        };
+        virtual BudgetStats getBudgetStats() const = 0;
+
+        // LOD config
+        struct LODConfig
+        {
+            float lod0Distance = 50.0f;
+            float lod1Distance = 100.0f;
+            float lod2Distance = 200.0f;
+            float transitionZone = 10.0f;
+        };
+        virtual LODConfig getLODConfig() const = 0;
+        virtual void setLODConfig(const LODConfig& config) = 0;
     };
 }

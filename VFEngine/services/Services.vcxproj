@@ -107,6 +107,7 @@
     <ClInclude Include="data\WaterData.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
+    <ClInclude Include="events\animation\AnimationBudgetEvents.hpp" />
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />
@@ -188,6 +189,7 @@
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\lightbake\LightBakeServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
+    <ClInclude Include="impl\navmesh\NavmeshStreamer.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsAnimationServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsPlayModeHandler.hpp" />
@@ -310,6 +312,7 @@
     <ClCompile Include="impl\lightbake\LightBakeServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshGeometryCollector.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshServiceImpl.cpp" />
+    <ClCompile Include="impl\navmesh\NavmeshStreamer.cpp" />
     <ClCompile Include="impl\physics\ControllerServiceImpl.cpp" />
     <ClCompile Include="impl\physics\PhysicsAnimationServiceImpl.cpp" />
     <ClCompile Include="impl\physics\PhysicsPlayModeHandler.cpp" />

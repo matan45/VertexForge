@@ -42,5 +42,10 @@ namespace core
 
         void setRootMotion(services::EntityHandle entity, bool enabled) override;
         [[nodiscard]] bool getRootMotion(services::EntityHandle entity) const override;
+
+        [[nodiscard]] BudgetStats getBudgetStats() const override;
+
+        [[nodiscard]] LODConfig getLODConfig() const override;
+        void setLODConfig(const LODConfig& config) override;
     };
 }

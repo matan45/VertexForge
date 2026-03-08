@@ -245,4 +245,226 @@ namespace services
                       totalVerts, totalTris);
         }
     }
+
+    // === Per-Tile Geometry Collection (VK-775) ===
+
+    static bool boundsOverlap2D(const navigation::NavmeshTileBounds& a,
+                                 const glm::vec3& bmin, const glm::vec3& bmax)
+    {
+        return a.max.x >= bmin.x && a.min.x <= bmax.x &&
+               a.max.z >= bmin.z && a.min.z <= bmax.z;
+    }
+
+    void NavmeshServiceImpl::collectTileGeometry(const navigation::NavmeshTileBounds& bounds,
+                                                   const types::NavmeshBakeSettings& settings,
+                                                   navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto expanded = navigation::expandBoundsForOverlap(bounds, settings);
+
+        if (settings.includeTerrain)
+        {
+            collectTerrainGeometryForBounds(expanded, outGeometry);
+        }
+        if (settings.includeStaticMeshes)
+        {
+            collectStaticMeshGeometryForBounds(expanded, outGeometry);
+        }
+        if (settings.includeColliders)
+        {
+            collectColliderGeometryForBounds(expanded, outGeometry);
+        }
+    }
+
+    void NavmeshServiceImpl::collectTerrainGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                                               navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        auto bakeGeometry = dispatcher.query(events::terrain::GetTerrainBakeGeometryQuery{});
+
+        if (bakeGeometry.vertices.empty())
+            return;
+
+        for (const auto& tileInfo : bakeGeometry.tileInfos)
+        {
+            glm::vec3 tileMin = tileInfo.worldOrigin;
+            glm::vec3 tileMax = tileMin + glm::vec3(tileInfo.tileSize, 1e6f, tileInfo.tileSize);
+
+            if (!boundsOverlap2D(bounds, tileMin, tileMax))
+                continue;
+
+            int baseVertex = outGeometry.getVertexCount();
+
+            int vStart = tileInfo.firstVertexIndex * 3;
+            int vEnd = vStart + tileInfo.vertexCount * 3;
+            for (int i = vStart; i < vEnd; i += 3)
+            {
+                outGeometry.addVertex(glm::vec3(
+                    bakeGeometry.vertices[i],
+                    bakeGeometry.vertices[i + 1],
+                    bakeGeometry.vertices[i + 2]));
+            }
+
+            int tStart = tileInfo.firstTriangleIndex * 3;
+            int tEnd = tStart + tileInfo.triangleCount * 3;
+            for (int i = tStart; i < tEnd; i += 3)
+            {
+                outGeometry.addTriangle(
+                    baseVertex + bakeGeometry.triangles[i] - tileInfo.firstVertexIndex,
+                    baseVertex + bakeGeometry.triangles[i + 1] - tileInfo.firstVertexIndex,
+                    baseVertex + bakeGeometry.triangles[i + 2] - tileInfo.firstVertexIndex);
+            }
+        }
+    }
+
+    void NavmeshServiceImpl::collectStaticMeshGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                                                  navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::MeshComponent, components::TransformComponent>();
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                const auto& rb = registry.get<components::RigidBodyComponent>(entity);
+                if (rb.type == components::RigidBodyType::Dynamic)
+                    continue;
+            }
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            glm::vec3 pos = transform.position;
+
+            // Quick position-based overlap check
+            if (pos.x < bounds.min.x - 50.0f || pos.x > bounds.max.x + 50.0f ||
+                pos.z < bounds.min.z - 50.0f || pos.z > bounds.max.z + 50.0f)
+                continue;
+
+            const auto& mesh = view.get<components::MeshComponent>(entity);
+            if (mesh.meshPath.empty())
+                continue;
+
+            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshPath);
+            auto meshesData = meshFuture.get();
+            if (!meshesData || meshesData->meshes.empty())
+                continue;
+
+            glm::mat4 modelMatrix = transform.getMatrix();
+
+            for (const auto& submesh : meshesData->meshes)
+            {
+                if (submesh.lodLevels.empty())
+                    continue;
+
+                const auto& lod = submesh.lodLevels[0];
+                int baseVertex = outGeometry.getVertexCount();
+
+                for (const auto& vertex : lod.vertices)
+                {
+                    glm::vec3 worldPos = glm::vec3(modelMatrix * glm::vec4(vertex.position, 1.0f));
+                    outGeometry.addVertex(worldPos);
+                }
+
+                for (size_t i = 0; i + 2 < lod.indices.size(); i += 3)
+                {
+                    outGeometry.addTriangle(
+                        baseVertex + static_cast<int>(lod.indices[i]),
+                        baseVertex + static_cast<int>(lod.indices[i + 1]),
+                        baseVertex + static_cast<int>(lod.indices[i + 2]));
+                }
+            }
+        }
+    }
+
+    void NavmeshServiceImpl::collectColliderGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                                                navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::MeshComponent>(entity))
+                continue;
+
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                const auto& rb = registry.get<components::RigidBodyComponent>(entity);
+                if (rb.type == components::RigidBodyType::Dynamic)
+                    continue;
+            }
+
+            const auto& collider = view.get<components::ColliderComponent>(entity);
+            if (collider.isTrigger)
+                continue;
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            glm::vec3 pos = transform.position;
+
+            if (pos.x < bounds.min.x - 50.0f || pos.x > bounds.max.x + 50.0f ||
+                pos.z < bounds.min.z - 50.0f || pos.z > bounds.max.z + 50.0f)
+                continue;
+
+            glm::mat4 modelMatrix = transform.getMatrix();
+            modelMatrix = glm::translate(modelMatrix, collider.offset);
+
+            if (collider.shape == components::ColliderShape::Box)
+            {
+                glm::vec3 half = collider.size * 0.5f;
+                int base = outGeometry.getVertexCount();
+
+                glm::vec3 corners[8] = {
+                    {-half.x, -half.y, -half.z}, { half.x, -half.y, -half.z},
+                    { half.x,  half.y, -half.z}, {-half.x,  half.y, -half.z},
+                    {-half.x, -half.y,  half.z}, { half.x, -half.y,  half.z},
+                    { half.x,  half.y,  half.z}, {-half.x,  half.y,  half.z}
+                };
+
+                for (const auto& corner : corners)
+                {
+                    outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(corner, 1.0f)));
+                }
+
+                int boxIndices[] = {
+                    0,1,2, 0,2,3, 5,4,7, 5,7,6,
+                    4,0,3, 4,3,7, 1,5,6, 1,6,2,
+                    3,2,6, 3,6,7, 4,5,1, 4,1,0
+                };
+                for (int i = 0; i < 36; i += 3)
+                {
+                    outGeometry.addTriangle(base + boxIndices[i], base + boxIndices[i+1], base + boxIndices[i+2]);
+                }
+            }
+            else if (collider.shape == components::ColliderShape::ConvexMesh ||
+                     collider.shape == components::ColliderShape::TriangleMesh)
+            {
+                if (collider.meshPath.empty())
+                    continue;
+
+                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshPath);
+                auto meshesData = meshFuture.get();
+                if (!meshesData || meshesData->meshes.empty())
+                    continue;
+
+                for (const auto& submesh : meshesData->meshes)
+                {
+                    if (submesh.lodLevels.empty()) continue;
+                    const auto& lod = submesh.lodLevels[0];
+                    int base = outGeometry.getVertexCount();
+
+                    for (const auto& vertex : lod.vertices)
+                    {
+                        outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(vertex.position, 1.0f)));
+                    }
+
+                    for (size_t i = 0; i + 2 < lod.indices.size(); i += 3)
+                    {
+                        outGeometry.addTriangle(
+                            base + static_cast<int>(lod.indices[i]),
+                            base + static_cast<int>(lod.indices[i + 1]),
+                            base + static_cast<int>(lod.indices[i + 2]));
+                    }
+                }
+            }
+        }
+    }
 }

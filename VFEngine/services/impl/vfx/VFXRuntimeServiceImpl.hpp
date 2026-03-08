@@ -25,5 +25,19 @@ namespace services
         void update(float deltaTime);
 
         bool isInstancePlaying(VFXInstanceId id) const;
+
+        struct BudgetStats
+        {
+            uint32_t activeEmitters = 0;
+            uint32_t maxEmitters = 0;
+            uint32_t allocatedParticles = 0;
+            uint32_t maxParticles = 0;
+            uint32_t lodCounts[4] = {0, 0, 0, 0};
+            float fragmentationPercent = 0.0f;
+            uint32_t poolWarmSlots = 0;
+            uint32_t poolUsedSlots = 0;
+            uint32_t poolTotalSlots = 0;
+        };
+        BudgetStats getBudgetStats() const;
     };
 }
