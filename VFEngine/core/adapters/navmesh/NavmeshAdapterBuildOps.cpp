@@ -194,8 +194,12 @@ namespace core
         const int nVerts = geometry.getVertexCount();
         const int* tris = geometry.triangles.data();
         const int nTris = geometry.getTriangleCount();
-        float bmin[3] = {geometry.boundsMin.x, geometry.boundsMin.y, geometry.boundsMin.z};
-        float bmax[3] = {geometry.boundsMax.x, geometry.boundsMax.y, geometry.boundsMax.z};
+
+        // Use grid-aligned tile bounds, NOT geometry bounds
+        // This ensures adjacent tiles share the exact same edge coordinates
+        const float tileWorldSize = settings.tileSize * settings.cellSize;
+        float bmin[3] = {tx * tileWorldSize, geometry.boundsMin.y, tz * tileWorldSize};
+        float bmax[3] = {(tx + 1) * tileWorldSize, geometry.boundsMax.y, (tz + 1) * tileWorldSize};
 
         rcConfig cfg = createRecastConfig(settings, bmin, bmax);
         cfg.borderSize = cfg.walkableRadius + 3;

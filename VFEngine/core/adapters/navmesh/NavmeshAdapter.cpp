@@ -6,6 +6,7 @@
 #include <DetourCommon.h>
 
 #include <cstring>
+#include <cmath>
 #include <algorithm>
 
 #include "print/Log.hpp"
@@ -256,15 +257,22 @@ namespace core
             return false;
 
         const float tileWorldSize = settings.tileSize * settings.cellSize;
-        const int gridW = static_cast<int>(ceilf((boundsMax.x - boundsMin.x) / tileWorldSize));
-        const int gridH = static_cast<int>(ceilf((boundsMax.z - boundsMin.z) / tileWorldSize));
+        // Compute tile range from actual grid coordinates (origin is 0,0)
+        const int tileMinX = static_cast<int>(floorf(boundsMin.x / tileWorldSize));
+        const int tileMinZ = static_cast<int>(floorf(boundsMin.z / tileWorldSize));
+        const int tileMaxX = static_cast<int>(floorf(boundsMax.x / tileWorldSize));
+        const int tileMaxZ = static_cast<int>(floorf(boundsMax.z / tileWorldSize));
+        const int gridW = tileMaxX - tileMinX + 1;
+        const int gridH = tileMaxZ - tileMinZ + 1;
         const int maxTiles = std::max(1, gridW * gridH);
 
         dtNavMeshParams meshParams;
         memset(&meshParams, 0, sizeof(meshParams));
-        meshParams.orig[0] = boundsMin.x;
+        // Origin must be (0,y,0) because tile coords are on a global grid:
+        // tile (tx,tz) maps to world [tx*tileSize, (tx+1)*tileSize]
+        meshParams.orig[0] = 0.0f;
         meshParams.orig[1] = boundsMin.y;
-        meshParams.orig[2] = boundsMin.z;
+        meshParams.orig[2] = 0.0f;
         meshParams.tileWidth = tileWorldSize;
         meshParams.tileHeight = tileWorldSize;
         meshParams.maxTiles = maxTiles;
