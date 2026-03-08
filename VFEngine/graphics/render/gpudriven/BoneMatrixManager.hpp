@@ -61,6 +61,11 @@ namespace render::gpudriven {
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
 
+        uint32_t getAllocatedCount() const { return static_cast<uint32_t>(allocations.size()); }
+        uint32_t getCapacity() const { return maxBoneMatrices; }
+        float getFragmentationPercent() const { return boneAllocator.getFragmentationPercent(); }
+        uint32_t getUsedBoneCount() const { return boneAllocator.getUsedCount() + boneAllocator.getReservedCount(); }
+
     private:
         void createBuffers();
         void destroyBuffers();

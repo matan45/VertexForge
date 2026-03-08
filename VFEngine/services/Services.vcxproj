@@ -107,6 +107,7 @@
     <ClInclude Include="data\WaterData.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
+    <ClInclude Include="events\animation\AnimationBudgetEvents.hpp" />
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />

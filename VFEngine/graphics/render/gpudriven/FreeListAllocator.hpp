@@ -63,6 +63,21 @@ namespace render::gpudriven {
         uint32_t getReservedCount() const { return reservedCount; }
         uint32_t getCapacity() const { return capacity; }
 
+        uint32_t getFreeBlockCount() const { return static_cast<uint32_t>(freeList.size()); }
+
+        float getFragmentationPercent() const {
+            if (freeList.empty()) return 0.0f;
+            uint32_t totalFree = 0;
+            uint32_t largestFree = 0;
+            for (const auto& block : freeList) {
+                totalFree += block.size;
+                if (block.size > largestFree) largestFree = block.size;
+            }
+            if (totalFree == 0) return 0.0f;
+            // Fragmentation = 1 - (largest free block / total free space)
+            return (1.0f - static_cast<float>(largestFree) / static_cast<float>(totalFree)) * 100.0f;
+        }
+
     private:
         struct FreeBlock {
             uint32_t offset;

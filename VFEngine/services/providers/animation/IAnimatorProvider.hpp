@@ -10,6 +10,15 @@ namespace services
     public:
         virtual ~IAnimatorProvider() = default;
 
+        struct BudgetStats
+        {
+            uint32_t totalAnimators = 0;
+            uint32_t culledEntities = 0;
+            uint32_t lodCounts[4] = {0, 0, 0, 0};
+            uint32_t pendingStreamingInits = 0;
+        };
+        [[nodiscard]] virtual BudgetStats getBudgetStats() const = 0;
+
         virtual void setFloat(EntityHandle entity, const std::string& paramName, float value) = 0;
         virtual void setInt(EntityHandle entity, const std::string& paramName, int32_t value) = 0;
         virtual void setBool(EntityHandle entity, const std::string& paramName, bool value) = 0;

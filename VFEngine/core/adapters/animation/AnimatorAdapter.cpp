@@ -1,5 +1,6 @@
 #include "AnimatorAdapter.hpp"
 #include "../../graphics/controllers/AnimatorSystemController.hpp"
+#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 
@@ -129,5 +130,22 @@ namespace core
     bool AnimatorAdapter::getRootMotion(services::EntityHandle entity) const
     {
         return withEntityOr<bool>(entity, false, [&](entt::entity e) { return controller->getRootMotion(e); });
+    }
+
+    AnimatorAdapter::BudgetStats AnimatorAdapter::getBudgetStats() const
+    {
+        BudgetStats stats{};
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        stats.totalAnimators = animSys.getTotalAnimatorCount();
+        stats.culledEntities = animSys.getCulledEntityCount();
+        stats.pendingStreamingInits = animSys.getPendingInitCount();
+
+        const auto& lodMgr = animSys.getLODManager();
+        for (int i = 0; i < 4; ++i)
+        {
+            stats.lodCounts[i] = lodMgr.getLODCount(static_cast<animation::AnimationLODLevel>(i));
+        }
+
+        return stats;
     }
 }

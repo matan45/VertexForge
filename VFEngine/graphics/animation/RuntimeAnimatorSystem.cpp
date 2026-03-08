@@ -9,6 +9,7 @@
 #include "../../services/events/editor/EditorModeEvents.hpp"
 #include "../../services/events/animation/AnimationEventEvents.hpp"
 #include "../../services/events/physics/SocketEvents.hpp"
+#include "../../services/events/world/WorldSectorEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <unordered_set>
@@ -80,6 +81,48 @@ namespace animation
                 }
             });
 
+        // Streaming integration: queue animator init on sector load, cleanup on unload
+        sectorLoadedToken = dispatcher.subscribe<events::world::SectorLoadedNotification>(
+            [this](const events::world::SectorLoadedNotification&)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::MeshComponent>();
+                for (auto entity : view)
+                {
+                    const auto& meshComp = view.get<components::MeshComponent>(entity);
+                    if (!meshComp.animatorPath.empty() && !hasAnimator(entity))
+                    {
+                        pendingInitQueue.push_back({entity, meshComp.animatorPath});
+                    }
+                }
+            });
+
+        sectorUnloadedToken = dispatcher.subscribe<events::world::SectorUnloadedNotification>(
+            [this](const events::world::SectorUnloadedNotification&)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                std::vector<entt::entity> toRemove;
+                for (const auto& [entity, animator] : animators)
+                {
+                    if (!registry.valid(entity))
+                    {
+                        toRemove.push_back(entity);
+                    }
+                }
+                for (auto entity : toRemove)
+                {
+                    destroyEntityAnimator(entity);
+                }
+
+                // Remove invalid entities from pending queue
+                pendingInitQueue.erase(
+                    std::remove_if(pendingInitQueue.begin(), pendingInitQueue.end(),
+                        [&registry](const PendingAnimatorInit& pending) {
+                            return !registry.valid(pending.entity);
+                        }),
+                    pendingInitQueue.end());
+            });
+
     }
 
     void RuntimeAnimatorSystem::shutdown()
@@ -104,12 +147,63 @@ namespace animation
             socketDataSavedToken = {};
         }
 
+        if (sectorLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sectorLoadedToken);
+            sectorLoadedToken = {};
+        }
+
+        if (sectorUnloadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sectorUnloadedToken);
+            sectorUnloadedToken = {};
+        }
+
+        pendingInitQueue.clear();
         clearAll();
         initialized = false;
     }
 
+    void RuntimeAnimatorSystem::setCullingContext(const math::Frustum& frustum, const glm::vec3& cameraPos)
+    {
+        cullingContext.frustum = frustum;
+        cullingContext.cameraPos = cameraPos;
+        cullingContext.enabled = true;
+    }
+
+    void RuntimeAnimatorSystem::clearCullingContext()
+    {
+        cullingContext.enabled = false;
+    }
+
+    void RuntimeAnimatorSystem::processPendingStreamingInits()
+    {
+        if (pendingInitQueue.empty())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        uint32_t initCount = 0;
+
+        while (!pendingInitQueue.empty() && initCount < maxInitPerFrame)
+        {
+            auto pending = pendingInitQueue.back();
+            pendingInitQueue.pop_back();
+
+            if (!registry.valid(pending.entity))
+                continue;
+
+            if (hasAnimator(pending.entity))
+                continue;
+
+            initializeEntityAnimator(pending.entity, pending.animatorPath);
+            ++initCount;
+        }
+    }
+
     void RuntimeAnimatorSystem::updateAll(float deltaTime)
     {
+        processPendingStreamingInits();
+
         auto activeAnimators = evaluateAnimations(deltaTime);
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -121,28 +215,177 @@ namespace animation
         }
     }
 
+    bool RuntimeAnimatorSystem::isEntityInFrustum(entt::entity entity, entt::registry& registry) const
+    {
+        if (!cullingContext.enabled || !cullingContext.frustum.isInitialized())
+            return true;
+
+        if (!registry.all_of<components::WorldTransformComponent>(entity))
+            return true;
+
+        const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+        glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+
+        // Use a conservative bounding sphere for animated entities
+        // Default radius of 3m covers most humanoid characters
+        // 5% expansion margin to prevent rapid toggling at frustum edges
+        constexpr float ANIM_ENTITY_RADIUS = 3.0f;
+        constexpr float FRUSTUM_MARGIN = 1.05f;
+        float radius = ANIM_ENTITY_RADIUS * FRUSTUM_MARGIN;
+
+        // Extract scale from world matrix for better radius estimation
+        float scaleX = glm::length(glm::vec3(worldTransform.worldMatrix[0]));
+        float scaleY = glm::length(glm::vec3(worldTransform.worldMatrix[1]));
+        float scaleZ = glm::length(glm::vec3(worldTransform.worldMatrix[2]));
+        float maxScale = glm::max(scaleX, glm::max(scaleY, scaleZ));
+        radius *= maxScale;
+
+        // Sphere-frustum test: check against all 6 planes
+        math::AABB aabb(worldPos - glm::vec3(radius), worldPos + glm::vec3(radius));
+        return cullingContext.frustum.intersectsAABB(aabb);
+    }
+
     RuntimeAnimatorSystem::ActiveAnimatorList RuntimeAnimatorSystem::evaluateAnimations(float deltaTime)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
+        culledEntityCount = 0;
+        lodManager.resetLODCounts();
+        instanceGroups.clear();
+        activeInstanceGroupCount = 0;
+
         ActiveAnimatorList activeAnimators;
+        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> lodInterpolateEntities;
+
+        // Collect candidates that pass frustum/LOD filtering
+        struct EvalCandidate
+        {
+            entt::entity entity;
+            AnimatorStateMachine* anim;
+            uint8_t lodLevel;
+        };
+        std::vector<EvalCandidate> evalCandidates;
+
         for (auto& [entity, animator] : animators)
         {
             if (!animator || !animator->isInitialized() || !animator->isPlaying())
                 continue;
             if (!registry.valid(entity))
                 continue;
-            activeAnimators.push_back({entity, animator.get()});
+
+            // Frustum culling: skip bone evaluation for off-screen entities
+            // Their last bone matrices remain in the GPU buffer
+            if (!isEntityInFrustum(entity, registry))
+            {
+                ++culledEntityCount;
+                continue;
+            }
+
+            // LOD: compute distance to camera and determine update frequency
+            auto& lodState = entityLODStates[entity];
+            if (cullingContext.enabled)
+            {
+                float distSq = 0.0f;
+                if (registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    const auto& wt = registry.get<components::WorldTransformComponent>(entity);
+                    glm::vec3 pos = glm::vec3(wt.worldMatrix[3]);
+                    glm::vec3 diff = pos - cullingContext.cameraPos;
+                    distSq = glm::dot(diff, diff);
+                }
+                lodManager.updateEntityLOD(lodState, distSq, deltaTime);
+            }
+            else
+            {
+                lodManager.updateEntityLOD(lodState, 0.0f, deltaTime);
+            }
+
+            lodManager.incrementLODCount(lodState.currentLOD);
+
+            if (lodManager.shouldEvaluateThisFrame(lodState))
+            {
+                uint8_t lodLevel = static_cast<uint8_t>(lodState.currentLOD);
+                evalCandidates.push_back({entity, animator.get(), lodLevel});
+                lodState.framesSinceLastEval = 0;
+            }
+            else if (lodState.currentLOD == AnimationLODLevel::LOD1 &&
+                     lodState.hasCachedPoseA && lodState.hasCachedPoseB)
+            {
+                // LOD 1 skipped frame: interpolate between cached poses
+                lodInterpolateEntities.push_back({entity, animator.get()});
+            }
+            // LOD 3 (frozen): do nothing, last pose stays in GPU buffer
         }
 
-        // Safe to use raw pointers: main thread blocks on f.get() below,
-        // so no animator can be destroyed while jobs are in flight.
-        if (activeAnimators.size() > 1)
+        // Build instance groups from eval candidates
+        // Entities that are blending have unique poses and cannot be grouped
+        ActiveAnimatorList leadersToEvaluate;
+        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> followersToSync;
+
+        for (auto& candidate : evalCandidates)
+        {
+            // Don't group blending entities - they have unique cross-state poses
+            if (candidate.anim->isBlending())
+            {
+                leadersToEvaluate.push_back({candidate.entity, candidate.anim});
+                continue;
+            }
+
+            const animator::AnimatorState* currentState = candidate.anim->getCurrentAnimatorState();
+            if (!currentState)
+            {
+                leadersToEvaluate.push_back({candidate.entity, candidate.anim});
+                continue;
+            }
+
+            // Get animator path from component
+            std::string animatorPath;
+            if (registry.all_of<components::AnimatorComponent>(candidate.entity))
+            {
+                animatorPath = registry.get<components::AnimatorComponent>(candidate.entity).animatorPath;
+            }
+
+            if (animatorPath.empty())
+            {
+                leadersToEvaluate.push_back({candidate.entity, candidate.anim});
+                continue;
+            }
+
+            float normalizedTime = candidate.anim->getNormalizedStateTime();
+            uint64_t groupKey = computeInstanceGroupKey(animatorPath, currentState->id,
+                                                         candidate.lodLevel, normalizedTime);
+
+            auto& group = instanceGroups[groupKey];
+            if (group.leader == entt::null)
+            {
+                // First entity in this group becomes the leader
+                group.leader = candidate.entity;
+                leadersToEvaluate.push_back({candidate.entity, candidate.anim});
+            }
+            else
+            {
+                // Additional entities become followers
+                group.followers.push_back(candidate.entity);
+                followersToSync.push_back({candidate.entity, candidate.anim});
+            }
+        }
+
+        // Count groups with 2+ members (actual instancing savings)
+        for (const auto& [key, group] : instanceGroups)
+        {
+            if (!group.followers.empty())
+            {
+                ++activeInstanceGroupCount;
+            }
+        }
+
+        // Evaluate leaders via job system (only leaders compute bone matrices)
+        if (leadersToEvaluate.size() > 1)
         {
             std::vector<std::future<void>> futures;
-            futures.reserve(activeAnimators.size());
+            futures.reserve(leadersToEvaluate.size());
 
-            for (auto& [entity, anim] : activeAnimators)
+            for (auto& [entity, anim] : leadersToEvaluate)
             {
                 futures.push_back(threading::JobSystem::instance().submit(
                     [anim, deltaTime]()
@@ -157,9 +400,70 @@ namespace animation
                 f.get();
             }
         }
-        else if (!activeAnimators.empty())
+        else if (!leadersToEvaluate.empty())
         {
-            activeAnimators[0].second->update(deltaTime);
+            leadersToEvaluate[0].second->update(deltaTime);
+        }
+
+        // Copy leader bone matrices to followers
+        for (const auto& [key, group] : instanceGroups)
+        {
+            if (group.followers.empty())
+                continue;
+
+            auto leaderIt = animators.find(group.leader);
+            if (leaderIt == animators.end())
+                continue;
+
+            const auto& leaderMatrices = leaderIt->second->getBoneMatrices();
+            for (entt::entity follower : group.followers)
+            {
+                auto followerIt = animators.find(follower);
+                if (followerIt != animators.end())
+                {
+                    followerIt->second->getMutableBoneMatrices() = leaderMatrices;
+                }
+            }
+        }
+
+        // Build final activeAnimators list: leaders + followers
+        activeAnimators = std::move(leadersToEvaluate);
+        for (auto& [entity, anim] : followersToSync)
+        {
+            activeAnimators.push_back({entity, anim});
+        }
+
+        // Cache poses for LOD 1 entities that were evaluated
+        for (auto& [entity, anim] : activeAnimators)
+        {
+            auto it = entityLODStates.find(entity);
+            if (it != entityLODStates.end() &&
+                it->second.currentLOD == AnimationLODLevel::LOD1)
+            {
+                lodManager.cachePose(it->second, anim->getBoneMatrices());
+            }
+        }
+
+        // Interpolate cached poses for LOD 1 entities on skipped frames
+        for (auto& [entity, anim] : lodInterpolateEntities)
+        {
+            auto it = entityLODStates.find(entity);
+            if (it != entityLODStates.end())
+            {
+                uint8_t lodIdx = static_cast<uint8_t>(it->second.currentLOD);
+                uint32_t interval = lodManager.getConfig().updateIntervals[lodIdx];
+                float t = interval > 0
+                    ? static_cast<float>(it->second.framesSinceLastEval) / static_cast<float>(interval)
+                    : 0.5f;
+                std::vector<glm::mat4> interpolated;
+                lodManager.interpolateCachedPoses(it->second, t, interpolated);
+                if (!interpolated.empty())
+                {
+                    anim->getMutableBoneMatrices() = std::move(interpolated);
+                    // Add to activeAnimators so bones get uploaded
+                    activeAnimators.push_back({entity, anim});
+                }
+            }
         }
 
         return activeAnimators;
@@ -528,6 +832,7 @@ namespace animation
         {
             animators.erase(it);
         }
+        entityLODStates.erase(entity);
 
         auto& registry = scene::EntityRegistry::getRegistry();
         if (registry.all_of<components::AnimatorComponent>(entity))
@@ -624,6 +929,7 @@ namespace animation
         }
 
         animators.clear();
+        entityLODStates.clear();
         animatorDataCache.clear();
         animationDataCache.clear();
         skeletonDataCache.clear();
@@ -643,6 +949,7 @@ namespace animation
         }
 
         animators.clear();
+        entityLODStates.clear();
     }
 
     void RuntimeAnimatorSystem::cleanupUnusedCaches()
@@ -813,5 +1120,18 @@ namespace animation
         if (it != socketTransformCache.end())
             return &it->second;
         return nullptr;
+    }
+
+    uint64_t RuntimeAnimatorSystem::computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
+                                                             uint8_t lodLevel, float normalizedTime) const
+    {
+        // Quantize time to 0.05 intervals
+        uint32_t quantizedTime = static_cast<uint32_t>(normalizedTime * 20.0f);
+
+        uint64_t key = std::hash<std::string>{}(animatorPath);
+        key ^= static_cast<uint64_t>(stateId) << 32;
+        key ^= static_cast<uint64_t>(lodLevel) << 40;
+        key ^= static_cast<uint64_t>(quantizedTime) << 48;
+        return key;
     }
 }

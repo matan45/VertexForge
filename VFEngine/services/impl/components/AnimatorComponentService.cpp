@@ -2,6 +2,7 @@
 #include "../../providers/animation/IAnimatorProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/animation/AnimatorEvents.hpp"
+#include "../../events/animation/AnimationBudgetEvents.hpp"
 
 namespace services
 {
@@ -220,6 +221,19 @@ namespace services
             [this](const events::animator::GetEntityRootMotionQuery& query)
             {
                 return getRootMotion(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<services::events::animation::GetAnimationBudgetStatsQuery>(
+            [this](const services::events::animation::GetAnimationBudgetStatsQuery&)
+            {
+                auto ps = animatorProvider->getBudgetStats();
+                services::events::animation::AnimationBudgetStatsResult result;
+                result.totalAnimators = ps.totalAnimators;
+                result.culledEntities = ps.culledEntities;
+                for (int i = 0; i < 4; ++i)
+                    result.lodCounts[i] = ps.lodCounts[i];
+                result.pendingStreamingInits = ps.pendingStreamingInits;
+                return result;
             });
     }
 }
