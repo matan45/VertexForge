@@ -42,20 +42,15 @@ namespace render::gpudriven
                                             vegetation.grassInstanceBuffer,
                                             vegetation.grassInstanceBufferMemory);
 
-        // Counter buffer (host-visible for readback of instance count)
+        // Counter buffer (device-local, reset via vkCmdFillBuffer on GPU timeline)
         core::BufferInfoRequest counterRequest(vkDevice, device.getPhysicalDevice());
         counterRequest.size = sizeof(uint32_t);
-        counterRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-        counterRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                    vk::MemoryPropertyFlagBits::eHostCoherent;
+        counterRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        counterRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::BufferUtilities::createBuffer(counterRequest,
                                             vegetation.grassCounterBuffer,
                                             vegetation.grassCounterBufferMemory);
-
-        vegetation.grassCounterMapped = vkDevice.mapMemory(
-            vegetation.grassCounterBufferMemory, 0, sizeof(uint32_t));
-        std::memset(vegetation.grassCounterMapped, 0, sizeof(uint32_t));
 
         vegetation.grassInstanceCapacity = maxInstances;
     }
@@ -227,32 +222,59 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::ensureTileStagingBuffers(uint32_t texelCount)
+    void GPUDrivenRenderer::ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount)
     {
-        if (vegetation.tileStagingCapacity >= texelCount) return;
+        bool needsResize = (vegetation.tileComputeCapacity < texelsPerTile) ||
+                           (vegetation.tileStagingTileSlots < tileCount);
+        if (!needsResize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
+        vkDevice.waitIdle();
 
-        // Destroy old buffers
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileDensityBuffer, vegetation.tileDensityBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileHeightBuffer, vegetation.tileHeightBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileHoleBuffer, vegetation.tileHoleBufferMemory);
+        // Unmap and destroy old staging buffer
+        if (vegetation.tileStagingMapped)
+        {
+            vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
+            vegetation.tileStagingMapped = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
 
-        auto createHostBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory)
+        // Per-tile data sizes
+        vk::DeviceSize densityPerTile = texelsPerTile * sizeof(float);
+        vk::DeviceSize heightPerTile = texelsPerTile * sizeof(float);
+        vk::DeviceSize holePerTile = texelsPerTile * sizeof(uint32_t);
+        vk::DeviceSize perTileTotal = densityPerTile + heightPerTile + holePerTile;
+
+        // Single large staging buffer with room for all tiles (persistently mapped)
+        {
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = perTileTotal * tileCount;
+            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
+            vegetation.tileStagingMapped = vkDevice.mapMemory(vegetation.tileStagingBufferMemory, 0, request.size);
+        }
+
+        // Device-local compute input buffers (single tile — copied per dispatch)
+        auto createComputeBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory)
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
             request.size = size;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, buffer, memory);
         };
 
-        createHostBuffer(texelCount * sizeof(float), vegetation.tileDensityBuffer, vegetation.tileDensityBufferMemory);
-        createHostBuffer(texelCount * sizeof(float), vegetation.tileHeightBuffer, vegetation.tileHeightBufferMemory);
-        // Hole mask is per-quad = (sqrt(texelCount)-1)^2, but allocate same size for simplicity
-        createHostBuffer(texelCount * sizeof(uint32_t), vegetation.tileHoleBuffer, vegetation.tileHoleBufferMemory);
+        createComputeBuffer(densityPerTile, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
+        createComputeBuffer(heightPerTile, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
+        createComputeBuffer(holePerTile, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
 
-        vegetation.tileStagingCapacity = texelCount;
+        vegetation.tileComputeCapacity = texelsPerTile;
+        vegetation.tileStagingTileSlots = tileCount;
+        vegetation.tileStagingTexelsPerSlot = texelsPerTile;
     }
 
     void GPUDrivenRenderer::dispatchGrassCompute(vk::CommandBuffer cmd,
@@ -262,113 +284,145 @@ namespace render::gpudriven
         if (!vegetation.grassRenderingEnabled) return;
         if (!vegetation.grassComputePipeline || !vegetation.grassComputePipeline->isInitialized()) return;
 
-        // Reset counter to 0
-        if (vegetation.grassCounterMapped)
+        // Collect tiles with density data
+        struct TileDispatchInfo
         {
-            std::memset(vegetation.grassCounterMapped, 0, sizeof(uint32_t));
-        }
+            const terrain::TerrainTile* tile;
+            uint32_t texelCount;
+        };
+        std::vector<TileDispatchInfo> dispatchTiles;
 
-        // Find max texel count for staging buffer sizing
         uint32_t maxTexelCount = 0;
-        uint32_t tilesWithDensity = 0;
         for (const auto* tile : visibleTiles)
         {
             if (!tile || !tile->vegetationDensity.isInitialized()) continue;
             uint32_t tc = static_cast<uint32_t>(tile->vegetationDensity.getTexelCount());
+            if (tc == 0) continue;
+            dispatchTiles.push_back({tile, tc});
             if (tc > maxTexelCount) maxTexelCount = tc;
-            if (tc > 0) ++tilesWithDensity;
         }
 
-        if (tilesWithDensity == 0 || maxTexelCount == 0)
+        if (dispatchTiles.empty())
         {
             vegetation.currentGrassInstanceCount = 0;
             return;
         }
 
-        // Ensure staging buffers are large enough
-        ensureTileStagingBuffers(maxTexelCount);
+        uint32_t tileCount = static_cast<uint32_t>(dispatchTiles.size());
 
-        vk::Device vkDevice = device.getLogicalDevice();
+        // Ensure buffers are large enough for all tiles
+        ensureTileStagingBuffers(maxTexelCount, tileCount);
 
-        // Update descriptors ONCE before recording any dispatches.
-        // The buffer handles stay the same across tiles — only their contents change via memcpy.
+        // Per-tile slot layout in staging buffer:
+        //   [density floats | height floats | hole uint32s] per tile
+        vk::DeviceSize densityPerTile = maxTexelCount * sizeof(float);
+        vk::DeviceSize heightPerTile = maxTexelCount * sizeof(float);
+        vk::DeviceSize holePerTile = maxTexelCount * sizeof(uint32_t);
+        vk::DeviceSize slotSize = densityPerTile + heightPerTile + holePerTile;
+
+        // Phase 1: Upload ALL tiles' data to staging buffer at different offsets (CPU side)
+        auto* basePtr = static_cast<uint8_t*>(vegetation.tileStagingMapped);
+
+        for (uint32_t i = 0; i < tileCount; ++i)
+        {
+            const auto& info = dispatchTiles[i];
+            uint8_t* slotPtr = basePtr + static_cast<size_t>(i) * slotSize;
+            vk::DeviceSize actualDensitySize = info.texelCount * sizeof(float);
+            vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
+            vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
+
+            // Density
+            std::memcpy(slotPtr, info.tile->vegetationDensity.densityData.data(), actualDensitySize);
+
+            // Height
+            uint8_t* heightPtr = slotPtr + densityPerTile;
+            if (info.tile->heightData.size() >= info.texelCount)
+            {
+                std::memcpy(heightPtr, info.tile->heightData.data(), actualHeightSize);
+            }
+            else
+            {
+                std::memset(heightPtr, 0, actualHeightSize);
+            }
+
+            // Hole mask
+            uint8_t* holePtr = slotPtr + densityPerTile + heightPerTile;
+            if (info.tile->hasHoleMask())
+            {
+                auto* dst = reinterpret_cast<uint32_t*>(holePtr);
+                for (uint32_t j = 0; j < info.texelCount && j < info.tile->holeMask.size(); ++j)
+                    dst[j] = info.tile->holeMask[j];
+                for (uint32_t j = static_cast<uint32_t>(info.tile->holeMask.size()); j < info.texelCount; ++j)
+                    dst[j] = 0;
+            }
+            else
+            {
+                std::memset(holePtr, 0, actualHoleSize);
+            }
+        }
+
+        // Phase 2: GPU commands — reset counter, then per-tile copy+dispatch
+
+        // Reset counter to 0 on GPU timeline
+        cmd.fillBuffer(vegetation.grassCounterBuffer, 0, sizeof(uint32_t), 0);
+
+        vk::MemoryBarrier fillBarrier(
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite);
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags{},
+            1, &fillBarrier,
+            0, nullptr,
+            0, nullptr);
+
+        // Update descriptors ONCE — point to device-local compute input buffers
         vegetation.grassComputePipeline->updateDescriptors(
-            vegetation.tileDensityBuffer,
-            vegetation.tileHeightBuffer,
-            vegetation.tileHoleBuffer,
+            vegetation.tileComputeDensity,
+            vegetation.tileComputeHeight,
+            vegetation.tileComputeHole,
             vegetation.grassInstanceBuffer,
             vegetation.grassCounterBuffer);
 
-        // Dispatch per-tile: upload data to host-visible buffers, then dispatch
-        for (const auto* tile : visibleTiles)
+        // Phase 3: Per-tile GPU copy from staging[offset] → compute buffer, then dispatch
+        for (uint32_t i = 0; i < tileCount; ++i)
         {
-            if (!tile || !tile->vegetationDensity.isInitialized()) continue;
+            const auto& info = dispatchTiles[i];
+            vk::DeviceSize stagingOffset = static_cast<vk::DeviceSize>(i) * slotSize;
+            vk::DeviceSize actualDensitySize = info.texelCount * sizeof(float);
+            vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
+            vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
 
-            uint32_t texelCount = static_cast<uint32_t>(tile->vegetationDensity.getTexelCount());
-            if (texelCount == 0) continue;
+            // Copy this tile's data from staging to compute input buffers
+            vk::BufferCopy densityCopy(stagingOffset, 0, actualDensitySize);
+            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeDensity, densityCopy);
 
-            // Upload density data
-            {
-                void* mapped = vkDevice.mapMemory(vegetation.tileDensityBufferMemory, 0, texelCount * sizeof(float));
-                std::memcpy(mapped, tile->vegetationDensity.densityData.data(), texelCount * sizeof(float));
-                vkDevice.unmapMemory(vegetation.tileDensityBufferMemory);
-            }
+            vk::BufferCopy heightCopy(stagingOffset + densityPerTile, 0, actualHeightSize);
+            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHeight, heightCopy);
 
-            // Upload height data
-            {
-                void* mapped = vkDevice.mapMemory(vegetation.tileHeightBufferMemory, 0, texelCount * sizeof(float));
-                if (tile->heightData.size() >= texelCount)
-                {
-                    std::memcpy(mapped, tile->heightData.data(), texelCount * sizeof(float));
-                }
-                else
-                {
-                    std::memset(mapped, 0, texelCount * sizeof(float));
-                }
-                vkDevice.unmapMemory(vegetation.tileHeightBufferMemory);
-            }
+            vk::BufferCopy holeCopy(stagingOffset + densityPerTile + heightPerTile, 0, actualHoleSize);
+            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHole, holeCopy);
 
-            // Upload hole mask (convert uint8 to uint32 for shader, or fill with zeros if none)
-            {
-                void* mapped = vkDevice.mapMemory(vegetation.tileHoleBufferMemory, 0, texelCount * sizeof(uint32_t));
-                if (tile->hasHoleMask())
-                {
-                    auto* dst = static_cast<uint32_t*>(mapped);
-                    for (uint32_t i = 0; i < texelCount && i < tile->holeMask.size(); ++i)
-                    {
-                        dst[i] = tile->holeMask[i];
-                    }
-                    for (uint32_t i = static_cast<uint32_t>(tile->holeMask.size()); i < texelCount; ++i)
-                    {
-                        dst[i] = 0;
-                    }
-                }
-                else
-                {
-                    std::memset(mapped, 0, texelCount * sizeof(uint32_t));
-                }
-                vkDevice.unmapMemory(vegetation.tileHoleBufferMemory);
-            }
-
-            // Memory barrier: ensure host writes are visible to compute shader
-            vk::MemoryBarrier hostBarrier(
-                vk::AccessFlagBits::eHostWrite,
+            // Barrier: transfer → compute
+            vk::MemoryBarrier copyBarrier(
+                vk::AccessFlagBits::eTransferWrite,
                 vk::AccessFlagBits::eShaderRead);
             cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eHost,
+                vk::PipelineStageFlagBits::eTransfer,
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::DependencyFlags{},
-                1, &hostBarrier,
+                1, &copyBarrier,
                 0, nullptr,
                 0, nullptr);
 
             vegetation::GrassComputePushConstants pushConstants{};
             pushConstants.tileWorldOrigin = glm::vec2(
-                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
-                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
-            pushConstants.tileWorldSize = tile->config.worldTileSize;
-            pushConstants.vertexSpacing = tile->config.getVertexSpacing();
-            pushConstants.verticesPerSide = tile->config.getVertexCount();
+                static_cast<float>(info.tile->coord.x) * info.tile->config.worldTileSize,
+                static_cast<float>(info.tile->coord.z) * info.tile->config.worldTileSize);
+            pushConstants.tileWorldSize = info.tile->config.worldTileSize;
+            pushConstants.vertexSpacing = info.tile->config.getVertexSpacing();
+            pushConstants.verticesPerSide = info.tile->config.getVertexCount();
             pushConstants.maxInstances = vegetation.grassInstanceCapacity;
             pushConstants.slopeLimit = 0.8f;
             pushConstants.densityMultiplier = 1.0f;
@@ -378,10 +432,25 @@ namespace render::gpudriven
             pushConstants.widthMax = 0.3f;
             pushConstants.time = cachedCamera.time;
 
-            vegetation.grassComputePipeline->dispatch(cmd, texelCount, pushConstants);
+            vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
+
+            // Barrier: compute reads/writes must finish before next tile overwrites compute buffers
+            if (i + 1 < tileCount)
+            {
+                vk::MemoryBarrier interTileBarrier(
+                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+                    vk::AccessFlagBits::eTransferWrite);
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::DependencyFlags{},
+                    1, &interTileBarrier,
+                    0, nullptr,
+                    0, nullptr);
+            }
         }
 
-        // Memory barrier: compute writes → vertex/fragment reads
+        // Final barrier: compute writes → task/mesh shader reads
         vk::MemoryBarrier barrier(
             vk::AccessFlagBits::eShaderWrite,
             vk::AccessFlagBits::eShaderRead);
@@ -393,11 +462,8 @@ namespace render::gpudriven
             0, nullptr,
             0, nullptr);
 
-        // We cannot read back the counter here — the GPU hasn't executed the compute
-        // shader yet (we're still recording the command buffer). Instead, estimate
-        // the max possible instance count. The task shader reads the actual count
-        // from the counter buffer on the GPU side and self-limits.
-        uint32_t maxPossibleInstances = tilesWithDensity * maxTexelCount * 4; // up to 4 blades per texel
+        // Task shader reads actual count from GPU counter — estimate upper bound for dispatch
+        uint32_t maxPossibleInstances = tileCount * maxTexelCount * 4;
         vegetation.currentGrassInstanceCount = std::min(maxPossibleInstances, vegetation.grassInstanceCapacity);
 
         // Update mesh pipeline descriptors with the instance buffer
@@ -483,12 +549,6 @@ namespace render::gpudriven
             vegetation.bufferManager.reset();
         }
 
-        if (vegetation.grassCounterMapped)
-        {
-            vkDevice.unmapMemory(vegetation.grassCounterBufferMemory);
-            vegetation.grassCounterMapped = nullptr;
-        }
-
         core::BufferUtilities::destroyBuffer(vkDevice,
                                              vegetation.grassInstanceBuffer,
                                              vegetation.grassInstanceBufferMemory);
@@ -496,16 +556,22 @@ namespace render::gpudriven
                                              vegetation.grassCounterBuffer,
                                              vegetation.grassCounterBufferMemory);
 
-        core::BufferUtilities::destroyBuffer(vkDevice,
-                                             vegetation.tileDensityBuffer,
-                                             vegetation.tileDensityBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice,
-                                             vegetation.tileHeightBuffer,
-                                             vegetation.tileHeightBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice,
-                                             vegetation.tileHoleBuffer,
-                                             vegetation.tileHoleBufferMemory);
-        vegetation.tileStagingCapacity = 0;
+        // Unmap and destroy staging buffer
+        if (vegetation.tileStagingMapped)
+        {
+            vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
+            vegetation.tileStagingMapped = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
+
+        // Destroy compute input buffers
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
+
+        vegetation.tileComputeCapacity = 0;
+        vegetation.tileStagingTileSlots = 0;
+        vegetation.tileStagingTexelsPerSlot = 0;
 
         vegetation.registeredTileKeys.clear();
         vegetation.grassInitialized = false;

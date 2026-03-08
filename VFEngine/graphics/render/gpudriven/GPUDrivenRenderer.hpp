@@ -147,7 +147,6 @@ namespace render::gpudriven
             vk::DeviceMemory grassInstanceBufferMemory;
             vk::Buffer grassCounterBuffer;
             vk::DeviceMemory grassCounterBufferMemory;
-            void* grassCounterMapped = nullptr;
             uint32_t grassInstanceCapacity = 0;
             uint32_t currentGrassInstanceCount = 0;
 
@@ -161,14 +160,22 @@ namespace render::gpudriven
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
 
-            // Per-tile staging buffers for compute dispatch (reused each frame)
-            vk::Buffer tileDensityBuffer;
-            vk::DeviceMemory tileDensityBufferMemory;
-            vk::Buffer tileHeightBuffer;
-            vk::DeviceMemory tileHeightBufferMemory;
-            vk::Buffer tileHoleBuffer;
-            vk::DeviceMemory tileHoleBufferMemory;
-            uint32_t tileStagingCapacity = 0; // current capacity in texels
+            // Staging buffer (host-visible, transfer src) — holds ALL tiles' data at offsets
+            vk::Buffer tileStagingBuffer;
+            vk::DeviceMemory tileStagingBufferMemory;
+            void* tileStagingMapped = nullptr;
+
+            // Device-local compute input buffers (storage + transfer dst) — single tile at a time
+            vk::Buffer tileComputeDensity;
+            vk::DeviceMemory tileComputeDensityMemory;
+            vk::Buffer tileComputeHeight;
+            vk::DeviceMemory tileComputeHeightMemory;
+            vk::Buffer tileComputeHole;
+            vk::DeviceMemory tileComputeHoleMemory;
+
+            uint32_t tileComputeCapacity = 0;   // per-tile texel capacity for compute buffers
+            uint32_t tileStagingTileSlots = 0;   // number of tile slots in staging buffer
+            uint32_t tileStagingTexelsPerSlot = 0; // texels per slot
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
@@ -454,7 +461,7 @@ namespace render::gpudriven
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
-        void ensureTileStagingBuffers(uint32_t texelCount);
+        void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
         void cleanupVegetation();
 
