@@ -232,6 +232,15 @@ namespace controllers
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
 
+        // Impostor baking — renders mesh from multiple angles to create billboard atlas
+        struct ImposterBakeResult
+        {
+            bool success = false;
+            std::string outputPath;
+            std::string errorMessage;
+        };
+        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath);
+
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
     };

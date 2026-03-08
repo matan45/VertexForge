@@ -359,6 +359,11 @@ namespace render
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
         }
 
+        if (gpuDrivenRenderer->isBillboardRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+        }
+
         if (hasCustomShaderMeshes)
         {
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);

@@ -70,7 +70,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
@@ -115,7 +115,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
@@ -150,7 +150,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()

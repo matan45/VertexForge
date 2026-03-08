@@ -308,6 +308,13 @@ namespace render
         return {};
     }
 
+    vk::Image RenderTextureViewPort::getLastRenderedImage() const
+    {
+        if (lastRenderedImageIndex < offscreenResources.colorImages.size())
+            return offscreenResources.colorImages[lastRenderedImageIndex].colorImage;
+        return {};
+    }
+
     void RenderTextureViewPort::createRenderPass()
     {
         // Mesh render pass: eLoad for color (skybox/clear already wrote it), eClear for depth.
@@ -467,7 +474,8 @@ namespace render
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
         imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment
                              | vk::ImageUsageFlagBits::eSampled
-                             | vk::ImageUsageFlagBits::eTransferDst;
+                             | vk::ImageUsageFlagBits::eTransferDst
+                             | vk::ImageUsageFlagBits::eTransferSrc;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());

@@ -27,6 +27,7 @@
 #include "../../adapters/vegetation/VegetationAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -69,8 +70,12 @@ namespace core
         vegetationAdapter = std::make_unique<adapters::VegetationAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
         vegetationRenderAdapter = std::make_unique<adapters::VegetationRenderAdapter>();
+        billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
 
         offScreen->init();
+
+        // Wire billboard render adapter to offscreen controller
+        billboardRenderAdapter->setOffScreenController(offScreen.get());
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();

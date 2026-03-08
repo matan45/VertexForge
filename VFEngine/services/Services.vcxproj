@@ -132,6 +132,7 @@
     <ClInclude Include="events\project\ProjectEvents.hpp" />
     <ClInclude Include="events\project\ResourceEvents.hpp" />
     <ClInclude Include="events\project\SceneEvents.hpp" />
+    <ClInclude Include="events\render\BillboardEvents.hpp" />
     <ClInclude Include="events\render\DebugDrawEvents.hpp" />
     <ClInclude Include="events\render\LightCullingEvents.hpp" />
     <ClInclude Include="events\render\MaterialEvents.hpp" />
@@ -200,6 +201,7 @@
     <ClInclude Include="impl\project\FileOperationsServiceImpl.hpp" />
     <ClInclude Include="impl\project\ProjectServiceImpl.hpp" />
     <ClInclude Include="impl\project\SceneServiceImpl.hpp" />
+    <ClInclude Include="impl\render\BillboardRenderServiceImpl.hpp" />
     <ClInclude Include="impl\render\DebugDrawServiceImpl.hpp" />
     <ClInclude Include="impl\render\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\render\PreviewServiceImpl.hpp" />
@@ -245,6 +247,7 @@
     <ClInclude Include="interfaces\project\IFileOperationsService.hpp" />
     <ClInclude Include="interfaces\project\IProjectService.hpp" />
     <ClInclude Include="interfaces\project\ISceneService.hpp" />
+    <ClInclude Include="interfaces\render\IBillboardRenderService.hpp" />
     <ClInclude Include="interfaces\render\IDebugDrawService.hpp" />
     <ClInclude Include="interfaces\render\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\render\IPreviewService.hpp" />
@@ -274,6 +277,7 @@
     <ClInclude Include="providers\physics\IIKProvider.hpp" />
     <ClInclude Include="providers\physics\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\physics\ISocketProvider.hpp" />
+    <ClInclude Include="providers\render\IBillboardRenderProvider.hpp" />
     <ClInclude Include="providers\render\IDebugDrawProvider.hpp" />
     <ClInclude Include="providers\render\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\render\IMaterialPreviewProvider.hpp" />
@@ -335,6 +339,7 @@
     <ClCompile Include="impl\project\FileOperationsServiceImpl.cpp" />
     <ClCompile Include="impl\project\ProjectServiceImpl.cpp" />
     <ClCompile Include="impl\project\SceneServiceImpl.cpp" />
+    <ClCompile Include="impl\render\BillboardRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\DebugDrawServiceImpl.cpp" />
     <ClCompile Include="impl\render\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\PreviewServiceImpl.cpp" />

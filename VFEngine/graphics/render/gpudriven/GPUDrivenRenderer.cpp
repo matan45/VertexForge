@@ -151,6 +151,7 @@ namespace render::gpudriven
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
             initWaterSubsystems(iblDescriptorSetLayout, renderPass);
             initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
+            initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
         }
         else
         {
@@ -229,6 +230,8 @@ namespace render::gpudriven
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
+        if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
+        if (billboard.bufferManager) billboard.bufferManager->cleanup();
         cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
@@ -248,6 +251,9 @@ namespace render::gpudriven
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        billboard.meshShaderPipeline.reset();
+        billboard.bufferManager.reset();
+        billboard.initialized = false;
         volumetricPipeline.reset();
         meshStreamManager.reset();
         terrain.streamManager.reset();

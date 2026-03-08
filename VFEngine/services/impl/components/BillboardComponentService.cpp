@@ -100,6 +100,8 @@ namespace services {
         else
             data.renderTextureSource = EntityHandle::invalid();
         data.renderTextureSourceName = comp.renderTextureSourceName;
+        data.billboardDistance = comp.billboardDistance;
+        data.maxRenderDistance = comp.maxRenderDistance;
         return data;
     }
 
@@ -123,6 +125,8 @@ namespace services {
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;
+        comp.billboardDistance = billboardData.billboardDistance;
+        comp.maxRenderDistance = billboardData.maxRenderDistance;
 
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;

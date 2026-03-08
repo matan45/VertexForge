@@ -23,6 +23,7 @@
 #include "../../adapters/vegetation/VegetationAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
 
 namespace core
 {
@@ -154,5 +155,10 @@ namespace core
     services::IVegetationRenderProvider* EditorBootstrap::getVegetationRenderProvider()
     {
         return vegetationRenderAdapter.get();
+    }
+
+    services::IBillboardRenderProvider* EditorBootstrap::getBillboardRenderProvider()
+    {
+        return billboardRenderAdapter.get();
     }
 }

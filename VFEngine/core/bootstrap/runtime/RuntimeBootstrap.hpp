@@ -17,6 +17,7 @@ namespace services
     class IPostProcessProvider;
     class IRenderTextureProvider;
     class IDebugDrawProvider;
+    class IBillboardRenderProvider;
 }
 
 namespace window
@@ -52,6 +53,11 @@ namespace core
     class RenderTextureAdapter;
     class DebugDrawAdapter;
 
+    namespace adapters
+    {
+        class BillboardRenderAdapter;
+    }
+
     class RuntimeBootstrap
     {
     private:
@@ -72,6 +78,7 @@ namespace core
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
+        std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -112,6 +119,8 @@ namespace core
         services::IRenderTextureProvider* getRenderTextureProvider();
 
         services::IDebugDrawProvider* getDebugDrawProvider();
+
+        services::IBillboardRenderProvider* getBillboardRenderProvider();
 
         // For late binding - allows RuntimeHandler to connect services
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();

@@ -34,6 +34,7 @@
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/render/BillboardRenderServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/VegetationServiceImpl.hpp"
@@ -322,6 +323,10 @@ namespace handlers
             bootstrap->getDebugDrawProvider()
         );
 
+        billboardRenderService = std::make_shared<services::BillboardRenderServiceImpl>(
+            bootstrap->getBillboardRenderProvider()
+        );
+
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
 
         worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
@@ -475,6 +480,7 @@ namespace handlers
         grassService->registerEventHandlers();
         vegetationBrushService->registerEventHandlers();
         vegetationBrushModeService->registerEventHandlers();
+        billboardRenderService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

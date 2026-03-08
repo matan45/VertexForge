@@ -3,6 +3,8 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/render/BillboardEvents.hpp"
+#include "events/scene/ComponentMediaEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
@@ -53,6 +55,10 @@ namespace windows::details
             changed |= drawSizeInput(data);
             ImGui::Spacing();
             changed |= drawColorTint(data);
+            ImGui::Spacing();
+            changed |= drawDistanceSettings(data);
+            ImGui::Spacing();
+            drawBakeImpostor(handle);
 
             if (changed)
             {
@@ -181,5 +187,87 @@ namespace windows::details
         }
 
         return changed;
+    }
+
+    bool BillboardDrawer::drawDistanceSettings(services::BillboardData& data)
+    {
+        bool changed = false;
+
+        ImGui::SeparatorText("GPU Billboard");
+
+        if (ImGui::DragFloat("Billboard Distance##Billboard", &data.billboardDistance, 1.0f, 1.0f, 10000.0f, "%.0f"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Distance at which mesh transitions to billboard impostor");
+        }
+
+        if (ImGui::DragFloat("Max Render Distance##Billboard", &data.maxRenderDistance, 1.0f, 1.0f, 50000.0f, "%.0f"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Maximum distance at which the billboard is rendered");
+        }
+
+        return changed;
+    }
+
+    void BillboardDrawer::drawBakeImpostor(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Check if entity has a mesh to bake from
+        events::scene::GetMeshDataQuery meshQuery;
+        meshQuery.entity = handle;
+        auto meshDataOpt = dispatcher.query(meshQuery);
+
+        bool hasMesh = meshDataOpt.has_value() && !meshDataOpt->meshPath.empty();
+        if (!hasMesh) ImGui::BeginDisabled();
+
+        if (ImGui::Button("Bake Impostor##Billboard"))
+        {
+            std::string meshPath = meshDataOpt->meshPath;
+
+            // Generate output path next to mesh file
+            std::string outputPath = meshPath;
+            auto dotPos = outputPath.rfind('.');
+            if (dotPos != std::string::npos)
+            {
+                outputPath = outputPath.substr(0, dotPos);
+            }
+            outputPath += ".vfImposter";
+
+            events::render::BakeImposterCommand cmd;
+            cmd.meshPath = meshPath;
+            cmd.outputPath = outputPath;
+            auto result = dispatcher.execute(cmd);
+
+            if (result.success)
+            {
+                vfLogInfo("Impostor baked: {}", result.outputPath);
+            }
+            else
+            {
+                vfLogError("Impostor bake failed: {}", result.errorMessage);
+            }
+        }
+
+        if (!hasMesh) ImGui::EndDisabled();
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            if (hasMesh)
+            {
+                ImGui::SetTooltip("Bake impostor atlas from entity mesh");
+            }
+            else
+            {
+                ImGui::SetTooltip("Entity needs a MeshComponent to bake impostor");
+            }
+        }
     }
 }

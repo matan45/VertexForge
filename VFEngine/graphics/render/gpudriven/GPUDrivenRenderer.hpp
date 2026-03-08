@@ -23,6 +23,10 @@
 #include "../shadow/ShadowSystem.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
+#include "BillboardBufferManager.hpp"
+#include "BillboardMeshShaderPipeline.hpp"
+#include "BillboardGPUTypes.hpp"
+#include "BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../vegetation/VegetationStreamManager.hpp"
@@ -184,6 +188,17 @@ namespace render::gpudriven
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
         };
 
+        struct BillboardState
+        {
+            std::unique_ptr<BillboardBufferManager> bufferManager;
+            std::unique_ptr<BillboardMeshShaderPipeline> meshShaderPipeline;
+            std::unique_ptr<BillboardStreamManager> streamManager;
+            std::vector<BillboardInstanceGPU> instanceList;
+            BillboardRenderStats stats;
+            bool renderingEnabled = true;
+            bool initialized = false;
+        };
+
         struct LightCullingState
         {
             std::unordered_set<uint32_t> visibleLightIds;
@@ -213,7 +228,7 @@ namespace render::gpudriven
             bool lodSelectionEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
-            float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
+            float categoryDistances[7] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
             float shadowDistanceMultiplier = 0.5f;
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
@@ -268,6 +283,7 @@ namespace render::gpudriven
         TerrainState terrain;
         WaterState water;
         VegetationState vegetation;
+        BillboardState billboard;
         LightCullingState lightCulling;
         MaterialState materials;
         CullingConfig culling;
@@ -338,7 +354,7 @@ namespace render::gpudriven
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
-        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) culling.categoryDistances[category] = distance; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < 7) culling.categoryDistances[category] = distance; }
         void setShadowDistanceMultiplier(float mult) { culling.shadowDistanceMultiplier = mult; }
         void setGlobalLodBias(float bias) { culling.globalLodBias = bias; }
         float getGlobalLodBias() const { return culling.globalLodBias; }
@@ -465,6 +481,15 @@ namespace render::gpudriven
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
         void cleanupVegetation();
 
+        // Billboard rendering
+        void updateBillboards(const std::vector<BillboardInstanceGPU>& instances);
+        void renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                  uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void clearBillboardData();
+        void setBillboardRenderingEnabled(bool enabled) { billboard.renderingEnabled = enabled; }
+        bool isBillboardRenderingEnabled() const { return billboard.renderingEnabled; }
+        const BillboardRenderStats& getBillboardStats() const { return billboard.stats; }
+
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
@@ -495,6 +520,7 @@ namespace render::gpudriven
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
 
+        void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);

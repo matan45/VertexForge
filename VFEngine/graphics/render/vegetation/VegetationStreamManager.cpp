@@ -136,4 +136,35 @@ namespace render::vegetation
 
         return 1.0f / (1.0f + dist * 0.01f);
     }
+
+    void VegetationStreamManager::addBillboardRequest(const VegetationBillboardRequest& request)
+    {
+        billboardRequests.push_back(request);
+    }
+
+    void VegetationStreamManager::clearBillboardRequests()
+    {
+        billboardRequests.clear();
+        billboardInstances.clear();
+    }
+
+    void VegetationStreamManager::buildBillboardInstances()
+    {
+        billboardInstances.clear();
+        billboardInstances.reserve(billboardRequests.size());
+
+        for (const auto& req : billboardRequests)
+        {
+            gpudriven::BillboardInstanceGPU instance{};
+            instance.positionAndScale = glm::vec4(req.position, req.scale);
+            instance.atlasUVRect = req.atlasUVRect;
+            instance.colorTint = glm::vec4(1.0f); // No tint for vegetation impostors
+            instance.bindlessTextureIndex = req.bindlessTextureIndex;
+            instance.flags = 1; // FLAG_AXIS_ALIGNED (Y-up for trees)
+            instance.entityId = 0;
+            instance.rotation = 0.0f;
+            instance.size = req.size;
+            billboardInstances.push_back(instance);
+        }
+    }
 }

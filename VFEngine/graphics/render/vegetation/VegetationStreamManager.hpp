@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VegetationBufferManager.hpp"
+#include "../gpudriven/BillboardGPUTypes.hpp"
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
@@ -16,6 +17,16 @@ namespace render::vegetation
         uint32_t maxUploadsPerFrame = 8;
         uint32_t maxBytesPerFrame = 4 * 1024 * 1024;
         float evictionThreshold = 0.9f;
+    };
+
+    // Tree instance that should transition to billboard impostor
+    struct VegetationBillboardRequest
+    {
+        glm::vec3 position{0.0f};
+        float scale = 1.0f;
+        uint32_t bindlessTextureIndex = 0;
+        glm::vec4 atlasUVRect{0.0f, 0.0f, 1.0f, 1.0f};
+        glm::vec2 size{2.0f, 4.0f};
     };
 
     class VegetationStreamManager
@@ -35,6 +46,12 @@ namespace render::vegetation
 
         [[nodiscard]] uint64_t getCurrentMemoryUsage() const { return currentMemoryUsage; }
 
+        // Billboard impostor integration
+        void addBillboardRequest(const VegetationBillboardRequest& request);
+        void clearBillboardRequests();
+        [[nodiscard]] const std::vector<gpudriven::BillboardInstanceGPU>& getBillboardInstances() const { return billboardInstances; }
+        void buildBillboardInstances();
+
     private:
         struct TileStreamState
         {
@@ -53,5 +70,9 @@ namespace render::vegetation
 
         std::unordered_map<VegetationTileKey, TileStreamState, VegetationTileKeyHash> tileStates;
         uint64_t currentMemoryUsage = 0;
+
+        // Billboard impostor data
+        std::vector<VegetationBillboardRequest> billboardRequests;
+        std::vector<gpudriven::BillboardInstanceGPU> billboardInstances;
     };
 }

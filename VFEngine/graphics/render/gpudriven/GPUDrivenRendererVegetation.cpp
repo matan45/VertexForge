@@ -177,6 +177,17 @@ namespace render::gpudriven
         if (vegetation.vegetationStreamManager)
         {
             vegetation.vegetationStreamManager->update(cameraPosition);
+
+            // Build billboard instances from vegetation impostor requests and merge with billboard system
+            vegetation.vegetationStreamManager->buildBillboardInstances();
+            const auto& vegBillboards = vegetation.vegetationStreamManager->getBillboardInstances();
+            if (!vegBillboards.empty() && billboard.initialized && billboard.renderingEnabled)
+            {
+                // Merge vegetation impostor billboards with existing billboard instances
+                auto mergedInstances = billboard.instanceList;
+                mergedInstances.insert(mergedInstances.end(), vegBillboards.begin(), vegBillboards.end());
+                updateBillboards(mergedInstances);
+            }
         }
     }
 

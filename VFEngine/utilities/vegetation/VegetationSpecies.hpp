@@ -17,6 +17,9 @@ namespace vegetation
         float maxScale = 1.2f;
         float windStrength = 1.0f;
 
+        // GPU Billboard Impostor
+        bool useGPUBillboardImposters = true;  // Use GPU billboard pipeline for impostor LOD
+
         // Collision
         bool hasCollision = false;
         float collisionRadius = 0.3f;

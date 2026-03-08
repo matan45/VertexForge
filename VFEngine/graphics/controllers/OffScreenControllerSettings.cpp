@@ -6,6 +6,7 @@
 #include "../render/shadow/ShadowSystem.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
+#include "../render/impostor/ImposterBaker.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
@@ -481,5 +482,32 @@ namespace controllers
         {
             handler->clearAdditionalWaterFrustums();
         }
+    }
+
+    OffScreenController::ImposterBakeResult OffScreenController::bakeImposter(
+        const std::string& meshPath, const std::string& outputPath)
+    {
+        ImposterBakeResult result;
+
+        auto* renderHandler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!renderHandler)
+        {
+            result.errorMessage = "No render pass handler available";
+            return result;
+        }
+
+        render::impostor::ImposterBaker baker;
+        baker.init(device, swapChain);
+        baker.setRenderPassHandler(renderHandler);
+
+        render::impostor::ImposterBakeRequest request;
+        request.meshPath = meshPath;
+        request.outputPath = outputPath;
+
+        auto bakeResult = baker.bake(request);
+        result.success = bakeResult.success;
+        result.outputPath = bakeResult.outputPath;
+        result.errorMessage = bakeResult.errorMessage;
+        return result;
     }
 }
