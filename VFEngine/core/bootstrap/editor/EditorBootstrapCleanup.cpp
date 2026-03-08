@@ -24,6 +24,9 @@
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/vegetation/VegetationAdapter.hpp"
+#include "../../adapters/vegetation/GrassRenderAdapter.hpp"
+#include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
 
 namespace core
 {
@@ -77,6 +80,9 @@ namespace core
         debugDrawAdapter.reset();
         lightBakeAdapter.reset();
         waterRenderAdapter.reset();
+        vegetationAdapter.reset();
+        grassRenderAdapter.reset();
+        vegetationRenderAdapter.reset();
 
         if (coreInterface)
         {

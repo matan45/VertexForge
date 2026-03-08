@@ -411,6 +411,16 @@ namespace controllers {
 		offScreenController->setWaterRenderProvider(provider);
 	}
 
+	void OffScreen::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+	{
+		offScreenController->setGrassRenderProvider(provider);
+	}
+
+	void OffScreen::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+	{
+		offScreenController->setVegetationRenderProvider(provider);
+	}
+
 	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
 	{
 		offScreenController->setRaycastCursorUV(uv);

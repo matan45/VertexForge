@@ -21,6 +21,8 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
+#include "../../services/providers/vegetation/IVegetationRenderProvider.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "material/MaterialTypes.hpp"
 
@@ -319,6 +321,40 @@ namespace render
                 [provider](terrain::TerrainTile& tile) {
                     provider->releaseTileRAMData(tile);
                 });
+        }
+    }
+
+    void RenderPassHandler::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+    {
+        if (provider && gpuDrivenRenderer)
+        {
+            auto* renderer = gpuDrivenRenderer.get();
+            provider->setAddTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->addVegetationTile(x, z);
+            });
+            provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->removeVegetationTile(x, z);
+            });
+            provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) {
+                renderer->markVegetationTileDirty(x, z);
+            });
+        }
+    }
+
+    void RenderPassHandler::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+    {
+        if (provider && gpuDrivenRenderer)
+        {
+            auto* renderer = gpuDrivenRenderer.get();
+            provider->setAddTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->addVegetationTile(x, z);
+            });
+            provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->removeVegetationTile(x, z);
+            });
+            provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) {
+                renderer->markVegetationTileDirty(x, z);
+            });
         }
     }
 

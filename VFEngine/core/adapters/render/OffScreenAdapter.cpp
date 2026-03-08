@@ -423,4 +423,16 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setGrassRenderProvider(services::IGrassRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setGrassRenderProvider(provider);
+        }
+    }
+
+    void OffScreenAdapter::setVegetationRenderProvider(services::IVegetationRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setVegetationRenderProvider(provider);
+        }
+    }
+
 }

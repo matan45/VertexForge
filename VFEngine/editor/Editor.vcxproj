@@ -232,6 +232,9 @@
     <ClInclude Include="windows\terrain\SculptToolPanel.hpp" />
     <ClInclude Include="windows\terrain\TerrainCreationWindow.hpp" />
     <ClInclude Include="windows\terrain\TerrainMaterialEditorWindow.hpp" />
+    <ClInclude Include="windows\vegetation\GrassDensityPanel.hpp" />
+    <ClInclude Include="windows\vegetation\VegetationPlacementPanel.hpp" />
+    <ClInclude Include="windows\vegetation\VegetationSpeciesPanel.hpp" />
     <ClInclude Include="windows\vfx\VFXEditorWindow.hpp" />
     <ClInclude Include="windows\vfx\VFXPreviewPanel.hpp" />
     <ClInclude Include="windows\vfx\VFXPropertyPanel.hpp" />
@@ -364,6 +367,9 @@
     <ClCompile Include="windows\terrain\SculptToolPanel.cpp" />
     <ClCompile Include="windows\terrain\TerrainCreationWindow.cpp" />
     <ClCompile Include="windows\terrain\TerrainMaterialEditorWindow.cpp" />
+    <ClCompile Include="windows\vegetation\GrassDensityPanel.cpp" />
+    <ClCompile Include="windows\vegetation\VegetationPlacementPanel.cpp" />
+    <ClCompile Include="windows\vegetation\VegetationSpeciesPanel.cpp" />
     <ClCompile Include="windows\vfx\VFXEditorWindow.cpp" />
     <ClCompile Include="windows\vfx\VFXPreviewPanel.cpp" />
     <ClCompile Include="windows\vfx\VFXPropertyPanel.cpp" />

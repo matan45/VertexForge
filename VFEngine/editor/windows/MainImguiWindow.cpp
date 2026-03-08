@@ -25,6 +25,9 @@ namespace windows
         menuBar.setWorldSectorWindow(&worldSectorWindow);
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
+        menuBar.setGrassDensityPanel(&grassDensityPanel);
+        menuBar.setVegetationPlacementPanel(&vegetationPlacementPanel);
+        menuBar.setVegetationSpeciesPanel(&vegetationSpeciesPanel);
 
         subscribeToEvents();
     }
@@ -98,6 +101,9 @@ namespace windows
             sculptToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();
+            grassDensityPanel.draw();
+            vegetationPlacementPanel.draw();
+            vegetationSpeciesPanel.draw();
         }
         ImGui::End();
     }

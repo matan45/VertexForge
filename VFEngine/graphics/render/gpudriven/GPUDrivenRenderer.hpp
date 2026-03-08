@@ -21,6 +21,10 @@
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
+#include "../vegetation/VegetationStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -69,6 +73,18 @@ namespace water
     struct WaterTileConfig;
 }
 
+namespace vegetation
+{
+    struct WindConfig;
+}
+
+namespace render::vegetation
+{
+    class GrassComputePipeline;
+    class GrassMeshShaderPipeline;
+    class WindSystem;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -111,6 +127,42 @@ namespace render::gpudriven
             // Ocean FFT
             std::unique_ptr<render::water::OceanFFT> oceanFFT;
             bool oceanEnabled = false;
+        };
+
+        struct VegetationState
+        {
+            std::unique_ptr<render::vegetation::GrassComputePipeline> grassComputePipeline;
+            std::unique_ptr<render::vegetation::GrassMeshShaderPipeline> grassMeshPipeline;
+            std::unique_ptr<render::vegetation::WindSystem> windSystem;
+
+            // Buffer manager for vegetation tile allocations
+            std::unique_ptr<render::vegetation::VegetationBufferManager> bufferManager;
+
+            // Stream managers
+            std::unique_ptr<render::vegetation::GrassStreamManager> grassStreamManager;
+            std::unique_ptr<render::vegetation::VegetationStreamManager> vegetationStreamManager;
+
+            // Grass instance buffer (GPU-side output from compute pipeline)
+            vk::Buffer grassInstanceBuffer;
+            vk::DeviceMemory grassInstanceBufferMemory;
+            vk::Buffer grassCounterBuffer;
+            vk::DeviceMemory grassCounterBufferMemory;
+            void* grassCounterMapped = nullptr;
+            uint32_t grassInstanceCapacity = 0;
+            uint32_t currentGrassInstanceCount = 0;
+
+            bool grassRenderingEnabled = true;
+            bool vegetationRenderingEnabled = true;
+            bool grassInitialized = false;
+
+            float grassFadeStart = 100.0f;
+            float grassFadeEnd = 150.0f;
+
+            vk::DescriptorSetLayout cachedIBLLayout;
+            vk::RenderPass cachedRenderPass;
+
+            // Track which terrain tiles have vegetation registered
+            std::unordered_set<uint64_t> registeredTileKeys;
         };
 
         struct LightCullingState
@@ -196,6 +248,7 @@ namespace render::gpudriven
 
         TerrainState terrain;
         WaterState water;
+        VegetationState vegetation;
         LightCullingState lightCulling;
         MaterialState materials;
         CullingConfig culling;
@@ -376,6 +429,21 @@ namespace render::gpudriven
         void readbackOceanDisplacement();
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
+        // Vegetation rendering
+        void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void renderGrassDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
+        void updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                       const glm::vec3& cameraPosition);
+        void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
+        bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
+        void setGrassFadeDistances(float start, float end) { vegetation.grassFadeStart = start; vegetation.grassFadeEnd = end; }
+        void addVegetationTile(int32_t coordX, int32_t coordZ);
+        void removeVegetationTile(int32_t coordX, int32_t coordZ);
+        void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void cleanupVegetation();
+
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
@@ -407,6 +475,7 @@ namespace render::gpudriven
         void updatePipelineDescriptors();
 
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);

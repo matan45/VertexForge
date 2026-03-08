@@ -27,6 +27,9 @@ namespace services
     class ILightBakeProvider;
     class IRenderHookProvider;
     class IDebugDrawProvider;
+    class IVegetationProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace window
@@ -71,6 +74,13 @@ namespace core
     class RenderHookAdapter;
     class DebugDrawAdapter;
 
+    namespace adapters
+    {
+        class VegetationAdapter;
+        class GrassRenderAdapter;
+        class VegetationRenderAdapter;
+    }
+
     class EditorBootstrap
     {
     private:
@@ -100,6 +110,9 @@ namespace core
         std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
+        std::unique_ptr<adapters::VegetationAdapter> vegetationAdapter;
+        std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
+        std::unique_ptr<adapters::VegetationRenderAdapter> vegetationRenderAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -162,6 +175,12 @@ namespace core
 
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();
+
+        services::IVegetationProvider* getVegetationProvider();
+
+        services::IGrassRenderProvider* getGrassRenderProvider();
+
+        services::IVegetationRenderProvider* getVegetationRenderProvider();
 
         // === Other Accessors ===
 

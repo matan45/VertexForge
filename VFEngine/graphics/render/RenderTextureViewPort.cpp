@@ -206,6 +206,11 @@ namespace render
             gpuRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet, width, height);
         }
 
+        if (gpuRenderer->isGrassRenderingEnabled())
+        {
+            gpuRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet, width, height);
+        }
+
         if (gpuRenderer->isWaterRenderingEnabled())
         {
             gpuRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);

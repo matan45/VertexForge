@@ -156,6 +156,9 @@
     <ClInclude Include="adapters\terrain\TerrainRaycastAdapter.hpp" />
     <ClInclude Include="adapters\terrain\TerrainRenderAdapter.hpp" />
     <ClInclude Include="adapters\terrain\WaterRenderAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\GrassRenderAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\VegetationAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\VegetationRenderAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
@@ -244,6 +247,9 @@
     <ClCompile Include="adapters\terrain\TerrainRaycastAdapter.cpp" />
     <ClCompile Include="adapters\terrain\TerrainRenderAdapter.cpp" />
     <ClCompile Include="adapters\terrain\WaterRenderAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\GrassRenderAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\VegetationAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\VegetationRenderAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />

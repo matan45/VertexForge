@@ -1,5 +1,11 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "../vegetation/GrassComputePipeline.hpp"
+#include "../vegetation/GrassMeshShaderPipeline.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
+#include "../vegetation/VegetationStreamManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/RenderManager.hpp"
@@ -144,6 +150,7 @@ namespace render::gpudriven
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
             initWaterSubsystems(iblDescriptorSetLayout, renderPass);
+            initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
         }
         else
         {
@@ -222,6 +229,7 @@ namespace render::gpudriven
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
+        cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();

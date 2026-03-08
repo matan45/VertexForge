@@ -20,6 +20,9 @@
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
+#include "vegetation/GrassDensityPanel.hpp"
+#include "vegetation/VegetationPlacementPanel.hpp"
+#include "vegetation/VegetationSpeciesPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -56,6 +59,9 @@ namespace windows
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;
+        GrassDensityPanel grassDensityPanel;
+        VegetationPlacementPanel vegetationPlacementPanel;
+        VegetationSpeciesPanel vegetationSpeciesPanel;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

@@ -36,6 +36,10 @@
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
+#include "impl/vegetation/VegetationServiceImpl.hpp"
+#include "impl/vegetation/GrassServiceImpl.hpp"
+#include "impl/vegetation/VegetationBrushServiceImpl.hpp"
+#include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -222,6 +226,10 @@ namespace handlers
         audioSceneUpdater.reset();
         worldSectorService.reset();
         assetLifecycleService.reset();
+        vegetationService.reset();
+        grassService.reset();
+        vegetationBrushService.reset();
+        vegetationBrushModeService.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
@@ -263,6 +271,7 @@ namespace handlers
         createVFXServices();
         createTerrainServices();
         createWaterServices();
+        createVegetationServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
@@ -410,6 +419,15 @@ namespace handlers
         }
     }
 
+    void EditorHandler::createVegetationServices()
+    {
+        vegetationService = std::make_shared<services::VegetationServiceImpl>(
+            bootstrap->getVegetationProvider());
+        grassService = std::make_shared<services::GrassServiceImpl>();
+        vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
+        vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -453,6 +471,10 @@ namespace handlers
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
+        vegetationService->registerEventHandlers();
+        grassService->registerEventHandlers();
+        vegetationBrushService->registerEventHandlers();
+        vegetationBrushModeService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

@@ -11,7 +11,7 @@ namespace components
 
     struct NavmeshAgentComponent
     {
-        float radius = 0.3f;
+        float radius = 0.25f;
         float height = 2.0f;
         float maxSpeed = 3.5f;
         float maxAcceleration = 8.0f;

@@ -402,6 +402,24 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setGrassRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setVegetationRenderProvider(provider);
+        }
+    }
+
     render::RenderPassHandler* OffScreenController::getRenderPassHandler() const
     {
         return offScreen ? offScreen->getRenderPassHandler() : nullptr;

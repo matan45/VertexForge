@@ -62,7 +62,7 @@ namespace events::navmesh
     {
         glm::vec3 start;
         glm::vec3 end;
-        float agentRadius = 0.3f;
+        float agentRadius = 0.25f;
         float agentHeight = 2.0f;
         std::string_view getName() const override { return "FindPath"; }
     };
@@ -145,8 +145,8 @@ namespace events::navmesh
     // Streaming config
     struct NavmeshStreamingConfig
     {
-        float loadRadius = 256.0f;
-        float unloadRadius = 320.0f;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
         int maxLoadsPerFrame = 2;
         int maxUnloadsPerFrame = 2;
     };

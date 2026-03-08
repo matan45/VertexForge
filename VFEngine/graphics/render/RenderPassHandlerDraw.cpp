@@ -132,6 +132,9 @@ namespace render
 
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
+
+            // Sync vegetation streaming with visible terrain tiles
+            gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, currentCameraPosition);
         }
 
         if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
@@ -323,6 +326,11 @@ namespace render
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
         {
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        if (gpuDrivenRenderer->isGrassRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
         }
 
         if (gpuDrivenRenderer->isWaterRenderingEnabled())

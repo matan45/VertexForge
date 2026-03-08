@@ -17,6 +17,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace core
@@ -276,6 +278,9 @@ namespace render
 
         void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();
+
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
