@@ -25,9 +25,6 @@ namespace windows
         menuBar.setWorldSectorWindow(&worldSectorWindow);
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
-        menuBar.setVegetationPlacementPanel(&vegetationPlacementPanel);
-        menuBar.setVegetationSpeciesPanel(&vegetationSpeciesPanel);
-
         subscribeToEvents();
     }
 

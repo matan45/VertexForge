@@ -294,6 +294,7 @@
     <ClCompile Include="serialization\SceneSerializeSocket.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
+    <ClCompile Include="serialization\SceneSerializeVegetation.cpp" />
     <ClCompile Include="serialization\SceneSerializeWater.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />
     <ClCompile Include="terrain\BrushSampler.cpp" />

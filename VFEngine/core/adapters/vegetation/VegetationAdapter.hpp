@@ -20,6 +20,7 @@ namespace core::adapters
         bool hasSpecies(uint32_t speciesId) const override;
         const std::unordered_map<uint32_t, vegetation::VegetationSpeciesConfig>& getAllSpecies() const override;
         uint32_t getSpeciesCount() const override;
+        void clearAllSpecies() override;
 
     private:
         vegetation::VegetationSpeciesRegistry registry;

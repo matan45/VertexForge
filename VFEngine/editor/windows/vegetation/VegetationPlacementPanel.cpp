@@ -21,9 +21,11 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // VegetationPlacementPanel is for tree/vegetation scattering (VK-712).
-        // It will be wired to its own placement mode when implemented.
-        // For now, do not auto-show during grass brush mode.
+        modeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
+            [this](const auto& n)
+            {
+                visible = n.isActive;
+            });
 
         subscribed = true;
     }
@@ -33,7 +35,13 @@ namespace windows
         if (!subscribed) subscribe();
         if (!visible) return;
 
-        ImGui::Begin("Vegetation Placement", &visible);
+        ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
+
+        if (!ImGui::Begin("Vegetation Placement", &visible))
+        {
+            ImGui::End();
+            return;
+        }
 
         // Brush type
         const char* brushTypes[] = {"Scatter", "Erase"};
@@ -53,11 +61,18 @@ namespace windows
         ImGui::SliderFloat("Max Scale", &maxScale, 0.1f, 3.0f);
         ImGui::SliderFloat("Random Rotation", &randomRotation, 0.0f, 1.0f);
 
-        // Species selector - placeholder
+        // Species selector
         ImGui::Separator();
         ImGui::Text("Species");
         ImGui::InputInt("Species ID", &selectedSpecies);
 
         ImGui::End();
+
+        if (!visible)
+        {
+            events::vegetationBrush::SetVegetationPlacementModeActiveCommand cmd;
+            cmd.active = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 }

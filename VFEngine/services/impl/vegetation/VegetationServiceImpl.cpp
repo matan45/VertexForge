@@ -1,12 +1,21 @@
 #include "VegetationServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vegetation/VegetationEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
 
 namespace services
 {
     VegetationServiceImpl::VegetationServiceImpl(IVegetationProvider* vegetationProvider)
         : provider(vegetationProvider)
     {
+    }
+
+    VegetationServiceImpl::~VegetationServiceImpl()
+    {
+        if (sceneClearedToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+        }
     }
 
     void VegetationServiceImpl::registerEventHandlers()
@@ -48,6 +57,18 @@ namespace services
             [this](const auto&)
             {
                 return provider->getSpeciesCount();
+            });
+
+        dispatcher.registerCommandHandler<events::vegetation::ClearAllVegetationSpeciesCommand>(
+            [this](const auto&)
+            {
+                provider->clearAllSpecies();
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const auto&)
+            {
+                provider->clearAllSpecies();
             });
     }
 

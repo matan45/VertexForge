@@ -1,4 +1,4 @@
-#include "VegetationBrushModeServiceImpl.hpp"
+#include "VegetationPlacementModeServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
@@ -10,46 +10,25 @@
 
 namespace services
 {
-    VegetationBrushModeServiceImpl::~VegetationBrushModeServiceImpl()
+    VegetationPlacementModeServiceImpl::~VegetationPlacementModeServiceImpl()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (editorModeToken.isValid())
-        {
-            dispatcher.unsubscribe(editorModeToken);
-        }
-        if (entityDeletedToken.isValid())
-        {
-            dispatcher.unsubscribe(entityDeletedToken);
-        }
-        if (sceneClearedToken.isValid())
-        {
-            dispatcher.unsubscribe(sceneClearedToken);
-        }
-        if (sculptModeToken.isValid())
-        {
-            dispatcher.unsubscribe(sculptModeToken);
-        }
-        if (paintModeToken.isValid())
-        {
-            dispatcher.unsubscribe(paintModeToken);
-        }
-        if (holeModeToken.isValid())
-        {
-            dispatcher.unsubscribe(holeModeToken);
-        }
-        if (vegPlacementModeToken.isValid())
-        {
-            dispatcher.unsubscribe(vegPlacementModeToken);
-        }
+        if (editorModeToken.isValid()) dispatcher.unsubscribe(editorModeToken);
+        if (entityDeletedToken.isValid()) dispatcher.unsubscribe(entityDeletedToken);
+        if (sceneClearedToken.isValid()) dispatcher.unsubscribe(sceneClearedToken);
+        if (sculptModeToken.isValid()) dispatcher.unsubscribe(sculptModeToken);
+        if (paintModeToken.isValid()) dispatcher.unsubscribe(paintModeToken);
+        if (holeModeToken.isValid()) dispatcher.unsubscribe(holeModeToken);
+        if (vegBrushModeToken.isValid()) dispatcher.unsubscribe(vegBrushModeToken);
     }
 
-    void VegetationBrushModeServiceImpl::registerEventHandlers()
+    void VegetationPlacementModeServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        dispatcher.registerCommandHandler<events::vegetationBrush::SetVegetationBrushModeActiveCommand>(
-            [this](const events::vegetationBrush::SetVegetationBrushModeActiveCommand& cmd)
+        dispatcher.registerCommandHandler<events::vegetationBrush::SetVegetationPlacementModeActiveCommand>(
+            [this](const events::vegetationBrush::SetVegetationPlacementModeActiveCommand& cmd)
             {
                 if (cmd.active)
                 {
@@ -61,29 +40,21 @@ namespace services
                 }
             });
 
-        dispatcher.registerQueryHandler<events::vegetationBrush::IsVegetationBrushModeActiveQuery>(
-            [this](const events::vegetationBrush::IsVegetationBrushModeActiveQuery&)
+        dispatcher.registerQueryHandler<events::vegetationBrush::IsVegetationPlacementModeActiveQuery>(
+            [this](const events::vegetationBrush::IsVegetationPlacementModeActiveQuery&)
             {
                 return isActive();
             });
 
-        dispatcher.registerQueryHandler<events::vegetationBrush::GetVegetationBrushTargetEntityQuery>(
-            [this](const events::vegetationBrush::GetVegetationBrushTargetEntityQuery&)
-            {
-                return getTargetEntity();
-            });
-
-        // Auto-deactivate when editor mode changes to Play
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {
-                if (n.currentMode == EditorMode::Play && vegetationBrushActive)
+                if (n.currentMode == EditorMode::Play && placementActive)
                 {
                     deactivate();
                 }
             });
 
-        // Auto-deactivate when target entity is deleted
         entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& n)
             {
@@ -93,108 +64,75 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when scene is cleared
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
-                if (vegetationBrushActive)
+                if (placementActive)
                 {
                     deactivate();
                 }
             });
 
-        // Auto-deactivate when sculpt mode activates
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
-                if (n.isActive && vegetationBrushActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && placementActive) deactivate();
             });
 
-        // Auto-deactivate when paint mode activates
         paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
             [this](const events::paint::PaintModeChangedNotification& n)
             {
-                if (n.isActive && vegetationBrushActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && placementActive) deactivate();
             });
 
-        // Auto-deactivate when hole mode activates
         holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
             [this](const events::hole::HoleModeChangedNotification& n)
             {
-                if (n.isActive && vegetationBrushActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && placementActive) deactivate();
             });
 
-        // Auto-deactivate when vegetation placement mode activates
-        vegPlacementModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
-            [this](const events::vegetationBrush::VegetationPlacementModeChangedNotification& n)
+        vegBrushModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
+            [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
             {
-                if (n.isActive && vegetationBrushActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && placementActive) deactivate();
             });
     }
 
-    bool VegetationBrushModeServiceImpl::activate()
+    bool VegetationPlacementModeServiceImpl::activate()
     {
-        if (vegetationBrushActive)
-        {
-            return true;
-        }
+        if (placementActive) return true;
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Deactivate sculpt mode if active
-        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-        if (sculptActive)
+        // Deactivate other terrain modes
+        if (dispatcher.query(events::sculpt::IsSculptModeActiveQuery{}))
         {
             events::sculpt::SetSculptModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }
-
-        // Deactivate paint mode if active
-        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-        if (paintActive)
+        if (dispatcher.query(events::paint::IsPaintModeActiveQuery{}))
         {
             events::paint::SetPaintModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }
-
-        // Deactivate hole mode if active
-        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-        if (holeActive)
+        if (dispatcher.query(events::hole::IsHoleModeActiveQuery{}))
         {
             events::hole::SetHoleModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }
-
-        // Deactivate vegetation placement mode if active
-        bool vegPlacementActive = dispatcher.query(events::vegetationBrush::IsVegetationPlacementModeActiveQuery{});
-        if (vegPlacementActive)
+        if (dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{}))
         {
-            events::vegetationBrush::SetVegetationPlacementModeActiveCommand cmd;
+            events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }
 
         // Get selected entity and verify it is a terrain
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-        if (!selectedEntity.has_value())
-        {
-            return false;
-        }
+        if (!selectedEntity.has_value()) return false;
 
         EntityHandle terrainEntity = *selectedEntity;
 
@@ -204,7 +142,6 @@ namespace services
 
         if (!isTerrain)
         {
-            // Check if selected entity is a terrain tile child
             events::terrain::HasTerrainTileComponentQuery tileQuery;
             tileQuery.entity = terrainEntity;
             bool isTile = dispatcher.query(tileQuery);
@@ -225,20 +162,17 @@ namespace services
                 }
             }
 
-            if (!isTerrain)
-            {
-                return false;
-            }
+            if (!isTerrain) return false;
         }
 
         targetTerrain = terrainEntity;
-        vegetationBrushActive = true;
+        placementActive = true;
 
         events::scene::SelectEntityCommand selectCmd;
         selectCmd.entity = terrainEntity;
         dispatcher.execute(selectCmd);
 
-        events::vegetationBrush::VegetationBrushModeChangedNotification notification;
+        events::vegetationBrush::VegetationPlacementModeChangedNotification notification;
         notification.isActive = true;
         notification.terrainEntity = terrainEntity;
         dispatcher.publish(notification);
@@ -246,28 +180,25 @@ namespace services
         return true;
     }
 
-    void VegetationBrushModeServiceImpl::deactivate()
+    void VegetationPlacementModeServiceImpl::deactivate()
     {
-        if (!vegetationBrushActive)
-        {
-            return;
-        }
+        if (!placementActive) return;
 
-        vegetationBrushActive = false;
+        placementActive = false;
         targetTerrain.reset();
 
-        events::vegetationBrush::VegetationBrushModeChangedNotification notification;
+        events::vegetationBrush::VegetationPlacementModeChangedNotification notification;
         notification.isActive = false;
         notification.terrainEntity = std::nullopt;
         events::EventDispatcher::instance().publish(notification);
     }
 
-    bool VegetationBrushModeServiceImpl::isActive() const
+    bool VegetationPlacementModeServiceImpl::isActive() const
     {
-        return vegetationBrushActive;
+        return placementActive;
     }
 
-    std::optional<EntityHandle> VegetationBrushModeServiceImpl::getTargetEntity() const
+    std::optional<EntityHandle> VegetationPlacementModeServiceImpl::getTargetEntity() const
     {
         return targetTerrain;
     }

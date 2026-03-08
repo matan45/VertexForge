@@ -598,5 +598,6 @@ namespace serialization
         {
             sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
         }
+
     }
 }

@@ -19,5 +19,6 @@ namespace services
         virtual bool hasSpecies(uint32_t speciesId) const = 0;
         virtual const std::unordered_map<uint32_t, vegetation::VegetationSpeciesConfig>& getAllSpecies() const = 0;
         virtual uint32_t getSpeciesCount() const = 0;
+        virtual void clearAllSpecies() = 0;
     };
 }

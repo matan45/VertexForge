@@ -26,8 +26,6 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/project/ExportEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
-#include "vegetation/VegetationPlacementPanel.hpp"
-#include "vegetation/VegetationSpeciesPanel.hpp"
 #include <imgui.h>
 #include <filesystem>
 
@@ -70,7 +68,6 @@ namespace windows
             handleSettingsMenu();
             handleAddMenu();
             handleScriptsMenu();
-            handleVegetationMenu();
             handleDebug();
             handlePlayControls();
             ImGui::EndMainMenuBar();
@@ -279,28 +276,6 @@ namespace windows
                 ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Not Built");
             }
 
-            ImGui::EndMenu();
-        }
-    }
-
-    void MainMenuBar::handleVegetationMenu()
-    {
-        if (ImGui::BeginMenu("Vegetation"))
-        {
-            if (ImGui::MenuItem("Placement"))
-            {
-                if (vegetationPlacementPanel)
-                {
-                    vegetationPlacementPanel->setVisible(true);
-                }
-            }
-            else if (ImGui::MenuItem("Species"))
-            {
-                if (vegetationSpeciesPanel)
-                {
-                    vegetationSpeciesPanel->setVisible(true);
-                }
-            }
             ImGui::EndMenu();
         }
     }

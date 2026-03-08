@@ -41,6 +41,7 @@
 #include "impl/vegetation/GrassServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
+#include "impl/vegetation/VegetationPlacementModeServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -431,6 +432,7 @@ namespace handlers
         grassService = std::make_shared<services::GrassServiceImpl>();
         vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
+        vegetationPlacementModeService = std::make_shared<services::VegetationPlacementModeServiceImpl>();
     }
 
     void EditorHandler::registerAllEventHandlers()
@@ -480,6 +482,7 @@ namespace handlers
         grassService->registerEventHandlers();
         vegetationBrushService->registerEventHandlers();
         vegetationBrushModeService->registerEventHandlers();
+        vegetationPlacementModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;

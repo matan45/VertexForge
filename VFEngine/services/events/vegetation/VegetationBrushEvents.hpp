@@ -64,6 +64,13 @@ namespace events::vegetationBrush
         std::string_view getName() const override { return "SetVegetationBrushModeActive"; }
     };
 
+    struct SetVegetationPlacementModeActiveCommand : ICommand<>
+    {
+        bool active;
+
+        std::string_view getName() const override { return "SetVegetationPlacementModeActive"; }
+    };
+
     // ---- Queries ----
 
     struct GetDensityBrushParamsQuery : IQuery<::vegetation::DensityBrushParams>
@@ -89,6 +96,11 @@ namespace events::vegetationBrush
     struct IsVegetationBrushModeActiveQuery : IQuery<bool>
     {
         std::string_view getName() const override { return "IsVegetationBrushModeActive"; }
+    };
+
+    struct IsVegetationPlacementModeActiveQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "IsVegetationPlacementModeActive"; }
     };
 
     struct GetVegetationBrushTargetEntityQuery : IQuery<std::optional<services::EntityHandle>>
@@ -148,5 +160,13 @@ namespace events::vegetationBrush
         std::optional<services::EntityHandle> terrainEntity;
 
         std::string_view getName() const override { return "VegetationBrushModeChanged"; }
+    };
+
+    struct VegetationPlacementModeChangedNotification : INotification
+    {
+        bool isActive;
+        std::optional<services::EntityHandle> terrainEntity;
+
+        std::string_view getName() const override { return "VegetationPlacementModeChanged"; }
     };
 }

@@ -29,6 +29,7 @@
 #include "interfaces/vegetation/IGrassService.hpp"
 #include "interfaces/vegetation/IVegetationBrushService.hpp"
 #include "interfaces/vegetation/IVegetationBrushModeService.hpp"
+#include "interfaces/vegetation/IVegetationPlacementModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
 #include "interfaces/lightbake/ILightBakeService.hpp"
@@ -113,6 +114,7 @@ namespace handlers {
 		std::shared_ptr<services::IGrassService> grassService;
 		std::shared_ptr<services::IVegetationBrushService> vegetationBrushService;
 		std::shared_ptr<services::IVegetationBrushModeService> vegetationBrushModeService;
+		std::shared_ptr<services::IVegetationPlacementModeService> vegetationPlacementModeService;
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;

@@ -8,6 +8,7 @@
 #include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include "../vegetation/VegetationSpecies.hpp"
 
 namespace scene
 {
@@ -39,6 +40,10 @@ namespace serialization
                                       scene::SceneGraphSystem& sceneGraph, bool isRoot,
                                       SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
                                       size_t totalEntities);
+
+        static json serializeVegetationSpecies(
+            const std::unordered_map<uint32_t, vegetation::VegetationSpeciesConfig>& species);
+        static std::vector<vegetation::VegetationSpeciesConfig> deserializeVegetationSpecies(const json& j);
 
     private:
         static json serializeRootEntity(scene::Entity& root);

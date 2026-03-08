@@ -22,9 +22,6 @@ namespace windows
     class WorldSectorWindow;
     class VFXDebugWindow;
     class AnimationDebugWindow;
-    class VegetationPlacementPanel;
-    class VegetationSpeciesPanel;
-
     class MainMenuBar
     {
     private:
@@ -50,9 +47,6 @@ namespace windows
         WorldSectorWindow* worldSectorWindow = nullptr;
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
-        VegetationPlacementPanel* vegetationPlacementPanel = nullptr;
-        VegetationSpeciesPanel* vegetationSpeciesPanel = nullptr;
-
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -122,22 +116,11 @@ namespace windows
             animationDebugWindow = window;
         }
 
-        void setVegetationPlacementPanel(VegetationPlacementPanel* panel)
-        {
-            vegetationPlacementPanel = panel;
-        }
-
-        void setVegetationSpeciesPanel(VegetationSpeciesPanel* panel)
-        {
-            vegetationSpeciesPanel = panel;
-        }
-
     private:
         void handleFileMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();
-        void handleVegetationMenu();
         void handleDebug();
         void handlePlayControls();
     };

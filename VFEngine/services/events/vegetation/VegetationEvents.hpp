@@ -50,6 +50,11 @@ namespace events::vegetation
         std::string_view getName() const override { return "GetVegetationSpeciesCount"; }
     };
 
+    struct ClearAllVegetationSpeciesCommand : ICommand<void>
+    {
+        std::string_view getName() const override { return "ClearAllVegetationSpecies"; }
+    };
+
     // --- Vegetation Configuration ---
 
     struct SetVegetationEnabledCommand : ICommand<void>

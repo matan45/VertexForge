@@ -38,4 +38,9 @@ namespace core::adapters
     {
         return registry.getSpeciesCount();
     }
+
+    void VegetationAdapter::clearAllSpecies()
+    {
+        registry.clear();
+    }
 }

@@ -1,13 +1,13 @@
 #pragma once
-#include "../../interfaces/vegetation/IVegetationBrushModeService.hpp"
+#include "../../interfaces/vegetation/IVegetationPlacementModeService.hpp"
 #include "../../events/EventTypes.hpp"
 
 namespace services
 {
-    class VegetationBrushModeServiceImpl : public IVegetationBrushModeService
+    class VegetationPlacementModeServiceImpl : public IVegetationPlacementModeService
     {
     private:
-        bool vegetationBrushActive = false;
+        bool placementActive = false;
         std::optional<EntityHandle> targetTerrain;
 
         ::events::SubscriptionToken editorModeToken;
@@ -16,11 +16,11 @@ namespace services
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
         ::events::SubscriptionToken holeModeToken;
-        ::events::SubscriptionToken vegPlacementModeToken;
+        ::events::SubscriptionToken vegBrushModeToken;
 
     public:
-        VegetationBrushModeServiceImpl() = default;
-        ~VegetationBrushModeServiceImpl() override;
+        VegetationPlacementModeServiceImpl() = default;
+        ~VegetationPlacementModeServiceImpl() override;
 
         void registerEventHandlers() override;
 
