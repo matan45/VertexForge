@@ -243,6 +243,97 @@ namespace core
         updateProgress(types::NavmeshBakeStatus::Idle, 0.0f, "");
     }
 
+    // === Tiled Navmesh ===
+
+    bool NavmeshAdapter::initTiledNavmesh(const types::NavmeshBakeSettings& settings,
+                                            const glm::vec3& boundsMin, const glm::vec3& boundsMax)
+    {
+        std::lock_guard lock(navMeshMutex);
+        destroyNavMeshLocked();
+
+        navMesh = dtAllocNavMesh();
+        if (!navMesh)
+            return false;
+
+        const float tileWorldSize = settings.tileSize * settings.cellSize;
+        const int gridW = static_cast<int>(ceilf((boundsMax.x - boundsMin.x) / tileWorldSize));
+        const int gridH = static_cast<int>(ceilf((boundsMax.z - boundsMin.z) / tileWorldSize));
+        const int maxTiles = std::max(1, gridW * gridH);
+
+        dtNavMeshParams meshParams;
+        memset(&meshParams, 0, sizeof(meshParams));
+        meshParams.orig[0] = boundsMin.x;
+        meshParams.orig[1] = boundsMin.y;
+        meshParams.orig[2] = boundsMin.z;
+        meshParams.tileWidth = tileWorldSize;
+        meshParams.tileHeight = tileWorldSize;
+        meshParams.maxTiles = maxTiles;
+        meshParams.maxPolys = MAX_POLYS;
+
+        dtStatus status = navMesh->init(&meshParams);
+        if (dtStatusFailed(status))
+        {
+            dtFreeNavMesh(navMesh);
+            navMesh = nullptr;
+            return false;
+        }
+
+        navQuery = dtAllocNavMeshQuery();
+        if (!navQuery || dtStatusFailed(navQuery->init(navMesh, MAX_POLYS)))
+        {
+            dtFreeNavMeshQuery(navQuery);
+            navQuery = nullptr;
+            dtFreeNavMesh(navMesh);
+            navMesh = nullptr;
+            return false;
+        }
+
+        initCrowd(settings.agentRadius);
+        return true;
+    }
+
+    bool NavmeshAdapter::addNavmeshTile(const navigation::NavmeshTileData& tileData)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!navMesh || tileData.data.empty())
+            return false;
+
+        unsigned char* data = static_cast<unsigned char*>(dtAlloc(tileData.dataSize, DT_ALLOC_PERM));
+        if (!data)
+            return false;
+
+        memcpy(data, tileData.data.data(), tileData.dataSize);
+
+        // Remove existing tile at this coordinate first
+        dtTileRef existingRef = navMesh->getTileRefAt(tileData.x, tileData.y, 0);
+        if (existingRef)
+        {
+            navMesh->removeTile(existingRef, nullptr, nullptr);
+        }
+
+        dtStatus status = navMesh->addTile(data, tileData.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
+        if (dtStatusFailed(status))
+        {
+            dtFree(data);
+            return false;
+        }
+        return true;
+    }
+
+    bool NavmeshAdapter::removeNavmeshTile(int tx, int tz)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!navMesh)
+            return false;
+
+        dtTileRef ref = navMesh->getTileRefAt(tx, tz, 0);
+        if (!ref)
+            return false;
+
+        dtStatus status = navMesh->removeTile(ref, nullptr, nullptr);
+        return dtStatusSucceed(status);
+    }
+
     // === Pathfinding ===
 
     navigation::NavPath NavmeshAdapter::findPath(const glm::vec3& start, const glm::vec3& end,

@@ -74,7 +74,7 @@ namespace render::mesh
         config.cullMode = vk::CullModeFlagBits::eNone;
         config.depthTestEnable = true;
         config.depthCompareOp = vk::CompareOp::eLessOrEqual;
-        config.depthWriteEnable = false;
+        config.depthWriteEnable = true;
         config.depthBiasEnable = true;
         config.depthBiasConstantFactor = -2.0f;
         config.depthBiasSlopeFactor = -2.0f;

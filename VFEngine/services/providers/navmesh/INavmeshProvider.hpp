@@ -19,6 +19,15 @@ namespace services
                                    const types::NavmeshBakeSettings& settings) = 0;
         virtual types::NavmeshBakeProgress getBuildProgress() const = 0;
 
+        // === Tiled Navmesh ===
+        virtual bool initTiledNavmesh(const types::NavmeshBakeSettings& settings,
+                                       const glm::vec3& boundsMin, const glm::vec3& boundsMax) = 0;
+        virtual navigation::NavmeshTileData buildSingleTile(int tx, int tz,
+                                                              const navigation::NavmeshInputGeometry& geometry,
+                                                              const types::NavmeshBakeSettings& settings) = 0;
+        virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
+        virtual bool removeNavmeshTile(int tx, int tz) = 0;
+
         virtual std::vector<navigation::NavmeshTileData> serializeNavmesh() const = 0;
         virtual bool deserializeNavmesh(const navigation::NavmeshFileHeader& header,
                                          const std::vector<navigation::NavmeshTileData>& tiles) = 0;

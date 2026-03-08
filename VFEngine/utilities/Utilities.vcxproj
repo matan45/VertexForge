@@ -136,6 +136,7 @@
     <ClInclude Include="math\TransformUtils.hpp" />
     <ClInclude Include="navigation\NavmeshData.hpp" />
     <ClInclude Include="navigation\NavmeshSerializer.hpp" />
+    <ClInclude Include="navigation\NavmeshTileCache.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="physics\PhysicsAnimationAsset.hpp" />
     <ClInclude Include="postprocess\PostProcessTypes.hpp" />
@@ -248,6 +249,7 @@
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\RayBVH.cpp" />
     <ClCompile Include="navigation\NavmeshSerializer.cpp" />
+    <ClCompile Include="navigation\NavmeshTileCache.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />

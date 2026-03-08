@@ -448,6 +448,7 @@ namespace windows
         if (extension == ".vfTerrainMat") return TerrainMaterial;
         if (extension == ".vfTerrain") return Terrain;
         if (extension == ".vfNavmesh") return Navmesh;
+        if (extension == ".vfNavTile") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
         if (extension == ".vfLightmap") return Lightmap;
         if (extension == ".vfWater") return Water;
