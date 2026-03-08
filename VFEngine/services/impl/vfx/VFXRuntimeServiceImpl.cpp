@@ -79,6 +79,35 @@ namespace services
                 result.poolTotalSlots = bs.poolTotalSlots;
                 return result;
             });
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXLODConfigQuery>(
+            [this](const events::vfxruntime::GetVFXLODConfigQuery&)
+            {
+                events::vfxruntime::VFXLODConfigResult result;
+                if (vfxProvider)
+                {
+                    auto lc = vfxProvider->getLODConfig();
+                    result.lod0Distance = lc.lod0Distance;
+                    result.lod1Distance = lc.lod1Distance;
+                    result.lod2Distance = lc.lod2Distance;
+                    result.transitionZone = lc.transitionZone;
+                }
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<events::vfxruntime::SetVFXLODConfigCommand>(
+            [this](const events::vfxruntime::SetVFXLODConfigCommand& cmd)
+            {
+                if (vfxProvider)
+                {
+                    IVFXRuntimeProvider::LODConfig config;
+                    config.lod0Distance = cmd.lod0Distance;
+                    config.lod1Distance = cmd.lod1Distance;
+                    config.lod2Distance = cmd.lod2Distance;
+                    config.transitionZone = cmd.transitionZone;
+                    vfxProvider->setLODConfig(config);
+                }
+            });
     }
 
     VFXInstanceId VFXRuntimeServiceImpl::createInstance(const VFXRuntimeParams& params)

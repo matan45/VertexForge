@@ -678,6 +678,19 @@ namespace controllers
         return stats;
     }
 
+    VFXSceneRenderer::VFXLODConfig VFXSceneRenderer::getLODConfig() const
+    {
+        return {LOD0_DIST, LOD1_DIST, LOD2_DIST, LOD_TRANSITION_ZONE};
+    }
+
+    void VFXSceneRenderer::setLODConfig(const VFXLODConfig& config)
+    {
+        LOD0_DIST = config.lod0Distance;
+        LOD1_DIST = config.lod1Distance;
+        LOD2_DIST = config.lod2Distance;
+        LOD_TRANSITION_ZONE = config.transitionZone;
+    }
+
     size_t VFXSceneRenderer::getTotalParticleCount() const
     {
         size_t total = 0;

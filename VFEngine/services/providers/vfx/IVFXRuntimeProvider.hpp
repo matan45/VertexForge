@@ -63,5 +63,16 @@ namespace services
             uint32_t poolTotalSlots = 0;
         };
         virtual BudgetStats getBudgetStats() const = 0;
+
+        // LOD config
+        struct LODConfig
+        {
+            float lod0Distance = 50.0f;
+            float lod1Distance = 100.0f;
+            float lod2Distance = 200.0f;
+            float transitionZone = 10.0f;
+        };
+        virtual LODConfig getLODConfig() const = 0;
+        virtual void setLODConfig(const LODConfig& config) = 0;
     };
 }

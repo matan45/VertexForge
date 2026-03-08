@@ -133,11 +133,11 @@ namespace controllers
         glm::vec4 frustumPlanes[6]{};
         bool frustumPlanesValid = false;
 
-        // LOD thresholds (squared distances)
-        static constexpr float LOD0_DIST = 50.0f;
-        static constexpr float LOD1_DIST = 100.0f;
-        static constexpr float LOD2_DIST = 200.0f;
-        static constexpr float LOD_TRANSITION_ZONE = 10.0f;
+        // LOD thresholds (distances)
+        float LOD0_DIST = 50.0f;
+        float LOD1_DIST = 100.0f;
+        float LOD2_DIST = 200.0f;
+        float LOD_TRANSITION_ZONE = 10.0f;
 
         std::vector<render::vfx::GPUCollider> sceneColliders;
         uint32_t sceneColliderCount = 0;
@@ -202,6 +202,17 @@ namespace controllers
         };
 
         VFXBudgetStats getBudgetStats() const;
+
+        struct VFXLODConfig
+        {
+            float lod0Distance = 50.0f;
+            float lod1Distance = 100.0f;
+            float lod2Distance = 200.0f;
+            float transitionZone = 10.0f;
+        };
+
+        VFXLODConfig getLODConfig() const;
+        void setLODConfig(const VFXLODConfig& config);
 
     private:
         void collectAllParticleInstances();

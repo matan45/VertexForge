@@ -77,4 +77,26 @@ namespace services::events::vfxruntime
     {
         std::string_view getName() const override { return "GetVFXBudgetStats"; }
     };
+
+    struct VFXLODConfigResult
+    {
+        float lod0Distance = 50.0f;
+        float lod1Distance = 100.0f;
+        float lod2Distance = 200.0f;
+        float transitionZone = 10.0f;
+    };
+
+    struct GetVFXLODConfigQuery : ::events::IQuery<VFXLODConfigResult>
+    {
+        std::string_view getName() const override { return "GetVFXLODConfig"; }
+    };
+
+    struct SetVFXLODConfigCommand : ::events::ICommand<void>
+    {
+        float lod0Distance = 50.0f;
+        float lod1Distance = 100.0f;
+        float lod2Distance = 200.0f;
+        float transitionZone = 10.0f;
+        std::string_view getName() const override { return "SetVFXLODConfig"; }
+    };
 }

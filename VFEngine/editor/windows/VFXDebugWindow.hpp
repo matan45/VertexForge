@@ -26,6 +26,11 @@ namespace windows
 
         CachedStats stats;
 
+        // LOD config
+        float lodDistances[3] = {50.0f, 100.0f, 200.0f};
+        float transitionZone = 10.0f;
+        bool configLoaded = false;
+
     public:
         explicit VFXDebugWindow() = default;
         ~VFXDebugWindow() override = default;
@@ -35,5 +40,6 @@ namespace windows
 
     private:
         void refreshData();
+        void drawConfigSection();
     };
 }

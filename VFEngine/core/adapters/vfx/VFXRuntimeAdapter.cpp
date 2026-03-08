@@ -202,6 +202,33 @@ namespace core
         return stats;
     }
 
+    services::IVFXRuntimeProvider::LODConfig VFXRuntimeAdapter::getLODConfig() const
+    {
+        LODConfig config{};
+        if (renderer)
+        {
+            auto rc = renderer->getLODConfig();
+            config.lod0Distance = rc.lod0Distance;
+            config.lod1Distance = rc.lod1Distance;
+            config.lod2Distance = rc.lod2Distance;
+            config.transitionZone = rc.transitionZone;
+        }
+        return config;
+    }
+
+    void VFXRuntimeAdapter::setLODConfig(const LODConfig& config)
+    {
+        if (renderer)
+        {
+            controllers::VFXSceneRenderer::VFXLODConfig rc;
+            rc.lod0Distance = config.lod0Distance;
+            rc.lod1Distance = config.lod1Distance;
+            rc.lod2Distance = config.lod2Distance;
+            rc.transitionZone = config.transitionZone;
+            renderer->setLODConfig(rc);
+        }
+    }
+
     void VFXRuntimeAdapter::updateSceneColliders()
     {
         // Skip if no VFX instances are active

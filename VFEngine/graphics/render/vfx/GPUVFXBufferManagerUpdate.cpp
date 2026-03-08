@@ -298,9 +298,6 @@ namespace render::vfx
         allocatedParticleCount += particleCount;
         activeEmitterCount++;
 
-        vfLogInfo("GPUVFXBufferManager: Allocated emitter {} with {} particles at offset {}",
-                   freeSlot, particleCount, particleOffset);
-
         return allocation;
     }
 

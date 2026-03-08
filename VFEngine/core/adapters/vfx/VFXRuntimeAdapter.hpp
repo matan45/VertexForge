@@ -66,5 +66,8 @@ namespace core
         void setMaxDrawDistance(float distance) override;
 
         BudgetStats getBudgetStats() const override;
+
+        LODConfig getLODConfig() const override;
+        void setLODConfig(const LODConfig& config) override;
     };
 }
