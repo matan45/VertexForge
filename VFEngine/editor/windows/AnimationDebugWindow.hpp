@@ -21,11 +21,6 @@ namespace windows
 
         CachedStats stats;
 
-        // LOD config (ST-10)
-        float lodDistances[4] = {25.0f, 75.0f, 150.0f, 300.0f};
-        int lodUpdateIntervals[4] = {1, 2, 6, 0};
-        int maxStreamingInitPerFrame = 4;
-
     public:
         explicit AnimationDebugWindow() = default;
         ~AnimationDebugWindow() override = default;
@@ -35,6 +30,5 @@ namespace windows
 
     private:
         void refreshData();
-        void drawConfigSection();
     };
 }

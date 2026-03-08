@@ -148,4 +148,36 @@ namespace core
 
         return stats;
     }
+
+    AnimatorAdapter::LODConfig AnimatorAdapter::getLODConfig() const
+    {
+        LODConfig config{};
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        const auto& lodCfg = animSys.getLODManager().getConfig();
+        config.lod0Distance = lodCfg.distanceThresholds[0];
+        config.lod1Distance = lodCfg.distanceThresholds[1];
+        config.lod2Distance = lodCfg.distanceThresholds[2];
+        config.lod3Distance = lodCfg.distanceThresholds[3];
+        config.lod0Interval = lodCfg.updateIntervals[0];
+        config.lod1Interval = lodCfg.updateIntervals[1];
+        config.lod2Interval = lodCfg.updateIntervals[2];
+        config.maxStreamingInitPerFrame = 4;
+        return config;
+    }
+
+    void AnimatorAdapter::setLODConfig(const LODConfig& config)
+    {
+        auto& animSys = animation::RuntimeAnimatorSystem::instance();
+        animation::AnimationLODConfig lodCfg;
+        lodCfg.distanceThresholds[0] = config.lod0Distance;
+        lodCfg.distanceThresholds[1] = config.lod1Distance;
+        lodCfg.distanceThresholds[2] = config.lod2Distance;
+        lodCfg.distanceThresholds[3] = config.lod3Distance;
+        lodCfg.updateIntervals[0] = config.lod0Interval;
+        lodCfg.updateIntervals[1] = config.lod1Interval;
+        lodCfg.updateIntervals[2] = config.lod2Interval;
+        lodCfg.updateIntervals[3] = 0; // LOD3 is always frozen
+        animSys.getLODManager().setConfig(lodCfg);
+        animSys.setMaxStreamingInitPerFrame(config.maxStreamingInitPerFrame);
+    }
 }

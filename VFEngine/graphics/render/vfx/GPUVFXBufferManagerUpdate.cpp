@@ -346,9 +346,6 @@ namespace render::vfx
                 freeList.erase(insertIt);
             }
         }
-
-        vfLogInfo("GPUVFXBufferManager: Freed emitter {} ({} particles at offset {})",
-                   emitterIndex, count, offset);
     }
 
     float GPUVFXBufferManager::getFragmentationPercent() const

@@ -632,6 +632,24 @@ namespace serialization
 
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
 
+        j["vfxLOD"] = {
+            {"lod0Distance", settings.vfxLOD.lod0Distance},
+            {"lod1Distance", settings.vfxLOD.lod1Distance},
+            {"lod2Distance", settings.vfxLOD.lod2Distance},
+            {"transitionZone", settings.vfxLOD.transitionZone}
+        };
+
+        j["animationLOD"] = {
+            {"lod0Distance", settings.animationLOD.lod0Distance},
+            {"lod1Distance", settings.animationLOD.lod1Distance},
+            {"lod2Distance", settings.animationLOD.lod2Distance},
+            {"lod3Distance", settings.animationLOD.lod3Distance},
+            {"lod0Interval", settings.animationLOD.lod0Interval},
+            {"lod1Interval", settings.animationLOD.lod1Interval},
+            {"lod2Interval", settings.animationLOD.lod2Interval},
+            {"maxStreamingInitPerFrame", settings.animationLOD.maxStreamingInitPerFrame}
+        };
+
         return j;
     }
 
@@ -650,6 +668,40 @@ namespace serialization
         else
         {
             settings.postProcess = postprocess::PostProcessSettings::createDefault();
+        }
+
+        if (j.contains("vfxLOD") && j["vfxLOD"].is_object())
+        {
+            const auto& vl = j["vfxLOD"];
+            if (vl.contains("lod0Distance") && vl["lod0Distance"].is_number())
+                settings.vfxLOD.lod0Distance = vl["lod0Distance"].get<float>();
+            if (vl.contains("lod1Distance") && vl["lod1Distance"].is_number())
+                settings.vfxLOD.lod1Distance = vl["lod1Distance"].get<float>();
+            if (vl.contains("lod2Distance") && vl["lod2Distance"].is_number())
+                settings.vfxLOD.lod2Distance = vl["lod2Distance"].get<float>();
+            if (vl.contains("transitionZone") && vl["transitionZone"].is_number())
+                settings.vfxLOD.transitionZone = vl["transitionZone"].get<float>();
+        }
+
+        if (j.contains("animationLOD") && j["animationLOD"].is_object())
+        {
+            const auto& al = j["animationLOD"];
+            if (al.contains("lod0Distance") && al["lod0Distance"].is_number())
+                settings.animationLOD.lod0Distance = al["lod0Distance"].get<float>();
+            if (al.contains("lod1Distance") && al["lod1Distance"].is_number())
+                settings.animationLOD.lod1Distance = al["lod1Distance"].get<float>();
+            if (al.contains("lod2Distance") && al["lod2Distance"].is_number())
+                settings.animationLOD.lod2Distance = al["lod2Distance"].get<float>();
+            if (al.contains("lod3Distance") && al["lod3Distance"].is_number())
+                settings.animationLOD.lod3Distance = al["lod3Distance"].get<float>();
+            if (al.contains("lod0Interval") && al["lod0Interval"].is_number_unsigned())
+                settings.animationLOD.lod0Interval = al["lod0Interval"].get<uint32_t>();
+            if (al.contains("lod1Interval") && al["lod1Interval"].is_number_unsigned())
+                settings.animationLOD.lod1Interval = al["lod1Interval"].get<uint32_t>();
+            if (al.contains("lod2Interval") && al["lod2Interval"].is_number_unsigned())
+                settings.animationLOD.lod2Interval = al["lod2Interval"].get<uint32_t>();
+            if (al.contains("maxStreamingInitPerFrame") && al["maxStreamingInitPerFrame"].is_number_unsigned())
+                settings.animationLOD.maxStreamingInitPerFrame = al["maxStreamingInitPerFrame"].get<uint32_t>();
         }
     }
 

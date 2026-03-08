@@ -2,6 +2,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
+#include "events/animation/AnimationBudgetEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -71,6 +73,28 @@ namespace windows
         events::render::ApplyShadowSettingsCommand shadowCmd;
         shadowCmd.settings = settings;
         dispatcher.execute(shadowCmd);
+
+        {
+            services::events::vfxruntime::SetVFXLODConfigCommand cmd;
+            cmd.lod0Distance = settings.vfxLOD.lod0Distance;
+            cmd.lod1Distance = settings.vfxLOD.lod1Distance;
+            cmd.lod2Distance = settings.vfxLOD.lod2Distance;
+            cmd.transitionZone = settings.vfxLOD.transitionZone;
+            dispatcher.execute(cmd);
+        }
+
+        {
+            services::events::animation::SetAnimationLODConfigCommand cmd;
+            cmd.lod0Distance = settings.animationLOD.lod0Distance;
+            cmd.lod1Distance = settings.animationLOD.lod1Distance;
+            cmd.lod2Distance = settings.animationLOD.lod2Distance;
+            cmd.lod3Distance = settings.animationLOD.lod3Distance;
+            cmd.lod0Interval = settings.animationLOD.lod0Interval;
+            cmd.lod1Interval = settings.animationLOD.lod1Interval;
+            cmd.lod2Interval = settings.animationLOD.lod2Interval;
+            cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
+            dispatcher.execute(cmd);
+        }
     }
 
     void RenderConfigWindow::drawShadowQualitySettings()
@@ -601,6 +625,112 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::drawVFXLODSection()
+    {
+        if (ImGui::CollapsingHeader("VFX LOD"))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            ImGui::Text("Distance Thresholds");
+            ImGui::Spacing();
+
+            bool changed = false;
+            changed |= ImGui::SliderFloat("LOD 0 (Full)##vfx", &settings.vfxLOD.lod0Distance, 10.0f, 200.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("LOD 1 (Half)##vfx", &settings.vfxLOD.lod1Distance, 20.0f, 400.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("LOD 2 (Quarter)##vfx", &settings.vfxLOD.lod2Distance, 50.0f, 800.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("Transition Zone##vfx", &settings.vfxLOD.transitionZone, 1.0f, 50.0f, "%.0f m");
+
+            // Enforce ordering
+            if (settings.vfxLOD.lod1Distance <= settings.vfxLOD.lod0Distance)
+                settings.vfxLOD.lod1Distance = settings.vfxLOD.lod0Distance + 1.0f;
+            if (settings.vfxLOD.lod2Distance <= settings.vfxLOD.lod1Distance)
+                settings.vfxLOD.lod2Distance = settings.vfxLOD.lod1Distance + 1.0f;
+
+            if (changed)
+            {
+                isDirty = true;
+                services::events::vfxruntime::SetVFXLODConfigCommand cmd;
+                cmd.lod0Distance = settings.vfxLOD.lod0Distance;
+                cmd.lod1Distance = settings.vfxLOD.lod1Distance;
+                cmd.lod2Distance = settings.vfxLOD.lod2Distance;
+                cmd.transitionZone = settings.vfxLOD.transitionZone;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
+    void RenderConfigWindow::drawAnimationLODSection()
+    {
+        if (ImGui::CollapsingHeader("Animation LOD"))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            bool changed = false;
+
+            ImGui::Text("Distance Thresholds");
+            ImGui::Spacing();
+            changed |= ImGui::SliderFloat("LOD 0 Max##anim", &settings.animationLOD.lod0Distance, 5.0f, 50.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("LOD 1 Max##anim", &settings.animationLOD.lod1Distance, 25.0f, 150.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("LOD 2 Max##anim", &settings.animationLOD.lod2Distance, 50.0f, 300.0f, "%.0f m");
+            changed |= ImGui::SliderFloat("LOD 3 Max##anim", &settings.animationLOD.lod3Distance, 100.0f, 500.0f, "%.0f m");
+
+            // Enforce ordering
+            if (settings.animationLOD.lod1Distance <= settings.animationLOD.lod0Distance)
+                settings.animationLOD.lod1Distance = settings.animationLOD.lod0Distance + 1.0f;
+            if (settings.animationLOD.lod2Distance <= settings.animationLOD.lod1Distance)
+                settings.animationLOD.lod2Distance = settings.animationLOD.lod1Distance + 1.0f;
+            if (settings.animationLOD.lod3Distance <= settings.animationLOD.lod2Distance)
+                settings.animationLOD.lod3Distance = settings.animationLOD.lod2Distance + 1.0f;
+
+            ImGui::Spacing();
+            ImGui::Text("Update Intervals (frames)");
+            ImGui::Spacing();
+
+            int intervals[3] = {
+                static_cast<int>(settings.animationLOD.lod0Interval),
+                static_cast<int>(settings.animationLOD.lod1Interval),
+                static_cast<int>(settings.animationLOD.lod2Interval)
+            };
+            changed |= ImGui::SliderInt("LOD 0 Interval##anim", &intervals[0], 1, 1);
+            changed |= ImGui::SliderInt("LOD 1 Interval##anim", &intervals[1], 1, 4);
+            changed |= ImGui::SliderInt("LOD 2 Interval##anim", &intervals[2], 2, 16);
+            settings.animationLOD.lod0Interval = static_cast<uint32_t>(intervals[0]);
+            settings.animationLOD.lod1Interval = static_cast<uint32_t>(intervals[1]);
+            settings.animationLOD.lod2Interval = static_cast<uint32_t>(intervals[2]);
+
+            ImGui::Spacing();
+            int maxInit = static_cast<int>(settings.animationLOD.maxStreamingInitPerFrame);
+            if (ImGui::SliderInt("Max Streaming Init/Frame", &maxInit, 1, 16))
+            {
+                settings.animationLOD.maxStreamingInitPerFrame = static_cast<uint32_t>(maxInit);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                isDirty = true;
+                services::events::animation::SetAnimationLODConfigCommand cmd;
+                cmd.lod0Distance = settings.animationLOD.lod0Distance;
+                cmd.lod1Distance = settings.animationLOD.lod1Distance;
+                cmd.lod2Distance = settings.animationLOD.lod2Distance;
+                cmd.lod3Distance = settings.animationLOD.lod3Distance;
+                cmd.lod0Interval = settings.animationLOD.lod0Interval;
+                cmd.lod1Interval = settings.animationLOD.lod1Interval;
+                cmd.lod2Interval = settings.animationLOD.lod2Interval;
+                cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void RenderConfigWindow::draw()
     {
         if (!visible)
@@ -615,6 +745,8 @@ namespace windows
             drawCullingSection();
             drawTerrainSection();
             drawShadowSection();
+            drawVFXLODSection();
+            drawAnimationLODSection();
 
             ImGui::Spacing();
             ImGui::Separator();

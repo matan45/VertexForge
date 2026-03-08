@@ -19,6 +19,20 @@ namespace services
         };
         [[nodiscard]] virtual BudgetStats getBudgetStats() const = 0;
 
+        struct LODConfig
+        {
+            float lod0Distance = 25.0f;
+            float lod1Distance = 75.0f;
+            float lod2Distance = 150.0f;
+            float lod3Distance = 300.0f;
+            uint32_t lod0Interval = 1;
+            uint32_t lod1Interval = 2;
+            uint32_t lod2Interval = 6;
+            uint32_t maxStreamingInitPerFrame = 4;
+        };
+        [[nodiscard]] virtual LODConfig getLODConfig() const = 0;
+        virtual void setLODConfig(const LODConfig& config) = 0;
+
         virtual void setFloat(EntityHandle entity, const std::string& paramName, float value) = 0;
         virtual void setInt(EntityHandle entity, const std::string& paramName, int32_t value) = 0;
         virtual void setBool(EntityHandle entity, const std::string& paramName, bool value) = 0;

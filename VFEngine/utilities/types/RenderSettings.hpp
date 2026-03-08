@@ -138,6 +138,26 @@ namespace types
         uint32_t shadowLOD = 2; // LOD level for terrain shadows (0=highest, 3=lowest)
     };
 
+    struct VFXLODSettings
+    {
+        float lod0Distance = 50.0f;
+        float lod1Distance = 100.0f;
+        float lod2Distance = 200.0f;
+        float transitionZone = 10.0f;
+    };
+
+    struct AnimationLODSettings
+    {
+        float lod0Distance = 25.0f;
+        float lod1Distance = 75.0f;
+        float lod2Distance = 150.0f;
+        float lod3Distance = 300.0f;
+        uint32_t lod0Interval = 1;
+        uint32_t lod1Interval = 2;
+        uint32_t lod2Interval = 6;
+        uint32_t maxStreamingInitPerFrame = 4;
+    };
+
     struct RenderSettings
     {
         ShadowSettings shadows;
@@ -146,6 +166,8 @@ namespace types
         TransparencySettings transparency;
         TerrainSettings terrain;
         postprocess::PostProcessSettings postProcess;
+        VFXLODSettings vfxLOD;
+        AnimationLODSettings animationLOD;
 
         static RenderSettings createDefault()
         {

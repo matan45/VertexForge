@@ -2,6 +2,8 @@
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include <algorithm>
 
 namespace services
@@ -107,6 +109,22 @@ namespace services
                     config.transitionZone = cmd.transitionZone;
                     vfxProvider->setLODConfig(config);
                 }
+            });
+
+        dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                auto& disp = ::events::EventDispatcher::instance();
+                ::events::scene::GetRenderSettingsQuery query;
+                auto settings = disp.query(query);
+                const auto& vfxLOD = settings.vfxLOD;
+
+                events::vfxruntime::SetVFXLODConfigCommand cmd;
+                cmd.lod0Distance = vfxLOD.lod0Distance;
+                cmd.lod1Distance = vfxLOD.lod1Distance;
+                cmd.lod2Distance = vfxLOD.lod2Distance;
+                cmd.transitionZone = vfxLOD.transitionZone;
+                disp.execute(cmd);
             });
     }
 

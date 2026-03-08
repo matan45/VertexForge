@@ -44,5 +44,8 @@ namespace core
         [[nodiscard]] bool getRootMotion(services::EntityHandle entity) const override;
 
         [[nodiscard]] BudgetStats getBudgetStats() const override;
+
+        [[nodiscard]] LODConfig getLODConfig() const override;
+        void setLODConfig(const LODConfig& config) override;
     };
 }
