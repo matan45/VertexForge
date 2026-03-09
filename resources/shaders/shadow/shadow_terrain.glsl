@@ -16,6 +16,10 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint shadowLOD;         // Which LOD to use for shadows (0-3)
     float depthBias;
     float slopeBias;
+    float normalBias;       // Normal offset to prevent self-shadowing at coarser LODs
+    float _pad0;
+    float _pad1;
+    float _pad2;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {
@@ -246,6 +250,10 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint shadowLOD;
     float depthBias;
     float slopeBias;
+    float normalBias;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {
@@ -279,6 +287,7 @@ struct TerrainShadowPayload {
 taskPayloadSharedEXT TerrainShadowPayload payload;
 
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
+shared vec3 sharedNormals[MESHLET_MAX_VERTICES];
 
 uvec3 unpackPrimitive(uint packed) {
     return uvec3(
@@ -306,7 +315,7 @@ void main() {
 
     mat4 modelMatrix = tile.modelMatrix;
 
-    // First pass: Load vertex positions into shared memory
+    // First pass: Load vertex positions and normals into shared memory
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -320,18 +329,29 @@ void main() {
                 vertexData[baseIdx + 1],
                 vertexData[baseIdx + 2]
             );
+            vec3 normal = vec3(
+                vertexData[baseIdx + 3],
+                vertexData[baseIdx + 4],
+                vertexData[baseIdx + 5]
+            );
 
             sharedPositions[localVertexIndex] = position;
+            sharedNormals[localVertexIndex] = normal;
         }
     }
 
     barrier();
 
     // Second pass: Transform and output positions (depth-only)
+    // Apply normal offset to push shadow surface behind rendered surface,
+    // preventing self-shadowing when shadow LOD differs from render LOD
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (localVertexIndex < vertexCount) {
-            vec4 worldPos = modelMatrix * vec4(sharedPositions[localVertexIndex], 1.0);
+            vec3 localPos = sharedPositions[localVertexIndex];
+            vec3 localNormal = sharedNormals[localVertexIndex];
+            localPos -= localNormal * pc.normalBias;
+            vec4 worldPos = modelMatrix * vec4(localPos, 1.0);
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = pc.lightViewProjection * worldPos;
         }
     }

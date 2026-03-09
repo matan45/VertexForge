@@ -204,7 +204,6 @@ namespace render::shadow
 
                 if (hasTerrainShadows)
                 {
-                    // Terrain needs higher bias than regular meshes due to large flat surfaces
                     constexpr float terrainBiasScale = 4.0f;
                     terrainShadowPipeline->dispatch(
                         cmd,
@@ -215,7 +214,8 @@ namespace render::shadow
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
                         view->depthBias * terrainBiasScale,
-                        view->slopeBias * terrainBiasScale
+                        view->slopeBias * terrainBiasScale,
+                        0.0f
                     );
                 }
             }
@@ -416,7 +416,8 @@ namespace render::shadow
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
                         view.depthBias,
-                        view.slopeBias
+                        view.slopeBias,
+                        0.0f
                     );
                 }
 

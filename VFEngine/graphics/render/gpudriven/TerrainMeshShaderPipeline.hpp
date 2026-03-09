@@ -31,7 +31,8 @@ namespace render::gpudriven
         float brushWorldRadius;    // 0.0 = inactive
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
-        float _pad1, _pad2, _pad3; // Align mat4 to 16-byte boundary (offset 64)
+        float shadowLOD;           // Shadow LOD level (0-3) for receiver-side bias scaling
+        float _pad2, _pad3;        // Align mat4 to 16-byte boundary (offset 64)
         glm::mat4 viewProjection; // CPU-precomputed view-projection (matches raycast invViewProjection)
     };
 
@@ -109,6 +110,7 @@ namespace render::gpudriven
         float brushFalloff = 0.0f;
         float brushShape = 0.0f;
         float terrainMaxDrawDistSq = 0.0f;
+        uint32_t shadowLOD = 2;
         glm::mat4 viewProjection{1.0f};
 
     public:
@@ -178,6 +180,7 @@ namespace render::gpudriven
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
         void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
+        void setShadowLOD(uint32_t lod) { shadowLOD = lod; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {

@@ -70,7 +70,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -260,7 +261,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -304,7 +306,10 @@ const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
-const float TERRAIN_NORMAL_BIAS_SCALE = 3.0;
+// Scale increases with shadow LOD to compensate for geometry mismatch between shadow and render LODs
+// LOD 0: shadow mesh matches render mesh closely, LOD 1-2: larger mismatch needs more bias
+const float TERRAIN_SHADOW_LOD_BIAS[] = float[](3.0, 8.0, 12.0, 3.0);
+#define TERRAIN_NORMAL_BIAS_SCALE TERRAIN_SHADOW_LOD_BIAS[uint(clamp(pc.shadowLOD, 0.0, 3.0))]
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
