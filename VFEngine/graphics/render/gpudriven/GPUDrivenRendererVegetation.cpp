@@ -380,6 +380,16 @@ namespace render::gpudriven
                     cached.baseVertexOffset = baseVertexOffset;
                     cached.availableLODMask = 0;
 
+                    // Get mesh AABB from merged buffer for ground placement offset
+                    if (mergedBuffer)
+                    {
+                        auto* submeshLoc = mergedBuffer->getSubmeshLocation(meshPath, submesh.name, 0);
+                        if (submeshLoc)
+                        {
+                            cached.meshMinY = submeshLoc->aabbMin.y;
+                        }
+                    }
+
                     for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
                     {
                         const auto& lodAlloc = meshletAlloc->lods[lod];
@@ -796,15 +806,18 @@ namespace render::gpudriven
                     vegetation::TreeInstanceGPU gpu{};
 
                     // Build model matrix from position, rotation, scale
+                    // Offset Y by -meshMinY so the mesh bottom sits on the terrain surface
                     float finalScale = instance.scale;
-                    glm::mat4 model = glm::translate(glm::mat4(1.0f), instance.position);
+                    glm::vec3 placementPos = instance.position;
+                    placementPos.y -= species.meshMinY * finalScale;
+                    glm::mat4 model = glm::translate(glm::mat4(1.0f), placementPos);
                     model = glm::rotate(model, instance.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
                     model = glm::scale(model, glm::vec3(finalScale));
                     gpu.modelMatrix = model;
 
-                    // Bounding sphere centered at instance position, radius based on tree size
+                    // Bounding sphere centered at placement position, radius based on tree size
                     float maxDim = std::max(species.billboardSize.x, species.billboardSize.y) * instance.scale;
-                    gpu.boundingSphere = glm::vec4(instance.position + glm::vec3(0, maxDim * 0.5f, 0), maxDim * 0.5f);
+                    gpu.boundingSphere = glm::vec4(placementPos + glm::vec3(0, maxDim * 0.5f, 0), maxDim * 0.5f);
 
                     gpu.speciesId = speciesIt->first;
 
