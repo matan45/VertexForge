@@ -24,5 +24,6 @@ namespace services
         IVegetationProvider* provider = nullptr;
         IVegetationRenderProvider* renderProvider = nullptr;
         ::events::SubscriptionToken sceneClearedToken;
+        ::events::SubscriptionToken terrainDeletedToken;
     };
 }

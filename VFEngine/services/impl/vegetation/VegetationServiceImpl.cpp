@@ -2,6 +2,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vegetation/VegetationEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 
 namespace services
 {
@@ -14,9 +15,14 @@ namespace services
 
     VegetationServiceImpl::~VegetationServiceImpl()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
         if (sceneClearedToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+            dispatcher.unsubscribe(sceneClearedToken);
+        }
+        if (terrainDeletedToken.isValid())
+        {
+            dispatcher.unsubscribe(terrainDeletedToken);
         }
     }
 
@@ -72,6 +78,16 @@ namespace services
             });
 
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const auto&)
+            {
+                provider->clearAllSpecies();
+                if (renderProvider)
+                {
+                    renderProvider->clearAllSpecies();
+                }
+            });
+
+        terrainDeletedToken = dispatcher.subscribe<events::terrain::TerrainDeletedNotification>(
             [this](const auto&)
             {
                 provider->clearAllSpecies();
