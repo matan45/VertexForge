@@ -308,11 +308,15 @@ namespace render::gpudriven
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
         }
 
-        // Dispatch vegetation tree LOD: upload instances, cull + LOD select
+        // Dispatch vegetation tree LOD: upload instances (only when changed), cull + LOD select
         if (vegetation.treeLODInitialized && vegetation.vegetationRenderingEnabled &&
             vegetation.currentTreeInstanceCount > 0)
         {
-            uploadTreeInstances(cmd);
+            if (vegetation.treeInstancesNeedUpload)
+            {
+                uploadTreeInstances(cmd);
+                vegetation.treeInstancesNeedUpload = false;
+            }
             dispatchVegetationCullLOD(cmd);
         }
 

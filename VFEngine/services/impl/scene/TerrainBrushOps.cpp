@@ -634,20 +634,39 @@ namespace services
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
 
-            if (brushType == vegetation::PlacementBrushType::Spread)
+            if (brushType == vegetation::PlacementBrushType::Place)
+            {
+                vegetation::VegetationPlacementBrushApplicator::PlaceParams params;
+                params.brushPosition = worldPosition;
+                params.tileWorldOrigin = tileOrigin;
+                params.minScale = brushParams.minScale;
+                params.maxScale = brushParams.maxScale;
+                params.randomRotation = brushParams.randomRotation;
+                params.speciesId = brushParams.speciesId;
+                params.tileWorldSize = tile->config.worldTileSize;
+                params.collisionRadius = speciesCollisionRadius;
+                params.heightData = tile->hasHeightData() ? tile->heightData.data() : nullptr;
+                params.heightVertexCount = tile->config.getVertexCount();
+
+                if (vegetation::VegetationPlacementBrushApplicator::place(tile->vegetationPlacement, params))
+                {
+                    tile->vegetationPlacementDirty = true;
+                    tile->vegetationPlacementGPUDirty = true;
+                    anyModified = true;
+                    vegetationPhysics.onTileLoaded(coord.x, coord.z, tile->vegetationPlacement);
+                }
+            }
+            else if (brushType == vegetation::PlacementBrushType::Spread)
             {
                 vegetation::VegetationPlacementBrushApplicator::SpreadParams params;
                 params.brushCenter = brushCenter;
                 params.tileWorldOrigin = tileOrigin;
                 params.brushRadius = brushParams.radius;
                 params.density = brushParams.density;
-                params.opacity = brushParams.opacity;
                 params.minScale = brushParams.minScale;
                 params.maxScale = brushParams.maxScale;
                 params.randomRotation = brushParams.randomRotation;
                 params.speciesId = brushParams.speciesId;
-                params.falloff = brushParams.falloff;
-                params.shape = brushParams.shape;
                 params.tileWorldSize = tile->config.worldTileSize;
                 params.collisionRadius = speciesCollisionRadius;
                 params.heightData = tile->hasHeightData() ? tile->heightData.data() : nullptr;

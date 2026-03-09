@@ -17,8 +17,9 @@ namespace vegetation
 
     enum class PlacementBrushType : uint8_t
     {
-        Spread = 0,
-        Erase = 1
+        Place = 0,
+        Erase = 1,
+        Spread = 2
     };
 
     struct DensityBrushParams

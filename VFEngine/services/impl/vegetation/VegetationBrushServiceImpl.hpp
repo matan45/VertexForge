@@ -11,7 +11,7 @@ namespace services
         vegetation::DensityBrushParams currentDensityParams;
         vegetation::PlacementBrushParams currentPlacementParams;
         vegetation::DensityBrushType currentDensityBrushType = vegetation::DensityBrushType::Paint;
-        vegetation::PlacementBrushType currentPlacementBrushType = vegetation::PlacementBrushType::Spread;
+        vegetation::PlacementBrushType currentPlacementBrushType = vegetation::PlacementBrushType::Place;
         bool vegetationModeActive = false;
         bool placementModeActive = false;
 

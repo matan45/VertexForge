@@ -627,8 +627,8 @@ namespace windows
 
         if (leftDown)
         {
-            // Spread and Erase: continuous while holding
-            bool shouldApply = true;
+            // Place: only on first click. Spread/Erase: continuous while holding.
+            bool shouldApply = (brushType != vegetation::PlacementBrushType::Place) || !placementDragging;
 
             if (shouldApply)
             {

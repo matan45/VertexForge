@@ -11,10 +11,9 @@ namespace windows
     {
     private:
         bool visible = false;
-        int selectedBrushType = 0; // 0=Spread, 1=Erase
+        int selectedBrushType = 0; // 0=Place, 1=Erase, 2=Spread
         float brushRadius = 10.0f;
         float density = 0.5f;
-        float opacity = 1.0f;
         float minScale = 0.8f;
         float maxScale = 1.2f;
         float randomRotation = 1.0f;

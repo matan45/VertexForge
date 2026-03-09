@@ -98,7 +98,7 @@ namespace terrain
 
         vegetation::VegetationPlacementData vegetationPlacement;
         bool vegetationPlacementDirty = false;
-        bool vegetationPlacementGPUDirty = false;
+        mutable bool vegetationPlacementGPUDirty = false;
 
         bool isDirty = true;
         bool isVisible = true;

@@ -727,6 +727,7 @@ namespace render::gpudriven
             if (!vegetation.registeredTileKeys.contains(key))
             {
                 vegetation.registeredTileKeys.insert(key);
+                vegetation.treeInstancesDirty = true;
 
                 if (vegetation.grassStreamManager)
                 {
@@ -736,6 +737,13 @@ namespace render::gpudriven
                 {
                     vegetation.vegetationStreamManager->addTile(cx, cz);
                 }
+            }
+
+            // Check if tile's placement data changed (GPU-side flag, mutable)
+            if (tile->vegetationPlacementGPUDirty)
+            {
+                vegetation.treeInstancesDirty = true;
+                tile->vegetationPlacementGPUDirty = false;
             }
         }
 
@@ -758,6 +766,7 @@ namespace render::gpudriven
                     vegetation.vegetationStreamManager->removeTile(cx, cz);
                 }
 
+                vegetation.treeInstancesDirty = true;
                 it = vegetation.registeredTileKeys.erase(it);
             }
             else
@@ -776,11 +785,11 @@ namespace render::gpudriven
             vegetation.vegetationStreamManager->update(cameraPosition);
         }
 
-        // Build TreeInstanceGPU array from ALL loaded tiles (not just visible ones).
-        // The GPU cull shader handles per-instance frustum culling, so we don't need
-        // tile-level pre-culling here — it would cause vegetation to pop in/out.
-        if (vegetation.treeLODInitialized)
+        // Build TreeInstanceGPU array only when placement data changes.
+        // The GPU cull shader handles per-instance frustum culling.
+        if (vegetation.treeLODInitialized && (vegetation.treeInstancesDirty || vegetation.speciesRenderInfoDirty))
         {
+            vegetation.treeInstancesDirty = false;
             std::vector<vegetation::TreeInstanceGPU> treeInstances;
             treeInstances.reserve(4096);
 
@@ -869,14 +878,12 @@ namespace render::gpudriven
             // Update debug collider data for physics debug rendering
             ::vegetation::VegetationColliderDebugData::instance().set(std::move(colliderDebugEntries));
 
-            // Upload tree instances to staging buffer
+            // Write to staging buffer (will be copied to device in uploadTreeInstances)
             if (vegetation.currentTreeInstanceCount > 0 && vegetation.treeInstanceStagingMapped)
             {
                 vk::DeviceSize dataSize = vegetation.currentTreeInstanceCount * sizeof(vegetation::TreeInstanceGPU);
                 std::memcpy(vegetation.treeInstanceStagingMapped, treeInstances.data(), dataSize);
-
-                // Also upload instance count
-                // (count will be uploaded via fillBuffer in the compute dispatch)
+                vegetation.treeInstancesNeedUpload = true;
             }
 
             // Upload species render info if dirty

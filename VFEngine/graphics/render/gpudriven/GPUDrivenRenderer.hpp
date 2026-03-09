@@ -218,6 +218,8 @@ namespace render::gpudriven
             uint32_t treeInstanceCapacity = 0;
             uint32_t currentTreeInstanceCount = 0;
             bool treeLODInitialized = false;
+            bool treeInstancesDirty = true;  // Rebuild GPU instances when placement data changes
+            bool treeInstancesNeedUpload = true; // Upload staging → device when rebuilt
 
             // Species data cache for billboard rendering of placed vegetation
             struct CachedSpeciesData
