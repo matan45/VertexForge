@@ -622,15 +622,12 @@ namespace windows
             return;
         }
 
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
         auto brushType = dispatcher.query(events::vegetationBrush::GetPlacementBrushTypeQuery{});
 
-        if (leftDown)
+        if (brushType == vegetation::PlacementBrushType::Place)
         {
-            // Place: only on first click. Spread/Erase: continuous while holding.
-            bool shouldApply = (brushType != vegetation::PlacementBrushType::Place) || !placementDragging;
-
-            if (shouldApply)
+            // Place: fire exactly once on mouse click (not hold)
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
                 if (hitResult.hit)
@@ -641,11 +638,18 @@ namespace windows
                     dispatcher.execute(applyCmd);
                 }
             }
-            placementDragging = true;
         }
-        else
+        else if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
-            placementDragging = false;
+            // Spread/Erase: continuous while holding
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::vegetationBrush::ApplyVegetationPlacementBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                dispatcher.execute(applyCmd);
+            }
         }
     }
 }

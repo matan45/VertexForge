@@ -167,6 +167,13 @@ namespace windows
             sendBrushParams();
         }
 
+        ImGui::Separator();
+        if (ImGui::Button("Clear All Placements"))
+        {
+            events::vegetationBrush::ClearAllVegetationPlacementsCommand clearCmd;
+            events::EventDispatcher::instance().execute(clearCmd);
+        }
+
         ImGui::End();
 
         if (!visible)

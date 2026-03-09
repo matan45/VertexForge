@@ -205,6 +205,12 @@ namespace services
             {
                 applyVegetationPlacementBrush(cmd.worldPosition, cmd.deltaTime);
             });
+
+        dispatcher.registerCommandHandler<events::vegetationBrush::ClearAllVegetationPlacementsCommand>(
+            [this](const events::vegetationBrush::ClearAllVegetationPlacementsCommand&)
+            {
+                clearAllVegetationPlacements();
+            });
     }
 
     void TerrainService::registerTerrainDataHandlers(::events::EventDispatcher& dispatcher)

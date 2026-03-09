@@ -166,6 +166,7 @@ namespace services
 
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyVegetationPlacementBrush(const glm::vec3& worldPosition, float deltaTime);
+        void clearAllVegetationPlacements();
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
     };

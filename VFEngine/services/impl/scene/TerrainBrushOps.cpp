@@ -715,4 +715,36 @@ namespace services
         }
     }
 
+    void TerrainService::clearAllVegetationPlacements()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationPlacementTargetEntityQuery{});
+        if (!targetEntity.has_value()) return;
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end()) return;
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+        const auto& allTiles = grid->getAllTiles();
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile) continue;
+            if (tile->vegetationPlacement.isEmpty()) continue;
+
+            tile->vegetationPlacement.clear();
+            tile->vegetationPlacementDirty = true;
+            tile->vegetationPlacementGPUDirty = true;
+        }
+
+        vegetationPhysics.clear();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(*targetEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            registry.get<components::TerrainComponent>(ent).saveDirty = true;
+        }
+    }
+
 }

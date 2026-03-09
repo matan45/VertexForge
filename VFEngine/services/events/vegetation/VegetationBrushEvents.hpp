@@ -71,6 +71,11 @@ namespace events::vegetationBrush
         std::string_view getName() const override { return "SetVegetationPlacementModeActive"; }
     };
 
+    struct ClearAllVegetationPlacementsCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "ClearAllVegetationPlacements"; }
+    };
+
     // ---- Queries ----
 
     struct GetDensityBrushParamsQuery : IQuery<::vegetation::DensityBrushParams>
