@@ -2,7 +2,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
-#include "events/vegetation/VegetationEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
 #include <imgui.h>
@@ -626,33 +625,6 @@ namespace windows
         }
     }
 
-    void RenderConfigWindow::drawVegetationSection()
-    {
-        if (ImGui::CollapsingHeader("Vegetation"))
-        {
-            ImGui::Indent(10.0f);
-
-            auto& dispatcher = events::EventDispatcher::instance();
-
-            bool debugLOD = dispatcher.query(events::vegetation::GetVegetationDebugLODViewQuery{});
-            if (ImGui::Checkbox("LOD Debug View", &debugLOD))
-            {
-                events::vegetation::SetVegetationDebugLODViewCommand cmd;
-                cmd.enabled = debugLOD;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Color vegetation meshes by LOD level:\n"
-                                  "Green = LOD 0 (highest detail)\n"
-                                  "Yellow = LOD 1\n"
-                                  "Red = LOD 2 (lowest detail)");
-            }
-
-            ImGui::Unindent(10.0f);
-        }
-    }
-
     void RenderConfigWindow::drawVFXLODSection()
     {
         if (ImGui::CollapsingHeader("VFX LOD"))
@@ -777,7 +749,6 @@ namespace windows
         {
             drawCullingSection();
             drawTerrainSection();
-            drawVegetationSection();
             drawShadowSection();
             drawVFXLODSection();
             drawAnimationLODSection();

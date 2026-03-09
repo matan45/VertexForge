@@ -21,6 +21,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/vegetation/VegetationEvents.hpp"
 #include "events/navmesh/NavmeshEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -347,6 +348,14 @@ namespace windows
                     events::render::ClearNavmeshDebugMeshCommand clearCmd;
                     dispatcher.execute(clearCmd);
                 }
+            }
+
+            bool vegLODDebug = dispatcher.query(events::vegetation::GetVegetationDebugLODViewQuery{});
+            if (ImGui::MenuItem("Vegetation LOD View", nullptr, vegLODDebug))
+            {
+                events::vegetation::SetVegetationDebugLODViewCommand cmd;
+                cmd.enabled = !vegLODDebug;
+                dispatcher.execute(cmd);
             }
 
             bool cullingVisible = cullingStatsWindow ? cullingStatsWindow->isVisible() : false;

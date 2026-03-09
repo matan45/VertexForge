@@ -334,6 +334,7 @@ namespace render::gpudriven
                     }
 
                     // Upload vertex/index to merged buffer
+                    uint32_t lodVertexOffset = 0;
                     if (mergedBuffer)
                     {
                         gpudriven::LODUploadData uploadData;
@@ -344,23 +345,25 @@ namespace render::gpudriven
                         mergedBuffer->uploadLOD(meshPath, submesh.name, 0, lod, uploadData);
                         mergedBuffer->markLODReady(meshPath, submesh.name, 0, lod);
 
-                        // Get the base vertex offset from the first LOD
+                        // Get the vertex offset for this specific LOD
+                        auto* submeshLoc = mergedBuffer->getSubmeshLocation(meshPath, submesh.name, 0);
+                        if (submeshLoc && submeshLoc->lods[lod].vertexCount > 0)
+                        {
+                            lodVertexOffset = submeshLoc->lods[lod].vertexOffset;
+                        }
+
                         if (lod == 0)
                         {
-                            auto* submeshLoc = mergedBuffer->getSubmeshLocation(meshPath, submesh.name, 0);
-                            if (submeshLoc && submeshLoc->lods[0].vertexCount > 0)
-                            {
-                                baseVertexOffset = submeshLoc->lods[0].vertexOffset;
-                            }
+                            baseVertexOffset = lodVertexOffset;
                         }
                     }
 
-                    // Upload meshlet data for this LOD
+                    // Upload meshlet data for this LOD with its own vertex offset
                     const auto& lodMeshletInfo = meshletData.lodLevels[lod];
                     if (lodMeshletInfo.meshletCount > 0)
                     {
                         meshletBuffer->uploadMeshletData(
-                            meshPath, submesh.name, 0, lod, meshletData, baseVertexOffset);
+                            meshPath, submesh.name, 0, lod, meshletData, lodVertexOffset);
                     }
                 }
 
