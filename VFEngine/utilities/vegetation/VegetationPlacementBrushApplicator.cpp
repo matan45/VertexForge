@@ -1,5 +1,4 @@
 #include "VegetationPlacementBrushApplicator.hpp"
-#include <iostream>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -143,14 +142,6 @@ namespace vegetation
                 placement.addInstance(instance);
                 added = true;
             }
-        }
-
-        if (added)
-        {
-            std::cout << "VegSpread: added instances, total=" << placement.getInstanceCount()
-                << " brush=(" << params.brushCenter.x << "," << params.brushCenter.y << ")"
-                << " radius=" << params.brushRadius << " density=" << params.density
-                << " cellSize=" << cellSize << std::endl;
         }
 
         return added;

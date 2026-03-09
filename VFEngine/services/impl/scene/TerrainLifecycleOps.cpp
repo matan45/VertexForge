@@ -8,10 +8,13 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
 #include "resource/ResourceManager.hpp"
+#include "vegetation/VegetationSerializer.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include <algorithm>
+#include <filesystem>
+#include <format>
 
 namespace services
 {
@@ -329,6 +332,24 @@ namespace services
         return result;
     }
 
+    std::vector<terrain::TerrainTile*> TerrainService::getAllLoadedTiles()
+    {
+        std::vector<terrain::TerrainTile*> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            for (auto* tile : grid->getAllTiles())
+            {
+                if (tile)
+                {
+                    result.push_back(tile);
+                }
+            }
+        }
+
+        return result;
+    }
+
     std::vector<terrain::TerrainTile*> TerrainService::queryVisibleTiles(
         const math::Frustum& frustum,
         const glm::vec3& cameraPosition)
@@ -582,6 +603,39 @@ namespace services
         // Note: saveDirty is intentionally NOT set here. Streamed-in tiles are
         // transient copies loaded from an already-saved file, not user modifications.
 
+        // Restore vegetation data for the streamed-in tile
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(terrainEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                const auto& tc = registry.get<components::TerrainComponent>(ent);
+                if (!tc.savePath.empty())
+                {
+                    namespace fs = std::filesystem;
+                    std::string vegDir = getVegetationDirectory(tc.savePath);
+
+                    std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
+                        vegDir, tileX, tileZ);
+                    if (fs::exists(densityPath))
+                    {
+                        vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensity);
+                        tile->vegetationDensityDirty = true;
+                        tile->vegetationDensityGPUDirty = true;
+                    }
+
+                    std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
+                        vegDir, tileX, tileZ);
+                    if (fs::exists(placementPath))
+                    {
+                        vegetation::VegetationSerializer::loadPlacementData(placementPath, tile->vegetationPlacement);
+                        tile->vegetationPlacementDirty = true;
+                        tile->vegetationPlacementGPUDirty = true;
+                    }
+                }
+            }
+        }
+
         createTileEntity(terrainEntity, tile, tileX, tileZ);
 
         // Queue physics body creation for after height data is loaded
@@ -700,5 +754,40 @@ namespace services
             comp.gridMaxZ = maxZ;
             comp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
         }
+    }
+
+    void TerrainService::loadAllTiles(EntityHandle terrainEntity)
+    {
+        if (!terrainEntity.isValid())
+            return;
+
+        auto cacheIt = fileCaches.find(terrainEntity.id);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+            return;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        auto& grid = *gridIt->second;
+        auto& fileCache = *cacheIt->second;
+
+        // Disable streaming so tiles won't be unloaded again
+        auto streamerIt = worldStreamers.find(terrainEntity.id);
+        if (streamerIt != worldStreamers.end() && streamerIt->second)
+        {
+            streamerIt->second->setEnabled(false);
+        }
+
+        // Stream in all saved tiles that aren't already loaded
+        fileCache.forEachSavedCoord([&](const terrain::TileCoord& coord)
+        {
+            if (!grid.hasTile(coord))
+            {
+                streamInTile(terrainEntity, coord.x, coord.z);
+            }
+        });
+
+        commitStreamingChanges(terrainEntity);
     }
 }

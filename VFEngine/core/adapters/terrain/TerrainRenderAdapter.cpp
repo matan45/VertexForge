@@ -76,6 +76,16 @@ namespace core
         return terrainService->queryVisibleTiles(frustum, cameraPosition);
     }
 
+    std::vector<terrain::TerrainTile*> TerrainRenderAdapter::getAllLoadedTiles()
+    {
+        if (!terrainService)
+        {
+            return {};
+        }
+
+        return terrainService->getAllLoadedTiles();
+    }
+
     bool TerrainRenderAdapter::hasActiveTerrain() const
     {
         return terrainService && terrainService->hasActiveTerrain();

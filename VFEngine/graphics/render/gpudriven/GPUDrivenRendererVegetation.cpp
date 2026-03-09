@@ -25,7 +25,6 @@
 #include "material/MaterialInstanceTypes.hpp"
 #include "BindlessTextureManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
-#include <iostream>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -772,17 +771,20 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                                       const std::vector<terrain::TerrainTile*>& allLoadedTiles,
                                                        const glm::vec3& cameraPosition)
     {
         if (!initialized || !vegetation.grassInitialized) return;
 
-        // Cache visible tiles for grass compute dispatch later in the frame
-        vegetation.cachedVisibleTiles.assign(visibleTiles.begin(), visibleTiles.end());
+        // Cache ALL loaded tiles for grass compute dispatch later in the frame
+        // Using allLoadedTiles instead of visibleTiles prevents grass from disappearing
+        // when tiles leave the camera frustum or stream out and back in
+        vegetation.cachedVisibleTiles.assign(allLoadedTiles.begin(), allLoadedTiles.end());
 
         // Sync tile size from actual terrain config (may differ from default 32)
-        if (!visibleTiles.empty() && visibleTiles[0])
+        if (!allLoadedTiles.empty() && allLoadedTiles[0])
         {
-            float actualTileSize = visibleTiles[0]->config.worldTileSize;
+            float actualTileSize = allLoadedTiles[0]->config.worldTileSize;
             if (vegetation.grassStreamManager)
             {
                 auto cfg = vegetation.grassStreamManager->getConfig();
@@ -797,21 +799,18 @@ namespace render::gpudriven
             }
         }
 
-        // Sync vegetation tiles with visible terrain tiles.
-        // Auto-register tiles that appear and auto-remove tiles that disappear.
-        std::unordered_set<uint64_t> currentlyVisible;
+        // Sync vegetation tiles with all loaded terrain tiles.
+        // Auto-register tiles that appear and auto-remove tiles that stream out.
+        std::unordered_set<uint64_t> currentlyLoaded;
 
-        for (const auto* tile : visibleTiles)
+        for (const auto* tile : allLoadedTiles)
         {
             if (!tile) continue;
 
             int32_t cx = tile->coord.x;
             int32_t cz = tile->coord.z;
             uint64_t key = makeTileKey(cx, cz);
-            currentlyVisible.insert(key);
-
-            // Store tile pointer for tree instance building (uses all loaded tiles)
-            vegetation.loadedTiles[key] = const_cast<terrain::TerrainTile*>(tile);
+            currentlyLoaded.insert(key);
 
             // Register new tiles with stream managers
             if (!vegetation.registeredTileKeys.contains(key))
@@ -829,11 +828,11 @@ namespace render::gpudriven
             }
         }
 
-        // Remove tiles that are no longer visible
+        // Remove tiles that are no longer loaded (streamed out)
         auto it = vegetation.registeredTileKeys.begin();
         while (it != vegetation.registeredTileKeys.end())
         {
-            if (!currentlyVisible.contains(*it))
+            if (!currentlyLoaded.contains(*it))
             {
                 uint64_t key = *it;
                 int32_t cx = static_cast<int32_t>(key >> 32);
@@ -848,9 +847,6 @@ namespace render::gpudriven
                     vegetation.vegetationStreamManager->removeTile(cx, cz);
                 }
 
-                // Note: do NOT erase from loadedTiles here — tree instances need
-                // all tiles regardless of frustum visibility. The GPU cull shader
-                // handles per-instance frustum culling.
                 it = vegetation.registeredTileKeys.erase(it);
             }
             else
@@ -880,7 +876,7 @@ namespace render::gpudriven
             uint32_t totalPlacementInstances = 0;
             uint32_t speciesMissCount = 0;
 
-            for (const auto& [tileKey, tile] : vegetation.loadedTiles)
+            for (const auto* tile : allLoadedTiles)
             {
                 if (!tile) continue;
                 if (tile->vegetationPlacement.getInstanceCount() == 0) continue;
@@ -944,20 +940,6 @@ namespace render::gpudriven
             }
 
             vegetation.currentTreeInstanceCount = static_cast<uint32_t>(treeInstances.size());
-
-            // Debug: log tree instance count changes
-            static uint32_t lastLoggedCount = 0;
-            static uint32_t lastLoggedTiles = 0;
-            uint32_t loadedTileCount = static_cast<uint32_t>(vegetation.loadedTiles.size());
-            if (vegetation.currentTreeInstanceCount != lastLoggedCount || loadedTileCount != lastLoggedTiles)
-            {
-                std::cout << "VegGPU: rebuild treeInstances=" << vegetation.currentTreeInstanceCount
-                    << " from " << loadedTileCount << " loaded tiles"
-                    << " (placement=" << totalPlacementInstances
-                    << " speciesMiss=" << speciesMissCount << ")" << std::endl;
-                lastLoggedCount = vegetation.currentTreeInstanceCount;
-                lastLoggedTiles = loadedTileCount;
-            }
 
             // Upload tree instances to staging buffer
             if (vegetation.currentTreeInstanceCount > 0 && vegetation.treeInstanceStagingMapped)

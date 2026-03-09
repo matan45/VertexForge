@@ -196,9 +196,6 @@ namespace render::gpudriven
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
 
-            // All loaded tile pointers for tree instance building (not frustum-filtered)
-            std::unordered_map<uint64_t, terrain::TerrainTile*> loadedTiles;
-
             // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
 
@@ -607,6 +604,7 @@ namespace render::gpudriven
                              uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
         void updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                       const std::vector<terrain::TerrainTile*>& allLoadedTiles,
                                        const glm::vec3& cameraPosition);
         void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }

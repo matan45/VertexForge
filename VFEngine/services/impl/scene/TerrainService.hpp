@@ -76,6 +76,8 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<terrain::TerrainTile*> getAllLoadedTiles();
+
         std::vector<terrain::TerrainTile*> queryVisibleTiles(
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
@@ -112,6 +114,7 @@ namespace services
         bool streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         void commitStreamingChanges(EntityHandle terrainEntity);
+        void loadAllTiles(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
