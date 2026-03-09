@@ -316,8 +316,7 @@ namespace render::shadow
 
         cmd.setDepthBias(depthBias, 0.0f, slopeBias);
 
-        // One workgroup per 32 instances (task shader local_size_x = 32)
-        uint32_t workgroupCount = (instanceCount + 31) / 32;
-        cmd.drawMeshTasksEXT(workgroupCount, 1, 1);
+        // One workgroup per instance (task shader local_size_x = 1)
+        cmd.drawMeshTasksEXT(instanceCount, 1, 1);
     }
 }
