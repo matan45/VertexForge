@@ -525,8 +525,6 @@ namespace services
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
 
-        // Remove vegetation colliders
-        vegetationPhysics.onTileUnloaded(tileX, tileZ);
 
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
@@ -627,25 +625,11 @@ namespace services
                         tile->vegetationDensityGPUDirty = true;
                     }
 
-                    std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
-                        vegDir, tileX, tileZ);
-                    if (fs::exists(placementPath))
-                    {
-                        vegetation::VegetationSerializer::loadPlacementData(placementPath, tile->vegetationPlacement);
-                        tile->vegetationPlacementDirty = true;
-                        tile->vegetationPlacementGPUDirty = true;
-                    }
                 }
             }
         }
 
         createTileEntity(terrainEntity, tile, tileX, tileZ);
-
-        // Create vegetation physics colliders
-        if (tile->hasVegetationPlacement())
-        {
-            vegetationPhysics.onTileLoaded(tileX, tileZ, tile->vegetationPlacement);
-        }
 
         // Queue physics body creation for after height data is loaded
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -696,8 +680,6 @@ namespace services
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
 
-        // Remove vegetation colliders
-        vegetationPhysics.onTileUnloaded(tileX, tileZ);
 
         // Remove from pending queue if it was waiting for height data
         pendingPhysicsTiles.erase(

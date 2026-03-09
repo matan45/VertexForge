@@ -437,15 +437,14 @@ namespace render::shadow
 
     void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd,
                                          const ShadowPassParams& params,
-                                         const TerrainShadowPassParams* terrainParams,
-                                         const VegetationShadowPassParams* vegetationParams)
+                                         const TerrainShadowPassParams* terrainParams)
     {
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, terrainParams, vegetationParams,
+        passRecorder->recordShadowPass(cmd, params, terrainParams,
             atlasManager.get(), resourcePool.get(),
-            shadowPassPipeline.get(), terrainShadowPipeline.get(), vegetationShadowPipeline.get(),
+            shadowPassPipeline.get(), terrainShadowPipeline.get(),
             directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
     }
 

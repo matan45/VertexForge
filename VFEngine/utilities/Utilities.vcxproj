@@ -203,14 +203,9 @@
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vegetation\GrassConfig.hpp" />
-    <ClInclude Include="vegetation\VegetationColliderDebug.hpp" />
     <ClInclude Include="vegetation\VegetationDensityBrushApplicator.hpp" />
     <ClInclude Include="vegetation\VegetationDensityMap.hpp" />
-    <ClInclude Include="vegetation\VegetationPlacementBrushApplicator.hpp" />
-    <ClInclude Include="vegetation\VegetationPlacementData.hpp" />
     <ClInclude Include="vegetation\VegetationSerializer.hpp" />
-    <ClInclude Include="vegetation\VegetationSpecies.hpp" />
-    <ClInclude Include="vegetation\VegetationSpeciesRegistry.hpp" />
     <ClInclude Include="vegetation\VegetationTypes.hpp" />
     <ClInclude Include="vegetation\WindConfig.hpp" />
     <ClInclude Include="vfx\VFXAsset.hpp" />
@@ -295,7 +290,6 @@
     <ClCompile Include="serialization\SceneSerializeSocket.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
-    <ClCompile Include="serialization\SceneSerializeVegetation.cpp" />
     <ClCompile Include="serialization\SceneSerializeWater.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />
     <ClCompile Include="terrain\BrushSampler.cpp" />
@@ -320,10 +314,7 @@
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vegetation\VegetationDensityBrushApplicator.cpp" />
     <ClCompile Include="vegetation\VegetationDensityMap.cpp" />
-    <ClCompile Include="vegetation\VegetationPlacementBrushApplicator.cpp" />
-    <ClCompile Include="vegetation\VegetationPlacementData.cpp" />
     <ClCompile Include="vegetation\VegetationSerializer.cpp" />
-    <ClCompile Include="vegetation\VegetationSpeciesRegistry.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />
     <ClCompile Include="vfx\VFXCurveTypes.cpp" />
     <ClCompile Include="vfx\VFXEventTypes.cpp" />

@@ -10,8 +10,6 @@ namespace services
 
         if (vegetationModeToken.isValid())
             dispatcher.unsubscribe(vegetationModeToken);
-        if (placementModeToken.isValid())
-            dispatcher.unsubscribe(placementModeToken);
     }
 
     void VegetationBrushServiceImpl::registerEventHandlers()
@@ -25,25 +23,11 @@ namespace services
                 setDensityParams(cmd.params);
             });
 
-        // Placement brush param commands
-        dispatcher.registerCommandHandler<events::vegetationBrush::SetPlacementBrushParamsCommand>(
-            [this](const events::vegetationBrush::SetPlacementBrushParamsCommand& cmd)
-            {
-                setPlacementParams(cmd.params);
-            });
-
         // Density brush type command
         dispatcher.registerCommandHandler<events::vegetationBrush::SetDensityBrushTypeCommand>(
             [this](const events::vegetationBrush::SetDensityBrushTypeCommand& cmd)
             {
                 setDensityBrushType(cmd.type);
-            });
-
-        // Placement brush type command
-        dispatcher.registerCommandHandler<events::vegetationBrush::SetPlacementBrushTypeCommand>(
-            [this](const events::vegetationBrush::SetPlacementBrushTypeCommand& cmd)
-            {
-                setPlacementBrushType(cmd.type);
             });
 
         // Apply brush commands are handled by TerrainService (which has grid access)
@@ -55,22 +39,10 @@ namespace services
                 return getDensityParams();
             });
 
-        dispatcher.registerQueryHandler<events::vegetationBrush::GetPlacementBrushParamsQuery>(
-            [this](const events::vegetationBrush::GetPlacementBrushParamsQuery&)
-            {
-                return getPlacementParams();
-            });
-
         dispatcher.registerQueryHandler<events::vegetationBrush::GetDensityBrushTypeQuery>(
             [this](const events::vegetationBrush::GetDensityBrushTypeQuery&)
             {
                 return getDensityBrushType();
-            });
-
-        dispatcher.registerQueryHandler<events::vegetationBrush::GetPlacementBrushTypeQuery>(
-            [this](const events::vegetationBrush::GetPlacementBrushTypeQuery&)
-            {
-                return getPlacementBrushType();
             });
 
         // Subscribe to vegetation brush mode changes
@@ -78,12 +50,6 @@ namespace services
             [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
             {
                 vegetationModeActive = n.isActive;
-            });
-
-        placementModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
-            [this](const events::vegetationBrush::VegetationPlacementModeChangedNotification& n)
-            {
-                placementModeActive = n.isActive;
             });
     }
 
@@ -99,18 +65,6 @@ namespace services
         publishDensityParamsChanged();
     }
 
-    void VegetationBrushServiceImpl::setPlacementParams(const vegetation::PlacementBrushParams& params)
-    {
-        if (!placementModeActive)
-        {
-            return;
-        }
-
-        currentPlacementParams = params;
-        currentPlacementParams.validate();
-        publishPlacementParamsChanged();
-    }
-
     void VegetationBrushServiceImpl::setDensityBrushType(vegetation::DensityBrushType type)
     {
         if (!vegetationModeActive)
@@ -122,35 +76,14 @@ namespace services
         publishDensityTypeChanged();
     }
 
-    void VegetationBrushServiceImpl::setPlacementBrushType(vegetation::PlacementBrushType type)
-    {
-        if (!placementModeActive)
-        {
-            return;
-        }
-
-        currentPlacementBrushType = type;
-        publishPlacementTypeChanged();
-    }
-
     vegetation::DensityBrushParams VegetationBrushServiceImpl::getDensityParams() const
     {
         return currentDensityParams;
     }
 
-    vegetation::PlacementBrushParams VegetationBrushServiceImpl::getPlacementParams() const
-    {
-        return currentPlacementParams;
-    }
-
     vegetation::DensityBrushType VegetationBrushServiceImpl::getDensityBrushType() const
     {
         return currentDensityBrushType;
-    }
-
-    vegetation::PlacementBrushType VegetationBrushServiceImpl::getPlacementBrushType() const
-    {
-        return currentPlacementBrushType;
     }
 
     void VegetationBrushServiceImpl::publishDensityParamsChanged()
@@ -160,24 +93,10 @@ namespace services
         events::EventDispatcher::instance().publish(notification);
     }
 
-    void VegetationBrushServiceImpl::publishPlacementParamsChanged()
-    {
-        events::vegetationBrush::PlacementBrushParamsChangedNotification notification;
-        notification.params = currentPlacementParams;
-        events::EventDispatcher::instance().publish(notification);
-    }
-
     void VegetationBrushServiceImpl::publishDensityTypeChanged()
     {
         events::vegetationBrush::DensityBrushTypeChangedNotification notification;
         notification.type = currentDensityBrushType;
-        events::EventDispatcher::instance().publish(notification);
-    }
-
-    void VegetationBrushServiceImpl::publishPlacementTypeChanged()
-    {
-        events::vegetationBrush::PlacementBrushTypeChangedNotification notification;
-        notification.type = currentPlacementBrushType;
         events::EventDispatcher::instance().publish(notification);
     }
 }

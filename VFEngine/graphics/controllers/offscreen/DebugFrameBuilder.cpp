@@ -15,7 +15,6 @@
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "vegetation/VegetationColliderDebug.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
@@ -227,39 +226,6 @@ namespace controllers::offscreen
         }
     }
 
-    void DebugFrameBuilder::collectVegetationColliders(
-        std::vector<render::mesh::PhysicsColliderRenderData>& drawList,
-        const glm::vec3& cameraPosition)
-    {
-        auto entries = vegetation::VegetationColliderDebugData::instance().get();
-        if (entries.empty()) return;
-
-        for (const auto& entry : entries)
-        {
-            // Only show colliders for instances within render distance (matches GPU cull shader)
-            float dist = glm::distance(entry.position, cameraPosition);
-            if (dist > entry.maxRenderDistance) continue;
-
-            render::mesh::PhysicsColliderRenderData renderData;
-
-            // Build world matrix: translate to position + half height offset, then rotate
-            float halfHeight = entry.height * 0.5f;
-            glm::vec3 capsuleCenter = entry.position + glm::vec3(0.0f, halfHeight, 0.0f);
-
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), capsuleCenter);
-            model = glm::rotate(model, entry.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-
-            renderData.worldMatrix = model;
-            renderData.shape = types::ColliderShape::Capsule;
-            renderData.radius = entry.radius;
-            renderData.height = entry.height;
-            renderData.bodyType = 0; // Static
-            renderData.isTrigger = false;
-
-            drawList.push_back(renderData);
-        }
-    }
-
     void DebugFrameBuilder::preparePhysicsColliders(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
@@ -270,19 +236,9 @@ namespace controllers::offscreen
             return;
         }
 
-        // Extract camera world position from view matrix for distance culling
-        glm::vec3 cameraPos(0.0f);
-        if (ctx.cameraController)
-        {
-            glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
-            cameraPos = glm::vec3(invView[3]);
-        }
-
         std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
         collectStandardColliders(colliderDrawList);
         collectTerrainColliders(colliderDrawList);
-        collectVegetationColliders(colliderDrawList, cameraPos);
-
         if (!colliderDrawList.empty())
         {
             if (!renderHandler->isMeshPipelineInitialized())

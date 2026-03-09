@@ -27,9 +27,7 @@ namespace services
     class ILightBakeProvider;
     class IRenderHookProvider;
     class IDebugDrawProvider;
-    class IVegetationProvider;
     class IGrassRenderProvider;
-    class IVegetationRenderProvider;
     class IBillboardRenderProvider;
     class ILightStreamingProvider;
     class IGIProvider;
@@ -79,9 +77,7 @@ namespace core
 
     namespace adapters
     {
-        class VegetationAdapter;
         class GrassRenderAdapter;
-        class VegetationRenderAdapter;
         class BillboardRenderAdapter;
         class LightStreamingAdapter;
         class GIAdapter;
@@ -116,9 +112,7 @@ namespace core
         std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
-        std::unique_ptr<adapters::VegetationAdapter> vegetationAdapter;
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
-        std::unique_ptr<adapters::VegetationRenderAdapter> vegetationRenderAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
@@ -185,11 +179,7 @@ namespace core
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();
 
-        services::IVegetationProvider* getVegetationProvider();
-
         services::IGrassRenderProvider* getGrassRenderProvider();
-
-        services::IVegetationRenderProvider* getVegetationRenderProvider();
 
         services::IBillboardRenderProvider* getBillboardRenderProvider();
 

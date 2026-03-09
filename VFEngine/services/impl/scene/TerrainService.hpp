@@ -7,7 +7,6 @@
 #include "math/Frustum.hpp"
 #include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
-#include "../vegetation/VegetationPhysicsIntegration.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
@@ -49,7 +48,6 @@ namespace services
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
-        VegetationPhysicsIntegration vegetationPhysics;
         std::atomic<bool> saveInProgress{false};
 
         bool distanceCullingEnabled_ = false;
@@ -98,9 +96,7 @@ namespace services
         void setPhysicsProvider(IPhysicsProvider* provider)
         {
             physicsProvider = provider;
-            vegetationPhysics.setPhysicsProvider(provider);
         }
-        void setVegetationProvider(IVegetationProvider* provider) { vegetationPhysics.setVegetationProvider(provider); }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
         void removeTerrainCollider(EntityHandle terrainEntity);
@@ -165,8 +161,6 @@ namespace services
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
-        void applyVegetationPlacementBrush(const glm::vec3& worldPosition, float deltaTime);
-        void clearAllVegetationPlacements();
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
     };

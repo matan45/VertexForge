@@ -194,34 +194,6 @@ namespace render::shadow
 
     }
 
-    void ShadowSystem::initVegetationShadowPass(vk::DescriptorSetLayout meshletDataLayout,
-                                                   vk::DescriptorSetLayout vertexDataLayout)
-    {
-        if (!initialized || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
-        {
-            return;
-        }
-
-        if (vegetationShadowPipeline)
-        {
-            return;
-        }
-
-        vegetationShadowPipeline = std::make_unique<VegetationShadowPipeline>(device);
-        vegetationShadowPipeline->init(meshletDataLayout, vertexDataLayout,
-                                        shadowPassPipeline->getRenderPass());
-    }
-
-    void ShadowSystem::updateVegetationShadowDescriptors(vk::Buffer treeInstanceBuffer,
-                                                          vk::Buffer instanceCountBuffer,
-                                                          vk::Buffer speciesRenderInfoBuffer)
-    {
-        if (vegetationShadowPipeline && vegetationShadowPipeline->isInitialized())
-        {
-            vegetationShadowPipeline->updateInstanceDescriptors(treeInstanceBuffer, instanceCountBuffer, speciesRenderInfoBuffer);
-        }
-    }
-
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
         if (lightShadowData.contains(entityId))

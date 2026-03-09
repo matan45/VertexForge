@@ -232,8 +232,6 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        vegetationPhysics.clear();
-
         for (auto& [id, _] : terrainGrids)
         {
             if (physicsProvider)

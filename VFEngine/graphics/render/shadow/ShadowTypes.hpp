@@ -273,11 +273,4 @@ namespace render::shadow
         uint32_t shadowLOD = 2;  // Default to LOD 2 (coarse) for shadows
     };
 
-    struct VegetationShadowPassParams
-    {
-        vk::DescriptorSet meshletDescSet;   // Shared meshlet buffer
-        vk::DescriptorSet vertexDescSet;    // Shared vertex buffer
-        uint32_t instanceCount = 0;
-        uint32_t shadowLOD = 1;  // Default to LOD 1 for vegetation shadows
-    };
 }

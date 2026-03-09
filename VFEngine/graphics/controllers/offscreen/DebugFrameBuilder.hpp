@@ -34,8 +34,6 @@ namespace controllers::offscreen
         void collectSpotLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
         void collectStandardColliders(std::vector<render::mesh::PhysicsColliderRenderData>& drawList);
         void collectTerrainColliders(std::vector<render::mesh::PhysicsColliderRenderData>& drawList);
-        void collectVegetationColliders(std::vector<render::mesh::PhysicsColliderRenderData>& drawList,
-                                        const glm::vec3& cameraPosition);
         void collectUIRectOutlines(std::vector<render::mesh::UICanvasOutlineRenderData>& drawList);
         void collectLightClusterHighlights(const FrameContext& ctx,
                                            render::mesh::ClusterDebugRenderData& debugData);

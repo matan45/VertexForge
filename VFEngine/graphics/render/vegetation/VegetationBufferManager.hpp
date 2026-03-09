@@ -35,8 +35,6 @@ namespace render::vegetation
         VegetationTileKey key;
         uint32_t grassInstanceOffset = 0;
         uint32_t grassInstanceCount = 0;
-        uint32_t treeInstanceOffset = 0;
-        uint32_t treeInstanceCount = 0;
         bool isUploaded = false;
     };
 
@@ -50,10 +48,6 @@ namespace render::vegetation
         VegetationTileAllocation allocateGrassInstances(const VegetationTileKey& key, uint32_t count);
         void freeGrassInstances(const VegetationTileKey& key);
 
-        // Tree instance management
-        VegetationTileAllocation allocateTreeInstances(const VegetationTileKey& key, uint32_t count);
-        void freeTreeInstances(const VegetationTileKey& key);
-
         // Free all allocations for a tile
         void freeTile(const VegetationTileKey& key);
 
@@ -66,16 +60,13 @@ namespace render::vegetation
 
         // Statistics
         [[nodiscard]] uint32_t getTotalGrassInstances() const { return totalGrassInstances; }
-        [[nodiscard]] uint32_t getTotalTreeInstances() const { return totalTreeInstances; }
         [[nodiscard]] size_t getActiveTileCount() const { return tileAllocations.size(); }
 
     private:
         std::unordered_map<VegetationTileKey, VegetationTileAllocation, VegetationTileKeyHash> tileAllocations;
 
         uint32_t nextGrassOffset = 0;
-        uint32_t nextTreeOffset = 0;
         uint32_t totalGrassInstances = 0;
-        uint32_t totalTreeInstances = 0;
 
         core::Device* devicePtr = nullptr;
     };

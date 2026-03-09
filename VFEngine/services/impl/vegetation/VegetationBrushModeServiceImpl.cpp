@@ -38,10 +38,6 @@ namespace services
         {
             dispatcher.unsubscribe(holeModeToken);
         }
-        if (vegPlacementModeToken.isValid())
-        {
-            dispatcher.unsubscribe(vegPlacementModeToken);
-        }
     }
 
     void VegetationBrushModeServiceImpl::registerEventHandlers()
@@ -133,15 +129,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when vegetation placement mode activates
-        vegPlacementModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
-            [this](const events::vegetationBrush::VegetationPlacementModeChangedNotification& n)
-            {
-                if (n.isActive && vegetationBrushActive)
-                {
-                    deactivate();
-                }
-            });
     }
 
     bool VegetationBrushModeServiceImpl::activate()
@@ -176,15 +163,6 @@ namespace services
         if (holeActive)
         {
             events::hole::SetHoleModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-
-        // Deactivate vegetation placement mode if active
-        bool vegPlacementActive = dispatcher.query(events::vegetationBrush::IsVegetationPlacementModeActiveQuery{});
-        if (vegPlacementActive)
-        {
-            events::vegetationBrush::SetVegetationPlacementModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }

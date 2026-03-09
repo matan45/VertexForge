@@ -73,7 +73,6 @@ namespace windows
             updatePaintCursorUV(vp, vs);
             updateHoleCursorUV(vp, vs);
             updateVegetationCursorUV(vp, vs);
-            updateVegetationPlacementCursorUV(vp, vs);
 
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
@@ -97,7 +96,6 @@ namespace windows
             handlePaintBrush();
             handleHoleBrush();
             handleVegetationBrush();
-            handleVegetationPlacementBrush();
         }
         ImGui::End();
     }
@@ -582,74 +580,4 @@ namespace windows
         }
     }
 
-    void ViewPort::updateVegetationPlacementCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        bool placementActive = dispatcher.query(events::vegetationBrush::IsVegetationPlacementModeActiveQuery{});
-
-        if (!placementActive || !ImGui::IsWindowHovered())
-        {
-            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            if (!sculptActive && !paintActive && !holeActive && !vegActive)
-            {
-                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            }
-            return;
-        }
-
-        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
-        ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
-        events::terrainRaycast::SetCursorPositionCommand cmd;
-        cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
-    }
-
-    void ViewPort::handleVegetationPlacementBrush()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        bool placementActive = dispatcher.query(events::vegetationBrush::IsVegetationPlacementModeActiveQuery{});
-
-        if (!placementActive || !ImGui::IsWindowHovered())
-        {
-            placementDragging = false;
-            return;
-        }
-
-        auto brushType = dispatcher.query(events::vegetationBrush::GetPlacementBrushTypeQuery{});
-
-        if (brushType == vegetation::PlacementBrushType::Place)
-        {
-            // Place: fire exactly once on mouse click (not hold)
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-            {
-                auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-                if (hitResult.hit)
-                {
-                    events::vegetationBrush::ApplyVegetationPlacementBrushCommand applyCmd;
-                    applyCmd.worldPosition = hitResult.position;
-                    applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                    dispatcher.execute(applyCmd);
-                }
-            }
-        }
-        else if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
-        {
-            // Spread/Erase: continuous while holding
-            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
-                events::vegetationBrush::ApplyVegetationPlacementBrushCommand applyCmd;
-                applyCmd.worldPosition = hitResult.position;
-                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                dispatcher.execute(applyCmd);
-            }
-        }
-    }
 }

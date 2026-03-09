@@ -7,18 +7,14 @@ namespace render::vegetation
         devicePtr = &device;
         tileAllocations.clear();
         nextGrassOffset = 0;
-        nextTreeOffset = 0;
         totalGrassInstances = 0;
-        totalTreeInstances = 0;
     }
 
     void VegetationBufferManager::cleanup()
     {
         tileAllocations.clear();
         nextGrassOffset = 0;
-        nextTreeOffset = 0;
         totalGrassInstances = 0;
-        totalTreeInstances = 0;
         devicePtr = nullptr;
     }
 
@@ -48,44 +44,8 @@ namespace render::vegetation
         it->second.grassInstanceCount = 0;
         it->second.isUploaded = false;
 
-        // Remove tile entry if both grass and tree allocations are empty
-        if (it->second.treeInstanceCount == 0)
-        {
-            tileAllocations.erase(it);
-        }
-    }
-
-    VegetationTileAllocation VegetationBufferManager::allocateTreeInstances(
-        const VegetationTileKey& key, uint32_t count)
-    {
-        auto& alloc = tileAllocations[key];
-        alloc.key = key;
-        alloc.treeInstanceOffset = nextTreeOffset;
-        alloc.treeInstanceCount = count;
-        alloc.isUploaded = false;
-
-        nextTreeOffset += count;
-        totalTreeInstances += count;
-
-        return alloc;
-    }
-
-    void VegetationBufferManager::freeTreeInstances(const VegetationTileKey& key)
-    {
-        auto it = tileAllocations.find(key);
-        if (it == tileAllocations.end())
-            return;
-
-        totalTreeInstances -= it->second.treeInstanceCount;
-        it->second.treeInstanceOffset = 0;
-        it->second.treeInstanceCount = 0;
-        it->second.isUploaded = false;
-
-        // Remove tile entry if both grass and tree allocations are empty
-        if (it->second.grassInstanceCount == 0)
-        {
-            tileAllocations.erase(it);
-        }
+        // Remove tile entry if grass allocation is empty
+        tileAllocations.erase(it);
     }
 
     void VegetationBufferManager::freeTile(const VegetationTileKey& key)
@@ -95,7 +55,6 @@ namespace render::vegetation
             return;
 
         totalGrassInstances -= it->second.grassInstanceCount;
-        totalTreeInstances -= it->second.treeInstanceCount;
         tileAllocations.erase(it);
     }
 
@@ -124,8 +83,6 @@ namespace render::vegetation
             gpuData.tileCoord = glm::ivec2(key.coordX, key.coordZ);
             gpuData.grassInstanceOffset = alloc.grassInstanceOffset;
             gpuData.grassInstanceCount = alloc.grassInstanceCount;
-            gpuData.treeInstanceOffset = alloc.treeInstanceOffset;
-            gpuData.treeInstanceCount = alloc.treeInstanceCount;
             // boundingSphere, aabbMin, aabbMax left at zero - will be populated
             // when actual geometry data is available during upload
             result.push_back(gpuData);

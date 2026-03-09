@@ -164,20 +164,7 @@ namespace render::gpudriven
             }
         }
 
-        shadow::VegetationShadowPassParams vegetationShadowParams{};
-        shadow::VegetationShadowPassParams* vegetationShadowParamsPtr = nullptr;
-
-        if (vegetation.treeLODInitialized && vegetation.vegetationRenderingEnabled &&
-            vegetation.currentTreeInstanceCount > 0 && meshShaderPipeline)
-        {
-            vegetationShadowParams.meshletDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
-            vegetationShadowParams.vertexDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
-            vegetationShadowParams.instanceCount = vegetation.currentTreeInstanceCount;
-            vegetationShadowParams.shadowLOD = 1;  // Use LOD 1 for shadow rendering
-            vegetationShadowParamsPtr = &vegetationShadowParams;
-        }
-
-        shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr, vegetationShadowParamsPtr);
+        shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr);
     }
 
     void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd)
@@ -306,18 +293,6 @@ namespace render::gpudriven
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
         {
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
-        }
-
-        // Dispatch vegetation tree LOD: upload instances (only when changed), cull + LOD select
-        if (vegetation.treeLODInitialized && vegetation.vegetationRenderingEnabled &&
-            vegetation.currentTreeInstanceCount > 0)
-        {
-            if (vegetation.treeInstancesNeedUpload)
-            {
-                uploadTreeInstances(cmd);
-                vegetation.treeInstancesNeedUpload = false;
-            }
-            dispatchVegetationCullLOD(cmd);
         }
 
         // Volumetric fog runs AFTER shadow passes so that:

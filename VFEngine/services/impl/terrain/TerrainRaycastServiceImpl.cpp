@@ -60,16 +60,6 @@ namespace services
         {
             dispatcher.unsubscribe(vegBrushParamsToken);
         }
-
-        if (vegPlacementModeToken.isValid())
-        {
-            dispatcher.unsubscribe(vegPlacementModeToken);
-        }
-
-        if (vegPlacementParamsToken.isValid())
-        {
-            dispatcher.unsubscribe(vegPlacementParamsToken);
-        }
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()
@@ -79,7 +69,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !vegBrushModeActive && !vegPlacementModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !vegBrushModeActive) || !provider)
                 {
                     return;
                 }
@@ -255,45 +245,6 @@ namespace services
             [this](const events::vegetationBrush::DensityBrushParamsChangedNotification& n)
             {
                 if (vegBrushModeActive && provider)
-                {
-                    provider->setBrushOverlayParams(
-                        n.params.radius,
-                        static_cast<float>(n.params.falloff),
-                        static_cast<float>(n.params.shape));
-                }
-            });
-
-        vegPlacementModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationPlacementModeChangedNotification>(
-            [this](const events::vegetationBrush::VegetationPlacementModeChangedNotification& n)
-            {
-                if (n.isActive)
-                {
-                    vegPlacementModeActive = true;
-                    if (provider)
-                    {
-                        auto brushParams = events::EventDispatcher::instance().query(
-                            events::vegetationBrush::GetPlacementBrushParamsQuery{});
-                        provider->setBrushOverlayParams(
-                            brushParams.radius,
-                            static_cast<float>(brushParams.falloff),
-                            static_cast<float>(brushParams.shape));
-                    }
-                }
-                else
-                {
-                    vegPlacementModeActive = false;
-                    if (provider)
-                    {
-                        provider->clearRaycastCursor();
-                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
-                    }
-                }
-            });
-
-        vegPlacementParamsToken = dispatcher.subscribe<events::vegetationBrush::PlacementBrushParamsChangedNotification>(
-            [this](const events::vegetationBrush::PlacementBrushParamsChangedNotification& n)
-            {
-                if (vegPlacementModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

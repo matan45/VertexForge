@@ -5,7 +5,6 @@
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
-#include "../vegetation/VegetationStreamManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/RenderManager.hpp"

@@ -18,9 +18,6 @@
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
-#include "vegetation/VegetationSpecies.hpp"
-#include "../vegetation/VegetationCullLODPipeline.hpp"
-#include "../vegetation/VegetationMeshShaderPipeline.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
@@ -32,7 +29,6 @@
 #include "BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
-#include "../vegetation/VegetationStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
 #include "../lighting/LightStreamManager.hpp"
@@ -156,7 +152,6 @@ namespace render::gpudriven
 
             // Stream managers
             std::unique_ptr<render::vegetation::GrassStreamManager> grassStreamManager;
-            std::unique_ptr<render::vegetation::VegetationStreamManager> vegetationStreamManager;
 
             // Grass instance buffer (GPU-side output from compute pipeline)
             vk::Buffer grassInstanceBuffer;
@@ -167,8 +162,6 @@ namespace render::gpudriven
             uint32_t currentGrassInstanceCount = 0;
 
             bool grassRenderingEnabled = true;
-            bool vegetationRenderingEnabled = true;
-            bool debugLODView = false;
             bool grassInitialized = false;
 
             ::vegetation::GrassRenderConfig grassConfig;
@@ -199,63 +192,6 @@ namespace render::gpudriven
             // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
 
-            // --- Vegetation LOD pipeline (tree mesh) ---
-            std::unique_ptr<render::vegetation::VegetationCullLODPipeline> cullLODPipeline;
-            std::unique_ptr<render::vegetation::VegetationMeshShaderPipeline> vegMeshPipeline;
-            // GPU buffers for tree LOD pipeline
-            vk::Buffer treeInstanceBuffer;
-            vk::DeviceMemory treeInstanceBufferMemory;
-            vk::Buffer treeInstanceCountBuffer;       // single uint32_t
-            vk::DeviceMemory treeInstanceCountBufferMemory;
-            vk::Buffer visibleLOD0Buffer;
-            vk::DeviceMemory visibleLOD0BufferMemory;
-            vk::Buffer lodCountersBuffer;             // uint32_t meshCount
-            vk::DeviceMemory lodCountersBufferMemory;
-            vk::Buffer treeInstanceStagingBuffer;     // host-visible staging for tree instances
-            vk::DeviceMemory treeInstanceStagingMemory;
-            void* treeInstanceStagingMapped = nullptr;
-
-            uint32_t treeInstanceCapacity = 0;
-            uint32_t currentTreeInstanceCount = 0;
-            bool treeLODInitialized = false;
-            bool treeInstancesDirty = true;  // Rebuild GPU instances when placement data changes
-            bool treeInstancesNeedUpload = true; // Upload staging → device when rebuilt
-
-            // Species data cache for billboard rendering of placed vegetation
-            struct CachedSpeciesData
-            {
-                uint32_t bindlessTextureIndex = 0;
-                glm::vec2 billboardSize{2.0f, 4.0f};
-                // LOD distances from species config
-                float lod1Distance = 50.0f;
-                float lod2Distance = 100.0f;
-                float maxRenderDistance = 500.0f;
-
-                // Material data
-                std::string materialPath;
-                uint32_t materialTextureIndex = 0;  // bindless index for albedo
-                bool hasMaterial = false;
-
-                // Mesh data (from .vfMesh)
-                std::string meshPath;
-                bool hasMesh = false;
-                uint32_t meshletOffset[4] = {};  // per LOD (global offset into shared meshlet buffer)
-                uint32_t meshletCount[4] = {};   // per LOD
-                uint32_t baseVertexOffset = 0;   // global offset into shared vertex buffer
-                uint32_t availableLODMask = 0;   // bits 0-3 for which mesh LODs are loaded
-                float meshMinY = 0.0f;           // lowest vertex Y in local space (for ground placement)
-
-                // Collision (from species config, cached for debug collider rendering)
-                bool hasCollision = false;
-                float collisionRadius = 0.3f;
-                float collisionHeight = 5.0f;
-            };
-            std::unordered_map<uint32_t, CachedSpeciesData> cachedSpecies;
-            bool speciesRenderInfoDirty = true;
-
-            // Species render info GPU buffer
-            vk::Buffer speciesRenderInfoBuffer;
-            vk::DeviceMemory speciesRenderInfoBufferMemory;
         };
 
         struct BillboardState
@@ -576,18 +512,8 @@ namespace render::gpudriven
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
-        void updateVegetationSpecies(uint32_t speciesId, const ::vegetation::VegetationSpeciesConfig& config);
-        void removeVegetationSpecies(uint32_t speciesId);
-        void clearAllVegetationSpecies();
         void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
-        void dispatchVegetationCullLOD(vk::CommandBuffer cmd);
-        void renderVegetationDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
-        void setVegetationRenderingEnabled(bool enabled) { vegetation.vegetationRenderingEnabled = enabled; }
-        bool isVegetationRenderingEnabled() const { return vegetation.vegetationRenderingEnabled; }
-        void setVegetationDebugLODView(bool enabled);
-        bool isVegetationDebugLODView() const { return vegetation.debugLODView; }
         void cleanupVegetation();
 
         // Billboard rendering
@@ -632,12 +558,6 @@ namespace render::gpudriven
         void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void createGrassBuffers(uint32_t maxInstances);
-        void initTreeLODPipeline(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
-        void createTreeLODBuffers(uint32_t maxInstances);
-        void uploadSpeciesRenderInfo();
-        void uploadTreeInstances(vk::CommandBuffer cmd);
-        void loadSpeciesMesh(uint32_t speciesId, const std::string& meshPath);
-        void unloadSpeciesMesh(uint32_t speciesId);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);

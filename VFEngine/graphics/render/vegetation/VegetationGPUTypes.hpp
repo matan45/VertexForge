@@ -13,43 +13,20 @@ namespace render::vegetation
         glm::vec4 color;                // xyz=color tint, w=alpha
     };
 
-    // Per tree/vegetation instance (from placement data)
-    struct TreeInstanceGPU
-    {
-        glm::mat4 modelMatrix;          // Full transform
-        glm::vec4 boundingSphere;       // xyz=center, w=radius
-        uint32_t speciesId;
-        uint32_t lodMask;               // Available LOD levels bitmask (bits 0-2=mesh LODs)
-        float lodDistances[4];          // LOD0->1, LOD1->2, LOD2->max, max render
-    };
-
     // Per-tile vegetation metadata for GPU
     struct VegetationTileGPUData
     {
         glm::ivec2 tileCoord;
         uint32_t grassInstanceOffset;
         uint32_t grassInstanceCount;
-        uint32_t treeInstanceOffset;
-        uint32_t treeInstanceCount;
+        uint32_t padding0;
+        uint32_t padding1;
         glm::vec4 boundingSphere;       // xyz=center, w=radius
         glm::vec4 aabbMin;
         glm::vec4 aabbMax;
     };
 
-    // Per-species meshlet render info for GPU (matches SpeciesRenderInfo in mesh_vegetation.glsl)
-    struct SpeciesRenderInfoGPU
-    {
-        uint32_t meshletOffset[4];      // per LOD (global offset into meshlet buffer)
-        uint32_t meshletCount[4];       // per LOD
-        uint32_t baseVertexOffset;      // global offset into vertex buffer
-        uint32_t materialTextureIndex;  // bindless texture index for albedo
-        uint32_t padding[2];
-    };
-
     // Constants
-    static constexpr uint32_t MAX_SPECIES = 256;
-    static constexpr uint32_t MAX_TREE_INSTANCES = 1024 * 64; // 64K tree instances max
     static constexpr uint32_t MAX_GRASS_INSTANCES_PER_TILE = 65536;
-    static constexpr uint32_t MAX_TREE_INSTANCES_PER_TILE = 4096;
     static constexpr uint32_t MAX_VEGETATION_TILES = 256;
 }

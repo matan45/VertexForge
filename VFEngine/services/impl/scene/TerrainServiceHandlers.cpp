@@ -199,18 +199,6 @@ namespace services
             {
                 applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
-
-        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationPlacementBrushCommand>(
-            [this](const events::vegetationBrush::ApplyVegetationPlacementBrushCommand& cmd)
-            {
-                applyVegetationPlacementBrush(cmd.worldPosition, cmd.deltaTime);
-            });
-
-        dispatcher.registerCommandHandler<events::vegetationBrush::ClearAllVegetationPlacementsCommand>(
-            [this](const events::vegetationBrush::ClearAllVegetationPlacementsCommand&)
-            {
-                clearAllVegetationPlacements();
-            });
     }
 
     void TerrainService::registerTerrainDataHandlers(::events::EventDispatcher& dispatcher)
