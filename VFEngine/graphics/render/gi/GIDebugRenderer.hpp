@@ -24,10 +24,6 @@ namespace render::gi
         vk::Pipeline probeDebugPipeline;
         vk::PipelineLayout probeDebugPipelineLayout;
 
-        vk::DescriptorSetLayout debugDescriptorLayout;
-        vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet debugDescriptorSet;
-
         bool initialized = false;
         bool showProbes = false;
         bool showCascadeBounds = false;

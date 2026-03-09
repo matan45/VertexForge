@@ -7,6 +7,7 @@
 namespace render::gi
 {
     static constexpr uint32_t MAX_CASCADES = 8;
+    static constexpr vk::DeviceSize CASCADE_BUFFER_SIZE = 16 + MAX_CASCADES * sizeof(GPUCascadeInfo);
 
     ProbeStorageBuffer::ProbeStorageBuffer(core::Device& device)
         : device(device)
@@ -116,7 +117,7 @@ namespace render::gi
 
         // Cascade info UBO (16 bytes header + cascade data)
         {
-            vk::DeviceSize cascadeBufferSize = 16 + MAX_CASCADES * sizeof(GPUCascadeInfo);
+            vk::DeviceSize cascadeBufferSize = CASCADE_BUFFER_SIZE;
 
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = cascadeBufferSize;
@@ -323,7 +324,7 @@ namespace render::gi
 
         // Cascade info
         {
-            vk::DescriptorBufferInfo bufferInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
+            vk::DescriptorBufferInfo bufferInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
 
             vk::WriteDescriptorSet write{};
             write.dstSet = cascadeInfoDescSet;
@@ -337,7 +338,7 @@ namespace render::gi
         // Sampling set A: probe read from A + cascade info as SSBO
         {
             vk::DescriptorBufferInfo probeInfo(probeBufferA, 0, probeBufferSize);
-            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             writes[0].dstSet = samplingDescSetA;
@@ -358,7 +359,7 @@ namespace render::gi
         // Sampling set B: probe read from B + cascade info as SSBO
         {
             vk::DescriptorBufferInfo probeInfo(probeBufferB, 0, probeBufferSize);
-            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             writes[0].dstSet = samplingDescSetB;

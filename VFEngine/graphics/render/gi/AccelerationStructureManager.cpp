@@ -1,5 +1,6 @@
 #include "AccelerationStructureManager.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../gpudriven/GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
 
@@ -56,18 +57,18 @@ namespace render::gi
             vkDevice.destroyAccelerationStructureKHR(tlas);
             tlas = nullptr;
         }
-        destroyBuffer(tlasBuffer, tlasMemory);
-        destroyBuffer(tlasScratchBuffer, tlasScratchMemory);
-        destroyBuffer(instanceBuffer, instanceMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceMemory);
 
         if (blas)
         {
             vkDevice.destroyAccelerationStructureKHR(blas);
             blas = nullptr;
         }
-        destroyBuffer(blasBuffer, blasMemory);
-        destroyBuffer(blasScratchBuffer, blasScratchMemory);
-        destroyBuffer(tlasStagingBuffer, tlasStagingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingMemory);
 
         if (descriptorPool)
         {
@@ -141,15 +142,18 @@ namespace render::gi
             vkDevice.destroyAccelerationStructureKHR(blas);
             blas = nullptr;
         }
-        destroyBuffer(blasBuffer, blasMemory);
-        destroyBuffer(blasScratchBuffer, blasScratchMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchMemory);
 
         // Create BLAS buffer
-        createBuffer(sizeInfo.accelerationStructureSize,
-                     vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-                     vk::BufferUsageFlagBits::eShaderDeviceAddress,
-                     vk::MemoryPropertyFlagBits::eDeviceLocal,
-                     blasBuffer, blasMemory);
+        {
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = sizeInfo.accelerationStructureSize;
+            request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                            vk::BufferUsageFlagBits::eShaderDeviceAddress;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, blasBuffer, blasMemory);
+        }
 
         // Create BLAS
         vk::AccelerationStructureCreateInfoKHR createInfo{};
@@ -159,11 +163,14 @@ namespace render::gi
         blas = vkDevice.createAccelerationStructureKHR(createInfo);
 
         // Create scratch buffer
-        createBuffer(sizeInfo.buildScratchSize,
-                     vk::BufferUsageFlagBits::eStorageBuffer |
-                     vk::BufferUsageFlagBits::eShaderDeviceAddress,
-                     vk::MemoryPropertyFlagBits::eDeviceLocal,
-                     blasScratchBuffer, blasScratchMemory);
+        {
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = sizeInfo.buildScratchSize;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                            vk::BufferUsageFlagBits::eShaderDeviceAddress;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, blasScratchBuffer, blasScratchMemory);
+        }
 
         vk::BufferDeviceAddressInfo scratchAddrInfo{};
         scratchAddrInfo.buffer = blasScratchBuffer;
@@ -243,29 +250,33 @@ namespace render::gi
         // Destroy old instance buffer if size changed
         if (currentInstanceCount != objectCount)
         {
-            destroyBuffer(instanceBuffer, instanceMemory);
+            core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceMemory);
         }
 
         // Create/update instance buffer
         vk::DeviceSize instanceBufferSize = sizeof(vk::AccelerationStructureInstanceKHR) * objectCount;
         if (!instanceBuffer)
         {
-            createBuffer(instanceBufferSize,
-                         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
-                         vk::BufferUsageFlagBits::eShaderDeviceAddress |
-                         vk::BufferUsageFlagBits::eTransferDst,
-                         vk::MemoryPropertyFlagBits::eDeviceLocal,
-                         instanceBuffer, instanceMemory);
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = instanceBufferSize;
+            request.usage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
+                            vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                            vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, instanceBuffer, instanceMemory);
         }
 
         // Destroy previous frame's staging buffer (safe now - previous cmd has completed)
-        destroyBuffer(tlasStagingBuffer, tlasStagingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingMemory);
 
         // Upload instance data via staging
-        createBuffer(instanceBufferSize,
-                     vk::BufferUsageFlagBits::eTransferSrc,
-                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                     tlasStagingBuffer, tlasStagingMemory);
+        {
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = instanceBufferSize;
+            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, tlasStagingBuffer, tlasStagingMemory);
+        }
 
         void* mapped = vkDevice.mapMemory(tlasStagingMemory, 0, instanceBufferSize);
         memcpy(mapped, instances.data(), instanceBufferSize);
@@ -323,14 +334,17 @@ namespace render::gi
                 vkDevice.destroyAccelerationStructureKHR(tlas);
                 tlas = nullptr;
             }
-            destroyBuffer(tlasBuffer, tlasMemory);
-            destroyBuffer(tlasScratchBuffer, tlasScratchMemory);
+            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasMemory);
+            core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchMemory);
 
-            createBuffer(sizeInfo.accelerationStructureSize,
-                         vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-                         vk::BufferUsageFlagBits::eShaderDeviceAddress,
-                         vk::MemoryPropertyFlagBits::eDeviceLocal,
-                         tlasBuffer, tlasMemory);
+            {
+                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+                request.size = sizeInfo.accelerationStructureSize;
+                request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, tlasBuffer, tlasMemory);
+            }
 
             vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{};
             tlasCreateInfo.buffer = tlasBuffer;
@@ -339,12 +353,15 @@ namespace render::gi
             tlas = vkDevice.createAccelerationStructureKHR(tlasCreateInfo);
 
             // Scratch buffer (use update size if larger)
-            vk::DeviceSize scratchSize = std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
-            createBuffer(scratchSize,
-                         vk::BufferUsageFlagBits::eStorageBuffer |
-                         vk::BufferUsageFlagBits::eShaderDeviceAddress,
-                         vk::MemoryPropertyFlagBits::eDeviceLocal,
-                         tlasScratchBuffer, tlasScratchMemory);
+            {
+                vk::DeviceSize scratchSize = std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
+                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+                request.size = scratchSize;
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, tlasScratchBuffer, tlasScratchMemory);
+            }
 
             buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
         }
@@ -453,66 +470,4 @@ namespace render::gi
         vkDevice.updateDescriptorSets(1, &write, 0, nullptr);
     }
 
-    uint32_t AccelerationStructureManager::findMemoryType(uint32_t typeFilter,
-                                                           vk::MemoryPropertyFlags properties) const
-    {
-        vk::PhysicalDeviceMemoryProperties memProps = device.getPhysicalDevice().getMemoryProperties();
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i)
-        {
-            if ((typeFilter & (1 << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return i;
-            }
-        }
-        vfLogError("AccelerationStructureManager: Failed to find suitable memory type");
-        return 0;
-    }
-
-    void AccelerationStructureManager::createBuffer(vk::DeviceSize size,
-                                                     vk::BufferUsageFlags usage,
-                                                     vk::MemoryPropertyFlags properties,
-                                                     vk::Buffer& buffer,
-                                                     vk::DeviceMemory& memory)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        vk::BufferCreateInfo bufferInfo{};
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-
-        buffer = vkDevice.createBuffer(bufferInfo);
-
-        vk::MemoryRequirements memReqs = vkDevice.getBufferMemoryRequirements(buffer);
-
-        vk::MemoryAllocateFlagsInfo allocFlags{};
-        if (usage & vk::BufferUsageFlagBits::eShaderDeviceAddress)
-        {
-            allocFlags.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
-        }
-
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.pNext = (allocFlags.flags != vk::MemoryAllocateFlags{}) ? &allocFlags : nullptr;
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memReqs.memoryTypeBits, properties);
-
-        memory = vkDevice.allocateMemory(allocInfo);
-        vkDevice.bindBufferMemory(buffer, memory, 0);
-    }
-
-    void AccelerationStructureManager::destroyBuffer(vk::Buffer& buffer, vk::DeviceMemory& memory)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-        if (buffer)
-        {
-            vkDevice.destroyBuffer(buffer);
-            buffer = nullptr;
-        }
-        if (memory)
-        {
-            vkDevice.freeMemory(memory);
-            memory = nullptr;
-        }
-    }
 }

@@ -34,18 +34,15 @@ namespace render::lighting
 
     void LightStreamManager::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
-        std::lock_guard<std::mutex> lock(mtx);
-        auto& sectorSet = sectorLights[sectorId];
+        // Query ECS component data before acquiring the lock to avoid holding
+        // the mutex during potentially slow registry lookups
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        std::vector<LightStreamEntry> entries;
+        entries.reserve(lightEntityIds.size());
 
         for (uint32_t entityId : lightEntityIds)
         {
-            if (registeredLights.contains(entityId))
-            {
-                continue;
-            }
-
-            // Detect light type from ECS
-            auto& registry = scene::EntityRegistry::getRegistry();
             auto entity = static_cast<entt::entity>(entityId);
 
             LightStreamEntry entry;
@@ -73,18 +70,31 @@ namespace render::lighting
                 continue;
             }
 
+            entries.push_back(entry);
+        }
+
+        std::lock_guard<std::mutex> lock(mtx);
+        auto& sectorSet = sectorLights[sectorId];
+
+        for (auto& entry : entries)
+        {
+            if (registeredLights.contains(entry.entityId))
+            {
+                continue;
+            }
+
             if (allocateSlot(entry))
             {
                 entry.active = true;
-                activeLightIds.insert(entityId);
+                activeLightIds.insert(entry.entityId);
             }
             else
             {
                 entry.active = false;
             }
 
-            registeredLights[entityId] = entry;
-            sectorSet.insert(entityId);
+            registeredLights[entry.entityId] = entry;
+            sectorSet.insert(entry.entityId);
         }
 
         vfLogInfo("LightStreamManager: Registered {} lights for sector {}",

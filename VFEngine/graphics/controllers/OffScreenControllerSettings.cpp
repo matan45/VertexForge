@@ -613,7 +613,7 @@ namespace controllers
         return {};
     }
 
-    void OffScreenController::registerSectorLights(uint32_t sectorId)
+    void OffScreenController::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -621,7 +621,7 @@ namespace controllers
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu && gpu->getLightStreamManager())
         {
-            gpu->getLightStreamManager()->registerSectorLights(sectorId, {});
+            gpu->getLightStreamManager()->registerSectorLights(sectorId, lightEntityIds);
         }
     }
 

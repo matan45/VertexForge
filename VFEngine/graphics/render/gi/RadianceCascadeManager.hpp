@@ -50,7 +50,7 @@ namespace render::gi
             uint32_t probeStartOffset; // Global offset
             uint32_t probeCount;       // Number to update
         };
-        std::vector<ProbeUpdateBatch> getProbeUpdateBatches() const;
+        std::vector<ProbeUpdateBatch> getProbeUpdateBatches();
 
         void applySettings(const GISettings& newSettings);
         const GISettings& getSettings() const { return settings; }

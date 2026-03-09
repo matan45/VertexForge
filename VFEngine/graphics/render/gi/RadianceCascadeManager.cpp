@@ -154,7 +154,7 @@ namespace render::gi
         ++frameIndex;
     }
 
-    std::vector<RadianceCascadeManager::ProbeUpdateBatch> RadianceCascadeManager::getProbeUpdateBatches() const
+    std::vector<RadianceCascadeManager::ProbeUpdateBatch> RadianceCascadeManager::getProbeUpdateBatches()
     {
         std::vector<ProbeUpdateBatch> batches;
 
@@ -192,11 +192,10 @@ namespace render::gi
             batches.push_back(batch);
         }
 
-        // Advance cursors (const_cast needed since this is logically non-const)
-        auto* mutableThis = const_cast<RadianceCascadeManager*>(this);
+        // Advance cursors
         for (auto& batch : batches)
         {
-            auto& cascade = mutableThis->cascades[batch.cascadeIndex];
+            auto& cascade = cascades[batch.cascadeIndex];
             cascade.updateCursor = (cascade.updateCursor + batch.probeCount) % cascade.probeCount;
         }
 

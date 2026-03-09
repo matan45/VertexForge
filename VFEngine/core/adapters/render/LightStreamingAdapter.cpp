@@ -29,11 +29,11 @@ namespace core::adapters
         return {};
     }
 
-    void LightStreamingAdapter::registerSectorLights(uint32_t sectorId)
+    void LightStreamingAdapter::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
         if (offScreen)
         {
-            offScreen->registerSectorLights(sectorId);
+            offScreen->registerSectorLights(sectorId, lightEntityIds);
         }
     }
 

@@ -413,7 +413,6 @@ namespace render::gpudriven
                     giTracePipeline->dispatch(cmd,
                                                storage->getProbeDataDescSet(),
                                                giCascadeManager->getCascadeInfoDescSet(),
-                                               vk::DescriptorSet{},
                                                push,
                                                tlasSet,
                                                lightSet);
@@ -433,10 +432,43 @@ namespace render::gpudriven
                 // Swap ping-pong: trace wrote to the write buffer, now make it the read buffer
                 storage->swapBuffers();
 
-                // Copy new read buffer to new write buffer so non-updated probes stay consistent
-                // (without this, partial updates leave stale data in the write buffer causing flicker)
-                vk::BufferCopy fullCopy{0, 0, storage->getProbeCount() * 64}; // 64 = sizeof(ProbeData)
-                cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(), fullCopy);
+                // Copy only non-updated probe ranges from read to write buffer
+                // (updated probes were already written by compute; copying them again would be redundant)
+                {
+                    constexpr vk::DeviceSize probeSize = sizeof(gi::ProbeData);
+                    uint32_t totalProbes = storage->getProbeCount();
+
+                    // Collect updated probe ranges sorted by offset
+                    std::vector<std::pair<uint32_t, uint32_t>> updatedRanges;
+                    updatedRanges.reserve(batches.size());
+                    for (const auto& batch : batches)
+                    {
+                        updatedRanges.emplace_back(batch.probeStartOffset, batch.probeStartOffset + batch.probeCount);
+                    }
+                    std::sort(updatedRanges.begin(), updatedRanges.end());
+
+                    // Build copy regions for the gaps between updated ranges
+                    std::vector<vk::BufferCopy> copyRegions;
+                    uint32_t cursor = 0;
+                    for (const auto& [start, end] : updatedRanges)
+                    {
+                        if (start > cursor)
+                        {
+                            copyRegions.push_back({cursor * probeSize, cursor * probeSize, (start - cursor) * probeSize});
+                        }
+                        cursor = std::max(cursor, end);
+                    }
+                    if (cursor < totalProbes)
+                    {
+                        copyRegions.push_back({cursor * probeSize, cursor * probeSize, (totalProbes - cursor) * probeSize});
+                    }
+
+                    if (!copyRegions.empty())
+                    {
+                        cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(),
+                                       static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+                    }
+                }
 
                 // Barrier: copy must finish before fragment reads and next frame's compute writes
                 vk::MemoryBarrier copyBarrier{

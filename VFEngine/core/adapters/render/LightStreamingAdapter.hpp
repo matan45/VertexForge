@@ -22,7 +22,7 @@ namespace core::adapters
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config) override;
         render::lighting::LightStreamingConfig getLightStreamingConfig() const override;
         render::lighting::LightStreamingStats getLightStreamingStats() const override;
-        void registerSectorLights(uint32_t sectorId) override;
+        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds) override;
         void unregisterSectorLights(uint32_t sectorId) override;
     };
 }

@@ -131,7 +131,6 @@ namespace render::gi
     void ProbeTracePipeline::dispatch(vk::CommandBuffer cmd,
                                        vk::DescriptorSet probeWriteDescSet,
                                        vk::DescriptorSet cascadeInfoDescSet,
-                                       vk::DescriptorSet probeReadDescSet,
                                        const GIComputePushConstants& pushConstants,
                                        vk::DescriptorSet tlasDescSet,
                                        vk::DescriptorSet lightDataDescSet)

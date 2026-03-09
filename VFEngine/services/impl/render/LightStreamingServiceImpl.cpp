@@ -26,7 +26,7 @@ namespace services
         dispatcher.registerCommandHandler<events::render::lightstreaming::RegisterSectorLightsCommand>(
             [this](const events::render::lightstreaming::RegisterSectorLightsCommand& cmd)
             {
-                provider->registerSectorLights(cmd.sectorId);
+                provider->registerSectorLights(cmd.sectorId, cmd.lightEntityIds);
             }
         );
 

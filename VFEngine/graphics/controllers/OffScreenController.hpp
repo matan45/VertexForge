@@ -247,7 +247,7 @@ namespace controllers
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
         render::lighting::LightStreamingConfig getLightStreamingConfig() const;
         render::lighting::LightStreamingStats getLightStreamingStats() const;
-        void registerSectorLights(uint32_t sectorId);
+        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
         void unregisterSectorLights(uint32_t sectorId);
 
     // Impostor baking — renders mesh from multiple angles to create billboard atlas

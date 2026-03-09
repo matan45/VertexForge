@@ -1,6 +1,7 @@
 #include "GIConfigWindow.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/render/GIEvents.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -114,8 +115,14 @@ namespace windows
                 ImGui::Text("Active Cascades: %u", stats.activeCascades);
                 ImGui::Text("Probes Updated/Frame: %u", stats.probesUpdatedThisFrame);
             }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("GIConfigWindow: Failed to query GI stats: {}", e.what());
+                ImGui::TextDisabled("Stats unavailable");
+            }
             catch (...)
             {
+                vfLogWarning("GIConfigWindow: Failed to query GI stats (unknown error)");
                 ImGui::TextDisabled("Stats unavailable");
             }
         }
@@ -129,8 +136,14 @@ namespace windows
         {
             settings = dispatcher.query(events::render::gi::GetGISettingsQuery{});
         }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("GIConfigWindow: Failed to load GI settings: {}", e.what());
+            settings = render::gi::GISettings{};
+        }
         catch (...)
         {
+            vfLogWarning("GIConfigWindow: Failed to load GI settings (unknown error)");
             settings = render::gi::GISettings{};
         }
 

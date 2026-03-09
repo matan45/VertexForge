@@ -555,9 +555,9 @@ namespace controllers {
 		return offScreenController->getLightStreamingStats();
 	}
 
-	void OffScreen::registerSectorLights(uint32_t sectorId)
+	void OffScreen::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
 	{
-		offScreenController->registerSectorLights(sectorId);
+		offScreenController->registerSectorLights(sectorId, lightEntityIds);
 	}
 
 	void OffScreen::unregisterSectorLights(uint32_t sectorId)
