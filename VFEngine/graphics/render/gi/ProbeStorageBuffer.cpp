@@ -288,8 +288,8 @@ namespace render::gi
         // Set A: read=A, write=B
         {
             std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
-            bufferInfos[0] = {probeBufferA, 0, probeBufferSize};
-            bufferInfos[1] = {probeBufferB, 0, probeBufferSize};
+            bufferInfos[0] = vk::DescriptorBufferInfo(probeBufferA, 0, probeBufferSize);
+            bufferInfos[1] = vk::DescriptorBufferInfo(probeBufferB, 0, probeBufferSize);
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             for (uint32_t i = 0; i < 2; ++i)
@@ -306,8 +306,8 @@ namespace render::gi
         // Set B: read=B, write=A
         {
             std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
-            bufferInfos[0] = {probeBufferB, 0, probeBufferSize};
-            bufferInfos[1] = {probeBufferA, 0, probeBufferSize};
+            bufferInfos[0] = vk::DescriptorBufferInfo(probeBufferB, 0, probeBufferSize);
+            bufferInfos[1] = vk::DescriptorBufferInfo(probeBufferA, 0, probeBufferSize);
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             for (uint32_t i = 0; i < 2; ++i)
@@ -323,7 +323,7 @@ namespace render::gi
 
         // Cascade info
         {
-            vk::DescriptorBufferInfo bufferInfo{cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo)};
+            vk::DescriptorBufferInfo bufferInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
 
             vk::WriteDescriptorSet write{};
             write.dstSet = cascadeInfoDescSet;
@@ -336,8 +336,8 @@ namespace render::gi
 
         // Sampling set A: probe read from A + cascade info as SSBO
         {
-            vk::DescriptorBufferInfo probeInfo{probeBufferA, 0, probeBufferSize};
-            vk::DescriptorBufferInfo cascadeInfo{cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo)};
+            vk::DescriptorBufferInfo probeInfo(probeBufferA, 0, probeBufferSize);
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             writes[0].dstSet = samplingDescSetA;
@@ -357,8 +357,8 @@ namespace render::gi
 
         // Sampling set B: probe read from B + cascade info as SSBO
         {
-            vk::DescriptorBufferInfo probeInfo{probeBufferB, 0, probeBufferSize};
-            vk::DescriptorBufferInfo cascadeInfo{cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo)};
+            vk::DescriptorBufferInfo probeInfo(probeBufferB, 0, probeBufferSize);
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, 16 + MAX_CASCADES * sizeof(GPUCascadeInfo));
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
             writes[0].dstSet = samplingDescSetB;

@@ -58,7 +58,7 @@ namespace render::lighting
                 const auto& light = registry.get<components::PointLightComponent>(entity);
                 entry.intensity = light.intensity;
                 entry.radius = light.radius;
-                entry.castsShadow = light.castShadow;
+                entry.castsShadow = false;
             }
             else if (registry.all_of<components::SpotLightComponent>(entity))
             {
@@ -66,7 +66,7 @@ namespace render::lighting
                 const auto& light = registry.get<components::SpotLightComponent>(entity);
                 entry.intensity = light.intensity;
                 entry.radius = light.range;
-                entry.castsShadow = light.castShadow;
+                entry.castsShadow = false;
             }
             else
             {

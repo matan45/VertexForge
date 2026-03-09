@@ -3,6 +3,11 @@
 #include "../gpudriven/GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
 
+// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 namespace render::gi
 {
     AccelerationStructureManager::AccelerationStructureManager(core::Device& device)

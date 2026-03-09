@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/Device.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <algorithm>

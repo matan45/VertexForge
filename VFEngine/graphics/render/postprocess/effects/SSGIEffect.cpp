@@ -3,7 +3,7 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
-#include "../../../core/OffscreenResources.hpp"
+#include "../../../core/OffScreen.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
@@ -223,7 +223,7 @@ namespace render::postprocess
             vk::ImageCreateInfo imgInfo{};
             imgInfo.imageType = vk::ImageType::e2D;
             imgInfo.format = vk::Format::eR16G16B16A16Sfloat;
-            imgInfo.extent = {currentExtent.width, currentExtent.height, 1};
+            imgInfo.extent = vk::Extent3D(currentExtent.width, currentExtent.height, 1);
             imgInfo.mipLevels = 1;
             imgInfo.arrayLayers = 1;
             imgInfo.samples = vk::SampleCountFlagBits::e1;
@@ -293,11 +293,11 @@ namespace render::postprocess
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::Format depthFormat = offscreenResources.depthFormat;
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
         depthAspectMask = vk::ImageAspectFlagBits::eDepth;
 
         vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = offscreenResources.depthImage;
+        viewInfo.image = offscreenResources.depthImage.depthImage;
         viewInfo.viewType = vk::ImageViewType::e2D;
         viewInfo.format = depthFormat;
         viewInfo.subresourceRange = {depthAspectMask, 0, 1, 0, 1};
@@ -432,54 +432,90 @@ namespace render::postprocess
         denoiseDescriptorSet = allocSet(denoiseDescriptorSetLayout);
         compositeDescriptorSet = allocSet(compositeDescriptorSetLayout);
 
+        // Get color image view from offscreen resources
+        vk::ImageView sceneColorView = offscreenResources.colorImages.empty()
+            ? vk::ImageView{} : offscreenResources.colorImages[0].colorImageView;
+
         // Update trace set (scene color + depth + params)
         {
-            vk::DescriptorImageInfo sceneColorInfo{sampler, offscreenResources.colorImageView,
-                                                    vk::ImageLayout::eShaderReadOnlyOptimal};
-            vk::DescriptorImageInfo depthInfo{sampler, depthOnlyImageView,
-                                              vk::ImageLayout::eShaderReadOnlyOptimal};
-            vk::DescriptorBufferInfo paramsInfo{paramsBuffer, 0, sizeof(SSGIParamsUBO)};
+            vk::DescriptorImageInfo sceneColorInfo(sampler, sceneColorView,
+                                                    vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo depthInfo(sampler, depthOnlyImageView,
+                                              vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorBufferInfo paramsInfo(paramsBuffer, 0, sizeof(SSGIParamsUBO));
 
             std::array<vk::WriteDescriptorSet, 3> writes{};
-            writes[0] = {traceDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &sceneColorInfo};
-            writes[1] = {traceDescriptorSet, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &depthInfo};
-            writes[2] = {traceDescriptorSet, 2, 0, 1, vk::DescriptorType::eUniformBuffer,
-                         nullptr, &paramsInfo};
+            writes[0].dstSet = traceDescriptorSet;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorCount = 1;
+            writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[0].pImageInfo = &sceneColorInfo;
+
+            writes[1].dstSet = traceDescriptorSet;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorCount = 1;
+            writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[1].pImageInfo = &depthInfo;
+
+            writes[2].dstSet = traceDescriptorSet;
+            writes[2].dstBinding = 2;
+            writes[2].descriptorCount = 1;
+            writes[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+            writes[2].pBufferInfo = &paramsInfo;
+
             vkDevice.updateDescriptorSets(writes, {});
         }
 
         // Update denoise set (raw SSGI + depth + params)
         {
-            vk::DescriptorImageInfo rawSSGIInfo{sampler, ssgiRawImageView,
-                                                 vk::ImageLayout::eShaderReadOnlyOptimal};
-            vk::DescriptorImageInfo depthInfo{sampler, depthOnlyImageView,
-                                              vk::ImageLayout::eShaderReadOnlyOptimal};
-            vk::DescriptorBufferInfo paramsInfo{paramsBuffer, 0, sizeof(SSGIParamsUBO)};
+            vk::DescriptorImageInfo rawSSGIInfo(sampler, ssgiRawImageView,
+                                                 vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo depthInfo(sampler, depthOnlyImageView,
+                                              vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorBufferInfo paramsInfo(paramsBuffer, 0, sizeof(SSGIParamsUBO));
 
             std::array<vk::WriteDescriptorSet, 3> writes{};
-            writes[0] = {denoiseDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &rawSSGIInfo};
-            writes[1] = {denoiseDescriptorSet, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &depthInfo};
-            writes[2] = {denoiseDescriptorSet, 2, 0, 1, vk::DescriptorType::eUniformBuffer,
-                         nullptr, &paramsInfo};
+            writes[0].dstSet = denoiseDescriptorSet;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorCount = 1;
+            writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[0].pImageInfo = &rawSSGIInfo;
+
+            writes[1].dstSet = denoiseDescriptorSet;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorCount = 1;
+            writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[1].pImageInfo = &depthInfo;
+
+            writes[2].dstSet = denoiseDescriptorSet;
+            writes[2].dstBinding = 2;
+            writes[2].descriptorCount = 1;
+            writes[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+            writes[2].pBufferInfo = &paramsInfo;
+
             vkDevice.updateDescriptorSets(writes, {});
         }
 
         // Update composite set (scene + denoised)
         {
-            vk::DescriptorImageInfo sceneInfo{sampler, offscreenResources.colorImageView,
-                                               vk::ImageLayout::eShaderReadOnlyOptimal};
-            vk::DescriptorImageInfo denoisedInfo{sampler, ssgiDenoisedImageView,
-                                                  vk::ImageLayout::eShaderReadOnlyOptimal};
+            vk::DescriptorImageInfo sceneInfo(sampler, sceneColorView,
+                                               vk::ImageLayout::eShaderReadOnlyOptimal);
+            vk::DescriptorImageInfo denoisedInfo(sampler, ssgiDenoisedImageView,
+                                                  vk::ImageLayout::eShaderReadOnlyOptimal);
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
-            writes[0] = {compositeDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &sceneInfo};
-            writes[1] = {compositeDescriptorSet, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler,
-                         &denoisedInfo};
+            writes[0].dstSet = compositeDescriptorSet;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorCount = 1;
+            writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[0].pImageInfo = &sceneInfo;
+
+            writes[1].dstSet = compositeDescriptorSet;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorCount = 1;
+            writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[1].pImageInfo = &denoisedInfo;
+
             vkDevice.updateDescriptorSets(writes, {});
         }
     }

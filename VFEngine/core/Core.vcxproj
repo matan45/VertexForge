@@ -234,6 +234,8 @@
     <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\render\GIAdapter.cpp" />
+    <ClCompile Include="adapters\render\LightStreamingAdapter.cpp" />
     <ClCompile Include="adapters\render\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\OffScreenAdapter.cpp" />
