@@ -198,6 +198,28 @@ namespace render::gpudriven
         {
             materials.textureCache->unloadTexture(texturePath);
         }
+
+        // Invalidate any materials that used this texture so they re-register on next use
+        std::vector<std::string> materialsToInvalidate;
+        for (const auto& [matPath, pbrValues] : materials.pbrCache)
+        {
+            if (pbrValues.albedoTexturePath == texturePath ||
+                pbrValues.normalTexturePath == texturePath ||
+                pbrValues.ormTexturePath == texturePath ||
+                pbrValues.metallicTexturePath == texturePath ||
+                pbrValues.roughnessTexturePath == texturePath ||
+                pbrValues.aoTexturePath == texturePath ||
+                pbrValues.emissionTexturePath == texturePath ||
+                pbrValues.heightTexturePath == texturePath)
+            {
+                materialsToInvalidate.push_back(matPath);
+            }
+        }
+        for (const auto& matPath : materialsToInvalidate)
+        {
+            materials.registeredPaths.erase(matPath);
+            materials.pbrCache.erase(matPath);
+        }
     }
 
     void GPUDrivenRenderer::releaseMaterialAsset(const std::string& materialPath)
@@ -206,6 +228,10 @@ namespace render::gpudriven
         {
             materials.textureCache->invalidateMaterialDescriptorSet(materialPath);
         }
+        // Remove from registered set so it can be re-registered if needed again
+        materials.registeredPaths.erase(materialPath);
+        materials.pbrCache.erase(materialPath);
+        materials.loaded.erase(materialPath);
     }
 
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
@@ -639,23 +665,26 @@ namespace render::gpudriven
         {
             materials.registeredPaths.insert(materialPath);
 
-            // Register texture dependencies so textures stay alive while material is tracked
+            // Register texture dependencies so textures stay alive while material is in use
             auto& lifecycle = resource::AssetLifecycleManager::instance();
-            if (lifecycle.isTracked(materialPath))
+            // Ensure the material is tracked before adding dependencies
+            // (the renderer may load materials that weren't yet acquired by the component service)
+            if (!lifecycle.isTracked(materialPath))
             {
-                auto addDep = [&](const std::string& texPath) {
-                    if (!texPath.empty())
-                        lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
-                };
-                addDep(pbrValues.albedoTexturePath);
-                addDep(pbrValues.normalTexturePath);
-                addDep(pbrValues.ormTexturePath);
-                addDep(pbrValues.metallicTexturePath);
-                addDep(pbrValues.roughnessTexturePath);
-                addDep(pbrValues.aoTexturePath);
-                addDep(pbrValues.emissionTexturePath);
-                addDep(pbrValues.heightTexturePath);
+                lifecycle.acquire(materialPath, resource::AssetType::Material);
             }
+            auto addDep = [&](const std::string& texPath) {
+                if (!texPath.empty())
+                    lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
+            };
+            addDep(pbrValues.albedoTexturePath);
+            addDep(pbrValues.normalTexturePath);
+            addDep(pbrValues.ormTexturePath);
+            addDep(pbrValues.metallicTexturePath);
+            addDep(pbrValues.roughnessTexturePath);
+            addDep(pbrValues.aoTexturePath);
+            addDep(pbrValues.emissionTexturePath);
+            addDep(pbrValues.heightTexturePath);
         }
 
         return registered;
