@@ -951,6 +951,7 @@ namespace services
                     tile->vegetationPlacementDirty = true;
                     tile->vegetationPlacementGPUDirty = true;
                     loadedPlacement++;
+                    vegetationPhysics.onTileLoaded(tile->coord.x, tile->coord.z, tile->vegetationPlacement);
                 }
             }
         }

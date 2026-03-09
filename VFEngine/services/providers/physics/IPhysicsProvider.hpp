@@ -82,6 +82,21 @@ namespace services
         virtual void addTerrainTileCollider(EntityHandle entity, const TerrainTileColliderInfo& tile) = 0;
         virtual void removeTerrainTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
 
+        // Vegetation colliders — bulk static capsules per tile
+        struct VegetationColliderInstance
+        {
+            glm::vec3 position{0.0f};
+            float rotation = 0.0f;      // Y-axis rotation in radians
+            float scale = 1.0f;
+            float radius = 0.3f;
+            float height = 5.0f;
+        };
+
+        virtual void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                                 const std::vector<VegetationColliderInstance>& instances) = 0;
+        virtual void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) = 0;
+        virtual void removeAllVegetationColliders() = 0;
+
         virtual void addWaterSensorBody(EntityHandle entity, const glm::vec3& position,
                                         const glm::vec3& halfExtents) = 0;
         virtual void removeWaterSensorBody(EntityHandle entity) = 0;

@@ -1,42 +1,66 @@
 #include "VegetationPhysicsIntegration.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../../providers/vegetation/IVegetationProvider.hpp"
 
 namespace services
 {
     void VegetationPhysicsIntegration::onTileLoaded(
         int32_t coordX, int32_t coordZ,
-        const vegetation::VegetationPlacementData& placement,
-        const vegetation::VegetationSpeciesRegistry& registry)
+        const vegetation::VegetationPlacementData& placement)
     {
-        TileKey key{coordX, coordZ};
-        auto& bodyIds = tileBodyIds[key];
-        bodyIds.clear();
+        if (!physicsProvider || !vegetationProvider) return;
 
-        for (const auto& inst : placement.instances)
+        TileKey key{coordX, coordZ};
+
+        // Remove existing colliders for this tile if any
+        if (activeTiles.contains(key))
         {
-            const auto* species = registry.getSpecies(inst.speciesId);
+            physicsProvider->removeVegetationTileColliders(coordX, coordZ);
+            activeTiles.erase(key);
+        }
+
+        std::vector<IPhysicsProvider::VegetationColliderInstance> colliderInstances;
+
+        for (const auto& inst : placement.getInstances())
+        {
+            const auto* species = vegetationProvider->getSpecies(inst.speciesId);
             if (!species || !species->hasCollision) continue;
 
-            // Stub: actual physics body creation via IPhysicsProvider
-            // Will create capsule colliders at inst.position with
-            // species->collisionRadius and species->collisionHeight
-            bodyIds.push_back(0); // Placeholder body ID
+            IPhysicsProvider::VegetationColliderInstance collider;
+            collider.position = inst.position;
+            collider.rotation = inst.rotation;
+            collider.scale = inst.scale;
+            collider.radius = species->collisionRadius;
+            collider.height = species->collisionHeight;
+            colliderInstances.push_back(collider);
+        }
+
+        if (!colliderInstances.empty())
+        {
+            physicsProvider->addVegetationTileColliders(coordX, coordZ, colliderInstances);
+            activeTiles[key] = true;
         }
     }
 
     void VegetationPhysicsIntegration::onTileUnloaded(int32_t coordX, int32_t coordZ)
     {
+        if (!physicsProvider) return;
+
         TileKey key{coordX, coordZ};
-        auto it = tileBodyIds.find(key);
-        if (it != tileBodyIds.end())
+        auto it = activeTiles.find(key);
+        if (it != activeTiles.end())
         {
-            // Stub: remove physics bodies via IPhysicsProvider
-            tileBodyIds.erase(it);
+            physicsProvider->removeVegetationTileColliders(coordX, coordZ);
+            activeTiles.erase(it);
         }
     }
 
     void VegetationPhysicsIntegration::clear()
     {
-        // Stub: remove all physics bodies
-        tileBodyIds.clear();
+        if (physicsProvider)
+        {
+            physicsProvider->removeAllVegetationColliders();
+        }
+        activeTiles.clear();
     }
 }

@@ -525,6 +525,9 @@ namespace services
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
 
+        // Remove vegetation colliders
+        vegetationPhysics.onTileUnloaded(tileX, tileZ);
+
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
 
@@ -638,6 +641,12 @@ namespace services
 
         createTileEntity(terrainEntity, tile, tileX, tileZ);
 
+        // Create vegetation physics colliders
+        if (tile->hasVegetationPlacement())
+        {
+            vegetationPhysics.onTileLoaded(tileX, tileZ, tile->vegetationPlacement);
+        }
+
         // Queue physics body creation for after height data is loaded
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity parentEnt = internal::fromHandle(terrainEntity);
@@ -686,6 +695,9 @@ namespace services
         // Remove physics body for this tile
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
+
+        // Remove vegetation colliders
+        vegetationPhysics.onTileUnloaded(tileX, tileZ);
 
         // Remove from pending queue if it was waiting for height data
         pendingPhysicsTiles.erase(

@@ -454,6 +454,44 @@ namespace core
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
     }
 
+    void PhysicsAdapter::addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                                     const std::vector<VegetationColliderInstance>& instances)
+    {
+        if (!physicsWorld || instances.empty()) return;
+
+        std::vector<JPH::BodyID> bodyIds;
+        bodyIds.reserve(instances.size());
+
+        for (const auto& inst : instances)
+        {
+            JPH::BodyID bodyId = physicsWorld->addStaticCapsule(
+                inst.position, inst.rotation, inst.scale,
+                inst.radius, inst.height, 0); // layer 0 = STATIC
+
+            if (!bodyId.IsInvalid())
+            {
+                bodyIds.push_back(bodyId);
+            }
+        }
+
+        if (!bodyIds.empty())
+        {
+            physicsWorld->addVegetationTileColliders(tileX, tileZ, bodyIds);
+        }
+    }
+
+    void PhysicsAdapter::removeVegetationTileColliders(int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeVegetationTileColliders(tileX, tileZ);
+    }
+
+    void PhysicsAdapter::removeAllVegetationColliders()
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeAllVegetationColliders();
+    }
+
     void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
                                             const glm::vec3& position,
                                             const glm::vec3& halfExtents)

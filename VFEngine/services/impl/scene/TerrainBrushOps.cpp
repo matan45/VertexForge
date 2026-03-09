@@ -641,6 +641,7 @@ namespace services
                     tile->vegetationPlacementDirty = true;
                     tile->vegetationPlacementGPUDirty = true;
                     anyModified = true;
+                    vegetationPhysics.onTileLoaded(coord.x, coord.z, tile->vegetationPlacement);
                 }
             }
             else if (brushType == vegetation::PlacementBrushType::Erase)
@@ -654,6 +655,10 @@ namespace services
                     tile->vegetationPlacementDirty = true;
                     tile->vegetationPlacementGPUDirty = true;
                     anyModified = true;
+                    if (tile->vegetationPlacement.isEmpty())
+                        vegetationPhysics.onTileUnloaded(coord.x, coord.z);
+                    else
+                        vegetationPhysics.onTileLoaded(coord.x, coord.z, tile->vegetationPlacement);
                 }
             }
         }
