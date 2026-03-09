@@ -19,10 +19,6 @@ namespace render::shadow
         uint32_t shadowLOD;
         float depthBias;
         float slopeBias;
-        float normalBias;
-        float _pad0;
-        float _pad1;
-        float _pad2;
     };
 
     class TerrainShadowPipeline
@@ -62,8 +58,7 @@ namespace render::shadow
                       uint32_t tileCount,
                       uint32_t shadowLOD,
                       float depthBias,
-                      float slopeBias,
-                      float normalBias);
+                      float slopeBias);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 

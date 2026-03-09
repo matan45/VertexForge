@@ -214,8 +214,7 @@ namespace render::shadow
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
                         view->depthBias * terrainBiasScale,
-                        view->slopeBias * terrainBiasScale,
-                        0.0f
+                        view->slopeBias * terrainBiasScale
                     );
                 }
             }
@@ -416,8 +415,7 @@ namespace render::shadow
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
                         view.depthBias,
-                        view.slopeBias,
-                        0.0f
+                        view.slopeBias
                     );
                 }
 

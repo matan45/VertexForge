@@ -13,7 +13,6 @@ namespace windows
         bool isDirty = false;
 
         void drawQualitySection();
-        void drawSSGISection();
         void drawProbeSection();
         void drawDebugSection();
         void drawStatsSection();

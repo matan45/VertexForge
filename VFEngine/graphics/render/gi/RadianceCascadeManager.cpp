@@ -28,7 +28,6 @@ namespace render::gi
         switch (settings.quality)
         {
         case GIQuality::Off:
-        case GIQuality::Low:
             config.cascadeCount = 0;
             break;
         case GIQuality::Medium:

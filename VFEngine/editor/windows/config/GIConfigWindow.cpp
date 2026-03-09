@@ -18,7 +18,6 @@ namespace windows
         if (ImGui::Begin("Global Illumination", &visible))
         {
             drawQualitySection();
-            drawSSGISection();
             drawProbeSection();
             drawDebugSection();
             drawStatsSection();
@@ -50,32 +49,15 @@ namespace windows
                 isDirty = true;
             }
 
-            const char* qualityNames[] = {"Off", "Low (SSGI Only)", "Medium (SSGI + 1 Cascade)",
-                                           "High (SSGI + 3 Cascades)", "Ultra (SSGI + 4 Cascades)"};
+            const char* qualityNames[] = {"Off", "Medium (1 Cascade)",
+                                           "High (3 Cascades)", "Ultra (4 Cascades)"};
             int qualityIdx = static_cast<int>(settings.quality);
-            if (ImGui::Combo("Quality Preset", &qualityIdx, qualityNames, 5))
+            if (ImGui::Combo("Quality Preset", &qualityIdx, qualityNames, 4))
             {
                 auto newQuality = static_cast<render::gi::GIQuality>(qualityIdx);
                 settings = render::gi::GISettings::fromQuality(newQuality);
                 isDirty = true;
             }
-        }
-    }
-
-    void GIConfigWindow::drawSSGISection()
-    {
-        if (ImGui::CollapsingHeader("Screen-Space GI"))
-        {
-            if (ImGui::SliderFloat("SSGI Intensity", &settings.ssgiIntensity, 0.0f, 3.0f))
-                isDirty = true;
-            if (ImGui::SliderFloat("SSGI Radius", &settings.ssgiRadius, 0.5f, 10.0f))
-                isDirty = true;
-            if (ImGui::SliderInt("Ray Count", &settings.ssgiRayCount, 2, 32))
-                isDirty = true;
-            if (ImGui::SliderInt("Step Count", &settings.ssgiStepCount, 4, 64))
-                isDirty = true;
-            if (ImGui::SliderFloat("Thickness", &settings.ssgiThickness, 0.1f, 2.0f))
-                isDirty = true;
         }
     }
 

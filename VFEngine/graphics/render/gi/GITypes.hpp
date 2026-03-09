@@ -8,23 +8,15 @@ namespace render::gi
     enum class GIQuality : uint8_t
     {
         Off = 0,
-        Low,      // SSGI only
-        Medium,   // SSGI + 1 cascade
-        High,     // SSGI + 3 cascades
-        Ultra     // SSGI + 4 cascades + higher density
+        Medium,   // 1 cascade
+        High,     // 3 cascades
+        Ultra     // 4 cascades + higher density
     };
 
     struct GISettings
     {
         bool enabled = false;
         GIQuality quality = GIQuality::Off;
-
-        // SSGI parameters
-        float ssgiIntensity = 1.0f;
-        float ssgiRadius = 2.0f;
-        int ssgiRayCount = 8;
-        int ssgiStepCount = 16;
-        float ssgiThickness = 0.5f;
 
         // Radiance cascade parameters
         float probeSpacing = 2.0f;            // Base spacing in meters (cascade 0)
@@ -50,29 +42,15 @@ namespace render::gi
             {
             case GIQuality::Off:
                 break;
-            case GIQuality::Low:
-                s.ssgiIntensity = 0.8f;
-                s.ssgiRayCount = 4;
-                s.ssgiStepCount = 8;
-                break;
             case GIQuality::Medium:
-                s.ssgiIntensity = 1.0f;
-                s.ssgiRayCount = 8;
-                s.ssgiStepCount = 16;
                 s.probeSpacing = 4.0f;
                 s.probeRaysPerUpdate = 64;
                 break;
             case GIQuality::High:
-                s.ssgiIntensity = 1.0f;
-                s.ssgiRayCount = 8;
-                s.ssgiStepCount = 16;
                 s.probeSpacing = 2.0f;
                 s.probeRaysPerUpdate = 128;
                 break;
             case GIQuality::Ultra:
-                s.ssgiIntensity = 1.0f;
-                s.ssgiRayCount = 16;
-                s.ssgiStepCount = 24;
                 s.probeSpacing = 2.0f;
                 s.probeRaysPerUpdate = 256;
                 break;

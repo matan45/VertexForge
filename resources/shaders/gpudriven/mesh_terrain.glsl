@@ -306,17 +306,21 @@ const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
-// Scale increases with shadow LOD to compensate for geometry mismatch between shadow and render LODs
-// LOD 0: shadow mesh matches render mesh closely, LOD 1-2: larger mismatch needs more bias
-const float TERRAIN_SHADOW_LOD_BIAS[] = float[](3.0, 8.0, 12.0, 3.0);
-#define TERRAIN_NORMAL_BIAS_SCALE TERRAIN_SHADOW_LOD_BIAS[uint(clamp(pc.shadowLOD, 0.0, 3.0))]
+// Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
+// pc.shadowLOD is uniform — GPU evaluates this once per wavefront, not per fragment
+float getTerrainNormalBiasScale() {
+    if (pc.shadowLOD < 0.5) return 3.0;
+    if (pc.shadowLOD < 1.5) return 8.0;
+    if (pc.shadowLOD < 2.5) return 12.0;
+    return 3.0;
+}
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
@@ -356,7 +360,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     if (lightSpacePos.w <= 0.0) return 1.0;
@@ -445,7 +449,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 
     if (linearDepth >= far) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     lightToFrag = biasedPos - lightPos;
     linearDepth = length(lightToFrag);
     vec3 sampleDir = normalize(lightToFrag);

@@ -13,8 +13,7 @@ namespace postprocess
         FilmGrain,
         DepthOfField,
         SSAO,
-        EdgeDetection,
-        SSGI
+        EdgeDetection
     };
 
     enum class VolumetricQuality : uint8_t
@@ -148,16 +147,6 @@ namespace postprocess
         float opacity = 1.0f;
     };
 
-    struct SSGISettings
-    {
-        bool enabled = false;
-        float intensity = 1.0f;
-        float radius = 3.0f;
-        int rayCount = 8;
-        int stepCount = 16;
-        float thickness = 0.5f;
-    };
-
     struct PostProcessSettings
     {
         bool enabled = false;
@@ -172,7 +161,6 @@ namespace postprocess
         VolumetricFogSettings volumetricFog;
         SSAOSettings ssao;
         EdgeDetectionSettings edgeDetection;
-        SSGISettings ssgi;
 
         static PostProcessSettings createDefault()
         {

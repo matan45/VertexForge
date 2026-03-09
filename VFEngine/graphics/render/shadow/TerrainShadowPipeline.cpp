@@ -194,8 +194,7 @@ namespace render::shadow
                                           uint32_t tileCount,
                                           uint32_t shadowLOD,
                                           float depthBias,
-                                          float slopeBias,
-                                          float normalBias)
+                                          float slopeBias)
     {
         if (!initialized || tileCount == 0)
             return;
@@ -224,7 +223,6 @@ namespace render::shadow
         pushConstants.shadowLOD = shadowLOD;
         pushConstants.depthBias = depthBias;
         pushConstants.slopeBias = slopeBias;
-        pushConstants.normalBias = normalBias;
 
         cmd.pushConstants(
             terrainShadowPipelineLayout,
