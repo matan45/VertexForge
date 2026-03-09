@@ -865,6 +865,7 @@ namespace render::gpudriven
                         entry.rotation = instance.rotation;
                         entry.radius = species.collisionRadius * finalScale;
                         entry.height = species.collisionHeight * finalScale;
+                        entry.maxRenderDistance = species.maxRenderDistance;
                         colliderDebugEntries.push_back(entry);
                     }
 

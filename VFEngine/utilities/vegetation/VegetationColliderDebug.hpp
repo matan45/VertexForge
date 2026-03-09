@@ -12,6 +12,7 @@ namespace vegetation
         float rotation = 0.0f;
         float radius = 0.3f;
         float height = 5.0f;
+        float maxRenderDistance = 100.0f;
     };
 
     // Shared debug data for vegetation colliders, written by GPU renderer, read by debug renderer.

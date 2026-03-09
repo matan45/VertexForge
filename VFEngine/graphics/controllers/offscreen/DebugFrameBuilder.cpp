@@ -16,6 +16,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "vegetation/VegetationColliderDebug.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -227,13 +228,18 @@ namespace controllers::offscreen
     }
 
     void DebugFrameBuilder::collectVegetationColliders(
-        std::vector<render::mesh::PhysicsColliderRenderData>& drawList)
+        std::vector<render::mesh::PhysicsColliderRenderData>& drawList,
+        const glm::vec3& cameraPosition)
     {
         auto entries = vegetation::VegetationColliderDebugData::instance().get();
         if (entries.empty()) return;
 
         for (const auto& entry : entries)
         {
+            // Only show colliders for instances within render distance (matches GPU cull shader)
+            float dist = glm::distance(entry.position, cameraPosition);
+            if (dist > entry.maxRenderDistance) continue;
+
             render::mesh::PhysicsColliderRenderData renderData;
 
             // Build world matrix: translate to position + half height offset, then rotate
@@ -264,10 +270,18 @@ namespace controllers::offscreen
             return;
         }
 
+        // Extract camera world position from view matrix for distance culling
+        glm::vec3 cameraPos(0.0f);
+        if (ctx.cameraController)
+        {
+            glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+            cameraPos = glm::vec3(invView[3]);
+        }
+
         std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
         collectStandardColliders(colliderDrawList);
         collectTerrainColliders(colliderDrawList);
-        collectVegetationColliders(colliderDrawList);
+        collectVegetationColliders(colliderDrawList, cameraPos);
 
         if (!colliderDrawList.empty())
         {
