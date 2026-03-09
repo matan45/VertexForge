@@ -11,6 +11,8 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../../graphics/render/gi/GITypes.hpp"
+#include "../../graphics/render/lighting/LightStreamManager.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 
@@ -148,6 +150,22 @@ namespace controllers
         postprocess::PostProcessSettings getPostProcessSettings() const;
         void setPostProcessEnabled(bool enabled);
         bool isPostProcessEnabled() const;
+
+        // GI settings
+        void applyGISettings(const render::gi::GISettings& settings);
+        render::gi::GISettings getGISettings() const;
+        render::gi::GIDebugStats getGIDebugStats() const;
+        void setGIShowProbes(bool show);
+        void setGIShowCascadeBounds(bool show);
+        void setGIShowProbeValidity(bool show);
+        void setGIIndirectOnlyMode(bool enabled);
+
+        // Light streaming settings
+        void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
+        render::lighting::LightStreamingConfig getLightStreamingConfig() const;
+        render::lighting::LightStreamingStats getLightStreamingStats() const;
+        void registerSectorLights(uint32_t sectorId);
+        void unregisterSectorLights(uint32_t sectorId);
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

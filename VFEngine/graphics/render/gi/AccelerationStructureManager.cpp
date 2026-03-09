@@ -67,6 +67,7 @@ namespace render::gi
         }
         destroyBuffer(blasBuffer, blasMemory);
         destroyBuffer(blasScratchBuffer, blasScratchMemory);
+        destroyBuffer(tlasStagingBuffer, tlasStagingMemory);
 
         if (descriptorPool)
         {
@@ -257,21 +258,22 @@ namespace render::gi
                          instanceBuffer, instanceMemory);
         }
 
+        // Destroy previous frame's staging buffer (safe now - previous cmd has completed)
+        destroyBuffer(tlasStagingBuffer, tlasStagingMemory);
+
         // Upload instance data via staging
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
         createBuffer(instanceBufferSize,
                      vk::BufferUsageFlagBits::eTransferSrc,
                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                     stagingBuffer, stagingMemory);
+                     tlasStagingBuffer, tlasStagingMemory);
 
-        void* mapped = vkDevice.mapMemory(stagingMemory, 0, instanceBufferSize);
+        void* mapped = vkDevice.mapMemory(tlasStagingMemory, 0, instanceBufferSize);
         memcpy(mapped, instances.data(), instanceBufferSize);
-        vkDevice.unmapMemory(stagingMemory);
+        vkDevice.unmapMemory(tlasStagingMemory);
 
         vk::BufferCopy copyRegion{};
         copyRegion.size = instanceBufferSize;
-        cmd.copyBuffer(stagingBuffer, instanceBuffer, 1, &copyRegion);
+        cmd.copyBuffer(tlasStagingBuffer, instanceBuffer, 1, &copyRegion);
 
         // Barrier after copy
         vk::MemoryBarrier copyBarrier{
@@ -380,11 +382,7 @@ namespace render::gi
 
         updateDescriptor();
 
-        // Clean up staging buffer (deferred - safe after command buffer execution)
-        // For simplicity, destroy immediately since we're in a recording context
-        // In production, these should go through a deferred deletion queue
-        vkDevice.destroyBuffer(stagingBuffer);
-        vkDevice.freeMemory(stagingMemory);
+        // Staging buffer kept alive as member - destroyed at start of next buildTLAS or in cleanup
     }
 
     void AccelerationStructureManager::createDescriptorLayout()

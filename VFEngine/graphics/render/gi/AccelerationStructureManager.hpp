@@ -42,6 +42,10 @@ namespace render::gi
         vk::Buffer tlasScratchBuffer;
         vk::DeviceMemory tlasScratchMemory;
 
+        // Staging buffer for TLAS instance upload (kept alive until next frame)
+        vk::Buffer tlasStagingBuffer;
+        vk::DeviceMemory tlasStagingMemory;
+
         // Descriptor for compute shader access
         vk::DescriptorSetLayout tlasDescriptorLayout;
         vk::DescriptorPool descriptorPool;

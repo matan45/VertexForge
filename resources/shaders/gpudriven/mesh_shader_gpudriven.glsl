@@ -856,7 +856,7 @@ void main() {
 
     vec3 giContribution = vec3(0.0);
 #ifdef GI_ENABLED
-    float cameraDist = length(camera.cameraPosition.xyz - fragWorldPos);
+    float cameraDist = length(camera.cameraPos - fragWorldPos);
     vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
     giContribution = giIrradiance * albedo * kD;
     // Reduce IBL ambient when GI is active to avoid double-counting

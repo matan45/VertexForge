@@ -1,79 +1,82 @@
 #include "GIAdapter.hpp"
-#include "../../../graphics/render/gi/RadianceCascadeManager.hpp"
-#include "../../../graphics/render/gi/GIDebugRenderer.hpp"
+#include "../../controllers/OffScreen.hpp"
 
 namespace core::adapters
 {
     void GIAdapter::applyGISettings(const render::gi::GISettings& settings)
     {
-        cachedSettings = settings;
-        if (cascadeManager)
+        if (offScreen)
         {
-            cascadeManager->applySettings(settings);
+            offScreen->applyGISettings(settings);
         }
     }
 
     render::gi::GISettings GIAdapter::getGISettings() const
     {
-        return cachedSettings;
+        if (offScreen)
+        {
+            return offScreen->getGISettings();
+        }
+        return {};
     }
 
     void GIAdapter::setGIEnabled(bool enabled)
     {
-        cachedSettings.enabled = enabled;
-        if (cascadeManager)
+        if (offScreen)
         {
-            cascadeManager->applySettings(cachedSettings);
+            auto settings = offScreen->getGISettings();
+            settings.enabled = enabled;
+            offScreen->applyGISettings(settings);
         }
     }
 
     bool GIAdapter::isGIEnabled() const
     {
-        return cachedSettings.enabled;
+        if (offScreen)
+        {
+            return offScreen->getGISettings().enabled;
+        }
+        return false;
     }
 
     render::gi::GIDebugStats GIAdapter::getGIDebugStats() const
     {
-        if (cascadeManager)
+        if (offScreen)
         {
-            render::gi::GIDebugStats stats{};
-            stats.totalProbes = cascadeManager->getTotalProbeCount();
-            stats.activeCascades = static_cast<uint32_t>(
-                cascadeManager->getCascadeCount());
-            return stats;
+            return offScreen->getGIDebugStats();
         }
         return {};
     }
 
     void GIAdapter::setShowProbes(bool show)
     {
-        if (debugRenderer)
+        if (offScreen)
         {
-            debugRenderer->setShowProbes(show);
+            offScreen->setGIShowProbes(show);
         }
     }
 
     void GIAdapter::setShowCascadeBounds(bool show)
     {
-        if (debugRenderer)
+        if (offScreen)
         {
-            debugRenderer->setShowCascadeBounds(show);
+            offScreen->setGIShowCascadeBounds(show);
         }
     }
 
     void GIAdapter::setShowProbeValidity(bool show)
     {
-        if (debugRenderer)
+        if (offScreen)
         {
-            debugRenderer->setShowProbeValidity(show);
+            offScreen->setGIShowProbeValidity(show);
         }
     }
 
     void GIAdapter::setIndirectOnlyMode(bool enabled)
     {
-        if (debugRenderer)
+        if (offScreen)
         {
-            debugRenderer->setIndirectOnlyMode(enabled);
+            offScreen->setGIIndirectOnlyMode(enabled);
         }
     }
 }

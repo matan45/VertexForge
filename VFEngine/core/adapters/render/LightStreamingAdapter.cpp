@@ -1,47 +1,47 @@
 #include "LightStreamingAdapter.hpp"
-#include "../../../graphics/render/lighting/LightStreamManager.hpp"
+#include "../../controllers/OffScreen.hpp"
 
 namespace core::adapters
 {
     void LightStreamingAdapter::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
     {
-        if (streamManager)
+        if (offScreen)
         {
-            streamManager->setConfig(config);
+            offScreen->setLightStreamingConfig(config);
         }
     }
 
     render::lighting::LightStreamingConfig LightStreamingAdapter::getLightStreamingConfig() const
     {
-        if (streamManager)
+        if (offScreen)
         {
-            return streamManager->getConfig();
+            return offScreen->getLightStreamingConfig();
         }
         return {};
     }
 
     render::lighting::LightStreamingStats LightStreamingAdapter::getLightStreamingStats() const
     {
-        if (streamManager)
+        if (offScreen)
         {
-            return streamManager->getStats();
+            return offScreen->getLightStreamingStats();
         }
         return {};
     }
 
     void LightStreamingAdapter::registerSectorLights(uint32_t sectorId)
     {
-        if (streamManager)
+        if (offScreen)
         {
-            streamManager->registerSectorLights(sectorId, {});
+            offScreen->registerSectorLights(sectorId);
         }
     }
 
     void LightStreamingAdapter::unregisterSectorLights(uint32_t sectorId)
     {
-        if (streamManager)
+        if (offScreen)
         {
-            streamManager->unregisterSectorLights(sectorId);
+            offScreen->unregisterSectorLights(sectorId);
         }
     }
 }

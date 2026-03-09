@@ -303,12 +303,15 @@ layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
+// Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
+const float TERRAIN_NORMAL_BIAS_SCALE = 3.0;
+
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
@@ -348,7 +351,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     if (lightSpacePos.w <= 0.0) return 1.0;
@@ -437,7 +440,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 
     if (linearDepth >= far) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * TERRAIN_NORMAL_BIAS_SCALE;
     lightToFrag = biasedPos - lightPos;
     linearDepth = length(lightToFrag);
     vec3 sampleDir = normalize(lightToFrag);

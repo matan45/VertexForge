@@ -392,9 +392,9 @@ namespace render::gpudriven
                         : vk::DescriptorSet{};
 
                     giTracePipeline->dispatch(cmd,
-                                               storage->getProbeWriteDescSet(),
-                                               giCascadeManager->getCascadeInfoDescSet(),
                                                storage->getProbeDataDescSet(),
+                                               giCascadeManager->getCascadeInfoDescSet(),
+                                               vk::DescriptorSet{},
                                                push,
                                                tlasSet,
                                                lightSet);
@@ -429,17 +429,8 @@ namespace render::gpudriven
                     }
                 }
 
-                // Swap ping-pong buffers
-                storage->swapBuffers();
-
-                // Update mesh shader pipelines with new read buffer's sampling set
-                auto samplingSet = storage->getSamplingDescSet();
-                if (meshShaderPipeline)
-                    meshShaderPipeline->updateGIProbeDescriptor(samplingSet);
-                if (transparentMeshShaderPipeline)
-                    transparentMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
-                if (wboitMeshShaderPipeline)
-                    wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+                // No ping-pong swap needed: trace reads A, writes B; update reads B, writes A.
+                // Fragment shader always samples from buffer A (the encoded/stable buffer).
             }
         }
 

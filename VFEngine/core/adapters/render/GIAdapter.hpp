@@ -1,10 +1,9 @@
 #pragma once
 #include "../../../services/providers/render/IGIProvider.hpp"
 
-namespace render::gi
+namespace controllers
 {
-    class RadianceCascadeManager;
-    class GIDebugRenderer;
+    class OffScreen;
 }
 
 namespace core::adapters
@@ -12,16 +11,13 @@ namespace core::adapters
     class GIAdapter : public services::IGIProvider
     {
     private:
-        render::gi::RadianceCascadeManager* cascadeManager = nullptr;
-        render::gi::GIDebugRenderer* debugRenderer = nullptr;
-        render::gi::GISettings cachedSettings;
+        controllers::OffScreen* offScreen = nullptr;
 
     public:
         GIAdapter() = default;
         ~GIAdapter() override = default;
 
-        void setCascadeManager(render::gi::RadianceCascadeManager* mgr) { cascadeManager = mgr; }
-        void setDebugRenderer(render::gi::GIDebugRenderer* dbg) { debugRenderer = dbg; }
+        void setOffScreenController(controllers::OffScreen* controller) { offScreen = controller; }
 
         void applyGISettings(const render::gi::GISettings& settings) override;
         render::gi::GISettings getGISettings() const override;

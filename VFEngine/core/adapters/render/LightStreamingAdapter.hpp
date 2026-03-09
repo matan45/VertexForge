@@ -1,9 +1,9 @@
 #pragma once
 #include "../../../services/providers/render/ILightStreamingProvider.hpp"
 
-namespace render::lighting
+namespace controllers
 {
-    class LightStreamManager;
+    class OffScreen;
 }
 
 namespace core::adapters
@@ -11,13 +11,13 @@ namespace core::adapters
     class LightStreamingAdapter : public services::ILightStreamingProvider
     {
     private:
-        render::lighting::LightStreamManager* streamManager = nullptr;
+        controllers::OffScreen* offScreen = nullptr;
 
     public:
         LightStreamingAdapter() = default;
         ~LightStreamingAdapter() override = default;
 
-        void setStreamManager(render::lighting::LightStreamManager* mgr) { streamManager = mgr; }
+        void setOffScreenController(controllers::OffScreen* controller) { offScreen = controller; }
 
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config) override;
         render::lighting::LightStreamingConfig getLightStreamingConfig() const override;

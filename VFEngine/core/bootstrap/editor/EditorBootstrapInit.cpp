@@ -78,8 +78,10 @@ namespace core
 
         offScreen->init();
 
-        // Wire billboard render adapter to offscreen controller
+        // Wire adapters to offscreen controller
         billboardRenderAdapter->setOffScreenController(offScreen.get());
+        lightStreamingAdapter->setOffScreenController(offScreen.get());
+        giAdapter->setOffScreenController(offScreen.get());
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();

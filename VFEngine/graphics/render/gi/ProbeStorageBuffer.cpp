@@ -160,7 +160,7 @@ namespace render::gi
             bindings[0].binding = 0;
             bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[0].descriptorCount = 1;
-            bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex;
 
             bindings[1].binding = 1;
             bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -179,7 +179,7 @@ namespace render::gi
             binding.binding = 0;
             binding.descriptorType = vk::DescriptorType::eUniformBuffer;
             binding.descriptorCount = 1;
-            binding.stageFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment;
+            binding.stageFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = 1;
