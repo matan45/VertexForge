@@ -27,6 +27,5 @@ namespace core::adapters
         void setShowProbes(bool show) override;
         void setShowCascadeBounds(bool show) override;
         void setShowProbeValidity(bool show) override;
-        void setIndirectOnlyMode(bool enabled) override;
     };
 }

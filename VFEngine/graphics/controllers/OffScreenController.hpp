@@ -242,7 +242,6 @@ namespace controllers
         void setGIShowProbes(bool show);
         void setGIShowCascadeBounds(bool show);
         void setGIShowProbeValidity(bool show);
-        void setGIIndirectOnlyMode(bool enabled);
 
         // Light streaming settings
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);

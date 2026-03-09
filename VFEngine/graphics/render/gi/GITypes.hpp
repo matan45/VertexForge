@@ -39,7 +39,6 @@ namespace render::gi
         bool showProbes = false;
         bool showCascadeBounds = false;
         bool showProbeValidity = false;
-        bool indirectOnlyMode = false;
 
         static GISettings fromQuality(GIQuality quality)
         {

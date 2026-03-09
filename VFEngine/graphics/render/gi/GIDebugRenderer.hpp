@@ -32,7 +32,6 @@ namespace render::gi
         bool showProbes = false;
         bool showCascadeBounds = false;
         bool showProbeValidity = false;
-        bool indirectOnlyMode = false;
 
     public:
         explicit GIDebugRenderer(core::Device& device);
@@ -55,8 +54,6 @@ namespace render::gi
         void setShowProbes(bool show) { showProbes = show; }
         void setShowCascadeBounds(bool show) { showCascadeBounds = show; }
         void setShowProbeValidity(bool show) { showProbeValidity = show; }
-        void setIndirectOnlyMode(bool enabled) { indirectOnlyMode = enabled; }
-
         bool isShowProbes() const { return showProbes; }
         bool isShowCascadeBounds() const { return showCascadeBounds; }
         bool isShowProbeValidity() const { return showProbeValidity; }

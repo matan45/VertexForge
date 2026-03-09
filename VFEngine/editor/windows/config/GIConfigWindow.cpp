@@ -116,8 +116,6 @@ namespace windows
                 isDirty = true;
             if (ImGui::Checkbox("Show Probe Validity", &settings.showProbeValidity))
                 isDirty = true;
-            if (ImGui::Checkbox("Indirect Only Mode", &settings.indirectOnlyMode))
-                isDirty = true;
         }
     }
 
@@ -133,7 +131,6 @@ namespace windows
                 ImGui::Text("Total Probes: %u", stats.totalProbes);
                 ImGui::Text("Active Cascades: %u", stats.activeCascades);
                 ImGui::Text("Probes Updated/Frame: %u", stats.probesUpdatedThisFrame);
-                ImGui::Text("GPU Time: %.2f ms", stats.gpuTimeMs);
             }
             catch (...)
             {

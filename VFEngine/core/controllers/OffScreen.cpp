@@ -538,11 +538,6 @@ namespace controllers {
 		offScreenController->setGIShowProbeValidity(show);
 	}
 
-	void OffScreen::setGIIndirectOnlyMode(bool enabled)
-	{
-		offScreenController->setGIIndirectOnlyMode(enabled);
-	}
-
 	// ── Light Streaming Settings ──────────────────────────────
 
 	void OffScreen::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)

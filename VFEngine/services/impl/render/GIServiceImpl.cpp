@@ -59,13 +59,6 @@ namespace services
             }
         );
 
-        dispatcher.registerCommandHandler<events::render::gi::SetGIIndirectOnlyModeCommand>(
-            [this](const events::render::gi::SetGIIndirectOnlyModeCommand& cmd)
-            {
-                provider->setIndirectOnlyMode(cmd.enabled);
-            }
-        );
-
         dispatcher.registerQueryHandler<events::render::gi::GetGISettingsQuery>(
             [this](const events::render::gi::GetGISettingsQuery&) -> render::gi::GISettings
             {

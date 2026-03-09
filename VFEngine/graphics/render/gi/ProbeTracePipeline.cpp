@@ -141,10 +141,16 @@ namespace render::gi
             return;
         }
 
+        // If pipeline was compiled with ray query support, TLAS must be available
+        if (rayQueryEnabled && !tlasDescSet)
+        {
+            return;
+        }
+
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
         std::vector<vk::DescriptorSet> descSets = {probeWriteDescSet, cascadeInfoDescSet};
-        if (rayQueryEnabled && tlasDescSet)
+        if (rayQueryEnabled)
         {
             descSets.push_back(tlasDescSet);
         }

@@ -532,10 +532,7 @@ namespace controllers
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu && gpu->getGICascadeManager())
         {
-            render::gi::GIDebugStats stats{};
-            stats.totalProbes = gpu->getGICascadeManager()->getTotalProbeCount();
-            stats.activeCascades = static_cast<uint32_t>(gpu->getGICascadeManager()->getCascadeCount());
-            return stats;
+            return gpu->getGICascadeManager()->getDebugStats();
         }
         return {};
     }
@@ -573,18 +570,6 @@ namespace controllers
         if (gpu && gpu->getGIDebugRenderer())
         {
             gpu->getGIDebugRenderer()->setShowProbeValidity(show);
-        }
-    }
-
-    void OffScreenController::setGIIndirectOnlyMode(bool enabled)
-    {
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
-
-        auto* gpu = renderHandler->getGPUDrivenRenderer();
-        if (gpu && gpu->getGIDebugRenderer())
-        {
-            gpu->getGIDebugRenderer()->setIndirectOnlyMode(enabled);
         }
     }
 

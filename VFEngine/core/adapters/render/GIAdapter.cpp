@@ -72,11 +72,4 @@ namespace core::adapters
         }
     }
 
-    void GIAdapter::setIndirectOnlyMode(bool enabled)
-    {
-        if (offScreen)
-        {
-            offScreen->setGIIndirectOnlyMode(enabled);
-        }
-    }
 }

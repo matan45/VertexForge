@@ -42,12 +42,6 @@ namespace events::render::gi
         std::string_view getName() const override { return "SetGIDebugProbeValidity"; }
     };
 
-    struct SetGIIndirectOnlyModeCommand : ::events::ICommand<void>
-    {
-        bool enabled;
-        std::string_view getName() const override { return "SetGIIndirectOnlyMode"; }
-    };
-
     // ---- Queries ----
 
     struct GetGISettingsQuery : ::events::IQuery<::render::gi::GISettings>

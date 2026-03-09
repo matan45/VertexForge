@@ -16,6 +16,5 @@ namespace services
         virtual void setShowProbes(bool show) = 0;
         virtual void setShowCascadeBounds(bool show) = 0;
         virtual void setShowProbeValidity(bool show) = 0;
-        virtual void setIndirectOnlyMode(bool enabled) = 0;
     };
 }
