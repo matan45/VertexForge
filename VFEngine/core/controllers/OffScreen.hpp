@@ -24,6 +24,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace controllers
@@ -138,6 +140,8 @@ namespace controllers
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
 
+        void setBillboardRenderingEnabled(bool enabled);
+
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
@@ -148,6 +152,8 @@ namespace controllers
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();
@@ -170,5 +176,14 @@ namespace controllers
 
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
+
+        struct ImposterBakeResult
+        {
+            bool success = false;
+            std::string outputPath;
+            std::string errorMessage;
+        };
+        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath,
+                                        const glm::vec3& meshCenter = glm::vec3(0.0f), float meshScale = 1.0f);
     };
 }

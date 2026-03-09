@@ -247,6 +247,9 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
+        float billboardDistance = 100.0f;  // Distance at which mesh transitions to billboard
+        float maxRenderDistance = 1000.0f; // Maximum render distance for billboard
+        std::string imposterPath;          // Path to .vfImposter atlas (baked from mesh)
     };
 
     struct TextData

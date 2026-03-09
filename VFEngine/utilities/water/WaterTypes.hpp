@@ -39,7 +39,7 @@ namespace water
     {
         bool enabled = false;
         uint32_t resolution = 256;
-        float patchSize = 100.0f;
+        float patchSize = 128.0f;
         float windSpeed = 8.0f;
         float windDirection = 45.0f;
         float amplitude = 0.00003f;

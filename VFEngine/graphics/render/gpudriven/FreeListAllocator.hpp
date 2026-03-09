@@ -64,11 +64,11 @@ namespace render::gpudriven {
             }
         }
 
-        uint32_t getUsedCount() const { return usedCount; }
-        uint32_t getReservedCount() const { return reservedCount; }
-        uint32_t getCapacity() const { return capacity; }
+        uint32_t getUsedCount() const { std::lock_guard<std::mutex> lock(mtx); return usedCount; }
+        uint32_t getReservedCount() const { std::lock_guard<std::mutex> lock(mtx); return reservedCount; }
+        uint32_t getCapacity() const { std::lock_guard<std::mutex> lock(mtx); return capacity; }
 
-        uint32_t getFreeBlockCount() const { return static_cast<uint32_t>(freeList.size()); }
+        uint32_t getFreeBlockCount() const { std::lock_guard<std::mutex> lock(mtx); return static_cast<uint32_t>(freeList.size()); }
 
         float getFragmentationPercent() const {
             std::lock_guard<std::mutex> lock(mtx);

@@ -2,6 +2,8 @@
 
 #include "TerrainTypes.hpp"
 #include "TerrainWeightMap.hpp"
+#include "../vegetation/VegetationDensityMap.hpp"
+#include "../vegetation/VegetationPlacementData.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
@@ -90,6 +92,14 @@ namespace terrain
         bool weightMapDirty = false;
         bool weightMapGPUDirty = false;
 
+        vegetation::VegetationDensityMap vegetationDensity;
+        bool vegetationDensityDirty = false;
+        bool vegetationDensityGPUDirty = false;
+
+        vegetation::VegetationPlacementData vegetationPlacement;
+        bool vegetationPlacementDirty = false;
+        bool vegetationPlacementGPUDirty = false;
+
         bool isDirty = true;
         bool isVisible = true;
 
@@ -140,6 +150,10 @@ namespace terrain
 
         void initializeWeightMap();
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
+
+        void initializeVegetationDensity();
+        [[nodiscard]] bool hasVegetationDensity() const { return vegetationDensity.isInitialized(); }
+        [[nodiscard]] bool hasVegetationPlacement() const { return !vegetationPlacement.isEmpty(); }
 
     private:
         void initializeFlat(float height = 0.0f);

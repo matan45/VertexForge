@@ -8,12 +8,15 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/TerrainSerializer.hpp"
+#include "vegetation/VegetationSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include <algorithm>
 #include <cfloat>
+#include <filesystem>
+#include <format>
 
 namespace services
 {
@@ -622,6 +625,8 @@ namespace services
         // Post-save bookkeeping
         size_t savedCount = cache.getDirtyCount();
 
+        saveVegetation(terrainEntityId, path);
+
         auto& comp = registry.get<components::TerrainComponent>(ent);
         comp.saveDirty = false;
 
@@ -703,6 +708,8 @@ namespace services
 
         if (result)
         {
+            saveVegetation(terrainEntityId, path);
+
             auto& mutableComp = registry.get<components::TerrainComponent>(ent);
             mutableComp.savePath = path;
             mutableComp.saveDirty = false;
@@ -843,6 +850,117 @@ namespace services
 
         vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
+        // Load vegetation data (density + placement) for each tile
+        loadVegetation(parentHandle.id, path);
+
         return parentHandle;
+    }
+
+    std::string TerrainService::getVegetationDirectory(const std::string& terrainPath)
+    {
+        namespace fs = std::filesystem;
+        fs::path p(terrainPath);
+        return (p.parent_path() / (p.stem().string() + "_vegetation")).string();
+    }
+
+    bool TerrainService::saveVegetation(uint64_t terrainEntityId, const std::string& terrainPath)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        namespace fs = std::filesystem;
+        std::string vegDir = getVegetationDirectory(terrainPath);
+
+        auto allTiles = gridIt->second->getAllTiles();
+        bool anyData = false;
+
+        for (const auto* tile : allTiles)
+        {
+            if (!tile) continue;
+
+            if (tile->vegetationDensity.isInitialized())
+            {
+                anyData = true;
+                std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
+                    vegDir, tile->coord.x, tile->coord.z);
+                if (!vegetation::VegetationSerializer::saveDensityMap(densityPath, tile->vegetationDensity))
+                {
+                    vfLogError("TerrainService: Failed to save vegetation density for tile ({}, {})",
+                               tile->coord.x, tile->coord.z);
+                }
+            }
+
+            if (tile->vegetationPlacement.getInstanceCount() > 0)
+            {
+                anyData = true;
+                std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
+                    vegDir, tile->coord.x, tile->coord.z);
+                if (!vegetation::VegetationSerializer::savePlacementData(placementPath, tile->vegetationPlacement))
+                {
+                    vfLogError("TerrainService: Failed to save vegetation placement for tile ({}, {})",
+                               tile->coord.x, tile->coord.z);
+                }
+            }
+        }
+
+        if (anyData)
+            vfLogInfo("TerrainService: Saved vegetation data to {}", vegDir);
+
+        return true;
+    }
+
+    bool TerrainService::loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        namespace fs = std::filesystem;
+        std::string vegDir = getVegetationDirectory(terrainPath);
+
+        if (!fs::exists(vegDir) || !fs::is_directory(vegDir))
+            return true; // No vegetation data — not an error
+
+        auto allTiles = gridIt->second->getAllTiles();
+        uint32_t loadedDensity = 0;
+        uint32_t loadedPlacement = 0;
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile) continue;
+
+            std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
+                vegDir, tile->coord.x, tile->coord.z);
+            if (fs::exists(densityPath))
+            {
+                if (vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensity))
+                {
+                    tile->vegetationDensityDirty = true;
+                    tile->vegetationDensityGPUDirty = true;
+                    loadedDensity++;
+                }
+            }
+
+            std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
+                vegDir, tile->coord.x, tile->coord.z);
+            if (fs::exists(placementPath))
+            {
+                if (vegetation::VegetationSerializer::loadPlacementData(placementPath, tile->vegetationPlacement))
+                {
+                    tile->vegetationPlacementDirty = true;
+                    tile->vegetationPlacementGPUDirty = true;
+                    loadedPlacement++;
+                }
+            }
+        }
+
+        if (loadedDensity > 0 || loadedPlacement > 0)
+        {
+            vfLogInfo("TerrainService: Loaded vegetation data ({} density, {} placement) from {}",
+                      loadedDensity, loadedPlacement, vegDir);
+        }
+
+        return true;
     }
 }

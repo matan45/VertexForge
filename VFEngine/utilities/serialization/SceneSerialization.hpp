@@ -8,6 +8,7 @@
 #include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include "../vegetation/VegetationSpecies.hpp"
 
 namespace scene
 {
@@ -39,6 +40,10 @@ namespace serialization
                                       scene::SceneGraphSystem& sceneGraph, bool isRoot,
                                       SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
                                       size_t totalEntities);
+
+        static json serializeVegetationSpecies(
+            const std::unordered_map<uint32_t, vegetation::VegetationSpeciesConfig>& species);
+        static std::vector<vegetation::VegetationSpeciesConfig> deserializeVegetationSpecies(const json& j);
 
     private:
         static json serializeRootEntity(scene::Entity& root);
@@ -154,6 +159,9 @@ namespace serialization
 
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
+
+        static json serializeGrass(const components::GrassComponent& grass);
+        static void deserializeGrass(const json& j, components::GrassComponent& grass);
 
         static json serializeWater(const components::WaterComponent& water);
         static void deserializeWater(const json& j, components::WaterComponent& water);

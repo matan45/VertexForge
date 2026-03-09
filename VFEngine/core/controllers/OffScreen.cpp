@@ -351,6 +351,11 @@ namespace controllers {
 		offScreenController->setTerrainRenderingEnabled(enabled);
 	}
 
+	void OffScreen::setBillboardRenderingEnabled(bool enabled)
+	{
+		offScreenController->setBillboardRenderingEnabled(enabled);
+	}
+
 	void OffScreen::setTerrainLODBias(float bias)
 	{
 		offScreenController->setTerrainLODBias(bias);
@@ -409,6 +414,16 @@ namespace controllers {
 	void OffScreen::setWaterRenderProvider(services::IWaterRenderProvider* provider)
 	{
 		offScreenController->setWaterRenderProvider(provider);
+	}
+
+	void OffScreen::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+	{
+		offScreenController->setGrassRenderProvider(provider);
+	}
+
+	void OffScreen::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+	{
+		offScreenController->setVegetationRenderProvider(provider);
 	}
 
 	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
@@ -489,5 +504,20 @@ namespace controllers {
 		{
 			offScreenController->clearAdditionalWaterFrustums();
 		}
+	}
+
+	OffScreen::ImposterBakeResult OffScreen::bakeImposter(const std::string& meshPath, const std::string& outputPath,
+	                                                      const glm::vec3& meshCenter, float meshScale)
+	{
+		if (!offScreenController)
+		{
+			return {false, "", "No OffScreenController available"};
+		}
+		auto controllerResult = offScreenController->bakeImposter(meshPath, outputPath, meshCenter, meshScale);
+		ImposterBakeResult result;
+		result.success = controllerResult.success;
+		result.outputPath = controllerResult.outputPath;
+		result.errorMessage = controllerResult.errorMessage;
+		return result;
 	}
 }

@@ -20,6 +20,10 @@
 #include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/vegetation/VegetationAdapter.hpp"
+#include "../../adapters/vegetation/GrassRenderAdapter.hpp"
+#include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
 
 namespace core
 {
@@ -136,5 +140,25 @@ namespace core
     services::IPostProcessProvider* EditorBootstrap::getPostProcessProvider()
     {
         return postProcessAdapter.get();
+    }
+
+    services::IVegetationProvider* EditorBootstrap::getVegetationProvider()
+    {
+        return vegetationAdapter.get();
+    }
+
+    services::IGrassRenderProvider* EditorBootstrap::getGrassRenderProvider()
+    {
+        return grassRenderAdapter.get();
+    }
+
+    services::IVegetationRenderProvider* EditorBootstrap::getVegetationRenderProvider()
+    {
+        return vegetationRenderAdapter.get();
+    }
+
+    services::IBillboardRenderProvider* EditorBootstrap::getBillboardRenderProvider()
+    {
+        return billboardRenderAdapter.get();
     }
 }

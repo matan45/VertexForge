@@ -22,7 +22,6 @@ namespace windows
     class WorldSectorWindow;
     class VFXDebugWindow;
     class AnimationDebugWindow;
-
     class MainMenuBar
     {
     private:
@@ -48,7 +47,6 @@ namespace windows
         WorldSectorWindow* worldSectorWindow = nullptr;
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
-
     public:
         MainMenuBar();
         ~MainMenuBar();

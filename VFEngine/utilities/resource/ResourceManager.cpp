@@ -51,12 +51,18 @@ namespace resource
         releaseExpired(hdrCache);
         releaseExpired(audioCache);
         releaseExpired(meshCache);
-        releaseExpired(materialCache);
-        releaseExpired(materialInstanceCache);
         releaseExpired(fontCache);
         releaseExpired(animationCache);
         releaseExpired(animatorCache);
-        releaseExpired(terrainMaterialCache);
+
+        // Material caches don't acquire in lifecycle (entity components own the lifecycle reference).
+        // Just clean expired weak_ptrs without releasing from lifecycle.
+        auto cleanExpired = [](auto& cache) {
+            std::erase_if(cache, [](const auto& pair) { return pair.second.expired(); });
+        };
+        cleanExpired(materialCache);
+        cleanExpired(materialInstanceCache);
+        cleanExpired(terrainMaterialCache);
 
         // Shaders are engine-internal, not lifecycle-tracked — just clean expired entries
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });

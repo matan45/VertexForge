@@ -12,8 +12,8 @@ namespace water
 
     struct WaterStreamingConfig
     {
-        float loadRadius = 200.0f;
-        float unloadRadius = 250.0f;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
         int maxLoadsPerFrame = 4;
         int maxUnloadsPerFrame = 4;
     };

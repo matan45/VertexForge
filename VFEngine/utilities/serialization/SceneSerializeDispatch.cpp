@@ -120,6 +120,12 @@ namespace serialization
                 entity.getComponent<components::TerrainTileComponent>());
         }
 
+        if (entity.hasComponent<components::GrassComponent>())
+        {
+            componentsJson["grass"] = serializeGrass(
+                entity.getComponent<components::GrassComponent>());
+        }
+
         if (entity.hasComponent<components::WaterComponent>())
         {
             componentsJson["water"] = serializeWater(
@@ -419,6 +425,12 @@ namespace serialization
             deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
         }
 
+        if (componentsJson.contains("grass"))
+        {
+            auto& grassComp = entity.addOrReplaceComponent<components::GrassComponent>();
+            deserializeGrass(componentsJson["grass"], grassComp);
+        }
+
         if (componentsJson.contains("water"))
         {
             auto& waterComp = entity.addOrReplaceComponent<components::WaterComponent>();
@@ -586,5 +598,6 @@ namespace serialization
         {
             sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
         }
+
     }
 }

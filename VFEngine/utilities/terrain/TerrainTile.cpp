@@ -212,6 +212,13 @@ namespace terrain
         weightMapGPUDirty = true;
     }
 
+    void TerrainTile::initializeVegetationDensity()
+    {
+        vegetationDensity.initializeDefault(config.getVertexCount());
+        vegetationDensityDirty = true;
+        vegetationDensityGPUDirty = true;
+    }
+
     void TerrainTile::initializeHoleMask()
     {
         uint32_t quadCount = config.getVertexCount() - 1;

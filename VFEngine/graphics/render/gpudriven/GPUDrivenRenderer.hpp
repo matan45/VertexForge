@@ -18,9 +18,22 @@
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
+#include "vegetation/VegetationSpecies.hpp"
+#include "../vegetation/VegetationCullLODPipeline.hpp"
+#include "../vegetation/VegetationMeshShaderPipeline.hpp"
+#include "../vegetation/ImposterPipeline.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "BillboardBufferManager.hpp"
+#include "BillboardMeshShaderPipeline.hpp"
+#include "BillboardGPUTypes.hpp"
+#include "BillboardStreamManager.hpp"
+#include "vegetation/GrassConfig.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
+#include "../vegetation/VegetationStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -69,6 +82,18 @@ namespace water
     struct WaterTileConfig;
 }
 
+namespace vegetation
+{
+    struct WindConfig;
+}
+
+namespace render::vegetation
+{
+    class GrassComputePipeline;
+    class GrassMeshShaderPipeline;
+    class WindSystem;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -113,6 +138,166 @@ namespace render::gpudriven
             bool oceanEnabled = false;
         };
 
+        struct VegetationState
+        {
+            std::unique_ptr<render::vegetation::GrassComputePipeline> grassComputePipeline;
+            std::unique_ptr<render::vegetation::GrassMeshShaderPipeline> grassMeshPipeline;
+            std::unique_ptr<render::vegetation::WindSystem> windSystem;
+
+            // Buffer manager for vegetation tile allocations
+            std::unique_ptr<render::vegetation::VegetationBufferManager> bufferManager;
+
+            // Stream managers
+            std::unique_ptr<render::vegetation::GrassStreamManager> grassStreamManager;
+            std::unique_ptr<render::vegetation::VegetationStreamManager> vegetationStreamManager;
+
+            // Grass instance buffer (GPU-side output from compute pipeline)
+            vk::Buffer grassInstanceBuffer;
+            vk::DeviceMemory grassInstanceBufferMemory;
+            vk::Buffer grassCounterBuffer;
+            vk::DeviceMemory grassCounterBufferMemory;
+            uint32_t grassInstanceCapacity = 0;
+            uint32_t currentGrassInstanceCount = 0;
+
+            bool grassRenderingEnabled = true;
+            bool vegetationRenderingEnabled = true;
+            bool grassInitialized = false;
+
+            ::vegetation::GrassRenderConfig grassConfig;
+
+            vk::DescriptorSetLayout cachedIBLLayout;
+            vk::RenderPass cachedRenderPass;
+
+            // Staging buffer (host-visible, transfer src) — holds ALL tiles' data at offsets
+            vk::Buffer tileStagingBuffer;
+            vk::DeviceMemory tileStagingBufferMemory;
+            void* tileStagingMapped = nullptr;
+
+            // Device-local compute input buffers (storage + transfer dst) — single tile at a time
+            vk::Buffer tileComputeDensity;
+            vk::DeviceMemory tileComputeDensityMemory;
+            vk::Buffer tileComputeHeight;
+            vk::DeviceMemory tileComputeHeightMemory;
+            vk::Buffer tileComputeHole;
+            vk::DeviceMemory tileComputeHoleMemory;
+
+            uint32_t tileComputeCapacity = 0;   // per-tile texel capacity for compute buffers
+            uint32_t tileStagingTileSlots = 0;   // number of tile slots in staging buffer
+            uint32_t tileStagingTexelsPerSlot = 0; // texels per slot
+
+            // Track which terrain tiles have vegetation registered
+            std::unordered_set<uint64_t> registeredTileKeys;
+
+            // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
+            std::vector<terrain::TerrainTile*> cachedVisibleTiles;
+
+            // --- Vegetation LOD pipeline (tree mesh + imposter) ---
+            std::unique_ptr<render::vegetation::VegetationCullLODPipeline> cullLODPipeline;
+            std::unique_ptr<render::vegetation::VegetationMeshShaderPipeline> vegMeshPipeline;
+            std::unique_ptr<render::vegetation::ImposterPipeline> imposterPipeline;
+
+            // GPU buffers for tree LOD pipeline
+            vk::Buffer treeInstanceBuffer;
+            vk::DeviceMemory treeInstanceBufferMemory;
+            vk::Buffer treeInstanceCountBuffer;       // single uint32_t
+            vk::DeviceMemory treeInstanceCountBufferMemory;
+            vk::Buffer visibleLOD0Buffer;
+            vk::DeviceMemory visibleLOD0BufferMemory;
+            vk::Buffer visibleLOD1Buffer;
+            vk::DeviceMemory visibleLOD1BufferMemory;
+            vk::Buffer visibleLOD2Buffer;
+            vk::DeviceMemory visibleLOD2BufferMemory;
+            vk::Buffer lodCountersBuffer;             // 3 x uint32_t (lod0Count, lod1Count, lod2Count)
+            vk::DeviceMemory lodCountersBufferMemory;
+            vk::Buffer imposterConfigBuffer;          // per-species ImposterConfigGPU[]
+            vk::DeviceMemory imposterConfigBufferMemory;
+            vk::Buffer treeInstanceStagingBuffer;     // host-visible staging for tree instances
+            vk::DeviceMemory treeInstanceStagingMemory;
+            void* treeInstanceStagingMapped = nullptr;
+
+            uint32_t treeInstanceCapacity = 0;
+            uint32_t currentTreeInstanceCount = 0;
+            bool treeLODInitialized = false;
+
+            // Species data cache for billboard rendering of placed vegetation
+            struct CachedSpeciesData
+            {
+                uint32_t bindlessTextureIndex = 0;
+                glm::vec2 billboardSize{2.0f, 4.0f};
+                std::string imposterAtlasPath;
+                bool hasImposter = false;
+
+                // Imposter config for GPU
+                float treeHeight = 4.0f;
+                float treeWidth = 2.0f;
+                uint32_t horizontalAngles = 8;
+                uint32_t verticalAngles = 1;
+                uint32_t viewResolution = 256;
+                float atlasWidth = 2048.0f;
+                float atlasHeight = 2048.0f;
+
+                // LOD distances from species config
+                float lod1Distance = 50.0f;
+                float lod2Distance = 100.0f;
+                float imposterDistance = 150.0f;
+                float maxRenderDistance = 500.0f;
+
+                // Material data
+                std::string materialPath;
+                uint32_t materialTextureIndex = 0;  // bindless index for albedo
+                bool hasMaterial = false;
+
+                // Mesh data (from .vfMesh)
+                std::string meshPath;
+                bool hasMesh = false;
+                uint32_t meshletOffset[4] = {};  // per LOD (global offset into shared meshlet buffer)
+                uint32_t meshletCount[4] = {};   // per LOD
+                uint32_t baseVertexOffset = 0;   // global offset into shared vertex buffer
+                uint32_t availableLODMask = 0;   // bits 0-3 for which mesh LODs are loaded
+            };
+            std::unordered_map<uint32_t, CachedSpeciesData> cachedSpecies;
+            bool imposterConfigDirty = true;
+            bool speciesRenderInfoDirty = true;
+
+            // Species render info GPU buffer
+            vk::Buffer speciesRenderInfoBuffer;
+            vk::DeviceMemory speciesRenderInfoBufferMemory;
+        };
+
+        struct ImposterViewInfo
+        {
+            float horizontalAngle;
+            float verticalAngle;
+            glm::vec4 uvRect; // xy = offset, zw = size
+        };
+
+        struct ImposterTexture
+        {
+            vk::Image image;
+            vk::DeviceMemory memory;
+            vk::ImageView imageView;
+            vk::Sampler sampler;
+            uint32_t bindlessIndex = 0;
+            uint32_t width = 0;
+            uint32_t height = 0;
+            uint32_t hAngles = 0;
+            uint32_t vAngles = 0;
+            uint32_t atlasCols = 0; // Number of columns in the atlas grid layout
+            std::vector<ImposterViewInfo> views;
+        };
+
+        struct BillboardState
+        {
+            std::unique_ptr<BillboardBufferManager> bufferManager;
+            std::unique_ptr<BillboardMeshShaderPipeline> meshShaderPipeline;
+            std::unique_ptr<BillboardStreamManager> streamManager;
+            std::vector<BillboardInstanceGPU> instanceList;
+            BillboardRenderStats stats;
+            bool renderingEnabled = true;
+            bool initialized = false;
+            std::unordered_map<std::string, ImposterTexture> loadedImposters;
+        };
+
         struct LightCullingState
         {
             std::unordered_set<uint32_t> visibleLightIds;
@@ -142,7 +327,7 @@ namespace render::gpudriven
             bool lodSelectionEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
-            float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
+            float categoryDistances[7] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
             float shadowDistanceMultiplier = 0.5f;
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
@@ -196,6 +381,8 @@ namespace render::gpudriven
 
         TerrainState terrain;
         WaterState water;
+        VegetationState vegetation;
+        BillboardState billboard;
         LightCullingState lightCulling;
         MaterialState materials;
         CullingConfig culling;
@@ -266,7 +453,7 @@ namespace render::gpudriven
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
-        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) culling.categoryDistances[category] = distance; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < 7) culling.categoryDistances[category] = distance; }
         void setShadowDistanceMultiplier(float mult) { culling.shadowDistanceMultiplier = mult; }
         void setGlobalLodBias(float bias) { culling.globalLodBias = bias; }
         float getGlobalLodBias() const { return culling.globalLodBias; }
@@ -376,6 +563,53 @@ namespace render::gpudriven
         void readbackOceanDisplacement();
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
+        // Vegetation rendering
+        void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void renderGrassDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
+        void updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                       const glm::vec3& cameraPosition);
+        void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
+        bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
+        void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
+        void addVegetationTile(int32_t coordX, int32_t coordZ);
+        void removeVegetationTile(int32_t coordX, int32_t coordZ);
+        void clearVegetationData();
+        void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void updateVegetationSpecies(uint32_t speciesId, const ::vegetation::VegetationSpeciesConfig& config);
+        void removeVegetationSpecies(uint32_t speciesId);
+        void clearAllVegetationSpecies();
+        void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
+        void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void dispatchVegetationCullLOD(vk::CommandBuffer cmd);
+        void renderVegetationDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void setVegetationRenderingEnabled(bool enabled) { vegetation.vegetationRenderingEnabled = enabled; }
+        bool isVegetationRenderingEnabled() const { return vegetation.vegetationRenderingEnabled; }
+        void cleanupVegetation();
+
+        // Billboard rendering
+        void updateBillboards(const std::vector<BillboardInstanceGPU>& instances);
+        void renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                  uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void clearBillboardData();
+        void setBillboardRenderingEnabled(bool enabled) { billboard.renderingEnabled = enabled; }
+        bool isBillboardRenderingEnabled() const { return billboard.renderingEnabled; }
+        const BillboardRenderStats& getBillboardStats() const { return billboard.stats; }
+
+        // Load a .vfImposter atlas and register its texture. Returns bindless texture index.
+        uint32_t loadImposterAtlas(const std::string& imposterPath);
+        void unloadImposterAtlas(const std::string& imposterPath);
+        bool hasImposterAtlas(const std::string& imposterPath) const;
+
+        // Get impostor GPU resources (for registering with other pipelines)
+        const ImposterTexture* getImposterTexture(const std::string& imposterPath) const
+        {
+            auto it = billboard.loadedImposters.find(imposterPath);
+            return (it != billboard.loadedImposters.end()) ? &it->second : nullptr;
+        }
+
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
@@ -406,7 +640,16 @@ namespace render::gpudriven
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
 
+        void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void createGrassBuffers(uint32_t maxInstances);
+        void initTreeLODPipeline(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void createTreeLODBuffers(uint32_t maxInstances);
+        void uploadImposterConfigs();
+        void uploadSpeciesRenderInfo();
+        void uploadTreeInstances(vk::CommandBuffer cmd);
+        void loadSpeciesMesh(uint32_t speciesId, const std::string& meshPath);
+        void unloadSpeciesMesh(uint32_t speciesId);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);

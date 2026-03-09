@@ -40,6 +40,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -123,6 +125,7 @@ namespace controllers
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
+        void setBillboardRenderingEnabled(bool enabled);
 
         void setOcclusionCullingEnabled(bool enabled);
 
@@ -205,6 +208,8 @@ namespace controllers
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();
@@ -227,6 +232,16 @@ namespace controllers
 
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
+
+        // Impostor baking — renders mesh from multiple angles to create billboard atlas
+        struct ImposterBakeResult
+        {
+            bool success = false;
+            std::string outputPath;
+            std::string errorMessage;
+        };
+        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath,
+                                        const glm::vec3& meshCenter = glm::vec3(0.0f), float meshScale = 1.0f);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

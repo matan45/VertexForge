@@ -197,6 +197,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setBillboardRenderingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setBillboardRenderingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::setTerrainLODBias(float bias)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

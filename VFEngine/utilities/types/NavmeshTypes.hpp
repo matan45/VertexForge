@@ -7,11 +7,11 @@ namespace types
     struct NavmeshBakeSettings
     {
         // Rasterization
-        float cellSize = 0.3f;
+        float cellSize = 0.25f;
         float cellHeight = 0.2f;
 
         // Agent
-        float agentRadius = 0.3f;
+        float agentRadius = 0.25f;
         float agentHeight = 2.0f;
         float agentMaxClimb = 0.4f;
         float agentMaxSlope = 45.0f;

@@ -137,6 +137,7 @@
     <ClInclude Include="adapters\physics\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\physics\SocketAdapter.hpp" />
+    <ClInclude Include="adapters\render\BillboardRenderAdapter.hpp" />
     <ClInclude Include="adapters\render\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\render\EditorTextureAdapter.hpp" />
     <ClInclude Include="adapters\render\MaterialPreviewAdapter.hpp" />
@@ -156,6 +157,9 @@
     <ClInclude Include="adapters\terrain\TerrainRaycastAdapter.hpp" />
     <ClInclude Include="adapters\terrain\TerrainRenderAdapter.hpp" />
     <ClInclude Include="adapters\terrain\WaterRenderAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\GrassRenderAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\VegetationAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\VegetationRenderAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
@@ -225,6 +229,7 @@
     <ClCompile Include="adapters\physics\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\physics\SocketAdapter.cpp" />
+    <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
     <ClCompile Include="adapters\render\MaterialPreviewAdapter.cpp" />
@@ -244,6 +249,9 @@
     <ClCompile Include="adapters\terrain\TerrainRaycastAdapter.cpp" />
     <ClCompile Include="adapters\terrain\TerrainRenderAdapter.cpp" />
     <ClCompile Include="adapters\terrain\WaterRenderAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\GrassRenderAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\VegetationAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\VegetationRenderAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />

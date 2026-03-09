@@ -21,10 +21,12 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/data/WaterData.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
 #include "water/OceanFFT.hpp"
+#include "vegetation/WindConfig.hpp"
 
 namespace
 {
@@ -132,6 +134,28 @@ namespace render
 
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
+
+            // Sync vegetation streaming with visible terrain tiles
+            gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, currentCameraPosition);
+
+            // Push grass render config from provider to renderer and update wind
+            if (grassRenderProvider)
+            {
+                auto grassConfig = grassRenderProvider->getGrassRenderConfig();
+                gpuDrivenRenderer->setGrassRenderConfig(grassConfig);
+
+                ::vegetation::WindConfig windConfig;
+                windConfig.direction = grassConfig.windDirection;
+                windConfig.speed = grassConfig.windSpeed * grassConfig.windStrength;
+                windConfig.gustStrength = grassConfig.gustStrength;
+                windConfig.gustFrequency = grassConfig.gustFrequency;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
+            else
+            {
+                ::vegetation::WindConfig windConfig;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
         }
 
         if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
@@ -325,9 +349,24 @@ namespace render
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
         }
 
+        if (gpuDrivenRenderer->isGrassRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        if (gpuDrivenRenderer->isVegetationRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderVegetationDraw(commandBuffer, iblDescriptorSet);
+        }
+
         if (gpuDrivenRenderer->isWaterRenderingEnabled())
         {
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+        }
+
+        if (gpuDrivenRenderer->isBillboardRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
         }
 
         if (hasCustomShaderMeshes)

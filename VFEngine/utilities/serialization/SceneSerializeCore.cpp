@@ -272,6 +272,12 @@ namespace serialization
         {
             j["renderTextureSourceName"] = billboard.renderTextureSourceName;
         }
+        j["billboardDistance"] = billboard.billboardDistance;
+        j["maxRenderDistance"] = billboard.maxRenderDistance;
+        if (!billboard.imposterPath.empty())
+        {
+            j["imposterPath"] = billboard.imposterPath;
+        }
         return j;
     }
 
@@ -296,6 +302,9 @@ namespace serialization
         billboard.texturePath = j.value("texturePath", std::string(""));
         billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         billboard.renderTextureSource = entt::null; // Resolved post-load
+        billboard.billboardDistance = j.value("billboardDistance", 100.0f);
+        billboard.maxRenderDistance = j.value("maxRenderDistance", 1000.0f);
+        billboard.imposterPath = j.value("imposterPath", std::string(""));
     }
 
     json SceneSerialization::serializeText(const components::TextComponent& text)

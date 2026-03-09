@@ -7,6 +7,7 @@
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "../../core/Texture.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
@@ -70,7 +71,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
@@ -115,7 +116,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
@@ -150,7 +151,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
@@ -637,6 +638,24 @@ namespace render::gpudriven
         if (registered)
         {
             materials.registeredPaths.insert(materialPath);
+
+            // Register texture dependencies so textures stay alive while material is tracked
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (lifecycle.isTracked(materialPath))
+            {
+                auto addDep = [&](const std::string& texPath) {
+                    if (!texPath.empty())
+                        lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
+                };
+                addDep(pbrValues.albedoTexturePath);
+                addDep(pbrValues.normalTexturePath);
+                addDep(pbrValues.ormTexturePath);
+                addDep(pbrValues.metallicTexturePath);
+                addDep(pbrValues.roughnessTexturePath);
+                addDep(pbrValues.aoTexturePath);
+                addDep(pbrValues.emissionTexturePath);
+                addDep(pbrValues.heightTexturePath);
+            }
         }
 
         return registered;

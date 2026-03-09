@@ -131,7 +131,7 @@ namespace render::gpudriven {
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        vfLogWarning("BindlessTextureManager: Allocated descriptor set");
+        vfLogInfo("BindlessTextureManager: Allocated descriptor set");
     }
 
     void BindlessTextureManager::setDefaultTexture(vk::ImageView imageView, vk::Sampler sampler)
@@ -146,7 +146,7 @@ namespace render::gpudriven {
         updateDescriptor(0, imageView, sampler);
         defaultTextureSet = true;
 
-        vfLogWarning("BindlessTextureManager: Set default texture at index 0");
+        vfLogInfo("BindlessTextureManager: Set default texture at index 0");
     }
 
     uint32_t BindlessTextureManager::registerTexture(const std::string& path, vk::ImageView imageView, vk::Sampler sampler)
@@ -179,7 +179,7 @@ namespace render::gpudriven {
 
         updateDescriptor(index, imageView, sampler);
 
-        vfLogWarning("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
+        vfLogInfo("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
         return index;
     }
 

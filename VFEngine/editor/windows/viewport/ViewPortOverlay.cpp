@@ -5,6 +5,7 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
+#include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
@@ -80,8 +81,10 @@ namespace windows
                 bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
                 bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+                bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
+                bool isVegPlacementMode = dispatcher.query(events::vegetationBrush::IsVegetationPlacementModeActiveQuery{});
 
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode);
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode || isVegPlacementMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -191,6 +194,68 @@ namespace windows
                 {
                     events::hole::SetHoleModeActiveCommand cmd;
                     cmd.active = !isHoleMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Vegetation brush mode toggle - enabled when terrain is selected or already in veg brush mode
+                bool canVegBrush = isVegBrushMode;
+                if (!canVegBrush)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery4;
+                        terrainQuery4.entity = *selectedEntity;
+                        canVegBrush = dispatcher.query(terrainQuery4);
+
+                        if (!canVegBrush)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery4;
+                            tileQuery4.entity = *selectedEntity;
+                            canVegBrush = dispatcher.query(tileQuery4);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canVegBrush);
+                if (iconButton(ViewportIcon::Vegetation, isVegBrushMode, isVegBrushMode ? "Exit Vegetation Brush" : "Enter Vegetation Brush"))
+                {
+                    events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
+                    cmd.active = !isVegBrushMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Vegetation placement mode toggle
+                bool canVegPlacement = isVegPlacementMode;
+                if (!canVegPlacement)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery5;
+                        terrainQuery5.entity = *selectedEntity;
+                        canVegPlacement = dispatcher.query(terrainQuery5);
+
+                        if (!canVegPlacement)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery5;
+                            tileQuery5.entity = *selectedEntity;
+                            canVegPlacement = dispatcher.query(tileQuery5);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canVegPlacement);
+                if (iconButton(ViewportIcon::VegetationPlacement, isVegPlacementMode, isVegPlacementMode ? "Exit Vegetation Placement" : "Enter Vegetation Placement"))
+                {
+                    events::vegetationBrush::SetVegetationPlacementModeActiveCommand cmd;
+                    cmd.active = !isVegPlacementMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

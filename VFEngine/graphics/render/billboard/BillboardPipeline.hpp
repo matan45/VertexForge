@@ -24,6 +24,7 @@ namespace render::billboard
         std::string texturePath;
         uint32_t firstInstance = 0;
         uint32_t instanceCount = 0;
+        float atlasGridSize = 1.0f; // 1.0 = full texture, >1 = grid atlas (impostor)
     };
 
     class BillboardPipeline

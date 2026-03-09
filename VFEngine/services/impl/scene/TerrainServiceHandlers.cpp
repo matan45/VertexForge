@@ -10,6 +10,7 @@
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 
@@ -21,6 +22,7 @@ namespace services
 
         registerTerrainCoreHandlers(dispatcher);
         registerBrushHandlers(dispatcher);
+        registerVegetationBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
 
@@ -181,6 +183,21 @@ namespace services
             [this](const events::holeBrush::ApplyHoleBrushCommand& cmd)
             {
                 applyHoleBrush(cmd.worldPosition, cmd.erase);
+            });
+    }
+
+    void TerrainService::registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationDensityBrushCommand>(
+            [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
+            {
+                applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationPlacementBrushCommand>(
+            [this](const events::vegetationBrush::ApplyVegetationPlacementBrushCommand& cmd)
+            {
+                applyVegetationPlacementBrush(cmd.worldPosition, cmd.deltaTime);
             });
     }
 

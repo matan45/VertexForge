@@ -1,5 +1,11 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "../vegetation/GrassComputePipeline.hpp"
+#include "../vegetation/GrassMeshShaderPipeline.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
+#include "../vegetation/VegetationStreamManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/RenderManager.hpp"
@@ -144,6 +150,8 @@ namespace render::gpudriven
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
             initWaterSubsystems(iblDescriptorSetLayout, renderPass);
+            initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
+            initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
         }
         else
         {
@@ -222,6 +230,20 @@ namespace render::gpudriven
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
+        // Clean up loaded impostor atlas textures before billboard subsystems
+        for (auto& [path, tex] : billboard.loadedImposters)
+        {
+            if (bindlessTextures) bindlessTextures->unregisterTexture(path);
+            if (tex.sampler) vkDevice.destroySampler(tex.sampler);
+            if (tex.imageView) vkDevice.destroyImageView(tex.imageView);
+            if (tex.image) vkDevice.destroyImage(tex.image);
+            if (tex.memory) vkDevice.freeMemory(tex.memory);
+        }
+        billboard.loadedImposters.clear();
+        if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
+        if (billboard.bufferManager) billboard.bufferManager->cleanup();
+        if (billboard.streamManager) billboard.streamManager->cleanup();
+        cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -240,6 +262,10 @@ namespace render::gpudriven
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        billboard.meshShaderPipeline.reset();
+        billboard.bufferManager.reset();
+        billboard.streamManager.reset();
+        billboard.initialized = false;
         volumetricPipeline.reset();
         meshStreamManager.reset();
         terrain.streamManager.reset();
@@ -377,6 +403,14 @@ namespace render::gpudriven
                     oceanLayout,
                     cachedRenderPass
                 });
+            }
+
+            if (vegetation.grassMeshPipeline && vegetation.grassMeshPipeline->isInitialized())
+            {
+                vegetation.grassMeshPipeline->recreate(
+                    cachedIBLLayout,
+                    vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    cachedRenderPass);
             }
         }
         else

@@ -6,6 +6,7 @@
 #include "../render/shadow/ShadowSystem.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
+#include "../render/impostor/ImposterBaker.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
@@ -55,6 +56,8 @@ namespace controllers
         gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
         gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
         gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
+        gpuDriven->setCategoryDistance(5, settings.distanceCulling.billboardDistance);
+        gpuDriven->setCategoryDistance(6, settings.distanceCulling.waterDistance);
         gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
 
         renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);
@@ -339,6 +342,15 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setBillboardRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setBillboardRenderingEnabled(enabled);
+        }
+    }
+
     void OffScreenController::setTerrainLODBias(float bias)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -399,6 +411,24 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setWaterRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setGrassRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setVegetationRenderProvider(provider);
         }
     }
 
@@ -463,5 +493,35 @@ namespace controllers
         {
             handler->clearAdditionalWaterFrustums();
         }
+    }
+
+    OffScreenController::ImposterBakeResult OffScreenController::bakeImposter(
+        const std::string& meshPath, const std::string& outputPath,
+        const glm::vec3& meshCenter, float meshScale)
+    {
+        ImposterBakeResult result;
+
+        auto* renderHandler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!renderHandler)
+        {
+            result.errorMessage = "No render pass handler available";
+            return result;
+        }
+
+        render::impostor::ImposterBaker baker;
+        baker.init(device, swapChain);
+        baker.setRenderPassHandler(renderHandler);
+
+        render::impostor::ImposterBakeRequest request;
+        request.meshPath = meshPath;
+        request.outputPath = outputPath;
+        request.config.meshScale = meshScale;
+        request.config.meshCenter = meshCenter;
+
+        auto bakeResult = baker.bake(request);
+        result.success = bakeResult.success;
+        result.outputPath = bakeResult.outputPath;
+        result.errorMessage = bakeResult.errorMessage;
+        return result;
     }
 }

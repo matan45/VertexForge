@@ -17,6 +17,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace core
@@ -147,6 +149,7 @@ namespace render
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IWaterRenderProvider* waterRenderProvider = nullptr;
+        services::IGrassRenderProvider* grassRenderProvider = nullptr;
 
         mutable uint32_t lastOceanConfigVersion = 0;
         mutable bool oceanFFTInitialized = false;
@@ -277,6 +280,9 @@ namespace render
         void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();
 
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
+
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
         void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
@@ -304,6 +310,8 @@ namespace render
         void setTerrainErrorThreshold(float threshold);
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
+
+        void setBillboardRenderingEnabled(bool enabled);
 
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);

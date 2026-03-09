@@ -10,6 +10,7 @@
 #include "NavmeshComponents.hpp"
 #include "ControllerComponents.hpp"
 #include "IKComponent.hpp"
+#include "VegetationComponents.hpp"
 
 namespace components
 {
@@ -26,5 +27,6 @@ namespace components
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent, LightmapComponent,
-                                               IKTargetComponent, WorldSectorComponent>;
+                                               IKTargetComponent, WorldSectorComponent,
+                                               GrassComponent>;
 }

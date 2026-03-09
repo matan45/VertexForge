@@ -69,6 +69,7 @@ namespace render
         bool isInitialized() const { return initialized; }
 
         vk::ImageView getLastRenderedImageView() const;
+        vk::Image getLastRenderedImage() const;
         vk::Sampler getTextureSampler() const { return sampler; }
 
     private:

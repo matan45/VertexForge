@@ -25,12 +25,18 @@
 #include "interfaces/terrain/IHoleModeService.hpp"
 #include "interfaces/terrain/IHoleBrushService.hpp"
 #include "interfaces/terrain/ITerrainRaycastService.hpp"
+#include "interfaces/vegetation/IVegetationService.hpp"
+#include "interfaces/vegetation/IGrassService.hpp"
+#include "interfaces/vegetation/IVegetationBrushService.hpp"
+#include "interfaces/vegetation/IVegetationBrushModeService.hpp"
+#include "interfaces/vegetation/IVegetationPlacementModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
 #include "interfaces/lightbake/ILightBakeService.hpp"
 #include "interfaces/physics/IControllerService.hpp"
 #include "interfaces/render/IRenderHookService.hpp"
 #include "interfaces/render/IDebugDrawService.hpp"
+#include "interfaces/render/IBillboardRenderService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/world/IWorldSectorService.hpp"
@@ -104,6 +110,12 @@ namespace handlers {
 		std::shared_ptr<services::IDebugDrawService> debugDrawService;
 		std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
 		std::shared_ptr<services::IWorldSectorService> worldSectorService;
+		std::shared_ptr<services::IVegetationService> vegetationService;
+		std::shared_ptr<services::IGrassService> grassService;
+		std::shared_ptr<services::IVegetationBrushService> vegetationBrushService;
+		std::shared_ptr<services::IVegetationBrushModeService> vegetationBrushModeService;
+		std::shared_ptr<services::IVegetationPlacementModeService> vegetationPlacementModeService;
+		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
@@ -129,6 +141,7 @@ namespace handlers {
 		void createVFXServices();
 		void createTerrainServices();
 		void createWaterServices();
+		void createVegetationServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();

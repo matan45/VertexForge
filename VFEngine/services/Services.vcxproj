@@ -132,6 +132,7 @@
     <ClInclude Include="events\project\ProjectEvents.hpp" />
     <ClInclude Include="events\project\ResourceEvents.hpp" />
     <ClInclude Include="events\project\SceneEvents.hpp" />
+    <ClInclude Include="events\render\BillboardEvents.hpp" />
     <ClInclude Include="events\render\DebugDrawEvents.hpp" />
     <ClInclude Include="events\render\LightCullingEvents.hpp" />
     <ClInclude Include="events\render\MaterialEvents.hpp" />
@@ -160,6 +161,9 @@
     <ClInclude Include="events\ui\UILabelButtonEvents.hpp" />
     <ClInclude Include="events\ui\UIScrollLayoutEvents.hpp" />
     <ClInclude Include="events\ui\UISliderProgressEvents.hpp" />
+    <ClInclude Include="events\vegetation\GrassEvents.hpp" />
+    <ClInclude Include="events\vegetation\VegetationBrushEvents.hpp" />
+    <ClInclude Include="events\vegetation\VegetationEvents.hpp" />
     <ClInclude Include="events\vfx\VFXEventNotifications.hpp" />
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
@@ -197,6 +201,7 @@
     <ClInclude Include="impl\project\FileOperationsServiceImpl.hpp" />
     <ClInclude Include="impl\project\ProjectServiceImpl.hpp" />
     <ClInclude Include="impl\project\SceneServiceImpl.hpp" />
+    <ClInclude Include="impl\render\BillboardRenderServiceImpl.hpp" />
     <ClInclude Include="impl\render\DebugDrawServiceImpl.hpp" />
     <ClInclude Include="impl\render\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\render\PreviewServiceImpl.hpp" />
@@ -218,6 +223,12 @@
     <ClInclude Include="impl\terrain\PaintBrushServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\PaintModeServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\TerrainRaycastServiceImpl.hpp" />
+    <ClInclude Include="impl\vegetation\GrassServiceImpl.hpp" />
+    <ClInclude Include="impl\vegetation\VegetationBrushModeServiceImpl.hpp" />
+    <ClInclude Include="impl\vegetation\VegetationBrushServiceImpl.hpp" />
+    <ClInclude Include="impl\vegetation\VegetationPhysicsIntegration.hpp" />
+    <ClInclude Include="impl\vegetation\VegetationPlacementModeServiceImpl.hpp" />
+    <ClInclude Include="impl\vegetation\VegetationServiceImpl.hpp" />
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
     <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
@@ -237,6 +248,7 @@
     <ClInclude Include="interfaces\project\IFileOperationsService.hpp" />
     <ClInclude Include="interfaces\project\IProjectService.hpp" />
     <ClInclude Include="interfaces\project\ISceneService.hpp" />
+    <ClInclude Include="interfaces\render\IBillboardRenderService.hpp" />
     <ClInclude Include="interfaces\render\IDebugDrawService.hpp" />
     <ClInclude Include="interfaces\render\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\render\IPreviewService.hpp" />
@@ -252,6 +264,11 @@
     <ClInclude Include="interfaces\terrain\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\terrain\ITerrainService.hpp" />
     <ClInclude Include="interfaces\terrain\IWaterService.hpp" />
+    <ClInclude Include="interfaces\vegetation\IGrassService.hpp" />
+    <ClInclude Include="interfaces\vegetation\IVegetationBrushModeService.hpp" />
+    <ClInclude Include="interfaces\vegetation\IVegetationBrushService.hpp" />
+    <ClInclude Include="interfaces\vegetation\IVegetationPlacementModeService.hpp" />
+    <ClInclude Include="interfaces\vegetation\IVegetationService.hpp" />
     <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
@@ -262,6 +279,7 @@
     <ClInclude Include="providers\physics\IIKProvider.hpp" />
     <ClInclude Include="providers\physics\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\physics\ISocketProvider.hpp" />
+    <ClInclude Include="providers\render\IBillboardRenderProvider.hpp" />
     <ClInclude Include="providers\render\IDebugDrawProvider.hpp" />
     <ClInclude Include="providers\render\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\render\IMaterialPreviewProvider.hpp" />
@@ -276,6 +294,9 @@
     <ClInclude Include="providers\terrain\ITerrainRaycastProvider.hpp" />
     <ClInclude Include="providers\terrain\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\terrain\IWaterRenderProvider.hpp" />
+    <ClInclude Include="providers\vegetation\IGrassRenderProvider.hpp" />
+    <ClInclude Include="providers\vegetation\IVegetationProvider.hpp" />
+    <ClInclude Include="providers\vegetation\IVegetationRenderProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXRuntimeProvider.hpp" />
   </ItemGroup>
@@ -320,6 +341,7 @@
     <ClCompile Include="impl\project\FileOperationsServiceImpl.cpp" />
     <ClCompile Include="impl\project\ProjectServiceImpl.cpp" />
     <ClCompile Include="impl\project\SceneServiceImpl.cpp" />
+    <ClCompile Include="impl\render\BillboardRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\DebugDrawServiceImpl.cpp" />
     <ClCompile Include="impl\render\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\PreviewServiceImpl.cpp" />
@@ -348,6 +370,12 @@
     <ClCompile Include="impl\terrain\PaintBrushServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\PaintModeServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\TerrainRaycastServiceImpl.cpp" />
+    <ClCompile Include="impl\vegetation\GrassServiceImpl.cpp" />
+    <ClCompile Include="impl\vegetation\VegetationBrushModeServiceImpl.cpp" />
+    <ClCompile Include="impl\vegetation\VegetationBrushServiceImpl.cpp" />
+    <ClCompile Include="impl\vegetation\VegetationPhysicsIntegration.cpp" />
+    <ClCompile Include="impl\vegetation\VegetationPlacementModeServiceImpl.cpp" />
+    <ClCompile Include="impl\vegetation\VegetationServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />

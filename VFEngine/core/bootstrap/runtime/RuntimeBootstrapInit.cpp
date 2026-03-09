@@ -15,6 +15,7 @@
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
 
 namespace core
 {
@@ -44,8 +45,11 @@ namespace core
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
+        billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
 
         offScreen->init();
+
+        billboardRenderAdapter->setOffScreenController(offScreen.get());
 
         // Disable editor-only visual aids in runtime
         offScreen->setShowGrid(false);

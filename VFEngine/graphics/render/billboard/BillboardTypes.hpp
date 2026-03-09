@@ -118,6 +118,7 @@ namespace render::billboard
         uint32_t entityId;
         glm::vec4 colorTint;
         std::string texturePath; // Non-empty = use custom texture instead of atlas
+        float atlasGridSize = 1.0f; // For impostor atlases: number of columns in grid
     };
 
     // Atlas configuration
