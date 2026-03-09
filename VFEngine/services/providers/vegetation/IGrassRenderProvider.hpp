@@ -11,6 +11,7 @@ namespace services
     {
     public:
         using TileCallback = std::function<void(int32_t, int32_t)>;
+        using GetConfigCallback = std::function<vegetation::GrassRenderConfig()>;
 
         virtual ~IGrassRenderProvider() = default;
 
@@ -27,5 +28,8 @@ namespace services
         virtual void setAddTileCallback(TileCallback) {}
         virtual void setRemoveTileCallback(TileCallback) {}
         virtual void setMarkDirtyCallback(TileCallback) {}
+
+        // Callback for config retrieval (set by service layer to avoid direct ECS access)
+        virtual void setGetConfigCallback(GetConfigCallback) {}
     };
 }

@@ -79,6 +79,12 @@ namespace render::gpudriven
     {
         if (!initialized || !billboard.initialized || !billboard.renderingEnabled) return;
 
+        // Reset GPU count buffer if a clear was requested
+        if (billboard.bufferManager->needsCountReset())
+        {
+            billboard.bufferManager->resetCountBuffer(cmd);
+        }
+
         uint32_t count = billboard.bufferManager->getInstanceCount();
         if (count == 0) return;
 

@@ -27,32 +27,42 @@ namespace render::gpudriven
         float loadDistSq = streamConfig.loadDistance * streamConfig.loadDistance;
         float unloadDistSq = streamConfig.unloadDistance * streamConfig.unloadDistance;
 
-        // Distance-based streaming: only include instances within load distance
-        for (const auto& instance : allInstances)
+        // Distance-based streaming with cached distSq for sorting
+        struct InstanceWithDist {
+            uint32_t index;
+            float distSq;
+        };
+        std::vector<InstanceWithDist> filtered;
+        filtered.reserve(allInstances.size());
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(allInstances.size()); ++i)
         {
+            const auto& instance = allInstances[i];
             glm::vec3 pos(instance.positionAndScale.x, instance.positionAndScale.y, instance.positionAndScale.z);
             glm::vec3 diff = pos - cameraPos;
             float distSq = glm::dot(diff, diff);
 
             if (distSq <= loadDistSq)
             {
-                if (visibleInstances.size() < MAX_GPU_BILLBOARDS)
+                if (filtered.size() < MAX_GPU_BILLBOARDS)
                 {
-                    visibleInstances.push_back(instance);
+                    filtered.push_back({i, distSq});
                 }
             }
         }
 
-        // Sort by distance for priority (closest first)
-        std::sort(visibleInstances.begin(), visibleInstances.end(),
-                  [&cameraPos](const BillboardInstanceGPU& a, const BillboardInstanceGPU& b)
+        // Sort by cached distance (closest first)
+        std::sort(filtered.begin(), filtered.end(),
+                  [](const InstanceWithDist& a, const InstanceWithDist& b)
                   {
-                      glm::vec3 posA(a.positionAndScale.x, a.positionAndScale.y, a.positionAndScale.z);
-                      glm::vec3 posB(b.positionAndScale.x, b.positionAndScale.y, b.positionAndScale.z);
-                      float distA = glm::dot(posA - cameraPos, posA - cameraPos);
-                      float distB = glm::dot(posB - cameraPos, posB - cameraPos);
-                      return distA < distB;
+                      return a.distSq < b.distSq;
                   });
+
+        visibleInstances.reserve(filtered.size());
+        for (const auto& entry : filtered)
+        {
+            visibleInstances.push_back(allInstances[entry.index]);
+        }
 
         // Apply per-frame upload budget
         size_t maxInstances = static_cast<size_t>(streamConfig.maxUploadsPerFrame) * 8;

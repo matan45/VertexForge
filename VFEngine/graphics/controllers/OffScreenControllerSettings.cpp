@@ -342,6 +342,15 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setBillboardRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setBillboardRenderingEnabled(enabled);
+        }
+    }
+
     void OffScreenController::setTerrainLODBias(float bias)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

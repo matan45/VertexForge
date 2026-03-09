@@ -351,6 +351,11 @@ namespace controllers {
 		offScreenController->setTerrainRenderingEnabled(enabled);
 	}
 
+	void OffScreen::setBillboardRenderingEnabled(bool enabled)
+	{
+		offScreenController->setBillboardRenderingEnabled(enabled);
+	}
+
 	void OffScreen::setTerrainLODBias(float bias)
 	{
 		offScreenController->setTerrainLODBias(bias);

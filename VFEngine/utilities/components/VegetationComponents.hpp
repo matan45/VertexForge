@@ -13,6 +13,5 @@ namespace components
     struct VegetationComponent
     {
         bool enabled = true;
-        uint32_t activeSpeciesCount = 0;
     };
 }

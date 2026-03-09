@@ -1,6 +1,4 @@
 #include "GrassRenderAdapter.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/VegetationComponents.hpp"
 
 namespace core::adapters
 {
@@ -31,12 +29,9 @@ namespace core::adapters
 
     vegetation::GrassRenderConfig GrassRenderAdapter::getGrassRenderConfig() const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::GrassComponent>();
-        for (auto entity : view)
+        if (getConfigCallback)
         {
-            const auto& comp = view.get<components::GrassComponent>(entity);
-            return comp.config;
+            return getConfigCallback();
         }
         return {};
     }

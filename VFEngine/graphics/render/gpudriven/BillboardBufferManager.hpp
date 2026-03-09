@@ -21,10 +21,14 @@ namespace render::gpudriven
         void uploadInstances(const std::vector<BillboardInstanceGPU>& instances);
         void clear();
 
+        // Reset count buffer on GPU timeline (call during command buffer recording)
+        void resetCountBuffer(vk::CommandBuffer cmd);
+
         [[nodiscard]] vk::Buffer getInstanceBuffer() const { return instanceBuffer; }
         [[nodiscard]] vk::Buffer getCountBuffer() const { return countBuffer; }
         [[nodiscard]] uint32_t getInstanceCount() const { return currentInstanceCount; }
         [[nodiscard]] uint32_t getCapacity() const { return capacity; }
+        [[nodiscard]] bool needsCountReset() const { return pendingCountReset; }
 
     private:
         void createBuffers(uint32_t maxInstances);
@@ -39,5 +43,6 @@ namespace render::gpudriven
 
         uint32_t capacity = 0;
         uint32_t currentInstanceCount = 0;
+        bool pendingCountReset = false;
     };
 }

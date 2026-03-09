@@ -21,8 +21,6 @@ namespace windows
         bool configLoaded = false;
 
         events::SubscriptionToken modeToken;
-        events::SubscriptionToken brushTypeToken;
-        events::SubscriptionToken brushParamsToken;
 
         bool subscribed = false;
 

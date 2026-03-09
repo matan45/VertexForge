@@ -46,6 +46,8 @@
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/vegetation/GrassEvents.hpp"
+#include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "time/Timer.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -434,6 +436,16 @@ namespace handlers
         vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
         vegetationPlacementModeService = std::make_shared<services::VegetationPlacementModeServiceImpl>();
+
+        // Wire grass config callback so the adapter doesn't access EntityRegistry directly
+        auto* grassProvider = bootstrap->getGrassRenderProvider();
+        if (grassProvider)
+        {
+            grassProvider->setGetConfigCallback([]() {
+                return events::EventDispatcher::instance().query(
+                    events::vegetation::GetGlobalGrassConfigQuery{});
+            });
+        }
     }
 
     void EditorHandler::registerAllEventHandlers()

@@ -12,8 +12,6 @@ namespace windows
         {
             auto& dispatcher = events::EventDispatcher::instance();
             dispatcher.unsubscribe(modeToken);
-            dispatcher.unsubscribe(brushTypeToken);
-            dispatcher.unsubscribe(brushParamsToken);
         }
     }
 

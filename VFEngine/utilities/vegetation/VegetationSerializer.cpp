@@ -9,16 +9,8 @@ namespace vegetation
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
-    bool VegetationSerializer::saveDensityMap(const std::string& filePath,
-                                              const VegetationDensityMap& densityMap)
+    static bool ensureParentDirectory(const std::string& filePath)
     {
-        if (!densityMap.isInitialized())
-        {
-            vfLogError("VegetationSerializer: Cannot save uninitialized density map");
-            return false;
-        }
-
-        // Ensure parent directory exists
         fs::path path(filePath);
         if (path.has_parent_path())
         {
@@ -31,6 +23,19 @@ namespace vegetation
                 return false;
             }
         }
+        return true;
+    }
+
+    bool VegetationSerializer::saveDensityMap(const std::string& filePath,
+                                              const VegetationDensityMap& densityMap)
+    {
+        if (!densityMap.isInitialized())
+        {
+            vfLogError("VegetationSerializer: Cannot save uninitialized density map");
+            return false;
+        }
+
+        if (!ensureParentDirectory(filePath)) return false;
 
         std::ofstream file(filePath, std::ios::binary);
         if (!file.is_open())
@@ -115,19 +120,7 @@ namespace vegetation
     bool VegetationSerializer::savePlacementData(const std::string& filePath,
                                                   const VegetationPlacementData& placement)
     {
-        // Ensure parent directory exists
-        fs::path path(filePath);
-        if (path.has_parent_path())
-        {
-            std::error_code ec;
-            fs::create_directories(path.parent_path(), ec);
-            if (ec)
-            {
-                vfLogError("VegetationSerializer: Failed to create directory {}: {}",
-                           path.parent_path().string(), ec.message());
-                return false;
-            }
-        }
+        if (!ensureParentDirectory(filePath)) return false;
 
         std::ofstream file(filePath, std::ios::binary);
         if (!file.is_open())

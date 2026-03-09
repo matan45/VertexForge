@@ -4,6 +4,11 @@
 #include "print/Log.hpp"
 #include <cstring>
 
+// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 namespace render::gpudriven
 {
     void BillboardBufferManager::init(core::Device& device)
@@ -45,18 +50,25 @@ namespace render::gpudriven
     void BillboardBufferManager::clear()
     {
         currentInstanceCount = 0;
+        pendingCountReset = true;
+    }
 
-        if (!devicePtr) return;
+    void BillboardBufferManager::resetCountBuffer(vk::CommandBuffer cmd)
+    {
+        if (!pendingCountReset) return;
 
-        vk::Device vkDevice = devicePtr->getLogicalDevice();
-        vk::PhysicalDevice physDevice = devicePtr->getPhysicalDevice();
-        vk::Queue queue = devicePtr->getGraphicsQueue();
-        vk::CommandPool cmdPool = devicePtr->getStagingCommandPool();
+        cmd.fillBuffer(countBuffer, 0, sizeof(uint32_t), 0);
 
-        // Zero the count buffer
-        uint32_t zero = 0;
-        core::BufferUtilities::copyToBuffer(vkDevice, physDevice, queue, cmdPool,
-                                             countBuffer, &zero, sizeof(uint32_t));
+        vk::MemoryBarrier memBarrier(
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead);
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eTaskShaderEXT | vk::PipelineStageFlagBits::eMeshShaderEXT,
+            vk::DependencyFlags{},
+            1, &memBarrier, 0, nullptr, 0, nullptr);
+
+        pendingCountReset = false;
     }
 
     void BillboardBufferManager::createBuffers(uint32_t maxInstances)

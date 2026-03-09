@@ -4,9 +4,16 @@
 
 namespace core::adapters
 {
+    // Culling category indices (must match OffScreenControllerSettings.cpp)
+    static constexpr uint32_t kBillboardCullingCategory = 5;
+
     void BillboardRenderAdapter::setBillboardRenderingEnabled(bool enabled)
     {
         billboardEnabled = enabled;
+        if (offScreen)
+        {
+            offScreen->setBillboardRenderingEnabled(enabled);
+        }
     }
 
     bool BillboardRenderAdapter::isBillboardRenderingEnabled() const
@@ -19,7 +26,7 @@ namespace core::adapters
         maxDistance = distance;
         if (offScreen)
         {
-            offScreen->setCategoryDistance(5, distance); // Billboard category = 5
+            offScreen->setCategoryDistance(kBillboardCullingCategory, distance);
         }
     }
 

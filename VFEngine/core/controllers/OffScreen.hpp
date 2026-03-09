@@ -140,6 +140,8 @@ namespace controllers
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
 
+        void setBillboardRenderingEnabled(bool enabled);
+
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);

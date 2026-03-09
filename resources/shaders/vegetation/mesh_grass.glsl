@@ -120,6 +120,10 @@ void main() {
     // Tip (1.0)
     offsets[6] = vec3(0.0, bladeHeight, 0.0);  heights[6] = 1.0;
 
+    // Blade face normal: perpendicular to the blade face, rotated by blade rotation
+    // The blade lies in the XY plane (local), so face normal is along Z, rotated by Y rotation
+    vec3 bladeNormal = normalize(vec3(sinR, 0.0, cosR));
+
     // Apply rotation and wind, emit vertices
     SetMeshOutputsEXT(7, 5);
 
@@ -138,9 +142,12 @@ void main() {
 
         vec3 worldP = rootPos + rotated + windDisp;
 
+        // Tilt normal upward at higher vertices for softer shading
+        vec3 normal = normalize(mix(bladeNormal, vec3(0.0, 1.0, 0.0), heights[v] * 0.4));
+
         gl_MeshVerticesEXT[v].gl_Position = projection * view * vec4(worldP, 1.0);
         outWorldPos[v] = worldP;
-        outNormal[v] = vec3(0.0, 1.0, 0.0); // Simplified normal
+        outNormal[v] = normal;
         outUV[v] = vec2(off.x / bladeWidth + 0.5, heights[v]);
         outAlpha[v] = alpha;
     }

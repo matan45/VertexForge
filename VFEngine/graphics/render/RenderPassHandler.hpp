@@ -311,6 +311,8 @@ namespace render
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
 
+        void setBillboardRenderingEnabled(bool enabled);
+
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);
         void setActiveCamera(occlusion::CameraId id);

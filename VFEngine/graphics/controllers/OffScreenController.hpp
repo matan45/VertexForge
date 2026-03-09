@@ -125,6 +125,7 @@ namespace controllers
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
+        void setBillboardRenderingEnabled(bool enabled);
 
         void setOcclusionCullingEnabled(bool enabled);
 
