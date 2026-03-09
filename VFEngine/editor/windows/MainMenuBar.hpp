@@ -22,6 +22,7 @@ namespace windows
     class WorldSectorWindow;
     class VFXDebugWindow;
     class AnimationDebugWindow;
+    class GIConfigWindow;
     class MainMenuBar
     {
     private:
@@ -47,6 +48,7 @@ namespace windows
         WorldSectorWindow* worldSectorWindow = nullptr;
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
+        GIConfigWindow* giConfigWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -114,6 +116,11 @@ namespace windows
         void setAnimationDebugWindow(AnimationDebugWindow* window)
         {
             animationDebugWindow = window;
+        }
+
+        void setGIConfigWindow(GIConfigWindow* window)
+        {
+            giConfigWindow = window;
         }
 
     private:

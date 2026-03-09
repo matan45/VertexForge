@@ -35,6 +35,8 @@
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/render/BillboardRenderServiceImpl.hpp"
+#include "impl/render/LightStreamingServiceImpl.hpp"
+#include "impl/render/GIServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/VegetationServiceImpl.hpp"
@@ -234,6 +236,8 @@ namespace handlers
         grassService.reset();
         vegetationBrushService.reset();
         vegetationBrushModeService.reset();
+        lightStreamingService.reset();
+        giService.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
@@ -331,6 +335,14 @@ namespace handlers
         );
 
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
+        lightStreamingService = std::make_shared<services::LightStreamingServiceImpl>(
+            bootstrap->getLightStreamingProvider()
+        );
+
+        giService = std::make_shared<services::GIServiceImpl>(
+            bootstrap->getGIProvider()
+        );
 
         worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
             bootstrap->getSceneGraphSystem()
@@ -497,6 +509,8 @@ namespace handlers
         vegetationBrushModeService->registerEventHandlers();
         vegetationPlacementModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
+        lightStreamingService->registerEventHandlers();
+        giService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

@@ -36,6 +36,13 @@
 #include "../vegetation/VegetationStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
+#include "../lighting/LightStreamManager.hpp"
+#include "../gi/GITypes.hpp"
+#include "../gi/RadianceCascadeManager.hpp"
+#include "../gi/ProbeTracePipeline.hpp"
+#include "../gi/ProbeUpdatePipeline.hpp"
+#include "../gi/GIDebugRenderer.hpp"
+#include "../gi/AccelerationStructureManager.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "material/MaterialManager.hpp"
@@ -366,6 +373,18 @@ namespace render::gpudriven
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
+        // Light streaming
+        std::unique_ptr<lighting::LightStreamManager> lightStreamManager;
+
+        // Global Illumination
+        std::unique_ptr<gi::RadianceCascadeManager> giCascadeManager;
+        std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
+        std::unique_ptr<gi::ProbeUpdatePipeline> giUpdatePipeline;
+        std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
+        std::unique_ptr<gi::AccelerationStructureManager> accelStructManager;
+        gi::GISettings cachedGISettings;
+        bool blasNeedsRebuild = true;
+
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
 
@@ -496,6 +515,18 @@ namespace render::gpudriven
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
+
+        // Light streaming
+        lighting::LightStreamManager* getLightStreamManager() const { return lightStreamManager.get(); }
+        void initLightStreaming(const lighting::LightStreamingConfig& config = {});
+
+        // Global Illumination
+        void initGI(const gi::GISettings& settings);
+        void cleanupGI();
+        void applyGISettings(const gi::GISettings& settings);
+        gi::RadianceCascadeManager* getGICascadeManager() const { return giCascadeManager.get(); }
+        gi::GIDebugRenderer* getGIDebugRenderer() const { return giDebugRenderer.get(); }
+        const gi::GISettings& getGISettings() const { return cachedGISettings; }
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

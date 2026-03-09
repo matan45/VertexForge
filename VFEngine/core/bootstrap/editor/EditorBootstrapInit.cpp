@@ -28,6 +28,8 @@
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/GIAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -71,6 +73,8 @@ namespace core
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
         vegetationRenderAdapter = std::make_unique<adapters::VegetationRenderAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
+        lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
+        giAdapter = std::make_unique<adapters::GIAdapter>();
 
         offScreen->init();
 

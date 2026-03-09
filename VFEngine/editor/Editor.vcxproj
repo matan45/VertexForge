@@ -153,6 +153,7 @@
     <ClInclude Include="windows\config\AudioConfigWindow.hpp" />
     <ClInclude Include="windows\config\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
+    <ClInclude Include="windows\config\GIConfigWindow.hpp" />
     <ClInclude Include="windows\config\NavmeshWindow.hpp" />
     <ClInclude Include="windows\config\PhysicsConfigWindow.hpp" />
     <ClInclude Include="windows\config\PostProcessConfigWindow.hpp" />
@@ -288,6 +289,7 @@
     <ClCompile Include="windows\config\AudioConfigWindow.cpp" />
     <ClCompile Include="windows\config\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\config\EditorCameraWindow.cpp" />
+    <ClCompile Include="windows\config\GIConfigWindow.cpp" />
     <ClCompile Include="windows\config\NavmeshWindow.cpp" />
     <ClCompile Include="windows\config\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\config\PostProcessConfigWindow.cpp" />

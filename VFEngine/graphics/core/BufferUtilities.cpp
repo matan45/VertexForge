@@ -15,7 +15,16 @@ namespace core
 		buffer = bufferInfo.logicalDevice.createBuffer(bufferCreateInfo);
 
 		vk::MemoryRequirements memRequirements = bufferInfo.logicalDevice.getBufferMemoryRequirements(buffer);
+
+		vk::MemoryAllocateFlagsInfo allocFlags{};
+		bool needsDeviceAddress = (bufferInfo.usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags{};
+		if (needsDeviceAddress)
+		{
+			allocFlags.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
+		}
+
 		vk::MemoryAllocateInfo allocInfo{};
+		allocInfo.pNext = needsDeviceAddress ? &allocFlags : nullptr;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(
 			bufferInfo.physicalDevice,

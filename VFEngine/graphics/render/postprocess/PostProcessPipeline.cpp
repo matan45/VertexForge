@@ -8,6 +8,7 @@
 #include "effects/DepthOfFieldEffect.hpp"
 #include "effects/SSAOEffect.hpp"
 #include "effects/EdgeDetectionEffect.hpp"
+#include "effects/SSGIEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -420,6 +421,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::EdgeDetection, settings.edgeDetection.enabled,
             [this]() { return std::make_unique<EdgeDetectionEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::SSGI, settings.ssgi.enabled,
+            [this]() { return std::make_unique<SSGIEffect>(device, swapChain, offscreenResources, *this); });
 
         updateSettings(settings);
     }

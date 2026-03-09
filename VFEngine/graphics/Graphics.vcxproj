@@ -163,6 +163,13 @@
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
+    <ClInclude Include="render\gi\AccelerationStructureManager.hpp" />
+    <ClInclude Include="render\gi\GIDebugRenderer.hpp" />
+    <ClInclude Include="render\gi\GITypes.hpp" />
+    <ClInclude Include="render\gi\ProbeStorageBuffer.hpp" />
+    <ClInclude Include="render\gi\ProbeTracePipeline.hpp" />
+    <ClInclude Include="render\gi\ProbeUpdatePipeline.hpp" />
+    <ClInclude Include="render\gi\RadianceCascadeManager.hpp" />
     <ClInclude Include="render\gpudriven\BillboardBufferManager.hpp" />
     <ClInclude Include="render\gpudriven\BillboardGPUTypes.hpp" />
     <ClInclude Include="render\gpudriven\BillboardMeshShaderPipeline.hpp" />
@@ -200,6 +207,7 @@
     <ClInclude Include="render\lighting\GPULightTypes.hpp" />
     <ClInclude Include="render\lighting\LightCullingPipeline.hpp" />
     <ClInclude Include="render\lighting\LightCullingTypes.hpp" />
+    <ClInclude Include="render\lighting\LightStreamManager.hpp" />
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
@@ -223,6 +231,7 @@
     <ClInclude Include="render\postprocess\effects\FXAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\SSGIEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
@@ -374,6 +383,12 @@
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
+    <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
+    <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
+    <ClCompile Include="render\gi\ProbeStorageBuffer.cpp" />
+    <ClCompile Include="render\gi\ProbeTracePipeline.cpp" />
+    <ClCompile Include="render\gi\ProbeUpdatePipeline.cpp" />
+    <ClCompile Include="render\gi\RadianceCascadeManager.cpp" />
     <ClCompile Include="render\gpudriven\BillboardBufferManager.cpp">
       <ObjectFileName>$(IntDir)\BillboardBufferManager1.obj</ObjectFileName>
     </ClCompile>
@@ -414,6 +429,7 @@
     <ClCompile Include="render\lighting\GPULightBufferManager.cpp" />
     <ClCompile Include="render\lighting\GPULightBufferManagerScene.cpp" />
     <ClCompile Include="render\lighting\LightCullingPipeline.cpp" />
+    <ClCompile Include="render\lighting\LightStreamManager.cpp" />
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
@@ -439,6 +455,7 @@
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
+    <ClCompile Include="render\postprocess\effects\SSGIEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
@@ -528,11 +545,16 @@
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
+    <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
+    <None Include="..\..\resources\shaders\gi\gi_common.glsl" />
+    <None Include="..\..\resources\shaders\gi\gi_debug_probe.glsl" />
+    <None Include="..\..\resources\shaders\gi\probe_trace.glsl" />
+    <None Include="..\..\resources\shaders\gi\probe_update.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\frag_billboard.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_billboard.glsl" />
@@ -570,6 +592,9 @@
     <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssgi_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssgi_denoise.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\ssgi_trace.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />

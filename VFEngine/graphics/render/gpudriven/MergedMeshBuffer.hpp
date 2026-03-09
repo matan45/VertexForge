@@ -138,7 +138,9 @@ namespace render::gpudriven
         void uploadObjects(vk::CommandBuffer cmd);
 
         vk::Buffer getVertexBuffer() const { return vertexBuffer; }
+        vk::Buffer getIndexBuffer() const { return indexBuffer; }
         vk::Buffer getObjectBuffer() const { return objectBuffer; }
+        const std::vector<GPUObjectData>& getCPUObjectData() const { return cpuObjectData; }
 
         uint32_t getTotalVertexCount() const { return totalVertexCount; }
         uint32_t getTotalIndexCount() const { return totalIndexCount; }

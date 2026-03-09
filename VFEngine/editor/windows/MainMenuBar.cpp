@@ -12,6 +12,7 @@
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
+#include "config/GIConfigWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
@@ -242,6 +243,13 @@ namespace windows
                 if (lightBakeWindow)
                 {
                     lightBakeWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Global Illumination"))
+            {
+                if (giConfigWindow)
+                {
+                    giConfigWindow->show();
                 }
             }
             ImGui::EndMenu();

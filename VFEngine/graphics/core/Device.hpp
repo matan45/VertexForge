@@ -42,6 +42,15 @@ namespace core
         uint32_t maxPreferredTaskWorkGroupInvocations = 0;
     };
 
+    struct RayQueryCapabilities
+    {
+        bool rayQuerySupported = false;
+        bool accelerationStructureSupported = false;
+        uint64_t maxGeometryCount = 0;
+        uint64_t maxInstanceCount = 0;
+        uint64_t maxPrimitiveCount = 0;
+    };
+
     class Device
     {
     private:
@@ -62,14 +71,18 @@ namespace core
         QueueFamilyIndices queueFamilyIndices{};
 
         MeshShaderCapabilities meshShaderCapabilities{};
+        RayQueryCapabilities rayQueryCapabilities{};
 
         // Shared staging command pool for one-time transfer operations
         vk::UniqueCommandPool stagingCommandPool;
 
         const std::array<const char*, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-        const std::array<const char*, 2> deviceExtensions = {
+        const std::array<const char*, 5> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            VK_EXT_MESH_SHADER_EXTENSION_NAME
+            VK_EXT_MESH_SHADER_EXTENSION_NAME,
+            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+            VK_KHR_RAY_QUERY_EXTENSION_NAME,
+            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
         };
 
         // Private functions for setup and initialization
@@ -80,6 +93,7 @@ namespace core
         void createLogicalDevice();
         void createStagingCommandPool();
         void queryMeshShaderCapabilities();
+        void queryRayQueryCapabilities();
         bool checkValidationLayerSupport() const;
 
         bool isDeviceSuitable(const vk::PhysicalDevice& device) const;
@@ -109,5 +123,9 @@ namespace core
         bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
         bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }
         const MeshShaderCapabilities& getMeshShaderCapabilities() const { return meshShaderCapabilities; }
+
+        bool isRayQuerySupported() const { return rayQueryCapabilities.rayQuerySupported; }
+        bool isAccelerationStructureSupported() const { return rayQueryCapabilities.accelerationStructureSupported; }
+        const RayQueryCapabilities& getRayQueryCapabilities() const { return rayQueryCapabilities; }
     };
 }

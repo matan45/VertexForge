@@ -24,6 +24,8 @@
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/GIAdapter.hpp"
 
 namespace core
 {
@@ -160,5 +162,15 @@ namespace core
     services::IBillboardRenderProvider* EditorBootstrap::getBillboardRenderProvider()
     {
         return billboardRenderAdapter.get();
+    }
+
+    services::ILightStreamingProvider* EditorBootstrap::getLightStreamingProvider()
+    {
+        return lightStreamingAdapter.get();
+    }
+
+    services::IGIProvider* EditorBootstrap::getGIProvider()
+    {
+        return giAdapter.get();
     }
 }

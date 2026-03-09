@@ -188,6 +188,7 @@ void main() {
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/gi_sampling.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -853,7 +854,16 @@ void main() {
         emissive = albedo * emissionMultiplier;
     }
 
-    vec3 color = ambient + directLighting + lightmapContribution + emissive;
+    vec3 giContribution = vec3(0.0);
+#ifdef GI_ENABLED
+    float cameraDist = length(camera.cameraPosition.xyz - fragWorldPos);
+    vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
+    giContribution = giIrradiance * albedo * kD;
+    // Reduce IBL ambient when GI is active to avoid double-counting
+    ambient *= max(0.3, 1.0 - length(giIrradiance));
+#endif
+
+    vec3 color = ambient + directLighting + lightmapContribution + giContribution + emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
