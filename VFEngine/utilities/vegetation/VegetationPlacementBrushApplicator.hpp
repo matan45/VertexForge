@@ -22,6 +22,7 @@ namespace vegetation
             terrain::BrushFalloff falloff;
             terrain::BrushShape shape;
             float tileWorldSize;
+            float collisionRadius = 0.0f; // If > 0, minimum spacing between instances
         };
 
         struct EraseParams

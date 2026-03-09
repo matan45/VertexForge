@@ -23,6 +23,7 @@
 #include "../material/MaterialPBRExtractor.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "BindlessTextureManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -197,6 +198,17 @@ namespace render::gpudriven
         // Load/reload species material if path changed
         if (!config.materialPath.empty() && config.materialPath != cached.materialPath)
         {
+            // Release old material from lifecycle manager
+            if (!cached.materialPath.empty())
+            {
+                resource::AssetLifecycleManager::instance().release(cached.materialPath);
+            }
+
+            // Acquire BEFORE registerMaterialTextures so isTracked() returns true
+            // when setting up texture dependencies
+            resource::AssetLifecycleManager::instance().acquire(
+                config.materialPath, resource::AssetType::Material);
+
             if (registerMaterialTextures(config.materialPath))
             {
                 // Extract albedo texture path from material
@@ -226,9 +238,19 @@ namespace render::gpudriven
                 cached.materialPath = config.materialPath;
                 vegetation.speciesRenderInfoDirty = true;
             }
+            else
+            {
+                // Registration failed, release the acquire
+                resource::AssetLifecycleManager::instance().release(config.materialPath);
+            }
         }
         else if (config.materialPath.empty() && cached.hasMaterial)
         {
+            // Release material from lifecycle manager
+            if (!cached.materialPath.empty())
+            {
+                resource::AssetLifecycleManager::instance().release(cached.materialPath);
+            }
             cached.materialTextureIndex = 0;
             cached.hasMaterial = false;
             cached.materialPath.clear();
@@ -243,6 +265,11 @@ namespace render::gpudriven
         auto it = vegetation.cachedSpecies.find(speciesId);
         if (it != vegetation.cachedSpecies.end())
         {
+            // Release material from lifecycle manager
+            if (!it->second.materialPath.empty())
+            {
+                resource::AssetLifecycleManager::instance().release(it->second.materialPath);
+            }
             if (it->second.hasImposter && !it->second.imposterAtlasPath.empty())
             {
                 unloadImposterAtlas(it->second.imposterAtlasPath);
@@ -261,6 +288,11 @@ namespace render::gpudriven
     {
         for (auto& [id, cached] : vegetation.cachedSpecies)
         {
+            // Release material from lifecycle manager
+            if (!cached.materialPath.empty())
+            {
+                resource::AssetLifecycleManager::instance().release(cached.materialPath);
+            }
             if (cached.hasImposter && !cached.imposterAtlasPath.empty())
             {
                 unloadImposterAtlas(cached.imposterAtlasPath);

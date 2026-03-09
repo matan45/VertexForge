@@ -20,6 +20,12 @@ namespace vegetation
         candidateCount = std::max(candidateCount, 1u);
         candidateCount = std::min(candidateCount, 1000u); // Cap to prevent excessive placement
 
+        // Tile bounds in world XZ - only place instances within this tile
+        float tileMinX = params.tileWorldOrigin.x;
+        float tileMinZ = params.tileWorldOrigin.y;
+        float tileMaxX = tileMinX + params.tileWorldSize;
+        float tileMaxZ = tileMinZ + params.tileWorldSize;
+
         // Seed RNG from position hash for deterministic results
         uint32_t seed = positionHash(params.brushCenter);
         std::mt19937 rng(seed);
@@ -28,16 +34,36 @@ namespace vegetation
         std::uniform_real_distribution<float> distScale(params.minScale, params.maxScale);
         std::uniform_real_distribution<float> distRotation(0.0f, glm::two_pi<float>());
 
+        // Compute minimum spacing: use collision radius if set, otherwise derive from density
+        float minSpacing;
+        if (params.collisionRadius > 0.0f)
+        {
+            minSpacing = params.collisionRadius * 2.0f; // Diameter as spacing
+        }
+        else
+        {
+            minSpacing = params.brushRadius / std::max(std::sqrt(params.density * brushArea), 1.0f);
+            minSpacing = std::max(minSpacing, 0.5f);
+        }
+        float minSpacingSq = minSpacing * minSpacing;
+
         bool added = false;
 
         for (uint32_t i = 0; i < candidateCount; ++i)
         {
-            // Generate random point within brush radius using rejection sampling
+            // Generate random point within brush radius
             float angle = distAngle(rng);
             float r = std::sqrt(distRadius(rng)) * params.brushRadius;
 
             glm::vec2 offset(r * std::cos(angle), r * std::sin(angle));
             glm::vec2 candidatePos = params.brushCenter + offset;
+
+            // Skip candidates outside this tile's bounds
+            if (candidatePos.x < tileMinX || candidatePos.x >= tileMaxX ||
+                candidatePos.y < tileMinZ || candidatePos.y >= tileMaxZ)
+            {
+                continue;
+            }
 
             // Check if candidate is within brush shape
             float dist = computeNormalizedDistance(
@@ -55,6 +81,20 @@ namespace vegetation
             {
                 continue;
             }
+
+            // Check minimum spacing against existing instances to avoid duplicates
+            bool tooClose = false;
+            for (const auto& existing : placement.getInstances())
+            {
+                float dx = existing.position.x - candidatePos.x;
+                float dz = existing.position.z - candidatePos.y;
+                if (dx * dx + dz * dz < minSpacingSq)
+                {
+                    tooClose = true;
+                    break;
+                }
+            }
+            if (tooClose) continue;
 
             VegetationInstance instance;
             instance.position = glm::vec3(candidatePos.x, 0.0f, candidatePos.y);

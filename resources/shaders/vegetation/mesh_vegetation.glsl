@@ -5,7 +5,6 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
-#include "wind_common.glsl"
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
@@ -35,12 +34,6 @@ layout(std430, set = 0, binding = 2) readonly buffer TreeInstanceBuffer {
 
 layout(set = 1, binding = 0) uniform CameraUBO {
     CameraData camera;
-};
-
-// Wind parameters
-layout(set = 2, binding = 0) uniform WindUBO {
-    vec4 windDirectionAndSpeed;  // xyz=direction, w=speed
-    vec4 windGustParams;         // x=gustStrength, y=gustFrequency, z=turbulenceScale, w=time
 };
 
 // Meshlet data (shared with main mesh pipeline)
@@ -103,12 +96,6 @@ void main() {
     mat3 normalMatrix = mat3(transpose(inverse(modelMatrix)));
     mat4 viewProjection = camera.projection * camera.view;
 
-    // Compute mesh bounding box Y range for wind height factor
-    // Use bounding sphere as approximation: bottom = center.y - radius, top = center.y + radius
-    float meshMinY = inst.boundingSphere.y - inst.boundingSphere.w;
-    float meshMaxY = inst.boundingSphere.y + inst.boundingSphere.w;
-    float meshHeightRange = max(meshMaxY - meshMinY, 0.001);
-
     // Load vertices
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {
@@ -149,12 +136,6 @@ void main() {
             vec3 localPos = sharedPositions[localVertexIndex];
             vec4 worldPos4 = modelMatrix * vec4(localPos, 1.0);
             vec3 worldPos = worldPos4.xyz;
-
-            // Apply wind displacement based on vertex height
-            float vertexHeight = clamp((worldPos.y - meshMinY) / meshHeightRange, 0.0, 1.0);
-            vec3 windOffset = calculateWindDisplacement(worldPos, vertexHeight,
-                                                         windDirectionAndSpeed, windGustParams);
-            worldPos += windOffset;
 
             fragWorldPos[localVertexIndex] = worldPos;
             fragNormal[localVertexIndex] = normalize(normalMatrix * sharedNormals[localVertexIndex]);

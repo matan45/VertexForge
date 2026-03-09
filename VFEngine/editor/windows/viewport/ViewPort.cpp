@@ -623,19 +623,26 @@ namespace windows
         }
 
         bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        auto brushType = dispatcher.query(events::vegetationBrush::GetPlacementBrushTypeQuery{});
 
         if (leftDown)
         {
-            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
-                events::vegetationBrush::ApplyVegetationPlacementBrushCommand applyCmd;
-                applyCmd.worldPosition = hitResult.position;
-                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                dispatcher.execute(applyCmd);
+            // Scatter: only on initial click, not while holding
+            // Erase: continuous while holding
+            bool shouldApply = (brushType == vegetation::PlacementBrushType::Erase) || !placementDragging;
 
-                placementDragging = true;
+            if (shouldApply)
+            {
+                auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+                if (hitResult.hit)
+                {
+                    events::vegetationBrush::ApplyVegetationPlacementBrushCommand applyCmd;
+                    applyCmd.worldPosition = hitResult.position;
+                    applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                    dispatcher.execute(applyCmd);
+                }
             }
+            placementDragging = true;
         }
         else
         {

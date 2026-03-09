@@ -195,8 +195,8 @@ namespace render::vegetation
                                    {bindlessTextureDescriptorSet}, {});
         }
 
-        uint32_t taskGroups = (visibleCount + 31) / 32;
-        cmd.drawMeshTasksEXT(taskGroups, 1, 1);
+        // Task shader has local_size_x = 1, so one workgroup per visible instance
+        cmd.drawMeshTasksEXT(visibleCount, 1, 1);
     }
 
     void VegetationMeshShaderPipeline::createInstanceDataDescriptor()

@@ -13,8 +13,10 @@ namespace vegetation
         float radiusSq = radius * radius;
         std::erase_if(instances, [&](const VegetationInstance& inst)
         {
-            glm::vec3 diff = inst.position - center;
-            return glm::dot(diff, diff) <= radiusSq;
+            // Compare in XZ only - instances are placed with Y=0
+            float dx = inst.position.x - center.x;
+            float dz = inst.position.z - center.z;
+            return (dx * dx + dz * dz) <= radiusSq;
         });
     }
 

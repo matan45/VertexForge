@@ -577,6 +577,19 @@ namespace services
         if (!allTiles.empty())
             worldTileSize = allTiles[0]->config.worldTileSize;
 
+        // Query species collision settings for placement spacing
+        float speciesCollisionRadius = 0.0f;
+        if (brushParams.speciesId > 0)
+        {
+            events::vegetation::GetVegetationSpeciesQuery speciesQuery;
+            speciesQuery.speciesId = brushParams.speciesId;
+            auto speciesConfig = dispatcher.query(speciesQuery);
+            if (speciesConfig.hasCollision)
+            {
+                speciesCollisionRadius = speciesConfig.collisionRadius;
+            }
+        }
+
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
@@ -620,6 +633,7 @@ namespace services
                 params.falloff = brushParams.falloff;
                 params.shape = brushParams.shape;
                 params.tileWorldSize = tile->config.worldTileSize;
+                params.collisionRadius = speciesCollisionRadius;
 
                 if (vegetation::VegetationPlacementBrushApplicator::scatter(tile->vegetationPlacement, params))
                 {
