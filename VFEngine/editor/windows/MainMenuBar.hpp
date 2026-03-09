@@ -23,6 +23,7 @@ namespace windows
     class VFXDebugWindow;
     class AnimationDebugWindow;
     class GIConfigWindow;
+    class LightStreamingDebugWindow;
     class MainMenuBar
     {
     private:
@@ -49,6 +50,7 @@ namespace windows
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
         GIConfigWindow* giConfigWindow = nullptr;
+        LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -121,6 +123,11 @@ namespace windows
         void setGIConfigWindow(GIConfigWindow* window)
         {
             giConfigWindow = window;
+        }
+
+        void setLightStreamingDebugWindow(LightStreamingDebugWindow* window)
+        {
+            lightStreamingDebugWindow = window;
         }
 
     private:

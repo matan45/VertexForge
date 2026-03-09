@@ -26,6 +26,7 @@ namespace windows
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
         menuBar.setGIConfigWindow(&giConfigWindow);
+        menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         subscribeToEvents();
     }
 
@@ -52,6 +53,7 @@ namespace windows
             {
                 postProcessConfigWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
+                lightStreamingDebugWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
@@ -103,6 +105,7 @@ namespace windows
             vegetationPlacementPanel.draw();
             vegetationSpeciesPanel.draw();
             giConfigWindow.draw();
+            lightStreamingDebugWindow.draw();
         }
         ImGui::End();
     }

@@ -13,6 +13,7 @@
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
 #include "config/GIConfigWindow.hpp"
+#include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
@@ -378,6 +379,14 @@ namespace windows
                 if (animationDebugWindow)
                 {
                     animationDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Light Streaming"))
+            {
+                if (lightStreamingDebugWindow)
+                {
+                    lightStreamingDebugWindow->show();
                 }
             }
 
