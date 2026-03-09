@@ -384,6 +384,7 @@ namespace render::gpudriven
         std::unique_ptr<gi::AccelerationStructureManager> accelStructManager;
         gi::GISettings cachedGISettings;
         bool blasNeedsRebuild = true;
+        bool giProbeBuffersNeedInit = true;
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;

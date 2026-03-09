@@ -354,8 +354,27 @@ namespace render::gpudriven
                 }
             }
 
-            auto batches = giCascadeManager->getProbeUpdateBatches();
             auto* storage = giCascadeManager->getProbeStorage();
+
+            // Zero-initialize probe buffers on first frame (device-local needs explicit upload)
+            if (storage && giProbeBuffersNeedInit)
+            {
+                storage->uploadToGPU(cmd);
+                giProbeBuffersNeedInit = false;
+
+                // Barrier: transfer writes must complete before compute reads
+                vk::MemoryBarrier initBarrier{
+                    vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::DependencyFlags{},
+                    1, &initBarrier, 0, nullptr, 0, nullptr);
+            }
+
+            auto batches = giCascadeManager->getProbeUpdateBatches();
 
             if (storage && !batches.empty())
             {
@@ -400,8 +419,35 @@ namespace render::gpudriven
                                                lightSet);
                 }
 
+                // Barrier: compute writes must finish before copy
+                vk::MemoryBarrier computeBarrier{
+                    vk::AccessFlagBits::eShaderWrite,
+                    vk::AccessFlagBits::eTransferRead
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::DependencyFlags{},
+                    1, &computeBarrier, 0, nullptr, 0, nullptr);
+
                 // Swap ping-pong: trace wrote to the write buffer, now make it the read buffer
                 storage->swapBuffers();
+
+                // Copy new read buffer to new write buffer so non-updated probes stay consistent
+                // (without this, partial updates leave stale data in the write buffer causing flicker)
+                vk::BufferCopy fullCopy{0, 0, storage->getProbeCount() * 64}; // 64 = sizeof(ProbeData)
+                cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(), fullCopy);
+
+                // Barrier: copy must finish before fragment reads and next frame's compute writes
+                vk::MemoryBarrier copyBarrier{
+                    vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eShaderRead
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
+                    vk::DependencyFlags{},
+                    1, &copyBarrier, 0, nullptr, 0, nullptr);
 
                 // Update mesh shader pipelines with new read buffer's sampling set
                 auto samplingSet = storage->getSamplingDescSet();
@@ -412,16 +458,7 @@ namespace render::gpudriven
                 if (wboitMeshShaderPipeline)
                     wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
 
-                // Barrier: compute writes must be visible to fragment shader reads
-                vk::MemoryBarrier fragBarrier{
-                    vk::AccessFlagBits::eShaderWrite,
-                    vk::AccessFlagBits::eShaderRead
-                };
-                cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::PipelineStageFlagBits::eFragmentShader,
-                    vk::DependencyFlags{},
-                    1, &fragBarrier, 0, nullptr, 0, nullptr);
+                // Note: the copy barrier above already syncs transfer→fragment+compute
             }
         }
 
@@ -555,6 +592,7 @@ namespace render::gpudriven
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
         blasNeedsRebuild = true;
+        giProbeBuffersNeedInit = true;
     }
 
     void GPUDrivenRenderer::applyGISettings(const gi::GISettings& settings)

@@ -87,7 +87,7 @@ namespace render::gi
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = probeBufferSize;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, probeBufferA, probeMemoryA);
         }
@@ -96,7 +96,7 @@ namespace render::gi
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = probeBufferSize;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, probeBufferB, probeMemoryB);
         }

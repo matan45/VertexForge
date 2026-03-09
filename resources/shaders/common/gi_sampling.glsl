@@ -106,7 +106,8 @@ vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
         irradiance /= totalWeight;
     }
 
-    return max(irradiance, vec3(0.0));
+    // Clamp to reasonable range to prevent flickering from unstable probes
+    return clamp(irradiance, vec3(0.0), vec3(5.0));
 }
 
 #endif // GI_ENABLED

@@ -273,10 +273,10 @@ void main() {
         radiance = directLight * 0.3; // Reduced contribution without actual geometry hits
 #endif
 
-        // Multi-bounce from own previous irradiance
+        // Multi-bounce from own previous irradiance (reduced weight to prevent feedback blowup)
         ProbeData prevData = probeDataRead[globalProbeIndex];
         if (prevData.validity.x > 0.1) {
-            radiance += evaluateSH(prevData, rayDir) * 0.5;
+            radiance += max(evaluateSH(prevData, rayDir), vec3(0.0)) * 0.2;
         }
         hit = true;
 #endif
@@ -291,6 +291,12 @@ void main() {
     newShR *= invRays;
     newShG *= invRays;
     newShB *= invRays;
+
+    // Clamp SH coefficients to prevent energy blowup
+    const float MAX_SH = 10.0;
+    newShR = clamp(newShR, vec4(-MAX_SH), vec4(MAX_SH));
+    newShG = clamp(newShG, vec4(-MAX_SH), vec4(MAX_SH));
+    newShB = clamp(newShB, vec4(-MAX_SH), vec4(MAX_SH));
 
     // Temporal blending with previous frame
     ProbeData prevProbe = probeDataRead[globalProbeIndex];

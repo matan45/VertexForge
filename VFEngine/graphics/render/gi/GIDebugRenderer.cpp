@@ -191,7 +191,7 @@ namespace render::gi
         push.viewProjection = viewProjection;
         push.totalProbes = totalProbes;
         push.showMode = showProbeValidity ? 1 : 0;
-        push.probeSize = 0.2f;
+        push.probeSize = 1.0f;
         push.padding = 0.0f;
 
         cmd.pushConstants(probeDebugPipelineLayout,
