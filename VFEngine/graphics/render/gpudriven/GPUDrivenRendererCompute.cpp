@@ -164,7 +164,20 @@ namespace render::gpudriven
             }
         }
 
-        shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr);
+        shadow::VegetationShadowPassParams vegetationShadowParams{};
+        shadow::VegetationShadowPassParams* vegetationShadowParamsPtr = nullptr;
+
+        if (vegetation.treeLODInitialized && vegetation.vegetationRenderingEnabled &&
+            vegetation.currentTreeInstanceCount > 0 && meshShaderPipeline)
+        {
+            vegetationShadowParams.meshletDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
+            vegetationShadowParams.vertexDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
+            vegetationShadowParams.instanceCount = vegetation.currentTreeInstanceCount;
+            vegetationShadowParams.shadowLOD = 1;  // Use LOD 1 for shadow rendering
+            vegetationShadowParamsPtr = &vegetationShadowParams;
+        }
+
+        shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr, vegetationShadowParamsPtr);
     }
 
     void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd)

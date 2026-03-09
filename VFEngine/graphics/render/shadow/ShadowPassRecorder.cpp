@@ -3,6 +3,7 @@
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
+#include "VegetationShadowPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "print/Log.hpp"
 
@@ -17,10 +18,12 @@ namespace render::shadow
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
         const TerrainShadowPassParams* terrainParams,
+        const VegetationShadowPassParams* vegetationParams,
         ShadowAtlasManager* atlasManager,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
         TerrainShadowPipeline* terrainShadowPipeline,
+        VegetationShadowPipeline* vegetationShadowPipeline,
         const std::vector<ShadowView>& directionalShadowViews,
         const std::vector<ShadowView>& spotShadowViews,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
@@ -38,6 +41,11 @@ namespace render::shadow
                                   terrainParams->tileCount > 0 &&
                                   terrainShadowPipeline != nullptr &&
                                   terrainShadowPipeline->isInitialized();
+
+        bool hasVegetationShadows = vegetationParams != nullptr &&
+                                     vegetationParams->instanceCount > 0 &&
+                                     vegetationShadowPipeline != nullptr &&
+                                     vegetationShadowPipeline->isInitialized();
 
         std::vector<const ShadowView*> allViews;
         for (const auto& view : spotShadowViews)
@@ -66,7 +74,7 @@ namespace render::shadow
                               params.drawCommandBuffer &&
                               params.drawCountBuffer;
 
-        if (!hasMeshBatches && !hasTerrainShadows)
+        if (!hasMeshBatches && !hasTerrainShadows && !hasVegetationShadows)
             return;
 
         if (hasAtlasViews)
@@ -217,6 +225,20 @@ namespace render::shadow
                         view->slopeBias * terrainBiasScale
                     );
                 }
+
+                if (hasVegetationShadows)
+                {
+                    vegetationShadowPipeline->dispatch(
+                        cmd,
+                        vegetationParams->meshletDescSet,
+                        vegetationParams->vertexDescSet,
+                        view->viewProjectionMatrix,
+                        vegetationParams->instanceCount,
+                        vegetationParams->shadowLOD,
+                        view->depthBias,
+                        view->slopeBias
+                    );
+                }
             }
 
             cmd.endRenderPass();
@@ -249,17 +271,20 @@ namespace render::shadow
             atlasFirstUse = false;
         }
 
-        renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool, shadowPassPipeline,
-                                     terrainShadowPipeline, lightShadowData);
+        renderPointLightCubeShadows(cmd, params, terrainParams, vegetationParams, resourcePool,
+                                     shadowPassPipeline, terrainShadowPipeline, vegetationShadowPipeline,
+                                     lightShadowData);
     }
 
     void ShadowPassRecorder::renderPointLightCubeShadows(
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
         const TerrainShadowPassParams* terrainParams,
+        const VegetationShadowPassParams* vegetationParams,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
         TerrainShadowPipeline* terrainShadowPipeline,
+        VegetationShadowPipeline* vegetationShadowPipeline,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
     {
         if (!resourcePool || !shadowPassPipeline)
@@ -269,6 +294,11 @@ namespace render::shadow
                                   terrainParams->tileCount > 0 &&
                                   terrainShadowPipeline != nullptr &&
                                   terrainShadowPipeline->isInitialized();
+
+        bool hasVegetationShadows = vegetationParams != nullptr &&
+                                     vegetationParams->instanceCount > 0 &&
+                                     vegetationShadowPipeline != nullptr &&
+                                     vegetationShadowPipeline->isInitialized();
 
         const auto& logicalDevice = device.getLogicalDevice();
 
@@ -296,7 +326,7 @@ namespace render::shadow
                               params.drawCommandBuffer &&
                               params.drawCountBuffer;
 
-        if (!hasMeshBatches && !hasTerrainShadows)
+        if (!hasMeshBatches && !hasTerrainShadows && !hasVegetationShadows)
             return;
 
         std::array<vk::DescriptorSet, 5> meshDescriptorSets = {
@@ -414,6 +444,20 @@ namespace render::shadow
                         view.viewProjectionMatrix,
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
+                        view.depthBias,
+                        view.slopeBias
+                    );
+                }
+
+                if (hasVegetationShadows)
+                {
+                    vegetationShadowPipeline->dispatch(
+                        cmd,
+                        vegetationParams->meshletDescSet,
+                        vegetationParams->vertexDescSet,
+                        view.viewProjectionMatrix,
+                        vegetationParams->instanceCount,
+                        vegetationParams->shadowLOD,
                         view.depthBias,
                         view.slopeBias
                     );

@@ -16,6 +16,7 @@ namespace render::shadow
     class ShadowResourcePool;
     class ShadowPassPipeline;
     class TerrainShadowPipeline;
+    class VegetationShadowPipeline;
 
     struct ShadowPassParams
     {
@@ -50,10 +51,12 @@ namespace render::shadow
             vk::CommandBuffer cmd,
             const ShadowPassParams& params,
             const TerrainShadowPassParams* terrainParams,
+            const VegetationShadowPassParams* vegetationParams,
             ShadowAtlasManager* atlasManager,
             ShadowResourcePool* resourcePool,
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
+            VegetationShadowPipeline* vegetationShadowPipeline,
             const std::vector<ShadowView>& directionalShadowViews,
             const std::vector<ShadowView>& spotShadowViews,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
@@ -66,9 +69,11 @@ namespace render::shadow
             vk::CommandBuffer cmd,
             const ShadowPassParams& params,
             const TerrainShadowPassParams* terrainParams,
+            const VegetationShadowPassParams* vegetationParams,
             ShadowResourcePool* resourcePool,
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
+            VegetationShadowPipeline* vegetationShadowPipeline,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
     };
 }

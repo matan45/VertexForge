@@ -20,7 +20,6 @@ namespace serialization
             j["maxRenderDistance"] = config.maxRenderDistance;
             j["minScale"] = config.minScale;
             j["maxScale"] = config.maxScale;
-            j["windStrength"] = config.windStrength;
             j["hasCollision"] = config.hasCollision;
             j["collisionRadius"] = config.collisionRadius;
             j["collisionHeight"] = config.collisionHeight;
@@ -55,8 +54,6 @@ namespace serialization
                 config.minScale = it->get<float>();
             if (auto it = speciesJson.find("maxScale"); it != speciesJson.end() && it->is_number())
                 config.maxScale = it->get<float>();
-            if (auto it = speciesJson.find("windStrength"); it != speciesJson.end() && it->is_number())
-                config.windStrength = it->get<float>();
             if (auto it = speciesJson.find("hasCollision"); it != speciesJson.end() && it->is_boolean())
                 config.hasCollision = it->get<bool>();
             if (auto it = speciesJson.find("collisionRadius"); it != speciesJson.end() && it->is_number())

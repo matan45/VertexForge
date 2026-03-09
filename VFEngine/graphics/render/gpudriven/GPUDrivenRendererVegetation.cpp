@@ -589,6 +589,21 @@ namespace render::gpudriven
             );
         }
 
+        // Initialize vegetation shadow pipeline
+        if (shadowSystem && meshShaderPipeline)
+        {
+            shadowSystem->initVegetationShadowPass(
+                meshShaderPipeline->getMeshletDataLayout(),
+                meshShaderPipeline->getVertexDataLayout()
+            );
+
+            shadowSystem->updateVegetationShadowDescriptors(
+                vegetation.treeInstanceBuffer,
+                vegetation.treeInstanceCountBuffer,
+                vegetation.speciesRenderInfoBuffer
+            );
+        }
+
         vegetation.treeLODInitialized = true;
         vegetation.cachedIBLLayout = iblDescriptorSetLayout;
         vegetation.cachedRenderPass = renderPass;

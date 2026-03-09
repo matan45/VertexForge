@@ -15,7 +15,6 @@ namespace vegetation
 
         float minScale = 0.8f;
         float maxScale = 1.2f;
-        float windStrength = 1.0f;
 
         // Collision
         bool hasCollision = false;

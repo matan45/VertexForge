@@ -7,6 +7,7 @@
 #include "ShadowGPUDataManager.hpp"
 #include "ShadowPassRecorder.hpp"
 #include "TerrainShadowPipeline.hpp"
+#include "VegetationShadowPipeline.hpp"
 #include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -40,6 +41,7 @@ namespace render
             std::unique_ptr<ShadowResourcePool> resourcePool;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
             std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
+            std::unique_ptr<VegetationShadowPipeline> vegetationShadowPipeline;
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
             std::unique_ptr<ShadowPassRecorder> passRecorder;
 
@@ -104,9 +106,17 @@ namespace render
 
             void uploadToGPU(vk::CommandBuffer cmd);
 
+            void initVegetationShadowPass(vk::DescriptorSetLayout meshletDataLayout,
+                                          vk::DescriptorSetLayout vertexDataLayout);
+
+            void updateVegetationShadowDescriptors(vk::Buffer treeInstanceBuffer,
+                                                    vk::Buffer instanceCountBuffer,
+                                                    vk::Buffer speciesRenderInfoBuffer);
+
             void recordShadowPass(vk::CommandBuffer cmd,
                                    const ShadowPassParams& params,
-                                   const TerrainShadowPassParams* terrainParams = nullptr);
+                                   const TerrainShadowPassParams* terrainParams = nullptr,
+                                   const VegetationShadowPassParams* vegetationParams = nullptr);
 
             [[nodiscard]] vk::DescriptorSetLayout getShadowDataLayout() const;
             [[nodiscard]] vk::DescriptorSet getShadowDataDescSet() const;

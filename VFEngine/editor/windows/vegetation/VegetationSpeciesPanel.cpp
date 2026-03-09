@@ -132,7 +132,6 @@ namespace windows
                 ImGui::Text("Properties");
                 changed |= ImGui::DragFloat("Min Scale", &config.minScale, 0.01f, 0.1f, 5.0f);
                 changed |= ImGui::DragFloat("Max Scale", &config.maxScale, 0.01f, 0.1f, 5.0f);
-                changed |= ImGui::DragFloat("Wind Strength", &config.windStrength, 0.01f, 0.0f, 5.0f);
                 changed |= ImGui::Checkbox("Has Collision", &config.hasCollision);
                 if (config.hasCollision)
                 {

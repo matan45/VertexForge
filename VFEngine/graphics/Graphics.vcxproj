@@ -248,6 +248,7 @@
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
     <ClInclude Include="render\shadow\SpotShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\TerrainShadowPipeline.hpp" />
+    <ClInclude Include="render\shadow\VegetationShadowPipeline.hpp" />
     <ClInclude Include="render\text\TextBufferManager.hpp" />
     <ClInclude Include="render\text\TextFontCache.hpp" />
     <ClInclude Include="render\text\TextPipeline.hpp" />
@@ -468,6 +469,7 @@
     <ClCompile Include="render\shadow\ShadowSystemFrame.cpp" />
     <ClCompile Include="render\shadow\SpotShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\TerrainShadowPipeline.cpp" />
+    <ClCompile Include="render\shadow\VegetationShadowPipeline.cpp" />
     <ClCompile Include="render\text\TextBufferManager.cpp" />
     <ClCompile Include="render\text\TextFontCache.cpp" />
     <ClCompile Include="render\text\TextPipeline.cpp" />

@@ -5,106 +5,123 @@
 
 #include "../common/gpu_types.glsl"
 
-// Shadow pass for tree/vegetation meshes (LOD0/LOD1)
-// Frustum culls vegetation instances against light frustum, depth-only output
+// Shadow pass for vegetation meshes — frustum cull instances, emit meshlets for depth-only rendering.
+// One workgroup processes one instance. Emits meshlet workgroups for visible instances.
 
-layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
-
-const uint MAX_VISIBLE = 128;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(push_constant) uniform VegetationShadowPushConstants {
     mat4 lightViewProjection;
     uint instanceCount;
-    float maxShadowDistance;
+    uint shadowLOD;
     float depthBias;
     float slopeBias;
 } pc;
 
-struct TreeInstanceGPU {
-    vec4 positionScale;     // xyz = world position, w = uniform scale
-    vec4 rotationSpecies;   // xyz = rotation, w = species ID (as float)
-    vec4 lodData;           // x = LOD level, y = fade factor, zw = reserved
+// Must match TreeInstanceGPU in VegetationGPUTypes.hpp
+struct TreeInstance {
+    mat4 modelMatrix;
+    vec4 boundingSphere;
+    uint speciesId;
+    uint lodMask;
+    float lodDistances[3];
+    uint padding;
+};
+
+// Must match SpeciesRenderInfoGPU in VegetationGPUTypes.hpp
+struct SpeciesRenderInfo {
+    uint meshletOffset[4];
+    uint meshletCount[4];
+    uint baseVertexOffset;
+    uint materialTextureIndex;
+    uint padding[2];
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer TreeInstanceBuffer {
-    TreeInstanceGPU instances[];
+    TreeInstance allInstances[];
 };
 
-layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
-    GPUMeshlet meshlets[];
+layout(std430, set = 0, binding = 1) readonly buffer InstanceCountBuffer {
+    uint totalInstanceCount;
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer SpeciesRenderInfoBuffer {
+    SpeciesRenderInfo speciesInfos[];
 };
 
 struct VegetationShadowPayload {
-    uint instanceIndices[MAX_VISIBLE];
-    uint count;
+    uint instanceIndex;
+    uint baseMeshletIndex;
+    uint meshletCount;
 };
 
 taskPayloadSharedEXT VegetationShadowPayload payload;
 
-shared uint sharedVisibleCount;
-shared uint sharedIndices[MAX_VISIBLE];
-shared vec4 sharedFrustumPlanes[6];
+bool sphereInLightFrustum(vec3 center, float radius) {
+    mat4 vp = pc.lightViewProjection;
+    vec4 planes[6];
+    planes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+    planes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+    planes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+    planes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+    planes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+    planes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
 
-bool sphereInFrustum(vec3 center, float radius) {
     for (int i = 0; i < 6; i++) {
-        float d = dot(sharedFrustumPlanes[i].xyz, center) + sharedFrustumPlanes[i].w;
+        float len = length(planes[i].xyz);
+        if (len < 0.0001) continue;
+        planes[i] /= len;
+        float d = dot(planes[i].xyz, center) + planes[i].w;
         if (d < -radius) return false;
     }
     return true;
 }
 
 void main() {
-    if (gl_LocalInvocationID.x == 0) {
-        sharedVisibleCount = 0;
-
-        mat4 vp = pc.lightViewProjection;
-        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
-        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
-        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
-        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
-        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
-        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
-
-        const float eps = 0.0001;
-        for (int i = 0; i < 6; i++) {
-            float len = max(length(sharedFrustumPlanes[i].xyz), eps);
-            sharedFrustumPlanes[i] /= len;
-        }
+    uint instIdx = gl_WorkGroupID.x;
+    if (instIdx >= pc.instanceCount) {
+        EmitMeshTasksEXT(0, 1, 1);
+        return;
     }
-    barrier();
 
-    uint baseIndex = gl_WorkGroupID.x * 32 + gl_LocalInvocationID.x;
+    TreeInstance inst = allInstances[instIdx];
 
-    if (baseIndex < pc.instanceCount) {
-        TreeInstanceGPU inst = instances[baseIndex];
-        vec3 pos = inst.positionScale.xyz;
-        float scale = inst.positionScale.w;
+    // Frustum cull against light frustum using bounding sphere
+    vec3 center = inst.boundingSphere.xyz;
+    float radius = inst.boundingSphere.w;
 
-        // Only render LOD0 and LOD1 for shadows (skip imposters)
-        uint lod = uint(inst.lodData.x);
-        if (lod <= 1) {
-            // Approximate tree as sphere for culling
-            float treeRadius = scale * 5.0;
+    if (!sphereInLightFrustum(center, radius)) {
+        EmitMeshTasksEXT(0, 1, 1);
+        return;
+    }
 
-            if (sphereInFrustum(pos, treeRadius)) {
-                uint slot = atomicAdd(sharedVisibleCount, 1);
-                if (slot < MAX_VISIBLE) {
-                    sharedIndices[slot] = baseIndex;
-                }
-            }
+    // Select shadow LOD — use the requested shadow LOD or fall back to available
+    SpeciesRenderInfo species = speciesInfos[inst.speciesId];
+    uint lod = pc.shadowLOD;
+
+    // Find available LOD (try requested, then fall back to lower detail)
+    while (lod < 4 && species.meshletCount[lod] == 0) {
+        lod++;
+    }
+    // If no lower LOD available, try higher detail
+    if (lod >= 4) {
+        lod = pc.shadowLOD;
+        while (lod > 0 && species.meshletCount[lod] == 0) {
+            lod--;
         }
     }
 
-    barrier();
-
-    if (gl_LocalInvocationID.x == 0) {
-        uint visCount = min(sharedVisibleCount, MAX_VISIBLE);
-        payload.count = visCount;
-        for (uint i = 0; i < visCount; i++) {
-            payload.instanceIndices[i] = sharedIndices[i];
-        }
-        EmitMeshTasksEXT(visCount > 0 ? 1 : 0, 1, 1);
+    uint meshletCount = species.meshletCount[lod];
+    if (meshletCount == 0) {
+        EmitMeshTasksEXT(0, 1, 1);
+        return;
     }
+
+    payload.instanceIndex = instIdx;
+    payload.baseMeshletIndex = species.meshletOffset[lod];
+    payload.meshletCount = meshletCount;
+
+    EmitMeshTasksEXT(meshletCount, 1, 1);
 }
 
 #type MESH
@@ -114,13 +131,11 @@ void main() {
 
 #include "../common/gpu_types.glsl"
 
-// Placeholder mesh shader for vegetation shadow pass
-// In the full implementation, this would read meshlet data from the merged mesh buffer
-// and transform vertices using the instance's model matrix
+// Depth-only mesh shader for vegetation shadows.
+// One workgroup per meshlet. Transforms vertices to light space, no color output.
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
-const uint MAX_VISIBLE = 128;
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;
@@ -128,19 +143,22 @@ layout(triangles, max_vertices = 64, max_primitives = 124) out;
 layout(push_constant) uniform VegetationShadowPushConstants {
     mat4 lightViewProjection;
     uint instanceCount;
-    float maxShadowDistance;
+    uint shadowLOD;
     float depthBias;
     float slopeBias;
 } pc;
 
-struct TreeInstanceGPU {
-    vec4 positionScale;
-    vec4 rotationSpecies;
-    vec4 lodData;
+struct TreeInstance {
+    mat4 modelMatrix;
+    vec4 boundingSphere;
+    uint speciesId;
+    uint lodMask;
+    float lodDistances[3];
+    uint padding;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer TreeInstanceBuffer {
-    TreeInstanceGPU instances[];
+    TreeInstance allInstances[];
 };
 
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
@@ -160,8 +178,9 @@ layout(std430, set = 2, binding = 0) readonly buffer VertexBuffer {
 };
 
 struct VegetationShadowPayload {
-    uint instanceIndices[MAX_VISIBLE];
-    uint count;
+    uint instanceIndex;
+    uint baseMeshletIndex;
+    uint meshletCount;
 };
 
 taskPayloadSharedEXT VegetationShadowPayload payload;
@@ -174,27 +193,53 @@ uvec3 unpackPrimitive(uint packed) {
     );
 }
 
-mat4 buildModelMatrix(vec3 pos, vec3 rot, float scale) {
-    float cx = cos(rot.x), sx = sin(rot.x);
-    float cy = cos(rot.y), sy = sin(rot.y);
-    float cz = cos(rot.z), sz = sin(rot.z);
-
-    mat3 rotMatrix = mat3(
-        cy*cz, cy*sz, -sy,
-        sx*sy*cz - cx*sz, sx*sy*sz + cx*cz, sx*cy,
-        cx*sy*cz + sx*sz, cx*sy*sz - sx*cz, cx*cy
-    );
-
-    mat4 m = mat4(1.0);
-    m[0] = vec4(rotMatrix[0] * scale, 0.0);
-    m[1] = vec4(rotMatrix[1] * scale, 0.0);
-    m[2] = vec4(rotMatrix[2] * scale, 0.0);
-    m[3] = vec4(pos, 1.0);
-    return m;
-}
-
 void main() {
-    // Placeholder: actual meshlet-based rendering will be connected
-    // when VegetationMeshShaderPipeline is fully implemented
-    SetMeshOutputsEXT(0, 0);
+    uint meshletLocalIdx = gl_WorkGroupID.x;
+    if (meshletLocalIdx >= payload.meshletCount) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    uint globalMeshletIndex = payload.baseMeshletIndex + meshletLocalIdx;
+    TreeInstance inst = allInstances[payload.instanceIndex];
+
+    GPUMeshlet meshlet = meshlets[globalMeshletIndex];
+
+    uint vertexCount, primitiveCount;
+    unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
+    SetMeshOutputsEXT(vertexCount, primitiveCount);
+
+    mat4 mvp = pc.lightViewProjection * inst.modelMatrix;
+
+    // Transform vertices — depth only, no varyings needed
+    uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
+    for (uint iter = 0; iter < numIterations; iter++) {
+        uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        if (localVertexIndex < vertexCount) {
+            uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
+            uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
+
+            // Vertex stride is 16 floats (64 bytes): pos(3) + normal(3) + uv(2) + bone(8)
+            uint baseIdx = globalVertexIndex * 16;
+
+            vec3 position = vec3(
+                vertexData[baseIdx + 0],
+                vertexData[baseIdx + 1],
+                vertexData[baseIdx + 2]
+            );
+
+            gl_MeshVerticesEXT[localVertexIndex].gl_Position = mvp * vec4(position, 1.0);
+        }
+    }
+
+    // Emit primitives
+    uint numPrimIterations = (primitiveCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
+    for (uint iter = 0; iter < numPrimIterations; iter++) {
+        uint localPrimIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+        if (localPrimIndex < primitiveCount) {
+            uint packedPrimitive = meshletPrimitives[meshlet.primitiveOffset + localPrimIndex];
+            uvec3 indices = unpackPrimitive(packedPrimitive);
+            gl_PrimitiveTriangleIndicesEXT[localPrimIndex] = indices;
+        }
+    }
 }
