@@ -125,7 +125,14 @@ namespace vegetation
                 if (tooClose) continue;
 
                 VegetationInstance instance;
-                instance.position = glm::vec3(candidateX, 0.0f, candidateZ);
+                float heightY = 0.0f;
+                if (params.heightData && params.heightVertexCount > 0)
+                {
+                    heightY = sampleTerrainHeight(candidateX, candidateZ,
+                        params.tileWorldOrigin, params.tileWorldSize,
+                        params.heightData, params.heightVertexCount);
+                }
+                instance.position = glm::vec3(candidateX, heightY, candidateZ);
                 instance.speciesId = params.speciesId;
 
                 // Deterministic scale from cell hash
@@ -203,5 +210,42 @@ namespace vegetation
     float VegetationPlacementBrushApplicator::hashToFloat(uint32_t h)
     {
         return static_cast<float>(h & 0xFFFFFFu) / static_cast<float>(0xFFFFFFu);
+    }
+
+    float VegetationPlacementBrushApplicator::sampleTerrainHeight(
+        float worldX, float worldZ,
+        const glm::vec2& tileWorldOrigin, float tileWorldSize,
+        const float* heightData, uint32_t vertexCount)
+    {
+        // Convert world position to normalized tile-local [0,1] coordinates
+        float localX = (worldX - tileWorldOrigin.x) / tileWorldSize;
+        float localZ = (worldZ - tileWorldOrigin.y) / tileWorldSize;
+
+        // Convert to heightfield grid coordinates
+        float quadCount = static_cast<float>(vertexCount - 1);
+        float gx = localX * quadCount;
+        float gz = localZ * quadCount;
+
+        // Clamp to valid grid range
+        gx = std::clamp(gx, 0.0f, quadCount);
+        gz = std::clamp(gz, 0.0f, quadCount);
+
+        // Bilinear interpolation
+        uint32_t x0 = static_cast<uint32_t>(gx);
+        uint32_t z0 = static_cast<uint32_t>(gz);
+        uint32_t x1 = std::min(x0 + 1, vertexCount - 1);
+        uint32_t z1 = std::min(z0 + 1, vertexCount - 1);
+
+        float fx = gx - static_cast<float>(x0);
+        float fz = gz - static_cast<float>(z0);
+
+        float h00 = heightData[z0 * vertexCount + x0];
+        float h10 = heightData[z0 * vertexCount + x1];
+        float h01 = heightData[z1 * vertexCount + x0];
+        float h11 = heightData[z1 * vertexCount + x1];
+
+        float h0 = h00 + (h10 - h00) * fx;
+        float h1 = h01 + (h11 - h01) * fx;
+        return h0 + (h1 - h0) * fz;
     }
 }

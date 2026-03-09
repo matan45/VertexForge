@@ -203,6 +203,7 @@
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vegetation\GrassConfig.hpp" />
+    <ClInclude Include="vegetation\VegetationColliderDebug.hpp" />
     <ClInclude Include="vegetation\VegetationDensityBrushApplicator.hpp" />
     <ClInclude Include="vegetation\VegetationDensityMap.hpp" />
     <ClInclude Include="vegetation\VegetationPlacementBrushApplicator.hpp" />

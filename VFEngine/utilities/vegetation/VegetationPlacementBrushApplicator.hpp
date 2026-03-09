@@ -24,6 +24,10 @@ namespace vegetation
             terrain::BrushShape shape;
             float tileWorldSize;
             float collisionRadius = 0.0f; // If > 0, minimum spacing between instances
+
+            // Terrain height sampling data
+            const float* heightData = nullptr;  // Tile heightfield grid
+            uint32_t heightVertexCount = 0;      // Vertices per side in heightfield
         };
 
         struct EraseParams
@@ -39,6 +43,11 @@ namespace vegetation
 
         // Erase vegetation instances within brush radius. Returns true if any instances were removed.
         static bool erase(VegetationPlacementData& placement, const EraseParams& params);
+
+        // Sample terrain height at a world XZ position using bilinear interpolation
+        static float sampleTerrainHeight(float worldX, float worldZ,
+            const glm::vec2& tileWorldOrigin, float tileWorldSize,
+            const float* heightData, uint32_t vertexCount);
 
     private:
         // Compute normalized distance [0,1] from brush center.

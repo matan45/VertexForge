@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vegetation/VegetationPlacementData.hpp"
+#include "vegetation/VegetationColliderDebug.hpp"
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -47,5 +48,10 @@ namespace services
 
         // Track which tiles have colliders
         std::unordered_map<TileKey, bool, TileKeyHash> activeTiles;
+
+        // Per-tile debug info for rendering
+        std::unordered_map<TileKey, std::vector<vegetation::ColliderDebugEntry>, TileKeyHash> tileDebugColliders;
+
+        void rebuildDebugData();
     };
 }

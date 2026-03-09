@@ -9,6 +9,7 @@
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "vegetation/VegetationSerializer.hpp"
+#include "vegetation/VegetationPlacementBrushApplicator.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -948,6 +949,20 @@ namespace services
             {
                 if (vegetation::VegetationSerializer::loadPlacementData(placementPath, tile->vegetationPlacement))
                 {
+                    // Re-sample terrain heights for loaded vegetation instances
+                    if (tile->hasHeightData())
+                    {
+                        glm::vec2 tileOrigin(
+                            static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                            static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+                        for (auto& inst : tile->vegetationPlacement.instances)
+                        {
+                            inst.position.y = vegetation::VegetationPlacementBrushApplicator::sampleTerrainHeight(
+                                inst.position.x, inst.position.z,
+                                tileOrigin, tile->config.worldTileSize,
+                                tile->heightData.data(), tile->config.getVertexCount());
+                        }
+                    }
                     tile->vegetationPlacementDirty = true;
                     tile->vegetationPlacementGPUDirty = true;
                     loadedPlacement++;

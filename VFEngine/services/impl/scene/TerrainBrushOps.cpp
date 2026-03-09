@@ -117,6 +117,21 @@ namespace services
                 tile->isDirty = true;
                 tile->setAllLODsDirty();
                 modifiedTiles.push_back(coord);
+
+                // Update vegetation instance heights to follow terrain
+                if (!tile->vegetationPlacement.isEmpty() && tile->hasHeightData())
+                {
+                    glm::vec2 tileOrigin(gpuParams.tileWorldOrigin);
+                    for (auto& inst : tile->vegetationPlacement.instances)
+                    {
+                        inst.position.y = vegetation::VegetationPlacementBrushApplicator::sampleTerrainHeight(
+                            inst.position.x, inst.position.z,
+                            tileOrigin, tile->config.worldTileSize,
+                            tile->heightData.data(), tile->config.getVertexCount());
+                    }
+                    tile->vegetationPlacementDirty = true;
+                    tile->vegetationPlacementGPUDirty = true;
+                }
             }
             else
             {
@@ -635,6 +650,8 @@ namespace services
                 params.shape = brushParams.shape;
                 params.tileWorldSize = tile->config.worldTileSize;
                 params.collisionRadius = speciesCollisionRadius;
+                params.heightData = tile->hasHeightData() ? tile->heightData.data() : nullptr;
+                params.heightVertexCount = tile->config.getVertexCount();
 
                 if (vegetation::VegetationPlacementBrushApplicator::spread(tile->vegetationPlacement, params))
                 {

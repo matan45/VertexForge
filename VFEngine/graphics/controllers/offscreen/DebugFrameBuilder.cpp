@@ -15,6 +15,7 @@
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "vegetation/VegetationColliderDebug.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -225,6 +226,34 @@ namespace controllers::offscreen
         }
     }
 
+    void DebugFrameBuilder::collectVegetationColliders(
+        std::vector<render::mesh::PhysicsColliderRenderData>& drawList)
+    {
+        auto entries = vegetation::VegetationColliderDebugData::instance().get();
+        if (entries.empty()) return;
+
+        for (const auto& entry : entries)
+        {
+            render::mesh::PhysicsColliderRenderData renderData;
+
+            // Build world matrix: translate to position + half height offset, then rotate
+            float halfHeight = entry.height * 0.5f;
+            glm::vec3 capsuleCenter = entry.position + glm::vec3(0.0f, halfHeight, 0.0f);
+
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), capsuleCenter);
+            model = glm::rotate(model, entry.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+
+            renderData.worldMatrix = model;
+            renderData.shape = types::ColliderShape::Capsule;
+            renderData.radius = entry.radius;
+            renderData.height = entry.height;
+            renderData.bodyType = 0; // Static
+            renderData.isTrigger = false;
+
+            drawList.push_back(renderData);
+        }
+    }
+
     void DebugFrameBuilder::preparePhysicsColliders(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
@@ -238,6 +267,7 @@ namespace controllers::offscreen
         std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
         collectStandardColliders(colliderDrawList);
         collectTerrainColliders(colliderDrawList);
+        collectVegetationColliders(colliderDrawList);
 
         if (!colliderDrawList.empty())
         {
