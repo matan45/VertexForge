@@ -619,13 +619,16 @@ namespace services
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
 
-            if (brushType == vegetation::PlacementBrushType::Scatter)
+            if (brushType == vegetation::PlacementBrushType::Spread)
             {
-                vegetation::VegetationPlacementBrushApplicator::ScatterParams params;
+                vegetation::VegetationPlacementBrushApplicator::SpreadParams params;
                 params.brushCenter = brushCenter;
                 params.tileWorldOrigin = tileOrigin;
                 params.brushRadius = brushParams.radius;
                 params.density = brushParams.density;
+                params.strength = brushParams.strength;
+                params.opacity = brushParams.opacity;
+                params.deltaTime = deltaTime;
                 params.minScale = brushParams.minScale;
                 params.maxScale = brushParams.maxScale;
                 params.randomRotation = brushParams.randomRotation;
@@ -635,7 +638,7 @@ namespace services
                 params.tileWorldSize = tile->config.worldTileSize;
                 params.collisionRadius = speciesCollisionRadius;
 
-                if (vegetation::VegetationPlacementBrushApplicator::scatter(tile->vegetationPlacement, params))
+                if (vegetation::VegetationPlacementBrushApplicator::spread(tile->vegetationPlacement, params))
                 {
                     tile->vegetationPlacementDirty = true;
                     tile->vegetationPlacementGPUDirty = true;

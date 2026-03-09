@@ -627,9 +627,8 @@ namespace windows
 
         if (leftDown)
         {
-            // Scatter: only on initial click, not while holding
-            // Erase: continuous while holding
-            bool shouldApply = (brushType == vegetation::PlacementBrushType::Erase) || !placementDragging;
+            // Spread and Erase: continuous while holding
+            bool shouldApply = true;
 
             if (shouldApply)
             {

@@ -36,6 +36,8 @@ namespace windows
         events::vegetationBrush::SetPlacementBrushParamsCommand cmd;
         cmd.params.radius = brushRadius;
         cmd.params.density = density;
+        cmd.params.strength = strength;
+        cmd.params.opacity = opacity;
         cmd.params.minScale = minScale;
         cmd.params.maxScale = maxScale;
         cmd.params.randomRotation = randomRotation;
@@ -59,7 +61,7 @@ namespace windows
         bool paramsChanged = false;
 
         // Brush type
-        const char* brushTypes[] = {"Scatter", "Erase"};
+        const char* brushTypes[] = {"Spread", "Erase"};
         if (ImGui::Combo("Tool", &selectedBrushType, brushTypes, IM_ARRAYSIZE(brushTypes)))
         {
             events::vegetationBrush::SetPlacementBrushTypeCommand cmd;
@@ -69,6 +71,8 @@ namespace windows
 
         paramsChanged |= ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f);
         paramsChanged |= ImGui::SliderFloat("Density", &density, 0.0f, 1.0f);
+        paramsChanged |= ImGui::SliderFloat("Strength", &strength, 0.0f, 100.0f);
+        paramsChanged |= ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f);
 
         ImGui::Separator();
         ImGui::Text("Scale");

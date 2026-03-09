@@ -9,12 +9,15 @@ namespace vegetation
     class VegetationPlacementBrushApplicator
     {
     public:
-        struct ScatterParams
+        struct SpreadParams
         {
             glm::vec2 brushCenter;       // World XZ position of brush center
             glm::vec2 tileWorldOrigin;   // World XZ origin of this tile
             float brushRadius;
-            float density;               // Instances per unit area
+            float density;               // Controls grid spacing (instances per unit area)
+            float strength;              // Placement probability multiplier
+            float opacity;               // Overall influence [0,1]
+            float deltaTime;             // Frame delta for continuous painting
             float minScale;
             float maxScale;
             float randomRotation;        // [0,1] - amount of random Y rotation
@@ -31,8 +34,10 @@ namespace vegetation
             float brushRadius;
         };
 
-        // Scatter vegetation instances within brush radius. Returns true if any instances were added.
-        static bool scatter(VegetationPlacementData& placement, const ScatterParams& params);
+        // Spread vegetation instances within brush radius using grid-based placement.
+        // Deterministic per grid cell — repainting the same area won't re-randomize existing instances.
+        // Returns true if any instances were added.
+        static bool spread(VegetationPlacementData& placement, const SpreadParams& params);
 
         // Erase vegetation instances within brush radius. Returns true if any instances were removed.
         static bool erase(VegetationPlacementData& placement, const EraseParams& params);
@@ -48,7 +53,10 @@ namespace vegetation
         // Apply falloff curve.
         static float applyFalloff(float t, terrain::BrushFalloff falloff);
 
-        // Generate a deterministic seed from position
-        static uint32_t positionHash(const glm::vec2& pos);
+        // Generate a deterministic hash from grid cell coordinates
+        static uint32_t cellHash(int cellX, int cellZ, uint32_t seed = 0);
+
+        // Generate a float [0,1] from a hash value
+        static float hashToFloat(uint32_t h);
     };
 }
