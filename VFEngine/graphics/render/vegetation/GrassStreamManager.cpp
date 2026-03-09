@@ -56,6 +56,10 @@ namespace render::vegetation
             // Actual upload logic will be connected to density map → compute shader pipeline
             state.isUploaded = true;
             state.isDirty = false;
+            // Estimate memory usage per tile for budget tracking
+            constexpr uint64_t estimatedBytesPerTile = 64 * 1024; // 64KB per tile
+            state.memoryUsage = estimatedBytesPerTile;
+            currentMemoryUsage += state.memoryUsage;
             uploadsThisFrame++;
         }
 
@@ -131,9 +135,7 @@ namespace render::vegetation
 
     float GrassStreamManager::calculatePriority(const VegetationTileKey& key, const glm::vec3& cameraPos) const
     {
-        // Simple distance-based priority
-        // Assumes tiles at coord * worldTileSize (default 32)
-        constexpr float tileSize = 32.0f;
+        float tileSize = streamConfig.worldTileSize;
         float tileX = static_cast<float>(key.coordX) * tileSize + tileSize * 0.5f;
         float tileZ = static_cast<float>(key.coordZ) * tileSize + tileSize * 0.5f;
 

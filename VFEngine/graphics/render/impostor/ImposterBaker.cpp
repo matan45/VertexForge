@@ -285,6 +285,15 @@ namespace render::impostor
         result.atlasHeight = layout.atlasHeight;
         result.viewCount = static_cast<uint32_t>(layout.views.size());
 
+        // Validate atlas dimensions to prevent overflow (width * height * 4 must fit in size_t)
+        constexpr uint32_t MAX_ATLAS_DIMENSION = 4096;
+        if (layout.atlasWidth > MAX_ATLAS_DIMENSION || layout.atlasHeight > MAX_ATLAS_DIMENSION)
+        {
+            result.errorMessage = "Atlas dimensions exceed maximum (" + std::to_string(MAX_ATLAS_DIMENSION) +
+                                  "): " + std::to_string(layout.atlasWidth) + "x" + std::to_string(layout.atlasHeight);
+            return result;
+        }
+
         uint32_t viewRes = request.config.viewResolution;
 
         if (request.progressCallback) request.progressCallback(0.05f);

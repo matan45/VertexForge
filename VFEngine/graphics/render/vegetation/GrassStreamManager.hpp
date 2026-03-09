@@ -16,6 +16,7 @@ namespace render::vegetation
         uint32_t maxUploadsPerFrame = 4;
         uint32_t maxBytesPerFrame = 2 * 1024 * 1024;    // 2MB per frame
         float evictionThreshold = 0.9f;
+        float worldTileSize = 32.0f;
     };
 
     class GrassStreamManager

@@ -163,9 +163,22 @@ namespace render::gpudriven
         file.read(reinterpret_cast<char*>(&vAngles), sizeof(uint32_t));
         file.read(reinterpret_cast<char*>(&viewRes), sizeof(uint32_t));
 
+        if (!file.good())
+        {
+            vfLogError("GPUDrivenRenderer: Failed to read imposter header: {}", imposterPath);
+            return 0;
+        }
+
         if (atlasWidth == 0 || atlasHeight == 0 || atlasWidth > 16384 || atlasHeight > 16384)
         {
             vfLogError("GPUDrivenRenderer: Invalid atlas dimensions {}x{} in: {}", atlasWidth, atlasHeight, imposterPath);
+            return 0;
+        }
+
+        constexpr uint32_t MAX_IMPOSTER_VIEW_COUNT = 256;
+        if (viewCount == 0 || viewCount > MAX_IMPOSTER_VIEW_COUNT)
+        {
+            vfLogError("GPUDrivenRenderer: Invalid view count {} in: {}", viewCount, imposterPath);
             return 0;
         }
 

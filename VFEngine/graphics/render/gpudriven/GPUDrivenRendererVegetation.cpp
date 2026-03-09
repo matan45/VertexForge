@@ -14,6 +14,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "vegetation/WindConfig.hpp"
 #include "vegetation/VegetationPlacementData.hpp"
@@ -286,6 +287,11 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::clearAllVegetationSpecies()
     {
+        // Clear cached tile pointers to prevent dangling pointer access
+        // if terrain is deleted while vegetation species are being cleared
+        vegetation.cachedVisibleTiles.clear();
+        vegetation.currentTreeInstanceCount = 0;
+
         for (auto& [id, cached] : vegetation.cachedSpecies)
         {
             // Release material from lifecycle manager
@@ -552,6 +558,13 @@ namespace render::gpudriven
         // LOD counters buffer (3 x 16 bytes for alignment: lod0Count@0, lod1Count@16, lod2Count@32)
         createStorageBuffer(3 * 16, vegetation.lodCountersBuffer, vegetation.lodCountersBufferMemory);
 
+        // Zero-initialize the LOD counters buffer to prevent reading stale GPU memory
+        {
+            auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
+            cmd->fillBuffer(vegetation.lodCountersBuffer, 0, 3 * 16, 0);
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        }
+
         // Imposter config buffer (per-species) - host-visible for easy updates
         auto createHostVisibleStorageBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory)
         {
@@ -765,6 +778,24 @@ namespace render::gpudriven
 
         // Cache visible tiles for grass compute dispatch later in the frame
         vegetation.cachedVisibleTiles.assign(visibleTiles.begin(), visibleTiles.end());
+
+        // Sync tile size from actual terrain config (may differ from default 32)
+        if (!visibleTiles.empty() && visibleTiles[0])
+        {
+            float actualTileSize = visibleTiles[0]->config.worldTileSize;
+            if (vegetation.grassStreamManager)
+            {
+                auto cfg = vegetation.grassStreamManager->getConfig();
+                cfg.worldTileSize = actualTileSize;
+                vegetation.grassStreamManager->setConfig(cfg);
+            }
+            if (vegetation.vegetationStreamManager)
+            {
+                auto cfg = vegetation.vegetationStreamManager->getConfig();
+                cfg.worldTileSize = actualTileSize;
+                vegetation.vegetationStreamManager->setConfig(cfg);
+            }
+        }
 
         // Sync vegetation tiles with visible terrain tiles.
         // Auto-register tiles that appear and auto-remove tiles that disappear.

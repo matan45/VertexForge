@@ -17,6 +17,7 @@ namespace render::vegetation
         uint32_t maxUploadsPerFrame = 8;
         uint32_t maxBytesPerFrame = 4 * 1024 * 1024;
         float evictionThreshold = 0.9f;
+        float worldTileSize = 32.0f;
     };
 
     // Tree instance that should transition to billboard impostor

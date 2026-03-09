@@ -3,6 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include <cstring>
+#include <cmath>
 
 namespace render::vegetation
 {
@@ -82,6 +83,9 @@ namespace render::vegetation
     void WindSystem::update(float deltaTime, const ::vegetation::WindConfig& config)
     {
         elapsedTime += deltaTime;
+        // Wrap to prevent float precision loss over long sessions
+        // 10000 seconds period preserves sub-millisecond precision
+        elapsedTime = std::fmod(elapsedTime, 10000.0f);
 
         glm::vec3 normalizedDir = glm::length(config.direction) > 0.0f
             ? glm::normalize(config.direction)

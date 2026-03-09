@@ -1,4 +1,5 @@
 #include "ImposterAtlasManager.hpp"
+#include "print/Log.hpp"
 
 namespace render::vegetation
 {
@@ -21,11 +22,12 @@ namespace render::vegetation
             return it->second.bindlessIndex;
         }
 
-        // Stub: actual texture loading will be wired with BindlessTextureManager
-        LoadedAtlas atlas{};
-        atlas.bindlessIndex = 0;
-        loadedAtlases[path] = atlas;
-        return atlas.bindlessIndex;
+        // Note: Imposter atlas loading is handled by GPUDrivenRenderer::loadImposterAtlas()
+        // which creates the GPU texture and registers with BindlessTextureManager directly.
+        // This class serves as a cache lookup only. Use GPUDrivenRenderer for actual loading.
+        vfLogWarning("ImposterAtlasManager::loadAtlas called but loading is handled by GPUDrivenRenderer. "
+                     "Use GPUDrivenRenderer::loadImposterAtlas() instead for: {}", path);
+        return 0;
     }
 
     void ImposterAtlasManager::unloadAtlas(const std::string& path)

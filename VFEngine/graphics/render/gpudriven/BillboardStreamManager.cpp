@@ -55,10 +55,10 @@ namespace render::gpudriven
                   });
 
         // Apply per-frame upload budget
-        if (visibleInstances.size() > streamConfig.maxUploadsPerFrame * 8)
+        size_t maxInstances = static_cast<size_t>(streamConfig.maxUploadsPerFrame) * 8;
+        if (visibleInstances.size() > maxInstances)
         {
-            // Budget: keep up to maxUploadsPerFrame * 8 instances per frame
-            // (each upload can handle multiple instances)
+            visibleInstances.resize(maxInstances);
         }
 
         streamedCount = static_cast<uint32_t>(visibleInstances.size());
