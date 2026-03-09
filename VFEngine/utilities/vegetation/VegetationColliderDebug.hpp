@@ -14,7 +14,7 @@ namespace vegetation
         float height = 5.0f;
     };
 
-    // Shared debug data for vegetation colliders, written by services, read by graphics.
+    // Shared debug data for vegetation colliders, written by GPU renderer, read by debug renderer.
     class VegetationColliderDebugData
     {
     public:

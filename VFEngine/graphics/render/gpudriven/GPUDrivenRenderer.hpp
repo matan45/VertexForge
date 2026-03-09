@@ -242,6 +242,11 @@ namespace render::gpudriven
                 uint32_t baseVertexOffset = 0;   // global offset into shared vertex buffer
                 uint32_t availableLODMask = 0;   // bits 0-3 for which mesh LODs are loaded
                 float meshMinY = 0.0f;           // lowest vertex Y in local space (for ground placement)
+
+                // Collision (from species config, cached for debug collider rendering)
+                bool hasCollision = false;
+                float collisionRadius = 0.3f;
+                float collisionHeight = 5.0f;
             };
             std::unordered_map<uint32_t, CachedSpeciesData> cachedSpecies;
             bool speciesRenderInfoDirty = true;

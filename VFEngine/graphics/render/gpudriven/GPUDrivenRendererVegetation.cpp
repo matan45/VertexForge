@@ -24,6 +24,7 @@
 #include "material/MaterialInstanceTypes.hpp"
 #include "BindlessTextureManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include "vegetation/VegetationColliderDebug.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -136,6 +137,11 @@ namespace render::gpudriven
         cached.lod1Distance = config.lod1Distance;
         cached.lod2Distance = config.lod2Distance;
         cached.maxRenderDistance = config.maxRenderDistance;
+
+        // Collision config for debug rendering
+        cached.hasCollision = config.hasCollision;
+        cached.collisionRadius = config.collisionRadius;
+        cached.collisionHeight = config.collisionHeight;
 
         // Load/reload species mesh if path changed
         if (!config.meshPath.empty() && config.meshPath != cached.meshPath)
@@ -251,6 +257,7 @@ namespace render::gpudriven
         }
         vegetation.cachedSpecies.clear();
         vegetation.speciesRenderInfoDirty = true;
+        ::vegetation::VegetationColliderDebugData::instance().clear();
     }
 
     void GPUDrivenRenderer::setVegetationDebugLODView(bool enabled)
@@ -777,6 +784,8 @@ namespace render::gpudriven
             std::vector<vegetation::TreeInstanceGPU> treeInstances;
             treeInstances.reserve(4096);
 
+            std::vector<::vegetation::ColliderDebugEntry> colliderDebugEntries;
+
             uint32_t totalPlacementInstances = 0;
             uint32_t speciesMissCount = 0;
 
@@ -839,12 +848,26 @@ namespace render::gpudriven
 
                     treeInstances.push_back(gpu);
 
+                    // Build debug collider entry (same position as the rendered mesh)
+                    if (species.hasCollision && species.hasMesh && gpu.lodMask != 0)
+                    {
+                        ::vegetation::ColliderDebugEntry entry;
+                        entry.position = placementPos;
+                        entry.rotation = instance.rotation;
+                        entry.radius = species.collisionRadius * finalScale;
+                        entry.height = species.collisionHeight * finalScale;
+                        colliderDebugEntries.push_back(entry);
+                    }
+
                     if (treeInstances.size() >= vegetation.treeInstanceCapacity) break;
                 }
                 if (treeInstances.size() >= vegetation.treeInstanceCapacity) break;
             }
 
             vegetation.currentTreeInstanceCount = static_cast<uint32_t>(treeInstances.size());
+
+            // Update debug collider data for physics debug rendering
+            ::vegetation::VegetationColliderDebugData::instance().set(std::move(colliderDebugEntries));
 
             // Upload tree instances to staging buffer
             if (vegetation.currentTreeInstanceCount > 0 && vegetation.treeInstanceStagingMapped)

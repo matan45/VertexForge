@@ -20,7 +20,6 @@ namespace services
         }
 
         std::vector<IPhysicsProvider::VegetationColliderInstance> colliderInstances;
-        std::vector<vegetation::ColliderDebugEntry> tileDebug;
 
         for (const auto& inst : placement.getInstances())
         {
@@ -34,27 +33,13 @@ namespace services
             collider.radius = species->collisionRadius;
             collider.height = species->collisionHeight;
             colliderInstances.push_back(collider);
-
-            vegetation::ColliderDebugEntry debugEntry;
-            debugEntry.position = inst.position;
-            debugEntry.rotation = inst.rotation;
-            debugEntry.radius = species->collisionRadius * inst.scale;
-            debugEntry.height = species->collisionHeight * inst.scale;
-            tileDebug.push_back(debugEntry);
         }
 
         if (!colliderInstances.empty())
         {
             physicsProvider->addVegetationTileColliders(coordX, coordZ, colliderInstances);
             activeTiles[key] = true;
-            tileDebugColliders[key] = std::move(tileDebug);
         }
-        else
-        {
-            tileDebugColliders.erase(key);
-        }
-
-        rebuildDebugData();
     }
 
     void VegetationPhysicsIntegration::onTileUnloaded(int32_t coordX, int32_t coordZ)
@@ -67,8 +52,6 @@ namespace services
         {
             physicsProvider->removeVegetationTileColliders(coordX, coordZ);
             activeTiles.erase(it);
-            tileDebugColliders.erase(key);
-            rebuildDebugData();
         }
     }
 
@@ -79,17 +62,5 @@ namespace services
             physicsProvider->removeAllVegetationColliders();
         }
         activeTiles.clear();
-        tileDebugColliders.clear();
-        vegetation::VegetationColliderDebugData::instance().clear();
-    }
-
-    void VegetationPhysicsIntegration::rebuildDebugData()
-    {
-        std::vector<vegetation::ColliderDebugEntry> all;
-        for (const auto& [key, colliders] : tileDebugColliders)
-        {
-            all.insert(all.end(), colliders.begin(), colliders.end());
-        }
-        vegetation::VegetationColliderDebugData::instance().set(std::move(all));
     }
 }
