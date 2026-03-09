@@ -246,10 +246,6 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint shadowLOD;
     float depthBias;
     float slopeBias;
-    float normalBias;
-    float _pad0;
-    float _pad1;
-    float _pad2;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {

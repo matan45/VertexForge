@@ -1,4 +1,5 @@
 #include "VegetationPlacementBrushApplicator.hpp"
+#include <iostream>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -60,15 +61,6 @@ namespace vegetation
             return false;
         }
 
-        // Influence for acceptance probability
-        float influence = params.strength * params.opacity * params.deltaTime;
-        influence = std::clamp(influence, 0.0f, 1.0f);
-
-        if (influence <= 0.0001f)
-        {
-            return false;
-        }
-
         bool added = false;
 
         for (int cz = cellStartZ; cz <= cellEndZ; ++cz)
@@ -105,9 +97,10 @@ namespace vegetation
                     continue;
                 }
 
-                // Apply falloff to acceptance probability
+                // Apply falloff to acceptance probability (deterministic, no deltaTime)
+                // This ensures placement is stable — same brush position always produces same result
                 float falloffValue = applyFalloff(dist, params.falloff);
-                float acceptance = falloffValue * influence;
+                float acceptance = falloffValue * params.opacity;
 
                 // Use deterministic hash for acceptance test
                 if (hashToFloat(h3) > acceptance)
@@ -150,6 +143,14 @@ namespace vegetation
                 placement.addInstance(instance);
                 added = true;
             }
+        }
+
+        if (added)
+        {
+            std::cout << "VegSpread: added instances, total=" << placement.getInstanceCount()
+                << " brush=(" << params.brushCenter.x << "," << params.brushCenter.y << ")"
+                << " radius=" << params.brushRadius << " density=" << params.density
+                << " cellSize=" << cellSize << std::endl;
         }
 
         return added;

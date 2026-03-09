@@ -9,6 +9,7 @@
 #include "terrain/HoleBrushApplicator.hpp"
 #include "vegetation/VegetationDensityBrushApplicator.hpp"
 #include "vegetation/VegetationPlacementBrushApplicator.hpp"
+#include <iostream>
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
@@ -621,14 +622,14 @@ namespace services
 
             if (brushType == vegetation::PlacementBrushType::Spread)
             {
+                std::cout << "VegBrush: spread on tile (" << tile->coord.x << "," << tile->coord.z
+                    << ") existing=" << tile->vegetationPlacement.getInstanceCount() << std::endl;
                 vegetation::VegetationPlacementBrushApplicator::SpreadParams params;
                 params.brushCenter = brushCenter;
                 params.tileWorldOrigin = tileOrigin;
                 params.brushRadius = brushParams.radius;
                 params.density = brushParams.density;
-                params.strength = brushParams.strength;
                 params.opacity = brushParams.opacity;
-                params.deltaTime = deltaTime;
                 params.minScale = brushParams.minScale;
                 params.maxScale = brushParams.maxScale;
                 params.randomRotation = brushParams.randomRotation;

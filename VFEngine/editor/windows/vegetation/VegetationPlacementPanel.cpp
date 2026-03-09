@@ -36,7 +36,6 @@ namespace windows
         events::vegetationBrush::SetPlacementBrushParamsCommand cmd;
         cmd.params.radius = brushRadius;
         cmd.params.density = density;
-        cmd.params.strength = strength;
         cmd.params.opacity = opacity;
         cmd.params.minScale = minScale;
         cmd.params.maxScale = maxScale;
@@ -71,7 +70,6 @@ namespace windows
 
         paramsChanged |= ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f);
         paramsChanged |= ImGui::SliderFloat("Density", &density, 0.0f, 1.0f);
-        paramsChanged |= ImGui::SliderFloat("Strength", &strength, 0.0f, 100.0f);
         paramsChanged |= ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f);
 
         ImGui::Separator();

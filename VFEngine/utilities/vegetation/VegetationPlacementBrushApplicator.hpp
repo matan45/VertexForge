@@ -15,9 +15,7 @@ namespace vegetation
             glm::vec2 tileWorldOrigin;   // World XZ origin of this tile
             float brushRadius;
             float density;               // Controls grid spacing (instances per unit area)
-            float strength;              // Placement probability multiplier
-            float opacity;               // Overall influence [0,1]
-            float deltaTime;             // Frame delta for continuous painting
+            float opacity;               // Overall influence [0,1] for falloff acceptance
             float minScale;
             float maxScale;
             float randomRotation;        // [0,1] - amount of random Y rotation

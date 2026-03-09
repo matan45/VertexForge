@@ -50,6 +50,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
 
@@ -194,6 +195,9 @@ namespace render::gpudriven
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
+
+            // All loaded tile pointers for tree instance building (not frustum-filtered)
+            std::unordered_map<uint64_t, terrain::TerrainTile*> loadedTiles;
 
             // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
             std::vector<terrain::TerrainTile*> cachedVisibleTiles;
