@@ -31,6 +31,7 @@ namespace render::gpudriven
         cachedCullingOutputLayout = info.cullingOutputLayout;
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
+        cachedGIProbeDataLayout = info.giProbeDataLayout;
 
         createStatsBuffer();
         createPerDrawDataDescriptor();
@@ -126,6 +127,7 @@ namespace render::gpudriven
         cachedCullingOutputLayout = info.cullingOutputLayout;
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
+        cachedGIProbeDataLayout = info.giProbeDataLayout;
 
         if (graphicsPipeline)
         {
@@ -232,6 +234,11 @@ namespace render::gpudriven
         }
         shadowDataDescriptorSet = shadowDataDescSet;
         shadowTextureDescriptorSet = shadowTextureDescSet;
+    }
+
+    void MeshShaderPipeline::updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet)
+    {
+        giProbeDataDescriptorSet = giProbeDescSet;
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -388,6 +395,10 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("WBOIT_ENABLED");
         }
+        if (info.giProbeDataLayout)
+        {
+            meshShader->addMacroDefinition("GI_ENABLED");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -414,7 +425,7 @@ namespace render::gpudriven
             return;
         }
 
-        std::array<vk::DescriptorSetLayout, 11> setLayouts = {
+        std::vector<vk::DescriptorSetLayout> setLayouts = {
             info.iblLayout,
             perDrawDataLayout,
             info.bindlessTextureLayout,
@@ -427,6 +438,11 @@ namespace render::gpudriven
             info.shadowDataLayout,
             info.shadowTextureLayout
         };
+
+        if (info.giProbeDataLayout)
+        {
+            setLayouts.push_back(info.giProbeDataLayout);
+        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

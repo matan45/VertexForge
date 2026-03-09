@@ -13,7 +13,7 @@ const uint MAX_MESHLETS_PER_PAYLOAD = 512;
 layout(push_constant) uniform TerrainShadowPushConstants {
     mat4 lightViewProjection;
     uint tileCount;
-    uint shadowLOD;         // Which LOD to use for shadows (0-3)
+    uint shadowLOD;
     float depthBias;
     float slopeBias;
 } pc;
@@ -246,6 +246,10 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint shadowLOD;
     float depthBias;
     float slopeBias;
+    float normalBias;
+    float _pad0;
+    float _pad1;
+    float _pad2;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {

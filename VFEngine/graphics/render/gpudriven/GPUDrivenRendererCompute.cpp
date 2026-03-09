@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/Device.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <algorithm>
@@ -320,6 +321,365 @@ namespace render::gpudriven
                                          lightCullingPipeline->getDescriptorSet(),
                                          shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
                                          shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{});
+        }
+
+        // GI probe update
+        if (giCascadeManager && giCascadeManager->isInitialized() &&
+            giTracePipeline && giTracePipeline->isInitialized())
+        {
+            giCascadeManager->updateCameraPosition(cachedCamera.position);
+            giCascadeManager->beginFrame();
+
+            // Build/update acceleration structures for ray queries
+            if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
+            {
+                if (blasNeedsRebuild && mergedBuffer->getTotalVertexCount() > 0 &&
+                    mergedBuffer->getTotalIndexCount() > 0)
+                {
+                    accelStructManager->buildBLAS(cmd,
+                        mergedBuffer->getVertexBuffer(), mergedBuffer->getTotalVertexCount(), 64,
+                        mergedBuffer->getIndexBuffer(), mergedBuffer->getTotalIndexCount());
+                    blasNeedsRebuild = false;
+                }
+
+                if (accelStructManager->isTLASReady() || !blasNeedsRebuild)
+                {
+                    if (mergedBuffer->getObjectCount() > 0)
+                    {
+                        // Access CPU-side object data for transforms
+                        accelStructManager->buildTLAS(cmd,
+                            mergedBuffer->getCPUObjectData(),
+                            mergedBuffer->getObjectCount());
+                    }
+                }
+            }
+
+            auto* storage = giCascadeManager->getProbeStorage();
+
+            // Zero-initialize probe buffers on first frame (device-local needs explicit upload)
+            if (storage && giProbeBuffersNeedInit)
+            {
+                storage->uploadToGPU(cmd);
+                giProbeBuffersNeedInit = false;
+
+                // Barrier: transfer writes must complete before compute reads
+                vk::MemoryBarrier initBarrier{
+                    vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::DependencyFlags{},
+                    1, &initBarrier, 0, nullptr, 0, nullptr);
+            }
+
+            auto batches = giCascadeManager->getProbeUpdateBatches();
+
+            if (storage && !batches.empty())
+            {
+                // Memory barrier before GI compute
+                vk::MemoryBarrier giBarrier{
+                    vk::AccessFlagBits::eShaderWrite,
+                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::DependencyFlags{},
+                    1, &giBarrier, 0, nullptr, 0, nullptr);
+
+                // Trace pass
+                for (const auto& batch : batches)
+                {
+                    gi::GIComputePushConstants push{};
+                    push.cascadeIndex = batch.cascadeIndex;
+                    push.probeStartIndex = batch.probeStartOffset;
+                    push.probeCount = batch.probeCount;
+                    push.raysPerProbe = cachedGISettings.probeRaysPerUpdate;
+                    push.maxDistance = cachedGISettings.maxProbeDistance;
+                    push.temporalBlend = cachedGISettings.temporalBlendFactor;
+                    push.frameRandom = static_cast<float>(giCascadeManager->getFrameIndex()) * 0.1f;
+                    push.frameIndex = giCascadeManager->getFrameIndex();
+
+                    vk::DescriptorSet tlasSet = (accelStructManager && accelStructManager->isTLASReady())
+                        ? accelStructManager->getTLASDescriptorSet()
+                        : vk::DescriptorSet{};
+
+                    vk::DescriptorSet lightSet = lightBufferManager
+                        ? lightBufferManager->getDescriptorSet()
+                        : vk::DescriptorSet{};
+
+                    giTracePipeline->dispatch(cmd,
+                                               storage->getProbeDataDescSet(),
+                                               giCascadeManager->getCascadeInfoDescSet(),
+                                               push,
+                                               tlasSet,
+                                               lightSet);
+                }
+
+                // Barrier: compute writes must finish before copy
+                vk::MemoryBarrier computeBarrier{
+                    vk::AccessFlagBits::eShaderWrite,
+                    vk::AccessFlagBits::eTransferRead
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::DependencyFlags{},
+                    1, &computeBarrier, 0, nullptr, 0, nullptr);
+
+                // Swap ping-pong: trace wrote to the write buffer, now make it the read buffer
+                storage->swapBuffers();
+
+                // Copy only non-updated probe ranges from read to write buffer
+                // (updated probes were already written by compute; copying them again would be redundant)
+                {
+                    constexpr vk::DeviceSize probeSize = sizeof(gi::ProbeData);
+                    uint32_t totalProbes = storage->getProbeCount();
+
+                    // Collect updated probe ranges sorted by offset
+                    std::vector<std::pair<uint32_t, uint32_t>> updatedRanges;
+                    updatedRanges.reserve(batches.size());
+                    for (const auto& batch : batches)
+                    {
+                        updatedRanges.emplace_back(batch.probeStartOffset, batch.probeStartOffset + batch.probeCount);
+                    }
+                    std::sort(updatedRanges.begin(), updatedRanges.end());
+
+                    // Build copy regions for the gaps between updated ranges
+                    std::vector<vk::BufferCopy> copyRegions;
+                    uint32_t cursor = 0;
+                    for (const auto& [start, end] : updatedRanges)
+                    {
+                        if (start > cursor)
+                        {
+                            copyRegions.push_back({cursor * probeSize, cursor * probeSize, (start - cursor) * probeSize});
+                        }
+                        cursor = std::max(cursor, end);
+                    }
+                    if (cursor < totalProbes)
+                    {
+                        copyRegions.push_back({cursor * probeSize, cursor * probeSize, (totalProbes - cursor) * probeSize});
+                    }
+
+                    if (!copyRegions.empty())
+                    {
+                        cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(),
+                                       static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+                    }
+                }
+
+                // Barrier: copy must finish before fragment reads and next frame's compute writes
+                vk::MemoryBarrier copyBarrier{
+                    vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eShaderRead
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
+                    vk::DependencyFlags{},
+                    1, &copyBarrier, 0, nullptr, 0, nullptr);
+
+                // Update mesh shader pipelines with new read buffer's sampling set
+                auto samplingSet = storage->getSamplingDescSet();
+                if (meshShaderPipeline)
+                    meshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+                if (transparentMeshShaderPipeline)
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+                if (wboitMeshShaderPipeline)
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+
+                // Note: the copy barrier above already syncs transfer→fragment+compute
+            }
+        }
+
+        // Update shadow LOD based on camera distance
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            shadowSystem->updateShadowLOD(cachedCamera.position);
+        }
+
+        // Update light streaming priorities
+        if (lightStreamManager)
+        {
+            lightStreamManager->updatePriorities(cachedCamera.position);
+            lightStreamManager->applyBudget();
+        }
+    }
+
+    void GPUDrivenRenderer::initLightStreaming(const lighting::LightStreamingConfig& config)
+    {
+        lightStreamManager = std::make_unique<lighting::LightStreamManager>();
+        lightStreamManager->init(config);
+    }
+
+    void GPUDrivenRenderer::initGI(const gi::GISettings& settings)
+    {
+        cachedGISettings = settings;
+
+        if (!settings.enabled || settings.quality == gi::GIQuality::Off)
+        {
+            return;
+        }
+
+        // Initialize cascade manager for probe-based GI (Medium+ quality)
+        if (settings.quality >= gi::GIQuality::Medium)
+        {
+            giCascadeManager = std::make_unique<gi::RadianceCascadeManager>(device);
+            giCascadeManager->init(settings);
+
+            auto* storage = giCascadeManager->getProbeStorage();
+            if (storage && storage->isInitialized())
+            {
+                // Initialize acceleration structure manager for ray queries
+                vk::DescriptorSetLayout tlasLayout = nullptr;
+                if (device.isRayQuerySupported())
+                {
+                    accelStructManager = std::make_unique<gi::AccelerationStructureManager>(device);
+                    accelStructManager->init();
+                    if (accelStructManager->isInitialized())
+                    {
+                        tlasLayout = accelStructManager->getTLASDescriptorLayout();
+                        blasNeedsRebuild = true;
+                    }
+                }
+
+                vk::DescriptorSetLayout lightDataLayout = lightBufferManager
+                    ? lightBufferManager->getDescriptorSetLayout() : nullptr;
+
+                giTracePipeline = std::make_unique<gi::ProbeTracePipeline>(device);
+                giTracePipeline->init(storage->getProbeDataLayout(),
+                                       storage->getCascadeInfoLayout(),
+                                       tlasLayout,
+                                       lightDataLayout);
+
+                giUpdatePipeline = std::make_unique<gi::ProbeUpdatePipeline>(device);
+                giUpdatePipeline->init(storage->getProbeDataLayout(),
+                                        storage->getCascadeInfoLayout());
+
+                if (cachedRenderPass)
+                {
+                    giDebugRenderer = std::make_unique<gi::GIDebugRenderer>(device);
+                    giDebugRenderer->init(cachedRenderPass,
+                                           storage->getProbeDataLayout(),
+                                           storage->getCascadeInfoLayout());
+                }
+
+                // Recreate mesh shader pipelines with GI sampling layout and update descriptors
+                if (meshShaderPipeline && shadowSystem)
+                {
+                    MeshPipelineInitInfo pipelineInfo{
+                        .iblLayout = cachedIBLLayout,
+                        .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                        .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                        .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                        .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                        .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                        .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                        .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                        .giProbeDataLayout = storage->getSamplingLayout(),
+                        .renderPass = cachedRenderPass
+                    };
+
+                    meshShaderPipeline->recreate(pipelineInfo);
+                    meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+
+                    if (transparentMeshShaderPipeline)
+                    {
+                        pipelineInfo.transparentMode = true;
+                        transparentMeshShaderPipeline->recreate(pipelineInfo);
+                        transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                        pipelineInfo.transparentMode = false;
+                    }
+
+                    if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                    {
+                        pipelineInfo.renderPass = cachedWBOITRenderPass;
+                        pipelineInfo.wboitMode = true;
+                        wboitMeshShaderPipeline->recreate(pipelineInfo);
+                        wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    }
+                }
+            }
+        }
+    }
+
+    void GPUDrivenRenderer::cleanupGI()
+    {
+        // Wait for all in-flight commands that reference GI descriptor sets
+        device.getLogicalDevice().waitIdle();
+
+        // Clear stale GI descriptor handles from pipelines BEFORE destroying the pool
+        if (meshShaderPipeline)
+            meshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+        if (transparentMeshShaderPipeline)
+            transparentMeshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+        if (wboitMeshShaderPipeline)
+            wboitMeshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+
+        if (giDebugRenderer) { giDebugRenderer->cleanup(); giDebugRenderer.reset(); }
+        if (giUpdatePipeline) { giUpdatePipeline->cleanup(); giUpdatePipeline.reset(); }
+        if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
+        if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
+        if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
+        blasNeedsRebuild = true;
+        giProbeBuffersNeedInit = true;
+    }
+
+    void GPUDrivenRenderer::applyGISettings(const gi::GISettings& settings)
+    {
+        bool needsReinit = (settings.quality != cachedGISettings.quality) ||
+                           (settings.enabled != cachedGISettings.enabled) ||
+                           (settings.probeSpacing != cachedGISettings.probeSpacing);
+
+        cachedGISettings = settings;
+
+        if (needsReinit)
+        {
+            cleanupGI();
+            initGI(settings);
+
+            // If initGI returned early (disabled/Off), recreate pipelines without GI
+            if (!giCascadeManager && meshShaderPipeline && shadowSystem && cachedRenderPass)
+            {
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = nullptr,
+                    .renderPass = cachedRenderPass
+                };
+                meshShaderPipeline->recreate(pipelineInfo);
+                if (transparentMeshShaderPipeline)
+                {
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    pipelineInfo.transparentMode = false;
+                }
+                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                {
+                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                }
+            }
+        }
+        else if (giCascadeManager)
+        {
+            giCascadeManager->applySettings(settings);
+        }
+
+        if (giDebugRenderer)
+        {
+            giDebugRenderer->setShowProbes(settings.showProbes);
+            giDebugRenderer->setShowCascadeBounds(settings.showCascadeBounds);
+            giDebugRenderer->setShowProbeValidity(settings.showProbeValidity);
         }
     }
 

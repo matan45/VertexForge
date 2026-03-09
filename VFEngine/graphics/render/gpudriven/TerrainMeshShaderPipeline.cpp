@@ -788,7 +788,7 @@ namespace render::gpudriven
         pc.brushWorldRadius = brushWorldRadius;
         pc.brushFalloff = brushFalloff;
         pc.brushShape = brushShape;
-        pc._pad1 = 0.0f;
+        pc.shadowLOD = static_cast<float>(shadowLOD);
         pc._pad2 = 0.0f;
         pc._pad3 = 0.0f;
         pc.viewProjection = viewProjection;

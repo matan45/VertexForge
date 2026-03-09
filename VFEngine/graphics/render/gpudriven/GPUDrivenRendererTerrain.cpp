@@ -399,6 +399,7 @@ namespace render::gpudriven
             terrainDistSq = d * d;
         }
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
+        terrain.pipeline->setShadowLOD(terrain.shadowLOD);
 
         uint32_t viewMode = culling.currentViewMode;
         if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;

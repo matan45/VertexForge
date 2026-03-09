@@ -23,6 +23,8 @@
 #include "vegetation/GrassDensityPanel.hpp"
 #include "vegetation/VegetationPlacementPanel.hpp"
 #include "vegetation/VegetationSpeciesPanel.hpp"
+#include "config/GIConfigWindow.hpp"
+#include "config/LightStreamingDebugWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -62,6 +64,8 @@ namespace windows
         GrassDensityPanel grassDensityPanel;
         VegetationPlacementPanel vegetationPlacementPanel;
         VegetationSpeciesPanel vegetationSpeciesPanel;
+        GIConfigWindow giConfigWindow;
+        LightStreamingDebugWindow lightStreamingDebugWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

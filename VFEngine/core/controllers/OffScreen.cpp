@@ -506,6 +506,65 @@ namespace controllers {
 		}
 	}
 
+	// ── GI Settings ──────────────────────────────────────────
+
+	void OffScreen::applyGISettings(const render::gi::GISettings& settings)
+	{
+		offScreenController->applyGISettings(settings);
+	}
+
+	render::gi::GISettings OffScreen::getGISettings() const
+	{
+		return offScreenController->getGISettings();
+	}
+
+	render::gi::GIDebugStats OffScreen::getGIDebugStats() const
+	{
+		return offScreenController->getGIDebugStats();
+	}
+
+	void OffScreen::setGIShowProbes(bool show)
+	{
+		offScreenController->setGIShowProbes(show);
+	}
+
+	void OffScreen::setGIShowCascadeBounds(bool show)
+	{
+		offScreenController->setGIShowCascadeBounds(show);
+	}
+
+	void OffScreen::setGIShowProbeValidity(bool show)
+	{
+		offScreenController->setGIShowProbeValidity(show);
+	}
+
+	// ── Light Streaming Settings ──────────────────────────────
+
+	void OffScreen::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
+	{
+		offScreenController->setLightStreamingConfig(config);
+	}
+
+	render::lighting::LightStreamingConfig OffScreen::getLightStreamingConfig() const
+	{
+		return offScreenController->getLightStreamingConfig();
+	}
+
+	render::lighting::LightStreamingStats OffScreen::getLightStreamingStats() const
+	{
+		return offScreenController->getLightStreamingStats();
+	}
+
+	void OffScreen::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+	{
+		offScreenController->registerSectorLights(sectorId, lightEntityIds);
+	}
+
+	void OffScreen::unregisterSectorLights(uint32_t sectorId)
+	{
+		offScreenController->unregisterSectorLights(sectorId);
+	}
+
 	OffScreen::ImposterBakeResult OffScreen::bakeImposter(const std::string& meshPath, const std::string& outputPath,
 	                                                      const glm::vec3& meshCenter, float meshScale)
 	{

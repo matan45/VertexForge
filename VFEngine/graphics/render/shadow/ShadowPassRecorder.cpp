@@ -204,6 +204,7 @@ namespace render::shadow
 
                 if (hasTerrainShadows)
                 {
+                    constexpr float terrainBiasScale = 4.0f;
                     terrainShadowPipeline->dispatch(
                         cmd,
                         terrainParams->terrainDataDescSet,
@@ -212,8 +213,8 @@ namespace render::shadow
                         view->viewProjectionMatrix,
                         terrainParams->tileCount,
                         terrainParams->shadowLOD,
-                        view->depthBias,
-                        view->slopeBias
+                        view->depthBias * terrainBiasScale,
+                        view->slopeBias * terrainBiasScale
                     );
                 }
             }

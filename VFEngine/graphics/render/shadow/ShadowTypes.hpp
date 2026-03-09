@@ -237,6 +237,33 @@ namespace render::shadow
         }
     };
 
+    struct ShadowLODConfig
+    {
+        bool enabled = true;
+        float tier0Distance = 30.0f;   // Resolution tier 0 max distance
+        float tier1Distance = 80.0f;   // Resolution tier 1 max distance
+        float tier2Distance = 150.0f;  // Resolution tier 2 max distance
+
+        uint32_t tier0Resolution = 2048;
+        uint32_t tier1Resolution = 1024;
+        uint32_t tier2Resolution = 512;
+
+        uint32_t getResolutionForDistance(float distance) const
+        {
+            if (!enabled) return tier0Resolution;
+            if (distance < tier0Distance) return tier0Resolution;
+            if (distance < tier1Distance) return tier1Resolution;
+            if (distance < tier2Distance) return tier2Resolution;
+            return 0; // No shadow beyond tier2
+        }
+
+        bool shouldHaveShadow(float distance) const
+        {
+            if (!enabled) return true;
+            return distance < tier2Distance;
+        }
+    };
+
     struct TerrainShadowPassParams
     {
         vk::DescriptorSet terrainDataDescSet;    // Terrain tile GPU data buffer

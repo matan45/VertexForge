@@ -6,6 +6,8 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../render/gi/GITypes.hpp"
+#include "../render/lighting/LightStreamManager.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include <memory>
 #include <string_view>
@@ -233,7 +235,22 @@ namespace controllers
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
 
-        // Impostor baking — renders mesh from multiple angles to create billboard atlas
+            // GI settings
+        void applyGISettings(const render::gi::GISettings& settings);
+        render::gi::GISettings getGISettings() const;
+        render::gi::GIDebugStats getGIDebugStats() const;
+        void setGIShowProbes(bool show);
+        void setGIShowCascadeBounds(bool show);
+        void setGIShowProbeValidity(bool show);
+
+        // Light streaming settings
+        void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
+        render::lighting::LightStreamingConfig getLightStreamingConfig() const;
+        render::lighting::LightStreamingStats getLightStreamingStats() const;
+        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
+        void unregisterSectorLights(uint32_t sectorId);
+
+    // Impostor baking — renders mesh from multiple angles to create billboard atlas
         struct ImposterBakeResult
         {
             bool success = false;

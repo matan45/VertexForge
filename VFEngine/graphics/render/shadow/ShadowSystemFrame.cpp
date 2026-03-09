@@ -619,5 +619,78 @@ namespace render::shadow
 
         globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
         globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
+
+        // Apply shadow LOD settings
+        shadowLODConfig.enabled = settings.shadowLOD.enabled;
+        shadowLODConfig.tier0Distance = settings.shadowLOD.tier0Distance;
+        shadowLODConfig.tier1Distance = settings.shadowLOD.tier1Distance;
+        shadowLODConfig.tier2Distance = settings.shadowLOD.tier2Distance;
+        shadowLODConfig.tier0Resolution = settings.shadowLOD.tier0Resolution;
+        shadowLODConfig.tier1Resolution = settings.shadowLOD.tier1Resolution;
+        shadowLODConfig.tier2Resolution = settings.shadowLOD.tier2Resolution;
+    }
+
+    void ShadowSystem::applyShadowLODSettings(const ShadowLODConfig& config)
+    {
+        shadowLODConfig = config;
+    }
+
+    void ShadowSystem::updateShadowLOD(const glm::vec3& cameraPosition)
+    {
+        if (!initialized || !shadowLODConfig.enabled)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type == ShadowMapType::DirectionalCSM)
+            {
+                continue; // Directional lights always keep their resolution
+            }
+
+            auto entity = static_cast<entt::entity>(entityId);
+            if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
+            {
+                continue;
+            }
+
+            const auto& transform = registry.get<components::WorldTransformComponent>(entity);
+            glm::vec3 lightPos = glm::vec3(transform.worldMatrix[3]);
+            float distance = glm::distance(cameraPosition, lightPos);
+
+            uint32_t desiredResolution = shadowLODConfig.getResolutionForDistance(distance);
+            bool shouldHaveShadow = shadowLODConfig.shouldHaveShadow(distance);
+
+            auto currentResIt = currentShadowResolutions.find(entityId);
+            uint32_t currentRes = (currentResIt != currentShadowResolutions.end())
+                ? currentResIt->second : data.settings.resolution;
+
+            if (!shouldHaveShadow && data.resourceHandle.isValid())
+            {
+                // Light too far, remove shadow
+                freeShadowMaps(data);
+                currentShadowResolutions.erase(entityId);
+                needsUpdate = true;
+            }
+            else if (shouldHaveShadow && desiredResolution != currentRes)
+            {
+                // Resolution change needed
+                if (data.resourceHandle.isValid())
+                {
+                    freeShadowMaps(data);
+                }
+
+                data.settings.resolution = desiredResolution;
+                if (allocateShadowMaps(data))
+                {
+                    currentShadowResolutions[entityId] = desiredResolution;
+                    data.settingsDirty = true;
+                    needsUpdate = true;
+                }
+            }
+        }
     }
 }

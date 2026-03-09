@@ -7,6 +7,8 @@
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "../render/impostor/ImposterBaker.hpp"
+#include "../render/gi/RadianceCascadeManager.hpp"
+#include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
@@ -492,6 +494,146 @@ namespace controllers
         if (handler)
         {
             handler->clearAdditionalWaterFrustums();
+        }
+    }
+
+    // ── GI Settings ──────────────────────────────────────────
+
+    void OffScreenController::applyGISettings(const render::gi::GISettings& settings)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            gpu->applyGISettings(settings);
+        }
+    }
+
+    render::gi::GISettings OffScreenController::getGISettings() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            return gpu->getGISettings();
+        }
+        return {};
+    }
+
+    render::gi::GIDebugStats OffScreenController::getGIDebugStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGICascadeManager())
+        {
+            return gpu->getGICascadeManager()->getDebugStats();
+        }
+        return {};
+    }
+
+    void OffScreenController::setGIShowProbes(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowProbes(show);
+        }
+    }
+
+    void OffScreenController::setGIShowCascadeBounds(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowCascadeBounds(show);
+        }
+    }
+
+    void OffScreenController::setGIShowProbeValidity(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowProbeValidity(show);
+        }
+    }
+
+    // ── Light Streaming Settings ──────────────────────────────
+
+    void OffScreenController::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->setConfig(config);
+        }
+    }
+
+    render::lighting::LightStreamingConfig OffScreenController::getLightStreamingConfig() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            return gpu->getLightStreamManager()->getConfig();
+        }
+        return {};
+    }
+
+    render::lighting::LightStreamingStats OffScreenController::getLightStreamingStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            return gpu->getLightStreamManager()->getStats();
+        }
+        return {};
+    }
+
+    void OffScreenController::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->registerSectorLights(sectorId, lightEntityIds);
+        }
+    }
+
+    void OffScreenController::unregisterSectorLights(uint32_t sectorId)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->unregisterSectorLights(sectorId);
         }
     }
 

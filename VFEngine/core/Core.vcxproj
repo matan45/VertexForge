@@ -140,6 +140,8 @@
     <ClInclude Include="adapters\render\BillboardRenderAdapter.hpp" />
     <ClInclude Include="adapters\render\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\render\EditorTextureAdapter.hpp" />
+    <ClInclude Include="adapters\render\GIAdapter.hpp" />
+    <ClInclude Include="adapters\render\LightStreamingAdapter.hpp" />
     <ClInclude Include="adapters\render\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\render\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\render\OffScreenAdapter.hpp" />
@@ -232,6 +234,8 @@
     <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\render\GIAdapter.cpp" />
+    <ClCompile Include="adapters\render\LightStreamingAdapter.cpp" />
     <ClCompile Include="adapters\render\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\OffScreenAdapter.cpp" />

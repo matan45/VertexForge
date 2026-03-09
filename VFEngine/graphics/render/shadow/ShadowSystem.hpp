@@ -61,6 +61,9 @@ namespace render
             uint8_t globalCascadeCount = 4;
             types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
 
+            ShadowLODConfig shadowLODConfig;
+            std::unordered_map<uint32_t, uint32_t> currentShadowResolutions; // entityId -> current resolution
+
             bool initialized = false;
             bool needsUpdate = true;
 
@@ -119,6 +122,8 @@ namespace render
             [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
 
             void applyRenderSettings(const types::RenderSettings& settings);
+            void applyShadowLODSettings(const ShadowLODConfig& config);
+            void updateShadowLOD(const glm::vec3& cameraPosition);
 
             [[nodiscard]] uint32_t getActiveShadowCasterCount() const;
             [[nodiscard]] uint32_t getActiveShadowViewCount() const;

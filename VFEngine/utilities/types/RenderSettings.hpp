@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "../postprocess/PostProcessTypes.hpp"
+#include "../../graphics/render/gi/GITypes.hpp"
 
 namespace types
 {
@@ -158,9 +159,35 @@ namespace types
         uint32_t maxStreamingInitPerFrame = 4;
     };
 
+    struct ShadowLODSettings
+    {
+        bool enabled = true;
+        float tier0Distance = 30.0f;   // < 30m  -> 2048
+        float tier1Distance = 80.0f;   // < 80m  -> 1024
+        float tier2Distance = 150.0f;  // < 150m -> 512
+        // > 150m -> no shadow
+
+        uint32_t tier0Resolution = 2048;
+        uint32_t tier1Resolution = 1024;
+        uint32_t tier2Resolution = 512;
+    };
+
+    struct LightStreamingSettings
+    {
+        uint32_t maxPointLights = 1024;
+        uint32_t maxSpotLights = 512;
+        float distanceWeight = 1.0f;
+        float intensityWeight = 0.5f;
+        float radiusWeight = 0.3f;
+        float shadowWeight = 2.0f;
+        float hysteresisMargin = 0.05f;
+    };
+
     struct RenderSettings
     {
         ShadowSettings shadows;
+        ShadowLODSettings shadowLOD;
+        LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
@@ -168,6 +195,7 @@ namespace types
         postprocess::PostProcessSettings postProcess;
         VFXLODSettings vfxLOD;
         AnimationLODSettings animationLOD;
+        render::gi::GISettings gi;
 
         static RenderSettings createDefault()
         {

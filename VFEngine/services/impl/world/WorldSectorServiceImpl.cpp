@@ -13,6 +13,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
+#include "../../events/render/LightStreamingEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
@@ -543,6 +544,31 @@ namespace services
             {
                 sector.state = world::SectorState::Loaded;
 
+                // Register sector lights for streaming
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    std::vector<uint32_t> lightEntityIds;
+                    for (uint64_t uuid : sector.entityUUIDs)
+                    {
+                        auto ent = findEntityByUUID(uuid);
+                        if (ent != entt::null)
+                        {
+                            if (registry.any_of<components::PointLightComponent,
+                                                components::SpotLightComponent>(ent))
+                            {
+                                lightEntityIds.push_back(static_cast<uint32_t>(ent));
+                            }
+                        }
+                    }
+                    if (!lightEntityIds.empty())
+                    {
+                        events::render::lightstreaming::RegisterSectorLightsCommand cmd;
+                        cmd.sectorId = world::sectorCoordToId(sector.coord);
+                        cmd.lightEntityIds = std::move(lightEntityIds);
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                }
+
                 ::events::world::SectorLoadedNotification notif;
                 notif.coord = sector.coord;
                 notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
@@ -756,6 +782,13 @@ namespace services
             return;
 
         sector->state = world::SectorState::Unloading;
+
+        // Unregister sector lights before entities are destroyed
+        {
+            events::render::lightstreaming::UnregisterSectorLightsCommand cmd;
+            cmd.sectorId = world::sectorCoordToId(coord);
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         // Cancel any pending entity loads for this sector (prevents recreating entities after unload)
         entityLoader.cancelPendingLoads(coord);

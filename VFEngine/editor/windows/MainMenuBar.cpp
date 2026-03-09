@@ -12,6 +12,8 @@
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "lighting/LightBakeWindow.hpp"
+#include "config/GIConfigWindow.hpp"
+#include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
@@ -244,6 +246,13 @@ namespace windows
                     lightBakeWindow->show();
                 }
             }
+            else if (ImGui::MenuItem("Global Illumination"))
+            {
+                if (giConfigWindow)
+                {
+                    giConfigWindow->show();
+                }
+            }
             ImGui::EndMenu();
         }
     }
@@ -370,6 +379,14 @@ namespace windows
                 if (animationDebugWindow)
                 {
                     animationDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Light Streaming"))
+            {
+                if (lightStreamingDebugWindow)
+                {
+                    lightStreamingDebugWindow->show();
                 }
             }
 

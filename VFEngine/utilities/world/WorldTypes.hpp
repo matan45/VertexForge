@@ -44,6 +44,15 @@ namespace world
         }
     };
 
+    inline uint32_t sectorCoordToId(const SectorCoord& coord)
+    {
+        // Encode two int32s into a single uint32 via Cantor-style pairing
+        // Shift to unsigned range first (offset by 0x4000 to support negative coords)
+        auto ux = static_cast<uint32_t>(coord.x + 0x4000);
+        auto uz = static_cast<uint32_t>(coord.z + 0x4000);
+        return (ux << 16) | (uz & 0xFFFF);
+    }
+
     enum class SectorState : uint8_t
     {
         Unloaded = 0,

@@ -31,6 +31,8 @@ namespace services
     class IGrassRenderProvider;
     class IVegetationRenderProvider;
     class IBillboardRenderProvider;
+    class ILightStreamingProvider;
+    class IGIProvider;
 }
 
 namespace window
@@ -81,6 +83,8 @@ namespace core
         class GrassRenderAdapter;
         class VegetationRenderAdapter;
         class BillboardRenderAdapter;
+        class LightStreamingAdapter;
+        class GIAdapter;
     }
 
     class EditorBootstrap
@@ -116,6 +120,8 @@ namespace core
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
         std::unique_ptr<adapters::VegetationRenderAdapter> vegetationRenderAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
+        std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
+        std::unique_ptr<adapters::GIAdapter> giAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -186,6 +192,10 @@ namespace core
         services::IVegetationRenderProvider* getVegetationRenderProvider();
 
         services::IBillboardRenderProvider* getBillboardRenderProvider();
+
+        services::ILightStreamingProvider* getLightStreamingProvider();
+
+        services::IGIProvider* getGIProvider();
 
         // === Other Accessors ===
 

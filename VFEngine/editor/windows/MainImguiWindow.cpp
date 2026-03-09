@@ -25,6 +25,8 @@ namespace windows
         menuBar.setWorldSectorWindow(&worldSectorWindow);
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
+        menuBar.setGIConfigWindow(&giConfigWindow);
+        menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         subscribeToEvents();
     }
 
@@ -50,6 +52,8 @@ namespace windows
             [this](const events::scene::SceneLoadedNotification&)
             {
                 postProcessConfigWindow.notifySceneLoaded();
+                giConfigWindow.notifySceneLoaded();
+                lightStreamingDebugWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
@@ -100,6 +104,8 @@ namespace windows
             grassDensityPanel.draw();
             vegetationPlacementPanel.draw();
             vegetationSpeciesPanel.draw();
+            giConfigWindow.draw();
+            lightStreamingDebugWindow.draw();
         }
         ImGui::End();
     }

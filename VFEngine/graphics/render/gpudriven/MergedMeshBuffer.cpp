@@ -128,7 +128,9 @@ namespace render::gpudriven
             request.size = maxVertexCount * vertexStride;
             request.usage = vk::BufferUsageFlagBits::eVertexBuffer |
                 vk::BufferUsageFlagBits::eTransferDst |
-                vk::BufferUsageFlagBits::eStorageBuffer;
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
         }
@@ -138,7 +140,9 @@ namespace render::gpudriven
             request.size = maxIndexCount * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eIndexBuffer |
                 vk::BufferUsageFlagBits::eTransferDst |
-                vk::BufferUsageFlagBits::eStorageBuffer;
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
         }

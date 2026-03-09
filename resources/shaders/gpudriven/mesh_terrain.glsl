@@ -70,7 +70,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -181,6 +182,7 @@ void main() {
 #include "../common/lighting_functions.glsl"
 #include "../common/shadow_sampling.glsl"
 #include "../common/cluster_culling.glsl"
+#include "../common/gi_sampling.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -259,7 +261,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -302,12 +305,22 @@ layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
+// Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
+// Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
+// pc.shadowLOD is uniform — GPU evaluates this once per wavefront, not per fragment
+float getTerrainNormalBiasScale() {
+    if (pc.shadowLOD < 0.5) return 3.0;
+    if (pc.shadowLOD < 1.5) return 8.0;
+    if (pc.shadowLOD < 2.5) return 12.0;
+    return 3.0;
+}
+
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
@@ -347,7 +360,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     if (lightSpacePos.w <= 0.0) return 1.0;
@@ -436,7 +449,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 
     if (linearDepth >= far) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     lightToFrag = biasedPos - lightPos;
     linearDepth = length(lightToFrag);
     vec3 sampleDir = normalize(lightToFrag);
@@ -583,7 +596,17 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
-    vec3 color = ambient + directLighting + lightmapContribution + mat_emission;
+    vec3 giContribution = vec3(0.0);
+#ifdef GI_ENABLED
+    float cameraDist = length(camera.cameraPosition.xyz - fragWorldPos);
+    vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
+    giContribution = giIrradiance * albedo * kD;
+    // Reduce ambient proportionally to GI strength to avoid double-counting
+    float giStrength = min(length(giIrradiance), 1.0);
+    ambient *= mix(1.0, 0.3, giStrength);
+#endif
+
+    vec3 color = ambient + directLighting + lightmapContribution + giContribution + mat_emission;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
