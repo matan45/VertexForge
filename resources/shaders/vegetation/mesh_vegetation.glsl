@@ -17,6 +17,7 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragInstanceIndex[];
 layout(location = 4) flat out uint fragMaterialTexIndex[];
+layout(location = 5) flat out uint fragLodLevel[];
 
 // Must match TreeInstanceGPU in VegetationGPUTypes.hpp
 struct TreeInstance {
@@ -59,6 +60,7 @@ struct VegetationPayload {
     uint meshletCount;
     uint baseVertexOffset;
     uint materialTextureIndex;
+    uint lodLevel;
 };
 
 taskPayloadSharedEXT VegetationPayload payload;
@@ -142,6 +144,7 @@ void main() {
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
             fragInstanceIndex[localVertexIndex] = instanceIdx;
             fragMaterialTexIndex[localVertexIndex] = payload.materialTextureIndex;
+            fragLodLevel[localVertexIndex] = payload.lodLevel;
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * vec4(worldPos, 1.0);
         }
     }

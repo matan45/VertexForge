@@ -65,6 +65,18 @@ namespace events::vegetation
         std::string_view getName() const override { return "SetVegetationEnabled"; }
     };
 
+    struct SetVegetationDebugLODViewCommand : ICommand<void>
+    {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetVegetationDebugLODView"; }
+    };
+
+    struct GetVegetationDebugLODViewQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "GetVegetationDebugLODView"; }
+    };
+
     // --- Notifications ---
 
     struct VegetationSpeciesChangedNotification : INotification

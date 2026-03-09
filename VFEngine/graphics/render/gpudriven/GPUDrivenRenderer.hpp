@@ -168,6 +168,7 @@ namespace render::gpudriven
 
             bool grassRenderingEnabled = true;
             bool vegetationRenderingEnabled = true;
+            bool debugLODView = false;
             bool grassInitialized = false;
 
             ::vegetation::GrassRenderConfig grassConfig;
@@ -577,6 +578,8 @@ namespace render::gpudriven
                                    uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void setVegetationRenderingEnabled(bool enabled) { vegetation.vegetationRenderingEnabled = enabled; }
         bool isVegetationRenderingEnabled() const { return vegetation.vegetationRenderingEnabled; }
+        void setVegetationDebugLODView(bool enabled);
+        bool isVegetationDebugLODView() const { return vegetation.debugLODView; }
         void cleanupVegetation();
 
         // Billboard rendering

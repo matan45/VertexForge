@@ -77,6 +77,21 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::vegetation::SetVegetationDebugLODViewCommand>(
+            [this](const auto& cmd)
+            {
+                if (renderProvider)
+                {
+                    renderProvider->setDebugLODView(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::vegetation::GetVegetationDebugLODViewQuery>(
+            [this](const auto&)
+            {
+                return renderProvider ? renderProvider->isDebugLODView() : false;
+            });
+
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const auto&)
             {

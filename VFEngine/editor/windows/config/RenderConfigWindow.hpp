@@ -22,6 +22,7 @@ namespace windows
         void drawTerrainSection();
         void drawVFXLODSection();
         void drawAnimationLODSection();
+        void drawVegetationSection();
         void loadFromScene();
         void saveToScene();
         void resetToDefaults();

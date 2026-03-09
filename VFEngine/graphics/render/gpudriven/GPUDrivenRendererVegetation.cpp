@@ -253,6 +253,15 @@ namespace render::gpudriven
         vegetation.speciesRenderInfoDirty = true;
     }
 
+    void GPUDrivenRenderer::setVegetationDebugLODView(bool enabled)
+    {
+        vegetation.debugLODView = enabled;
+        if (vegetation.vegMeshPipeline)
+        {
+            vegetation.vegMeshPipeline->setDebugLODView(enabled);
+        }
+    }
+
     void GPUDrivenRenderer::loadSpeciesMesh(uint32_t speciesId, const std::string& meshPath)
     {
         auto it = vegetation.cachedSpecies.find(speciesId);

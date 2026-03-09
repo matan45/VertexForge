@@ -54,6 +54,7 @@ namespace render::vegetation
 
         void dispatch(vk::CommandBuffer cmd, uint32_t visibleCount);
 
+        void setDebugLODView(bool enabled) { debugFlags = enabled ? 1u : 0u; }
         bool isInitialized() const { return initialized; }
 
     private:
@@ -83,6 +84,7 @@ namespace render::vegetation
         vk::DescriptorSet bindlessTextureDescriptorSet;
 
         bool initialized = false;
+        uint32_t debugFlags = 0; // bit 0: LOD color view
 
         void createInstanceDataDescriptor();
         void createPipeline(vk::DescriptorSetLayout cameraLayout,

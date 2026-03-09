@@ -51,6 +51,7 @@ struct VegetationPayload {
     uint meshletCount;
     uint baseVertexOffset;
     uint materialTextureIndex;
+    uint lodLevel;
 };
 
 taskPayloadSharedEXT VegetationPayload payload;
@@ -79,6 +80,7 @@ void main() {
     payload.meshletCount = meshletCount;
     payload.baseVertexOffset = species.baseVertexOffset;
     payload.materialTextureIndex = species.materialTextureIndex;
+    payload.lodLevel = lod;
 
     EmitMeshTasksEXT(meshletCount, 1, 1);
 }

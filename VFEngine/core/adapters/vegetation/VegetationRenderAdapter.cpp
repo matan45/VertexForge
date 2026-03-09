@@ -41,4 +41,15 @@ namespace core::adapters
     {
         if (clearAllSpeciesCallback) clearAllSpeciesCallback();
     }
+
+    void VegetationRenderAdapter::setDebugLODView(bool enabled)
+    {
+        debugLODViewEnabled = enabled;
+        if (debugLODViewCallback) debugLODViewCallback(enabled);
+    }
+
+    bool VegetationRenderAdapter::isDebugLODView() const
+    {
+        return debugLODViewEnabled;
+    }
 }

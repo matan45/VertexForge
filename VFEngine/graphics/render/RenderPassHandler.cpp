@@ -365,6 +365,9 @@ namespace render
             provider->setClearAllSpeciesCallback([renderer]() {
                 renderer->clearAllVegetationSpecies();
             });
+            provider->setDebugLODViewCallback([renderer](bool enabled) {
+                renderer->setVegetationDebugLODView(enabled);
+            });
         }
     }
 

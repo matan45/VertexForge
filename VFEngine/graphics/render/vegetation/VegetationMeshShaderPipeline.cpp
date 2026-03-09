@@ -195,6 +195,9 @@ namespace render::vegetation
                                    {bindlessTextureDescriptorSet}, {});
         }
 
+        // Push debug flags to fragment shader
+        cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(uint32_t), &debugFlags);
+
         // Task shader has local_size_x = 1, so one workgroup per visible instance
         cmd.drawMeshTasksEXT(visibleCount, 1, 1);
     }
@@ -276,10 +279,17 @@ namespace render::vegetation
             bindlessTextureLayout   // Set 5: bindless textures
         };
 
+        // Push constant for debug flags (used by fragment shader)
+        vk::PushConstantRange pushRange{};
+        pushRange.stageFlags = vk::ShaderStageFlagBits::eFragment;
+        pushRange.offset = 0;
+        pushRange.size = sizeof(uint32_t);
+
         vk::PipelineLayoutCreateInfo layoutCreateInfo{};
         layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
         layoutCreateInfo.pSetLayouts = setLayouts.data();
-        layoutCreateInfo.pushConstantRangeCount = 0;
+        layoutCreateInfo.pushConstantRangeCount = 1;
+        layoutCreateInfo.pPushConstantRanges = &pushRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 

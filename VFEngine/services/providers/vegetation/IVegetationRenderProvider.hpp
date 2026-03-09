@@ -27,6 +27,9 @@ namespace services
         virtual void removeSpecies(uint32_t speciesId) = 0;
         virtual void clearAllSpecies() = 0;
 
+        virtual void setDebugLODView(bool enabled) = 0;
+        virtual bool isDebugLODView() const = 0;
+
         // Callbacks for wiring to renderer (set by RenderPassHandler)
         virtual void setAddTileCallback(TileCallback) {}
         virtual void setRemoveTileCallback(TileCallback) {}
@@ -34,5 +37,6 @@ namespace services
         virtual void setUpdateSpeciesCallback(SpeciesUpdateCallback) {}
         virtual void setRemoveSpeciesCallback(SpeciesRemoveCallback) {}
         virtual void setClearAllSpeciesCallback(std::function<void()>) {}
+        virtual void setDebugLODViewCallback(std::function<void(bool)>) {}
     };
 }
