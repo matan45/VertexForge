@@ -33,9 +33,7 @@ namespace render::vegetation
         void updateDescriptors(
             vk::Buffer treeInstanceBuffer,
             vk::Buffer instanceCountBuffer,
-            vk::Buffer visibleLOD0Buffer,
-            vk::Buffer visibleLOD1Buffer,
-            vk::Buffer visibleLOD2Buffer,
+            vk::Buffer visibleMeshBuffer,
             vk::Buffer countersBuffer
         );
 

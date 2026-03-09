@@ -2,10 +2,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/VegetationEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
-#include "events/render/BillboardEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
-#include <filesystem>
 
 namespace windows
 {
@@ -124,14 +122,10 @@ namespace windows
                     }
                 }
 
-                // Imposter atlas path (read-only, generated)
-                ImGui::Text("Imposter: %s", config.imposterAtlasPath.empty() ? "(none - Generate below)" : config.imposterAtlasPath.c_str());
-
                 ImGui::Separator();
                 ImGui::Text("Distances");
                 changed |= ImGui::DragFloat("LOD1 Dist", &config.lod1Distance, 1.0f, 1.0f, 2000.0f);
                 changed |= ImGui::DragFloat("LOD2 Dist", &config.lod2Distance, 1.0f, 1.0f, 2000.0f);
-                changed |= ImGui::DragFloat("Imposter Dist", &config.imposterDistance, 1.0f, 1.0f, 2000.0f);
                 changed |= ImGui::DragFloat("Max Render Dist", &config.maxRenderDistance, 1.0f, 1.0f, 5000.0f);
 
                 ImGui::Separator();
@@ -152,44 +146,6 @@ namespace windows
                     cmd.speciesId = static_cast<uint32_t>(selectedSpeciesId);
                     cmd.config = config;
                     events::EventDispatcher::instance().execute(cmd);
-                }
-
-                ImGui::Spacing();
-                ImGui::BeginDisabled(config.meshPath.empty());
-                if (ImGui::Button("Generate Imposters"))
-                {
-                    // Derive output path next to the mesh file
-                    std::filesystem::path meshFs(config.meshPath);
-                    std::string outputPath = (meshFs.parent_path() / (meshFs.stem().string() + ".vfImposter")).string();
-
-                    events::render::BakeImposterCommand cmd;
-                    cmd.meshPath = config.meshPath;
-                    cmd.outputPath = outputPath;
-                    cmd.meshScale = (config.minScale + config.maxScale) * 0.5f;
-                    auto result = events::EventDispatcher::instance().execute(cmd);
-
-                    if (result.success)
-                    {
-                        config.imposterAtlasPath = result.outputPath;
-
-                        events::vegetation::UpdateVegetationSpeciesCommand updateCmd;
-                        updateCmd.speciesId = static_cast<uint32_t>(selectedSpeciesId);
-                        updateCmd.config = config;
-                        events::EventDispatcher::instance().execute(updateCmd);
-                        bakeMessage = "Imposter generated: " + result.outputPath;
-                    }
-                    else
-                    {
-                        bakeMessage = "Failed: " + result.errorMessage;
-                    }
-                    bakeMessageTimer = 5.0f;
-                }
-                ImGui::EndDisabled();
-
-                if (bakeMessageTimer > 0.0f)
-                {
-                    ImGui::TextWrapped("%s", bakeMessage.c_str());
-                    bakeMessageTimer -= ImGui::GetIO().DeltaTime;
                 }
 
                 if (ImGui::Button("Remove Species"))

@@ -19,8 +19,8 @@ namespace render::vegetation
         glm::mat4 modelMatrix;          // Full transform
         glm::vec4 boundingSphere;       // xyz=center, w=radius
         uint32_t speciesId;
-        uint32_t lodMask;               // Available LOD levels bitmask (bits 0-2=mesh LODs, bit 3=imposter)
-        float lodDistances[4];          // LOD0->1, LOD1->2, LOD2->imposter, max render
+        uint32_t lodMask;               // Available LOD levels bitmask (bits 0-2=mesh LODs)
+        float lodDistances[4];          // LOD0->1, LOD1->2, LOD2->max, max render
     };
 
     // Per-tile vegetation metadata for GPU
@@ -44,19 +44,6 @@ namespace render::vegetation
         uint32_t baseVertexOffset;      // global offset into vertex buffer
         uint32_t materialTextureIndex;  // bindless texture index for albedo
         uint32_t padding[2];
-    };
-
-    // Per-species imposter configuration for GPU (matches ImposterConfig in mesh_imposter.glsl)
-    struct ImposterConfigGPU
-    {
-        uint32_t atlasTextureIndex;
-        uint32_t horizontalAngles;
-        uint32_t verticalAngles;
-        uint32_t viewResolution;
-        float atlasWidth;
-        float atlasHeight;
-        float treeHeight;
-        float treeWidth;
     };
 
     // Constants

@@ -11,8 +11,8 @@ struct TreeInstance {
     mat4 modelMatrix;
     vec4 boundingSphere;    // xyz=center, w=radius
     uint speciesId;
-    uint lodMask;           // bits 0-2=mesh LODs, bit 3=imposter
-    float lodDistances[4];  // LOD0->1, LOD1->2, LOD2->imposter, max render
+    uint lodMask;           // bits 0-2=mesh LODs
+    float lodDistances[4];  // LOD0->1, LOD1->2, max render, (unused)
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer TreeInstanceBuffer {
@@ -34,23 +34,8 @@ layout(std430, set = 0, binding = 2) buffer VisibleMeshBuffer {
     VisibleInstance visibleMesh[];
 };
 
-// Imposters (LOD 3) - go to imposter pipeline
-layout(std430, set = 0, binding = 3) buffer VisibleImposterBuffer {
-    VisibleInstance visibleImposters[];
-};
-
-// Unused binding 4 kept for layout compatibility
-layout(std430, set = 0, binding = 4) buffer UnusedBuffer {
-    VisibleInstance unused[];
-};
-
-layout(std430, set = 0, binding = 5) buffer CountersBuffer {
+layout(std430, set = 0, binding = 3) buffer CountersBuffer {
     uint meshCount;
-    uint pad0[3];
-    uint imposterCount;
-    uint pad1[3];
-    uint unusedCount;
-    uint pad2[3];
 };
 
 // Camera - matches GPUCameraData
@@ -83,17 +68,15 @@ void main() {
     float dist = distance(center, camera.cameraPosition.xyz);
 
     // Beyond max render distance
-    if (camera.enableDistanceCulling != 0u && dist > inst.lodDistances[3]) return;
+    if (camera.enableDistanceCulling != 0u && dist > inst.lodDistances[2]) return;
 
     uint lodLevel;
     if (dist < inst.lodDistances[0]) {
         lodLevel = 0;  // Mesh LOD0
     } else if (dist < inst.lodDistances[1]) {
         lodLevel = 1;  // Mesh LOD1
-    } else if (dist < inst.lodDistances[2]) {
-        lodLevel = 2;  // Mesh LOD2
     } else {
-        lodLevel = 3;  // Imposter
+        lodLevel = 2;  // Mesh LOD2
     }
 
     // Check if this LOD is available, fallback to nearest lower
@@ -102,18 +85,11 @@ void main() {
     }
     if ((inst.lodMask & (1u << lodLevel)) == 0u) return;
 
-    // Write to appropriate buffer
+    // Write to mesh buffer
     VisibleInstance vis;
     vis.instanceIndex = idx;
     vis.lodLevel = lodLevel;
 
-    if (lodLevel <= 2) {
-        // Mesh LODs go to mesh buffer
-        uint outIdx = atomicAdd(meshCount, 1);
-        visibleMesh[outIdx] = vis;
-    } else {
-        // Imposter
-        uint outIdx = atomicAdd(imposterCount, 1);
-        visibleImposters[outIdx] = vis;
-    }
+    uint outIdx = atomicAdd(meshCount, 1);
+    visibleMesh[outIdx] = vis;
 }

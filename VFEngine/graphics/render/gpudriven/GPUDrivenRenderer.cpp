@@ -246,16 +246,6 @@ namespace render::gpudriven
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
-        // Clean up loaded impostor atlas textures before billboard subsystems
-        for (auto& [path, tex] : billboard.loadedImposters)
-        {
-            if (bindlessTextures) bindlessTextures->unregisterTexture(path);
-            if (tex.sampler) vkDevice.destroySampler(tex.sampler);
-            if (tex.imageView) vkDevice.destroyImageView(tex.imageView);
-            if (tex.image) vkDevice.destroyImage(tex.image);
-            if (tex.memory) vkDevice.freeMemory(tex.memory);
-        }
-        billboard.loadedImposters.clear();
         if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
         if (billboard.bufferManager) billboard.bufferManager->cleanup();
         if (billboard.streamManager) billboard.streamManager->cleanup();

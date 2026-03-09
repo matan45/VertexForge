@@ -18,10 +18,6 @@ namespace windows
         std::unordered_map<uint32_t, vegetation::VegetationSpeciesConfig> cachedSpecies;
         bool cacheValid = false;
 
-        // Bake feedback
-        std::string bakeMessage;
-        float bakeMessageTimer = 0.0f;
-
         events::SubscriptionToken modeToken;
         bool subscribed = false;
 

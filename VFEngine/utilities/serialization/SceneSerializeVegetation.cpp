@@ -14,15 +14,12 @@ namespace serialization
             j["name"] = config.name;
             j["meshPath"] = config.meshPath;
             j["materialPath"] = config.materialPath;
-            j["imposterAtlasPath"] = config.imposterAtlasPath;
             j["lod1Distance"] = config.lod1Distance;
             j["lod2Distance"] = config.lod2Distance;
-            j["imposterDistance"] = config.imposterDistance;
             j["maxRenderDistance"] = config.maxRenderDistance;
             j["minScale"] = config.minScale;
             j["maxScale"] = config.maxScale;
             j["windStrength"] = config.windStrength;
-            j["useGPUBillboardImposters"] = config.useGPUBillboardImposters;
             j["hasCollision"] = config.hasCollision;
             j["collisionRadius"] = config.collisionRadius;
             j["collisionHeight"] = config.collisionHeight;
@@ -47,14 +44,10 @@ namespace serialization
                 config.meshPath = it->get<std::string>();
             if (auto it = speciesJson.find("materialPath"); it != speciesJson.end() && it->is_string())
                 config.materialPath = it->get<std::string>();
-            if (auto it = speciesJson.find("imposterAtlasPath"); it != speciesJson.end() && it->is_string())
-                config.imposterAtlasPath = it->get<std::string>();
             if (auto it = speciesJson.find("lod1Distance"); it != speciesJson.end() && it->is_number())
                 config.lod1Distance = it->get<float>();
             if (auto it = speciesJson.find("lod2Distance"); it != speciesJson.end() && it->is_number())
                 config.lod2Distance = it->get<float>();
-            if (auto it = speciesJson.find("imposterDistance"); it != speciesJson.end() && it->is_number())
-                config.imposterDistance = it->get<float>();
             if (auto it = speciesJson.find("maxRenderDistance"); it != speciesJson.end() && it->is_number())
                 config.maxRenderDistance = it->get<float>();
             if (auto it = speciesJson.find("minScale"); it != speciesJson.end() && it->is_number())
@@ -63,8 +56,6 @@ namespace serialization
                 config.maxScale = it->get<float>();
             if (auto it = speciesJson.find("windStrength"); it != speciesJson.end() && it->is_number())
                 config.windStrength = it->get<float>();
-            if (auto it = speciesJson.find("useGPUBillboardImposters"); it != speciesJson.end() && it->is_boolean())
-                config.useGPUBillboardImposters = it->get<bool>();
             if (auto it = speciesJson.find("hasCollision"); it != speciesJson.end() && it->is_boolean())
                 config.hasCollision = it->get<bool>();
             if (auto it = speciesJson.find("collisionRadius"); it != speciesJson.end() && it->is_number())

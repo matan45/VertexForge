@@ -83,16 +83,14 @@ namespace render::vegetation
     void VegetationCullLODPipeline::updateDescriptors(
         vk::Buffer treeInstanceBuffer,
         vk::Buffer instanceCountBuffer,
-        vk::Buffer visibleLOD0Buffer,
-        vk::Buffer visibleLOD1Buffer,
-        vk::Buffer visibleLOD2Buffer,
+        vk::Buffer visibleMeshBuffer,
         vk::Buffer countersBuffer)
     {
         if (!initialized) return;
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        std::array<vk::DescriptorBufferInfo, 6> bufferInfos{};
+        std::array<vk::DescriptorBufferInfo, 4> bufferInfos{};
 
         // binding 0: tree instance buffer (read-only)
         bufferInfos[0].buffer = treeInstanceBuffer;
@@ -104,28 +102,18 @@ namespace render::vegetation
         bufferInfos[1].offset = 0;
         bufferInfos[1].range = VK_WHOLE_SIZE;
 
-        // binding 2: visible LOD0 output
-        bufferInfos[2].buffer = visibleLOD0Buffer;
+        // binding 2: visible mesh output (all LODs)
+        bufferInfos[2].buffer = visibleMeshBuffer;
         bufferInfos[2].offset = 0;
         bufferInfos[2].range = VK_WHOLE_SIZE;
 
-        // binding 3: visible LOD1 output
-        bufferInfos[3].buffer = visibleLOD1Buffer;
+        // binding 3: atomic counters
+        bufferInfos[3].buffer = countersBuffer;
         bufferInfos[3].offset = 0;
         bufferInfos[3].range = VK_WHOLE_SIZE;
 
-        // binding 4: visible LOD2 output (imposters)
-        bufferInfos[4].buffer = visibleLOD2Buffer;
-        bufferInfos[4].offset = 0;
-        bufferInfos[4].range = VK_WHOLE_SIZE;
-
-        // binding 5: atomic counters
-        bufferInfos[5].buffer = countersBuffer;
-        bufferInfos[5].offset = 0;
-        bufferInfos[5].range = VK_WHOLE_SIZE;
-
-        std::array<vk::WriteDescriptorSet, 6> writes{};
-        for (uint32_t i = 0; i < 6; ++i)
+        std::array<vk::WriteDescriptorSet, 4> writes{};
+        for (uint32_t i = 0; i < 4; ++i)
         {
             writes[i].dstSet = descriptorSet;
             writes[i].dstBinding = i;
@@ -178,9 +166,9 @@ namespace render::vegetation
     {
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // Set 0: 6 storage buffer bindings (matches vegetation_cull_lod.comp)
-        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
-        for (uint32_t i = 0; i < 6; ++i)
+        // Set 0: 4 storage buffer bindings (matches vegetation_cull_lod.glsl)
+        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        for (uint32_t i = 0; i < 4; ++i)
         {
             bindings[i].binding = i;
             bindings[i].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -261,7 +249,7 @@ namespace render::vegetation
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 6;
+        poolSizes[0].descriptorCount = 4;
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
 
