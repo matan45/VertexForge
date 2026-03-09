@@ -1,4 +1,5 @@
 #include "VegetationPlacementBrushApplicator.hpp"
+#include "../print/Log.hpp"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -57,6 +58,8 @@ namespace vegetation
         int totalCells = (cellEndX - cellStartX + 1) * (cellEndZ - cellStartZ + 1);
         if (totalCells > maxCells)
         {
+            vfLogWarning("Vegetation brush: area too large ({} cells, max {}). Reduce brush radius or density.",
+                         totalCells, maxCells);
             return false;
         }
 

@@ -1,4 +1,5 @@
 #include "SceneSerialization.hpp"
+#include "../print/Log.hpp"
 
 namespace serialization
 {
@@ -62,6 +63,14 @@ namespace serialization
                 config.collisionRadius = it->get<float>();
             if (auto it = speciesJson.find("collisionHeight"); it != speciesJson.end() && it->is_number())
                 config.collisionHeight = it->get<float>();
+
+            // Warn about deprecated imposter fields from older scene files
+            if (speciesJson.contains("imposterAtlasPath") || speciesJson.contains("imposterDistance") ||
+                speciesJson.contains("useGPUBillboardImposters"))
+            {
+                vfLogWarning("Vegetation species '{}' contains deprecated impostor fields — impostor system has been removed.",
+                             config.name);
+            }
 
             result.push_back(config);
         }
