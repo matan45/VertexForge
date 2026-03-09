@@ -859,8 +859,9 @@ void main() {
     float cameraDist = length(camera.cameraPos - fragWorldPos);
     vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
     giContribution = giIrradiance * albedo * kD;
-    // Reduce IBL ambient when GI is active to avoid double-counting
-    ambient *= max(0.3, 1.0 - length(giIrradiance));
+    // Reduce IBL ambient by fixed factor when GI is active to avoid double-counting
+    // (using fixed factor instead of GI-dependent to prevent feedback oscillation)
+    ambient *= 0.3;
 #endif
 
     vec3 color = ambient + directLighting + lightmapContribution + giContribution + emissive;

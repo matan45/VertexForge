@@ -12,6 +12,10 @@ layout(std430, set = 0, binding = 0) readonly buffer ProbeDataBuffer {
 };
 
 layout(std140, set = 1, binding = 0) uniform CascadeInfoUBO {
+    uint cascadeCount;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     CascadeInfo cascades[8];
 };
 
@@ -33,8 +37,7 @@ void main() {
 
     // Find which cascade this probe belongs to
     uint cascadeIdx = 0;
-    for (uint i = 0; i < 8; ++i) {
-        if (cascades[i].gridDimsOffset.x == 0) break;
+    for (uint i = 0; i < cascadeCount && i < 8u; ++i) {
         uint cascadeEnd = uint(cascades[i].gridDimsOffset.w) +
             uint(cascades[i].gridDimsOffset.x * cascades[i].gridDimsOffset.y * cascades[i].gridDimsOffset.z);
         if (probeIndex < cascadeEnd) {

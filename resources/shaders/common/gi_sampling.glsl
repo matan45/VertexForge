@@ -106,10 +106,6 @@ vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
         irradiance /= totalWeight;
     }
 
-    // Decode gamma encoding
-    const float GAMMA = 5.0;
-    irradiance = sign(irradiance) * pow(abs(irradiance), vec3(GAMMA));
-
     return max(irradiance, vec3(0.0));
 }
 

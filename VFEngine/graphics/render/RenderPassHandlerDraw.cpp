@@ -374,6 +374,11 @@ namespace render
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
         }
 
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
+        }
+
         if (debugRendererPtr)
         {
             debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,

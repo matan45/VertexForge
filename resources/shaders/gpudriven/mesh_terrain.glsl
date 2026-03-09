@@ -592,7 +592,8 @@ void main() {
     float cameraDist = length(camera.cameraPosition.xyz - fragWorldPos);
     vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
     giContribution = giIrradiance * albedo * kD;
-    ambient *= max(0.3, 1.0 - length(giIrradiance));
+    // Fixed ambient reduction to prevent feedback oscillation
+    ambient *= 0.3;
 #endif
 
     vec3 color = ambient + directLighting + lightmapContribution + giContribution + mat_emission;

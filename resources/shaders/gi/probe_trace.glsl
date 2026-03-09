@@ -23,8 +23,12 @@ layout(std430, set = 0, binding = 1) writeonly buffer ProbeWriteBuffer {
     ProbeData probeDataWrite[];
 };
 
-// Set 1: Cascade info
+// Set 1: Cascade info (buffer has 16-byte header: cascadeCount + padding)
 layout(std140, set = 1, binding = 0) uniform CascadeInfoUBO {
+    uint cascadeCount;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     CascadeInfo cascades[8];
 };
 
@@ -138,9 +142,8 @@ vec3 evaluateDirectLightingAtHitPoint(vec3 hitPos, vec3 hitNormal) {
 
 // Sample multi-bounce irradiance from probes at a world position
 vec3 sampleProbeIrradiance(vec3 worldPos, vec3 direction) {
-    for (int c = 0; c < 8; ++c) {
+    for (uint c = 0; c < cascadeCount && c < 8u; ++c) {
         CascadeInfo hitCascade = cascades[c];
-        if (hitCascade.gridDimsOffset.w < 0) break;
 
         vec3 localPos = (worldPos - hitCascade.gridOriginSpacing.xyz) / hitCascade.gridOriginSpacing.w;
         ivec3 gridDims = hitCascade.gridDimsOffset.xyz;

@@ -449,6 +449,8 @@ namespace render::gpudriven
         void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                              uint32_t screenWidth = 0, uint32_t screenHeight = 0);
 
+        void renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection);
+
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
         bool hasTransparentObjects() const { return mergedBuffer && mergedBuffer->getTransparentObjectCount() > 0; }

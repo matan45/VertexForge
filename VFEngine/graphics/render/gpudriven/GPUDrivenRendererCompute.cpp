@@ -400,37 +400,28 @@ namespace render::gpudriven
                                                lightSet);
                 }
 
-                // Barrier between trace and update
+                // Swap ping-pong: trace wrote to the write buffer, now make it the read buffer
+                storage->swapBuffers();
+
+                // Update mesh shader pipelines with new read buffer's sampling set
+                auto samplingSet = storage->getSamplingDescSet();
+                if (meshShaderPipeline)
+                    meshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+                if (transparentMeshShaderPipeline)
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+                if (wboitMeshShaderPipeline)
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+
+                // Barrier: compute writes must be visible to fragment shader reads
+                vk::MemoryBarrier fragBarrier{
+                    vk::AccessFlagBits::eShaderWrite,
+                    vk::AccessFlagBits::eShaderRead
+                };
                 cmd.pipelineBarrier(
                     vk::PipelineStageFlagBits::eComputeShader,
-                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eFragmentShader,
                     vk::DependencyFlags{},
-                    1, &giBarrier, 0, nullptr, 0, nullptr);
-
-                // Update pass (irradiance accumulation)
-                if (giUpdatePipeline && giUpdatePipeline->isInitialized())
-                {
-                    for (const auto& batch : batches)
-                    {
-                        gi::GIComputePushConstants push{};
-                        push.cascadeIndex = batch.cascadeIndex;
-                        push.probeStartIndex = batch.probeStartOffset;
-                        push.probeCount = batch.probeCount;
-                        push.raysPerProbe = cachedGISettings.probeRaysPerUpdate;
-                        push.maxDistance = cachedGISettings.maxProbeDistance;
-                        push.temporalBlend = cachedGISettings.temporalBlendFactor;
-                        push.frameRandom = static_cast<float>(giCascadeManager->getFrameIndex()) * 0.1f;
-                        push.frameIndex = giCascadeManager->getFrameIndex();
-
-                        giUpdatePipeline->dispatch(cmd,
-                                                    storage->getProbeWriteDescSet(),
-                                                    giCascadeManager->getCascadeInfoDescSet(),
-                                                    push);
-                    }
-                }
-
-                // No ping-pong swap needed: trace reads A, writes B; update reads B, writes A.
-                // Fragment shader always samples from buffer A (the encoded/stable buffer).
+                    1, &fragBarrier, 0, nullptr, 0, nullptr);
             }
         }
 
@@ -547,6 +538,17 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::cleanupGI()
     {
+        // Wait for all in-flight commands that reference GI descriptor sets
+        device.getLogicalDevice().waitIdle();
+
+        // Clear stale GI descriptor handles from pipelines BEFORE destroying the pool
+        if (meshShaderPipeline)
+            meshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+        if (transparentMeshShaderPipeline)
+            transparentMeshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+        if (wboitMeshShaderPipeline)
+            wboitMeshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
+
         if (giDebugRenderer) { giDebugRenderer->cleanup(); giDebugRenderer.reset(); }
         if (giUpdatePipeline) { giUpdatePipeline->cleanup(); giUpdatePipeline.reset(); }
         if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
@@ -558,6 +560,7 @@ namespace render::gpudriven
     void GPUDrivenRenderer::applyGISettings(const gi::GISettings& settings)
     {
         bool needsReinit = (settings.quality != cachedGISettings.quality) ||
+                           (settings.enabled != cachedGISettings.enabled) ||
                            (settings.probeSpacing != cachedGISettings.probeSpacing);
 
         cachedGISettings = settings;
@@ -566,6 +569,36 @@ namespace render::gpudriven
         {
             cleanupGI();
             initGI(settings);
+
+            // If initGI returned early (disabled/Off), recreate pipelines without GI
+            if (!giCascadeManager && meshShaderPipeline && shadowSystem && cachedRenderPass)
+            {
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = nullptr,
+                    .renderPass = cachedRenderPass
+                };
+                meshShaderPipeline->recreate(pipelineInfo);
+                if (transparentMeshShaderPipeline)
+                {
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    pipelineInfo.transparentMode = false;
+                }
+                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                {
+                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                }
+            }
         }
         else if (giCascadeManager)
         {

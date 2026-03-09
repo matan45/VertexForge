@@ -15,8 +15,12 @@ layout(std430, set = 0, binding = 1) writeonly buffer ProbeWriteBuffer {
     ProbeData probeDataWrite[];
 };
 
-// Set 1: Cascade info
+// Set 1: Cascade info (buffer has 16-byte header: cascadeCount + padding)
 layout(std140, set = 1, binding = 0) uniform CascadeInfoUBO {
+    uint cascadeCount;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     CascadeInfo cascades[8];
 };
 

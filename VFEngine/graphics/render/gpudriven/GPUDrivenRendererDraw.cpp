@@ -1,5 +1,8 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../gi/GIDebugRenderer.hpp"
+#include "../gi/RadianceCascadeManager.hpp"
+#include "../gi/ProbeStorageBuffer.hpp"
 #include <array>
 #include <vector>
 
@@ -333,5 +336,25 @@ namespace render::gpudriven
                 commandsPerSection,
                 sizeof(MeshTasksIndirectCommand));
         }
+    }
+
+    void GPUDrivenRenderer::renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection)
+    {
+        if (!giDebugRenderer || !giCascadeManager || !giCascadeManager->isInitialized())
+        {
+            return;
+        }
+
+        auto* storage = giCascadeManager->getProbeStorage();
+        if (!storage || !storage->isInitialized())
+        {
+            return;
+        }
+
+        giDebugRenderer->render(cmd,
+                                 storage->getProbeDataDescSet(),
+                                 giCascadeManager->getCascadeInfoDescSet(),
+                                 viewProjection,
+                                 giCascadeManager->getTotalProbeCount());
     }
 }
