@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstring>
 #include <atomic>
-#include <chrono>
 
 namespace render::gpudriven
 {
@@ -330,29 +329,9 @@ namespace render::gpudriven
         transparentObjectCount = 0;
 
         // For small scenes, use the original sequential path (no overhead)
-        bool useParallel = renderData.size() >= PARALLEL_OBJECT_THRESHOLD;
-
-        static uint32_t logCounter = 0;
-        bool shouldLog = (++logCounter % 300 == 1);
-
-        auto startTime = shouldLog ? std::chrono::high_resolution_clock::now()
-                                   : std::chrono::high_resolution_clock::time_point{};
-
-        if (!useParallel)
+        if (renderData.size() < PARALLEL_OBJECT_THRESHOLD)
         {
             updateObjectsSequential(renderData, resolvers);
-
-            if (shouldLog)
-            {
-                auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
-                float ms = std::chrono::duration<float, std::milli>(elapsed).count();
-                uint32_t totalInstances = 0;
-                for (const auto& rd : renderData)
-                    totalInstances += rd.instanceTransforms.empty() ? 1
-                        : static_cast<uint32_t>(rd.instanceTransforms.size());
-                vfLogInfo("MergedMeshBuffer [SEQUENTIAL]: renderEntries={} objects={} time={:.2f}ms",
-                    renderData.size(), currentObjectCount, ms);
-            }
             return;
         }
 
@@ -470,15 +449,6 @@ namespace render::gpudriven
 
         currentObjectCount = totalWork;
         transparentObjectCount = transparentCount.load(std::memory_order_relaxed);
-
-        if (shouldLog)
-        {
-            auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
-            float ms = std::chrono::duration<float, std::milli>(elapsed).count();
-            vfLogInfo("MergedMeshBuffer [PARALLEL]: renderEntries={} objects={} threads={} time={:.2f}ms",
-                renderData.size(), currentObjectCount,
-                threading::JobSystem::instance().getThreadCount(), ms);
-        }
     }
 
 }

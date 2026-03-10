@@ -19,7 +19,6 @@
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "threading/JobSystem.hpp"
-#include <chrono>
 
 
 namespace controllers::offscreen
