@@ -671,7 +671,27 @@ namespace core::physics
                                                     const std::vector<JPH::BodyID>& bodyIds)
     {
         TileCoordKey key = makeTileKey(tileX, tileZ);
-        vegetationBodies[key] = bodyIds;
+
+        auto it = vegetationBodies.find(key);
+        if (it != vegetationBodies.end())
+        {
+            if (initialized && physicsSystem)
+            {
+                auto& bodyInterface = physicsSystem->GetBodyInterface();
+                for (auto& oldId : it->second)
+                {
+                    if (!oldId.IsInvalid())
+                    {
+                        removeAndDestroyBody(bodyInterface, oldId);
+                    }
+                }
+            }
+            it->second = bodyIds;
+        }
+        else
+        {
+            vegetationBodies[key] = bodyIds;
+        }
     }
 
     void PhysicsWorld::removeVegetationTileColliders(int32_t tileX, int32_t tileZ)

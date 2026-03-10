@@ -464,6 +464,9 @@ namespace core
 
         for (const auto& inst : instances)
         {
+            if (inst.scale <= 0.0f || inst.height * inst.scale < 0.01f)
+                continue;
+
             JPH::BodyID bodyId = physicsWorld->addStaticCapsule(
                 inst.position, inst.rotation, inst.scale,
                 inst.radius, inst.height, 0); // layer 0 = STATIC
@@ -471,6 +474,11 @@ namespace core
             if (!bodyId.IsInvalid())
             {
                 bodyIds.push_back(bodyId);
+            }
+            else
+            {
+                vfLogWarning("PhysicsAdapter: Failed to create vegetation collider at ({}, {}, {}) scale={} for tile ({}, {})",
+                    inst.position.x, inst.position.y, inst.position.z, inst.scale, tileX, tileZ);
             }
         }
 
