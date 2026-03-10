@@ -2,10 +2,12 @@
 #include "../mesh/MeshTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Log.hpp"
+#include "threading/JobSystem.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <glm/gtc/packing.hpp>
 #include <cmath>
 #include <cstring>
+#include <atomic>
 
 namespace render::gpudriven
 {
@@ -262,77 +264,139 @@ namespace render::gpudriven
         currentObjectCount = 0;
         transparentObjectCount = 0;
 
+        // Work item for parallel phase: each produces one GPUObjectData
+        struct WorkItem
+        {
+            const mesh::MeshRenderData* meshRender;
+            const SubmeshLocation* submeshLoc;
+            const glm::mat4* instanceTransform; // non-null for instanced entries
+            int32_t templateIndex;               // >=0: copy from template instead of populateObjectData
+        };
+
+        std::vector<WorkItem> workItems;
+        std::vector<GPUObjectData> templates;
+        workItems.reserve(renderData.size() * 2);
+
+        // ── Phase 1: Sequential pre-pass ──
+        // Pre-populate mutable caches, build work items, build instanced templates.
         for (const auto& meshRender : renderData)
         {
             auto meshIt = meshPathToIndex.find(meshRender.meshPath);
-            if (meshIt == meshPathToIndex.end())
-            {
-                continue;
-            }
+            if (meshIt == meshPathToIndex.end()) continue;
 
             const auto& meshInfo = registeredMeshes[meshIt->second];
 
-            // Instance batching: resolve material once, copy per instance
             if (!meshRender.instanceTransforms.empty())
             {
+                // Instanced path: build template per submesh (populates caches),
+                // then create lightweight work items that just copy the template.
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
 
-                    // Build template GPUObjectData once
-                    GPUObjectData templateObj;
-                    populateObjectData(templateObj, meshRender, submeshLoc, resolvers);
-                    bool isTransparent = (templateObj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT);
+                    int32_t tmplIdx = static_cast<int32_t>(templates.size());
+                    templates.emplace_back();
+                    populateObjectData(templates.back(), meshRender, submeshLoc, resolvers);
 
-                    // Stamp out one copy per instance transform
                     for (const auto& instanceMatrix : meshRender.instanceTransforms)
                     {
-                        if (currentObjectCount >= maxObjectCount)
-                        {
-                            vfLogWarning("MergedMeshBuffer: max object count reached");
-                            return;
-                        }
-
-                        GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                        obj = templateObj;
-                        std::memcpy(&obj.modelMatrix, &instanceMatrix, sizeof(glm::mat4));
-                        obj.entityId = currentObjectCount;
-
-                        if (isTransparent) transparentObjectCount++;
-                        currentObjectCount++;
+                        if (workItems.size() >= maxObjectCount) break;
+                        workItems.push_back({&meshRender, &submeshLoc, &instanceMatrix, tmplIdx});
                     }
                 }
-                continue;
+            }
+            else
+            {
+                // Non-instanced path: pre-populate caches so parallel phase is read-only.
+                for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
+                {
+                    const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
+                    if (!submeshLoc.hasRenderableLOD()) continue;
+                    if (workItems.size() >= maxObjectCount) break;
+
+                    // Determine material path for this submesh
+                    const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
+                    std::string materialPath;
+                    if (subMat)
+                    {
+                        materialPath = subMat->materialPath;
+                    }
+                    else
+                    {
+                        materialPath = meshRender.defaultMaterialPath;
+                        // Pre-populate pbrCache
+                        if (!materialPath.empty() && pbrCache.find(materialPath) == pbrCache.end())
+                        {
+                            pbrCache.emplace(materialPath,
+                                mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath));
+                        }
+                    }
+
+                    // Pre-populate instanceToParentCache
+                    if (!materialPath.empty() && resolvers.time > 0.0f &&
+                        material::isInstanceFile(materialPath))
+                    {
+                        if (instanceToParentCache.find(materialPath) == instanceToParentCache.end())
+                        {
+                            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                            if (instanceData && !instanceData->parentMaterialPath.empty())
+                            {
+                                instanceToParentCache[materialPath] = instanceData->parentMaterialPath;
+                            }
+                        }
+                    }
+
+                    workItems.push_back({&meshRender, &submeshLoc, nullptr, -1});
+                }
             }
 
-            for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
+            if (workItems.size() >= maxObjectCount)
             {
-                const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
-
-                if (!submeshLoc.hasRenderableLOD())
-                {
-                    continue;
-                }
-
-                if (currentObjectCount >= maxObjectCount)
-                {
-                    vfLogWarning("MergedMeshBuffer: max object count reached");
-                    return;
-                }
-
-                GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                populateObjectData(obj, meshRender, submeshLoc, resolvers);
-                obj.entityId = currentObjectCount;
-
-                if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
-                {
-                    transparentObjectCount++;
-                }
-
-                currentObjectCount++;
+                vfLogWarning("MergedMeshBuffer: max object count reached");
+                break;
             }
         }
+
+        uint32_t totalWork = static_cast<uint32_t>(workItems.size());
+        if (totalWork == 0) return;
+
+        // ── Phase 2: Parallel object data population ──
+        // Each work item writes to its own cpuObjectData[i] slot.
+        // Caches are read-only at this point (pre-populated in phase 1).
+        std::atomic<uint32_t> transparentCount{0};
+
+        threading::JobSystem::instance().parallelFor(totalWork,
+            [&](uint32_t begin, uint32_t end)
+            {
+                for (uint32_t i = begin; i < end; ++i)
+                {
+                    const auto& work = workItems[i];
+                    GPUObjectData& obj = cpuObjectData[i];
+
+                    if (work.templateIndex >= 0)
+                    {
+                        // Instanced: copy pre-built template, override transform
+                        obj = templates[work.templateIndex];
+                        std::memcpy(&obj.modelMatrix, work.instanceTransform, sizeof(glm::mat4));
+                    }
+                    else
+                    {
+                        // Non-instanced: full populate (caches are pre-populated, no mutation)
+                        populateObjectData(obj, *work.meshRender, *work.submeshLoc, resolvers);
+                    }
+
+                    obj.entityId = i;
+
+                    if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
+                    {
+                        transparentCount.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+            });
+
+        currentObjectCount = totalWork;
+        transparentObjectCount = transparentCount.load(std::memory_order_relaxed);
     }
 
 }

@@ -18,6 +18,7 @@
 #include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
+#include "threading/JobSystem.hpp"
 
 
 namespace controllers::offscreen
@@ -387,20 +388,10 @@ namespace controllers::offscreen
         ctx.bvhManager->updateOcclusionCullingData(renderHandler);
     }
 
-    void FramePreparationSystem::prepareBillboards(const FrameContext& ctx)
+    std::vector<render::billboard::BillboardRenderData> FramePreparationSystem::gatherBillboardData(
+        const FrameContext& ctx)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initBillboardPipeline();
-
-        if (!renderHandler->isBillboardPipelineInitialized())
-        {
-            renderHandler->setBillboardDrawList({});
-            return;
-        }
-
         bool showEditorIcons = !ctx.playModeActive && ctx.showBillboardIcons;
-
         std::vector<render::billboard::BillboardRenderData> billboardDrawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -420,13 +411,11 @@ namespace controllers::offscreen
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Editor-only billboards (debug icons) only show in editor mode
             if (billboard.editorOnly && !showEditorIcons)
             {
                 continue;
             }
 
-            // Non-editor billboards (custom textured) always render
             render::billboard::BillboardRenderData renderData;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
@@ -450,21 +439,11 @@ namespace controllers::offscreen
             billboardDrawList.push_back(renderData);
         }
 
-        renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+        return billboardDrawList;
     }
 
-    void FramePreparationSystem::prepareText(const FrameContext& ctx)
+    std::vector<render::text::TextRenderData> FramePreparationSystem::gatherTextData(const FrameContext& ctx)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initTextPipeline();
-
-        if (!renderHandler->isTextPipelineInitialized())
-        {
-            renderHandler->setTextDrawList({});
-            return;
-        }
-
         std::vector<render::text::TextRenderData> textDrawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -504,6 +483,70 @@ namespace controllers::offscreen
             textDrawList.push_back(std::move(renderData));
         }
 
-        renderHandler->setTextDrawList(std::move(textDrawList));
+        return textDrawList;
+    }
+
+    void FramePreparationSystem::prepareBillboards(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initBillboardPipeline();
+
+        if (!renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->setBillboardDrawList({});
+            return;
+        }
+
+        renderHandler->setBillboardDrawList(gatherBillboardData(ctx));
+    }
+
+    void FramePreparationSystem::prepareText(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initTextPipeline();
+
+        if (!renderHandler->isTextPipelineInitialized())
+        {
+            renderHandler->setTextDrawList({});
+            return;
+        }
+
+        renderHandler->setTextDrawList(gatherTextData(ctx));
+    }
+
+    void FramePreparationSystem::prepareSceneData(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        // Initialize pipelines on main thread (Vulkan resource creation)
+        renderHandler->initBillboardPipeline();
+        renderHandler->initTextPipeline();
+
+        bool billboardReady = renderHandler->isBillboardPipelineInitialized();
+        bool textReady = renderHandler->isTextPipelineInitialized();
+
+        // Launch billboard and text data gathering in parallel
+        auto billboardFuture = threading::JobSystem::instance().submit(
+            [this, &ctx, billboardReady]() -> std::vector<render::billboard::BillboardRenderData>
+            {
+                if (!billboardReady) return {};
+                return gatherBillboardData(ctx);
+            }, threading::JobPriority::HIGH);
+
+        auto textFuture = threading::JobSystem::instance().submit(
+            [this, &ctx, textReady]() -> std::vector<render::text::TextRenderData>
+            {
+                if (!textReady) return {};
+                return gatherTextData(ctx);
+            }, threading::JobPriority::HIGH);
+
+        // Mesh preparation runs on main thread (BVH, animator, pbrCache mutations)
+        prepareMeshes(ctx);
+
+        // Wait for parallel tasks and set draw lists on main thread
+        renderHandler->setBillboardDrawList(billboardFuture.get());
+        renderHandler->setTextDrawList(textFuture.get());
     }
 }

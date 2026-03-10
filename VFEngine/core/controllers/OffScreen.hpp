@@ -79,6 +79,7 @@ namespace controllers
 
         void prepareFrameBillboards();
         void prepareFrameText();
+        void prepareSceneData();
         void setShowBillboardIcons(bool show);
         bool getShowBillboardIcons() const;
         bool loadBillboardAtlas(const std::string& atlasPath);

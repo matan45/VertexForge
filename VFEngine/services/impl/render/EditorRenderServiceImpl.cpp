@@ -49,9 +49,7 @@ namespace services
         frameCounter++;
         offScreenProvider->prepareGrid();
         offScreenProvider->prepareCameras();
-        offScreenProvider->prepareFrameMeshes();
-        offScreenProvider->prepareFrameBillboards();
-        offScreenProvider->prepareFrameText();
+        offScreenProvider->prepareSceneData();
         offScreenProvider->prepareFrameCameraFrustums();
         offScreenProvider->prepareFrameAudioSpheres();
         offScreenProvider->prepareFrameLightGizmos();
