@@ -19,6 +19,7 @@ namespace windows
         int falloffIndex = 2;
 
         int selectedPaletteIndex = -1; // -1 = All (weighted random)
+        bool paletteDirty = false;
         std::vector<meshbrush::MeshPaletteEntry> paletteEntries;
         nfd::FileDialog fileDialog;
 

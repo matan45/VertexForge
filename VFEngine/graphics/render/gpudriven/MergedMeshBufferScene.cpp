@@ -5,6 +5,7 @@
 #include <material/MaterialInstanceTypes.hpp>
 #include <glm/gtc/packing.hpp>
 #include <cmath>
+#include <cstring>
 
 namespace render::gpudriven
 {
@@ -270,6 +271,40 @@ namespace render::gpudriven
             }
 
             const auto& meshInfo = registeredMeshes[meshIt->second];
+
+            // Instance batching: resolve material once, copy per instance
+            if (!meshRender.instanceTransforms.empty())
+            {
+                for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
+                {
+                    const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
+                    if (!submeshLoc.hasRenderableLOD()) continue;
+
+                    // Build template GPUObjectData once
+                    GPUObjectData templateObj;
+                    populateObjectData(templateObj, meshRender, submeshLoc, resolvers);
+                    bool isTransparent = (templateObj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT);
+
+                    // Stamp out one copy per instance transform
+                    for (const auto& instanceMatrix : meshRender.instanceTransforms)
+                    {
+                        if (currentObjectCount >= maxObjectCount)
+                        {
+                            vfLogWarning("MergedMeshBuffer: max object count reached");
+                            return;
+                        }
+
+                        GPUObjectData& obj = cpuObjectData[currentObjectCount];
+                        obj = templateObj;
+                        std::memcpy(&obj.modelMatrix, &instanceMatrix, sizeof(glm::mat4));
+                        obj.entityId = currentObjectCount;
+
+                        if (isTransparent) transparentObjectCount++;
+                        currentObjectCount++;
+                    }
+                }
+                continue;
+            }
 
             for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
             {

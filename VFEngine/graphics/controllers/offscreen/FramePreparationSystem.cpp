@@ -16,6 +16,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
+#include "components/MeshBrushComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 
@@ -234,6 +235,27 @@ namespace controllers::offscreen
                     continue;
                 }
 
+                // Batch component: collect active instance transforms into one MeshRenderData
+                if (registry.all_of<components::MeshBrushBatchComponent>(entity))
+                {
+                    const auto& batch = registry.get<components::MeshBrushBatchComponent>(entity);
+                    if (batch.instances.empty()) continue;
+
+                    auto renderData = buildRenderData(entity, meshComp, worldTransform);
+                    renderData.instanceTransforms.reserve(batch.instances.size());
+                    for (const auto& inst : batch.instances)
+                    {
+                        if (inst.active)
+                        {
+                            renderData.instanceTransforms.push_back(inst.transform);
+                        }
+                    }
+                    if (!renderData.instanceTransforms.empty())
+                    {
+                        meshDrawList.push_back(std::move(renderData));
+                    }
+                    continue;
+                }
 
                 meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }

@@ -193,7 +193,9 @@ namespace windows
 
             if (ImGui::TreeNode("Entry", "%s", label.c_str()))
             {
-                ImGui::Checkbox("Enabled", &entry.enabled);
+                bool changed = false;
+
+                changed |= ImGui::Checkbox("Enabled", &entry.enabled);
 
                 // Mesh path input with browse button
                 char meshBuf[256] = {};
@@ -209,6 +211,7 @@ namespace windows
                     if (!selectedPath.empty())
                     {
                         entry.meshPath = selectedPath;
+                        changed = true;
                     }
                 }
 
@@ -226,19 +229,22 @@ namespace windows
                     if (!selectedPath.empty())
                     {
                         entry.materialPath = selectedPath;
+                        changed = true;
                     }
                 }
 
-                ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
-                ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.01f, 10.0f);
-                ImGui::DragFloat2("Rotation Y Range", &entry.rotationYRange.x, 1.0f, 0.0f, 360.0f);
-                ImGui::Checkbox("Random Rotation X", &entry.randomRotationX);
+                changed |= ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
+                changed |= ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.01f, 10.0f);
+                changed |= ImGui::DragFloat2("Rotation Y Range", &entry.rotationYRange.x, 1.0f, 0.0f, 360.0f);
+                changed |= ImGui::Checkbox("Random Rotation X", &entry.randomRotationX);
                 ImGui::SameLine();
-                ImGui::Checkbox("Random Rotation Z", &entry.randomRotationZ);
-                ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
-                ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
-                ImGui::DragFloat2("Height Range", &entry.heightRange.x, 1.0f, -10000.0f, 10000.0f);
-                ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
+                changed |= ImGui::Checkbox("Random Rotation Z", &entry.randomRotationZ);
+                changed |= ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+                changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
+                changed |= ImGui::DragFloat2("Height Range", &entry.heightRange.x, 1.0f, -10000.0f, 10000.0f);
+                changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
+
+                if (changed) paletteDirty = true;
 
                 if (ImGui::Button("Remove"))
                 {
@@ -254,6 +260,7 @@ namespace windows
 
         if (removeIndex >= 0)
         {
+            paletteDirty = true;
             paletteEntries.erase(paletteEntries.begin() + removeIndex);
 
             // Adjust selected index if needed
@@ -279,6 +286,7 @@ namespace windows
 
         if (ImGui::Button("Add Entry"))
         {
+            paletteDirty = true;
             meshbrush::MeshPaletteEntry newEntry;
             paletteEntries.push_back(newEntry);
 
@@ -287,12 +295,13 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Sync palette to service whenever entries change
-        if (!paletteEntries.empty())
+        // Sync palette to service only when entries actually change
+        if (paletteDirty && !paletteEntries.empty())
         {
             events::meshBrush::SetMeshBrushPaletteCommand cmd;
             cmd.palette = paletteEntries;
             events::EventDispatcher::instance().execute(cmd);
+            paletteDirty = false;
         }
     }
 

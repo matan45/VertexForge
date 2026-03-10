@@ -9,7 +9,9 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
 #include "../../../utilities/components/MeshBrushComponents.hpp"
+#include "../../../utilities/math/TransformUtils.hpp"
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
 namespace services
@@ -71,11 +73,11 @@ namespace services
                 if (cmd.index < palette.size())
                 {
                     palette.erase(palette.begin() + cmd.index);
-                    // Remove all group entities for this palette index
-                    for (auto it = groupEntities.begin(); it != groupEntities.end();)
+                    // Remove all batch entities for this palette index
+                    for (auto it = batchEntities.begin(); it != batchEntities.end();)
                     {
                         if (it->first.paletteIdx == cmd.index)
-                            it = groupEntities.erase(it);
+                            it = batchEntities.erase(it);
                         else
                             ++it;
                     }
@@ -118,14 +120,14 @@ namespace services
                 meshBrushModeActive = n.isActive;
             });
 
-        // Clear spatial grid on scene clear
+        // Clear on scene clear
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
                 spatialGrid.clear();
-                entityCounter = 0;
+                nextInstanceId = 1;
                 hasLastPlacement = false;
-                groupEntities.clear();
+                batchEntities.clear();
                 aabbYOffsetCache.clear();
             });
     }
@@ -164,8 +166,6 @@ namespace services
 
     void MeshBrushServiceImpl::placeMeshes(const glm::vec3& worldPos, const glm::vec3& normal)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
         // Ensure normal points upward (terrain raycast may return inverted normals)
         glm::vec3 surfaceNormal = normal;
         if (surfaceNormal.y < 0.0f)
@@ -179,7 +179,6 @@ namespace services
 
         if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(palette.size()))
         {
-            // Single entry selected
             const auto& entry = palette[selectedPaletteIndex];
             if (!entry.enabled || entry.meshPath.empty()) return;
             enabledIndices.push_back(static_cast<uint32_t>(selectedPaletteIndex));
@@ -187,7 +186,6 @@ namespace services
         }
         else
         {
-            // All enabled entries (weighted random)
             for (uint32_t idx = 0; idx < palette.size(); ++idx)
             {
                 if (palette[idx].enabled && !palette[idx].meshPath.empty())
@@ -200,7 +198,6 @@ namespace services
         if (enabledIndices.empty()) return;
         std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
 
-        // Generate candidate positions using simple random sampling within brush radius
         float radius = currentParams.radius;
         float spacing = currentParams.spacing;
         int maxCandidates = static_cast<int>(currentParams.density * radius * radius * glm::pi<float>() / (spacing * spacing));
@@ -211,10 +208,10 @@ namespace services
         std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
 
         uint32_t placedCount = 0;
+        auto& registry = scene::EntityRegistry::getRegistry();
 
         for (int i = 0; i < maxCandidates; ++i)
         {
-            // Random point in circle
             float angle = angleDist(rng);
             float r = radius * std::sqrt(radiusDist(rng));
 
@@ -222,44 +219,30 @@ namespace services
             candidatePos.x += r * std::cos(angle);
             candidatePos.z += r * std::sin(angle);
 
-            // Add jitter
             candidatePos.x += jitterDist(rng) * currentParams.positionJitter * spacing;
             candidatePos.z += jitterDist(rng) * currentParams.positionJitter * spacing;
-
-            // Use the worldPos Y (terrain height) for the candidate
             candidatePos.y = worldPos.y;
 
-            // Check spacing
             if (spatialGrid.hasNeighborWithin(candidatePos, spacing))
             {
                 continue;
             }
 
-            // Select palette entry from enabled entries
+            // Select palette entry
             uint32_t enabledIdx = paletteDist(rng);
             uint32_t paletteIdx = enabledIndices[enabledIdx];
             const auto& entry = palette[paletteIdx];
 
             // Check slope
             float slopeAngle = std::acos(std::clamp(glm::dot(surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
-            float slopeDeg = glm::degrees(slopeAngle);
-            if (slopeDeg > entry.maxSlope)
-            {
-                continue;
-            }
+            if (glm::degrees(slopeAngle) > entry.maxSlope) continue;
 
-            // Apply AABB-based Y offset so mesh bottom sits on terrain surface
-            float aabbOffset = getAABBYOffset(entry.meshPath);
-            candidatePos.y += aabbOffset;
-
-            // Apply manual Y offset from palette entry
+            // Apply AABB + manual Y offset
+            candidatePos.y += getAABBYOffset(entry.meshPath);
             candidatePos.y += entry.yOffset;
 
             // Check height range
-            if (candidatePos.y < entry.heightRange.x || candidatePos.y > entry.heightRange.y)
-            {
-                continue;
-            }
+            if (candidatePos.y < entry.heightRange.x || candidatePos.y > entry.heightRange.y) continue;
 
             // Compute random transform
             std::uniform_real_distribution<float> scaleDist(entry.scaleRange.x, entry.scaleRange.y);
@@ -268,23 +251,19 @@ namespace services
             std::uniform_real_distribution<float> rotYDist(entry.rotationYRange.x, entry.rotationYRange.y);
             float rotY = rotYDist(rng);
 
-            float rotX = 0.0f;
-            float rotZ = 0.0f;
+            float rotX = 0.0f, rotZ = 0.0f;
             if (entry.randomRotationX)
             {
-                std::uniform_real_distribution<float> rotDist(0.0f, 360.0f);
-                rotX = rotDist(rng);
+                std::uniform_real_distribution<float> d(0.0f, 360.0f);
+                rotX = d(rng);
             }
             if (entry.randomRotationZ)
             {
-                std::uniform_real_distribution<float> rotDist(0.0f, 360.0f);
-                rotZ = rotDist(rng);
+                std::uniform_real_distribution<float> d(0.0f, 360.0f);
+                rotZ = d(rng);
             }
 
-            TransformData transform;
-            transform.position = candidatePos;
-            transform.rotation = glm::vec3(rotX, rotY, rotZ);
-            transform.scale = glm::vec3(scale);
+            glm::vec3 rotation(rotX, rotY, rotZ);
 
             if (entry.alignToNormal && glm::length(surfaceNormal) > 0.001f)
             {
@@ -295,52 +274,32 @@ namespace services
                 if (glm::length(axis) > 0.001f)
                 {
                     axis = glm::normalize(axis);
-                    transform.rotation.x = alignAngle * axis.x;
-                    transform.rotation.z = alignAngle * axis.z;
+                    rotation.x = alignAngle * axis.x;
+                    rotation.z = alignAngle * axis.z;
                 }
             }
 
-            // Create entity under per-entry per-sector group
-            auto groupEntity = ensureGroupEntity(paletteIdx, candidatePos);
-            events::scene::CreateEntityCommand createCmd;
-            createCmd.name = "MeshBrush_" + std::to_string(entityCounter++);
-            createCmd.parent = groupEntity;
-            auto entity = dispatcher.execute(createCmd);
-            if (!entity.isValid()) continue;
+            // Build world-space model matrix for this instance
+            glm::mat4 modelMatrix = math::composeMatrix(candidatePos, rotation, glm::vec3(scale));
 
-            // Convert world position to local space relative to parent group
-            int32_t sx = static_cast<int32_t>(std::floor(candidatePos.x / sectorSize));
-            int32_t sz = static_cast<int32_t>(std::floor(candidatePos.z / sectorSize));
-            glm::vec3 parentPos(
-                (static_cast<float>(sx) + 0.5f) * sectorSize,
-                0.0f,
-                (static_cast<float>(sz) + 0.5f) * sectorSize
-            );
-            transform.position = candidatePos - parentPos;
+            // Get or create the batch entity for this palette entry + sector
+            auto batchEntity = ensureBatchEntity(paletteIdx, candidatePos);
+            auto enttBatch = internal::fromHandle(batchEntity);
 
-            events::scene::AddMeshComponentCommand meshCmd;
-            meshCmd.entity = entity;
-            dispatcher.execute(meshCmd);
+            if (!registry.valid(enttBatch)) continue;
 
-            MeshData meshData;
-            meshData.meshPath = entry.meshPath;
-            events::scene::SetMeshDataCommand meshDataCmd;
-            meshDataCmd.entity = entity;
-            meshDataCmd.meshData = meshData;
-            dispatcher.execute(meshDataCmd);
+            // Add instance to the batch component
+            auto& batch = registry.get<components::MeshBrushBatchComponent>(enttBatch);
 
-            events::scene::SetTransformCommand transformCmd;
-            transformCmd.entity = entity;
-            transformCmd.transform = transform;
-            dispatcher.execute(transformCmd);
+            components::BrushInstance inst;
+            inst.id = nextInstanceId++;
+            inst.transform = modelMatrix;
+            inst.worldPosition = candidatePos;
+            inst.active = true;
+            batch.instances.push_back(inst);
+            batch.dirty = true;
 
-            // Add brush instance tag via direct registry access
-            auto enttEntity = internal::fromHandle(entity);
-            auto& registry = scene::EntityRegistry::getRegistry();
-            registry.emplace<components::MeshBrushInstanceComponent>(enttEntity,
-                components::MeshBrushInstanceComponent{0, paletteIdx, surfaceNormal});
-
-            spatialGrid.insert(entity.id, candidatePos);
+            spatialGrid.insert(inst.id, candidatePos);
 
             ++placedCount;
         }
@@ -350,53 +309,58 @@ namespace services
             events::meshBrush::MeshBrushAppliedNotification notification;
             notification.position = worldPos;
             notification.count = placedCount;
-            dispatcher.publish(notification);
+            events::EventDispatcher::instance().publish(notification);
         }
     }
 
     void MeshBrushServiceImpl::eraseInstances(const glm::vec3& worldPos)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
         auto entries = spatialGrid.queryRadius(worldPos, currentParams.radius);
+        auto& registry = scene::EntityRegistry::getRegistry();
 
         for (const auto& entry : entries)
         {
-            EntityHandle entityHandle;
-            entityHandle.id = entry.entityId;
-
-            auto enttEntity = internal::fromHandle(entityHandle);
-            auto& registry = scene::EntityRegistry::getRegistry();
-
-            if (!registry.valid(enttEntity)) continue;
-            if (!registry.all_of<components::MeshBrushInstanceComponent>(enttEntity)) continue;
-
             spatialGrid.remove(entry.entityId);
 
-            events::scene::DeleteEntityCommand deleteCmd;
-            deleteCmd.entity = entityHandle;
-            dispatcher.execute(deleteCmd);
+            // Find and deactivate the instance in batch components
+            for (auto& [key, handle] : batchEntities)
+            {
+                if (!handle.isValid()) continue;
+                auto entt = internal::fromHandle(handle);
+                if (!registry.valid(entt)) continue;
+                if (!registry.all_of<components::MeshBrushBatchComponent>(entt)) continue;
+
+                auto& batch = registry.get<components::MeshBrushBatchComponent>(entt);
+                for (auto& inst : batch.instances)
+                {
+                    if (inst.id == entry.entityId && inst.active)
+                    {
+                        inst.active = false;
+                        batch.dirty = true;
+                        goto nextEntry;
+                    }
+                }
+            }
+            nextEntry:;
         }
     }
 
-    EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
+    EntityHandle MeshBrushServiceImpl::ensureBatchEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
     {
-        // Compute sector coordinates from world position
         int32_t sx = static_cast<int32_t>(std::floor(worldPos.x / sectorSize));
         int32_t sz = static_cast<int32_t>(std::floor(worldPos.z / sectorSize));
-        GroupKey key{paletteIdx, sx, sz};
+        BatchKey key{paletteIdx, sx, sz};
 
-        auto it = groupEntities.find(key);
-        if (it != groupEntities.end() && it->second.isValid())
+        auto it = batchEntities.find(key);
+        if (it != batchEntities.end() && it->second.isValid())
         {
-            // Verify it still exists in registry
             auto entt = internal::fromHandle(it->second);
             auto& registry = scene::EntityRegistry::getRegistry();
             if (registry.valid(entt)) return it->second;
         }
 
-        // Build group name: "MeshBrush_<filename>_(sX,sZ)"
-        std::string meshLabel = "Group_" + std::to_string(paletteIdx);
+        // Build batch entity name from mesh filename + sector
+        std::string meshLabel = "Batch_" + std::to_string(paletteIdx);
         if (paletteIdx < palette.size() && !palette[paletteIdx].meshPath.empty())
         {
             const auto& meshPath = palette[paletteIdx].meshPath;
@@ -404,31 +368,52 @@ namespace services
             meshLabel = (pos != std::string::npos)
                 ? meshPath.substr(pos + 1) : meshPath;
         }
-        std::string groupName = "MeshBrush_" + meshLabel
+        std::string entityName = "MeshBrush_" + meshLabel
             + "_(" + std::to_string(sx) + "," + std::to_string(sz) + ")";
 
-        // Position the group entity at the center of the sector
-        // so it gets assigned to the correct sector by WorldSectorManager
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Create entity with mesh component (needed for FramePreparationSystem to pick it up)
         events::scene::CreateEntityCommand createCmd;
-        createCmd.name = groupName;
+        createCmd.name = entityName;
         auto entity = dispatcher.execute(createCmd);
 
         if (entity.isValid())
         {
-            TransformData groupTransform;
-            groupTransform.position = glm::vec3(
+            // Set position at sector center for correct sector assignment
+            TransformData batchTransform;
+            batchTransform.position = glm::vec3(
                 (static_cast<float>(sx) + 0.5f) * sectorSize,
                 0.0f,
                 (static_cast<float>(sz) + 0.5f) * sectorSize
             );
             events::scene::SetTransformCommand transformCmd;
             transformCmd.entity = entity;
-            transformCmd.transform = groupTransform;
+            transformCmd.transform = batchTransform;
             dispatcher.execute(transformCmd);
+
+            // Add mesh component with the mesh path
+            events::scene::AddMeshComponentCommand meshCmd;
+            meshCmd.entity = entity;
+            dispatcher.execute(meshCmd);
+
+            if (paletteIdx < palette.size())
+            {
+                MeshData meshData;
+                meshData.meshPath = palette[paletteIdx].meshPath;
+                events::scene::SetMeshDataCommand meshDataCmd;
+                meshDataCmd.entity = entity;
+                meshDataCmd.meshData = meshData;
+                dispatcher.execute(meshDataCmd);
+            }
+
+            // Add batch component via direct registry access
+            auto enttEntity = internal::fromHandle(entity);
+            auto& registry = scene::EntityRegistry::getRegistry();
+            registry.emplace<components::MeshBrushBatchComponent>(enttEntity);
         }
 
-        groupEntities[key] = entity;
+        batchEntities[key] = entity;
         return entity;
     }
 
@@ -442,7 +427,6 @@ namespace services
             return it->second;
         }
 
-        // Query the mesh AABB from the render service
         events::render::GetMeshBoundingBoxQuery query;
         query.meshPath = meshPath;
         auto result = events::EventDispatcher::instance().query(query);
@@ -450,7 +434,6 @@ namespace services
         float offset = 0.0f;
         if (result.has_value())
         {
-            // Offset by -min.y so the bottom of the mesh sits on the terrain surface
             offset = -result->min.y;
         }
 

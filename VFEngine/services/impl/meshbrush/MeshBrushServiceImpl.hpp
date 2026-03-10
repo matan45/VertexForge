@@ -31,24 +31,24 @@ namespace services
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
 
-        // Global entity counter for unique names
-        uint32_t entityCounter = 0;
+        // Global instance ID counter
+        uint64_t nextInstanceId = 1;
 
-        // Per-palette-entry + per-sector group parent entities
+        // Per-palette-entry + per-sector batch entities
         // Key: (paletteIdx, sectorX, sectorZ)
-        struct GroupKey
+        struct BatchKey
         {
             uint32_t paletteIdx;
             int32_t sectorX;
             int32_t sectorZ;
-            bool operator==(const GroupKey& o) const
+            bool operator==(const BatchKey& o) const
             {
                 return paletteIdx == o.paletteIdx && sectorX == o.sectorX && sectorZ == o.sectorZ;
             }
         };
-        struct GroupKeyHash
+        struct BatchKeyHash
         {
-            size_t operator()(const GroupKey& k) const
+            size_t operator()(const BatchKey& k) const
             {
                 size_t h = std::hash<uint32_t>{}(k.paletteIdx);
                 h ^= std::hash<int32_t>{}(k.sectorX) + 0x9e3779b9 + (h << 6) + (h >> 2);
@@ -57,8 +57,8 @@ namespace services
             }
         };
         static constexpr float sectorSize = 128.0f;
-        std::unordered_map<GroupKey, EntityHandle, GroupKeyHash> groupEntities;
-        EntityHandle ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
+        std::unordered_map<BatchKey, EntityHandle, BatchKeyHash> batchEntities;
+        EntityHandle ensureBatchEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
 
         // AABB Y-offset cache (meshPath -> -aabb.min.y)
         std::unordered_map<std::string, float> aabbYOffsetCache;
