@@ -19,6 +19,7 @@
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "threading/JobSystem.hpp"
+#include <chrono>
 
 
 namespace controllers::offscreen
@@ -518,35 +519,12 @@ namespace controllers::offscreen
 
     void FramePreparationSystem::prepareSceneData(const FrameContext& ctx)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        // Initialize pipelines on main thread (Vulkan resource creation)
-        renderHandler->initBillboardPipeline();
-        renderHandler->initTextPipeline();
-
-        bool billboardReady = renderHandler->isBillboardPipelineInitialized();
-        bool textReady = renderHandler->isTextPipelineInitialized();
-
-        // Launch billboard and text data gathering in parallel
-        auto billboardFuture = threading::JobSystem::instance().submit(
-            [this, &ctx, billboardReady]() -> std::vector<render::billboard::BillboardRenderData>
-            {
-                if (!billboardReady) return {};
-                return gatherBillboardData(ctx);
-            }, threading::JobPriority::HIGH);
-
-        auto textFuture = threading::JobSystem::instance().submit(
-            [this, &ctx, textReady]() -> std::vector<render::text::TextRenderData>
-            {
-                if (!textReady) return {};
-                return gatherTextData(ctx);
-            }, threading::JobPriority::HIGH);
-
-        // Mesh preparation runs on main thread (BVH, animator, pbrCache mutations)
+        // Mesh preparation first - mutates ECS (animator, BVH), initializes mesh pipeline
         prepareMeshes(ctx);
 
-        // Wait for parallel tasks and set draw lists on main thread
-        renderHandler->setBillboardDrawList(billboardFuture.get());
-        renderHandler->setTextDrawList(textFuture.get());
+        // Billboard and text: init pipelines + gather data sequentially
+        // (parallel submit/future overhead exceeds the cost of these lightweight gathers)
+        prepareBillboards(ctx);
+        prepareText(ctx);
     }
 }
