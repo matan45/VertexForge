@@ -231,6 +231,7 @@ namespace windows
                 changed |= ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
                 changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
                 changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
+                changed |= ImGui::Checkbox("Use Collider", &entry.useCollider);
 
                 if (changed) paletteDirty = true;
 

@@ -20,6 +20,7 @@ namespace meshbrush
         bool alignToNormal = false;
         float maxSlope = 90.0f; // degrees
         float yOffset = 0.0f; // Manual vertical offset from terrain surface
+        bool useCollider = false; // Add static box collider per instance
     };
 
     struct MeshBrushParams

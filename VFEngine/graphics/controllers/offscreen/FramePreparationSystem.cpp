@@ -16,7 +16,6 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
-#include "components/MeshBrushComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 
@@ -212,6 +211,68 @@ namespace controllers::offscreen
             return renderData;
         };
 
+        // Check if an entity can be instanced-batched with others sharing the same mesh+material.
+        // Entities with per-instance unique data (lightmaps, bounding box debug, animations) cannot be batched.
+        auto canBatch = [&](entt::entity entity, const render::mesh::MeshRenderData& rd) -> bool
+        {
+            if (rd.showBoundingBox) return false;
+            if (!rd.lightmapPath.empty()) return false;
+            if (!rd.submeshMaterials.empty()) return false;
+            if (rd.maxDrawDistance > 0.0f) return false;
+            if (registry.all_of<components::AnimatorComponent>(entity)) return false;
+            return true;
+        };
+
+        // Batch key: meshPath + defaultMaterialPath
+        struct BatchKey
+        {
+            std::string meshPath;
+            std::string materialPath;
+            bool operator==(const BatchKey& o) const
+            {
+                return meshPath == o.meshPath && materialPath == o.materialPath;
+            }
+        };
+        struct BatchKeyHash
+        {
+            size_t operator()(const BatchKey& k) const
+            {
+                size_t h = std::hash<std::string>{}(k.meshPath);
+                h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+
+        // Map from batch key to index in meshDrawList (for the template MeshRenderData)
+        std::unordered_map<BatchKey, size_t, BatchKeyHash> batchMap;
+
+        auto collectEntity = [&](entt::entity entity, const components::MeshComponent& meshComp,
+                                  const components::WorldTransformComponent& worldTransform)
+        {
+            auto renderData = buildRenderData(entity, meshComp, worldTransform);
+
+            if (canBatch(entity, renderData))
+            {
+                BatchKey key{renderData.meshPath, renderData.defaultMaterialPath};
+                auto it = batchMap.find(key);
+                if (it != batchMap.end())
+                {
+                    // Append transform to existing batch
+                    meshDrawList[it->second].instanceTransforms.push_back(worldTransform.worldMatrix);
+                    return;
+                }
+
+                // Start new batch: first instance goes into instanceTransforms
+                size_t idx = meshDrawList.size();
+                renderData.instanceTransforms.push_back(worldTransform.worldMatrix);
+                meshDrawList.push_back(std::move(renderData));
+                batchMap[key] = idx;
+                return;
+            }
+
+            meshDrawList.push_back(std::move(renderData));
+        };
+
         if (useGPUDrivenCulling)
         {
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
@@ -235,29 +296,7 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                // Batch component: collect active instance transforms into one MeshRenderData
-                if (registry.all_of<components::MeshBrushBatchComponent>(entity))
-                {
-                    const auto& batch = registry.get<components::MeshBrushBatchComponent>(entity);
-                    if (batch.instances.empty()) continue;
-
-                    auto renderData = buildRenderData(entity, meshComp, worldTransform);
-                    renderData.instanceTransforms.reserve(batch.instances.size());
-                    for (const auto& inst : batch.instances)
-                    {
-                        if (inst.active)
-                        {
-                            renderData.instanceTransforms.push_back(inst.transform);
-                        }
-                    }
-                    if (!renderData.instanceTransforms.empty())
-                    {
-                        meshDrawList.push_back(std::move(renderData));
-                    }
-                    continue;
-                }
-
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
         else if (ctx.bvhManager->isBuilt() && frustumReady)
@@ -291,8 +330,7 @@ namespace controllers::offscreen
                     continue;
                 }
 
-
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
         else
@@ -318,7 +356,6 @@ namespace controllers::offscreen
                     continue;
                 }
 
-
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
@@ -328,7 +365,7 @@ namespace controllers::offscreen
                     }
                 }
 
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
 

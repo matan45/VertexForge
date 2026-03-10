@@ -6,11 +6,11 @@
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/render/MaterialEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../data/DTOs.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
-#include "../../../utilities/components/MeshBrushComponents.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -75,11 +75,11 @@ namespace services
                 if (cmd.index < palette.size())
                 {
                     palette.erase(palette.begin() + cmd.index);
-                    // Remove all batch entities for this palette index
-                    for (auto it = batchEntities.begin(); it != batchEntities.end();)
+                    // Remove group entities for this palette index
+                    for (auto it = groupEntities.begin(); it != groupEntities.end();)
                     {
                         if (it->first.paletteIdx == cmd.index)
-                            it = batchEntities.erase(it);
+                            it = groupEntities.erase(it);
                         else
                             ++it;
                     }
@@ -129,7 +129,8 @@ namespace services
                 spatialGrid.clear();
                 nextInstanceId = 1;
                 hasLastPlacement = false;
-                batchEntities.clear();
+                groupEntities.clear();
+                instanceEntities.clear();
                 aabbYOffsetCache.clear();
             });
     }
@@ -210,7 +211,7 @@ namespace services
         std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
 
         uint32_t placedCount = 0;
-        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = events::EventDispatcher::instance();
 
         for (int i = 0; i < maxCandidates; ++i)
         {
@@ -228,7 +229,7 @@ namespace services
             events::terrain::GetTerrainHeightAtQuery heightQuery;
             heightQuery.worldX = candidatePos.x;
             heightQuery.worldZ = candidatePos.z;
-            auto heightResult = events::EventDispatcher::instance().query(heightQuery);
+            auto heightResult = dispatcher.query(heightQuery);
             candidatePos.y = heightResult.valid ? heightResult.height : worldPos.y;
 
             if (spatialGrid.hasNeighborWithin(candidatePos, spacing))
@@ -284,27 +285,100 @@ namespace services
                 }
             }
 
-            // Build world-space model matrix for this instance
-            glm::mat4 modelMatrix = math::composeMatrix(candidatePos, rotation, glm::vec3(scale));
+            // Get or create the group entity for this palette entry + sector
+            auto groupEntity = ensureGroupEntity(paletteIdx, candidatePos);
 
-            // Get or create the batch entity for this palette entry + sector
-            auto batchEntity = ensureBatchEntity(paletteIdx, candidatePos);
-            auto enttBatch = internal::fromHandle(batchEntity);
+            uint64_t instanceId = nextInstanceId++;
 
-            if (!registry.valid(enttBatch)) continue;
+            // Create individual mesh entity under the group
+            events::scene::CreateEntityCommand createCmd;
+            createCmd.name = "Brush_" + std::to_string(instanceId);
+            auto entity = dispatcher.execute(createCmd);
+            if (!entity.isValid()) continue;
 
-            // Add instance to the batch component
-            auto& batch = registry.get<components::MeshBrushBatchComponent>(enttBatch);
+            // Parent under group
+            events::scene::ReparentEntityCommand reparentCmd;
+            reparentCmd.entity = entity;
+            reparentCmd.newParent = groupEntity;
+            dispatcher.execute(reparentCmd);
 
-            components::BrushInstance inst;
-            inst.id = nextInstanceId++;
-            inst.transform = modelMatrix;
-            inst.worldPosition = candidatePos;
-            inst.active = true;
-            batch.instances.push_back(inst);
-            batch.dirty = true;
+            // Set transform (world-space position, parent group has identity transform)
+            TransformData transform;
+            transform.position = candidatePos;
+            transform.rotation = rotation;
+            transform.scale = glm::vec3(scale);
+            events::scene::SetTransformCommand transformCmd;
+            transformCmd.entity = entity;
+            transformCmd.transform = transform;
+            dispatcher.execute(transformCmd);
 
-            spatialGrid.insert(inst.id, candidatePos);
+            // Add mesh component
+            events::scene::AddMeshComponentCommand meshCmd;
+            meshCmd.entity = entity;
+            dispatcher.execute(meshCmd);
+
+            MeshData meshData;
+            meshData.meshPath = entry.meshPath;
+            events::scene::SetMeshDataCommand meshDataCmd;
+            meshDataCmd.entity = entity;
+            meshDataCmd.meshData = meshData;
+            dispatcher.execute(meshDataCmd);
+
+            // Apply material if specified
+            if (!entry.materialPath.empty())
+            {
+                events::material::AddMaterialComponentCommand matCmd;
+                matCmd.entity = entity;
+                dispatcher.execute(matCmd);
+
+                events::material::SetDefaultMaterialCommand defaultMatCmd;
+                defaultMatCmd.entity = entity;
+                defaultMatCmd.materialPath = entry.materialPath;
+                dispatcher.execute(defaultMatCmd);
+            }
+
+            // Add collider if enabled
+            if (entry.useCollider)
+            {
+                // Compute collider size from mesh AABB
+                glm::vec3 colliderSize(0.5f);
+                glm::vec3 colliderOffset(0.0f);
+                events::render::GetMeshBoundingBoxQuery bbQuery;
+                bbQuery.meshPath = entry.meshPath;
+                auto bbResult = dispatcher.query(bbQuery);
+                if (bbResult.has_value())
+                {
+                    colliderSize = (bbResult->max - bbResult->min) * 0.5f;
+                    colliderOffset = (bbResult->max + bbResult->min) * 0.5f;
+                }
+
+                events::scene::AddColliderComponentCommand colliderCmd;
+                colliderCmd.entity = entity;
+                dispatcher.execute(colliderCmd);
+
+                ColliderComponentData colliderData;
+                colliderData.shape = types::ColliderShape::Box;
+                colliderData.size = colliderSize;
+                colliderData.offset = colliderOffset;
+                events::scene::SetColliderDataCommand setColliderCmd;
+                setColliderCmd.entity = entity;
+                setColliderCmd.colliderData = colliderData;
+                dispatcher.execute(setColliderCmd);
+
+                events::scene::AddRigidBodyComponentCommand rbCmd;
+                rbCmd.entity = entity;
+                dispatcher.execute(rbCmd);
+
+                RigidBodyComponentData rbData;
+                rbData.type = types::RigidBodyType::Static;
+                events::scene::SetRigidBodyDataCommand setRbCmd;
+                setRbCmd.entity = entity;
+                setRbCmd.rigidBodyData = rbData;
+                dispatcher.execute(setRbCmd);
+            }
+
+            spatialGrid.insert(instanceId, candidatePos);
+            instanceEntities[instanceId] = entity;
 
             ++placedCount;
         }
@@ -314,58 +388,46 @@ namespace services
             events::meshBrush::MeshBrushAppliedNotification notification;
             notification.position = worldPos;
             notification.count = placedCount;
-            events::EventDispatcher::instance().publish(notification);
+            dispatcher.publish(notification);
         }
     }
 
     void MeshBrushServiceImpl::eraseInstances(const glm::vec3& worldPos)
     {
         auto entries = spatialGrid.queryRadius(worldPos, currentParams.radius);
-        auto& registry = scene::EntityRegistry::getRegistry();
 
         for (const auto& entry : entries)
         {
             spatialGrid.remove(entry.entityId);
 
-            // Find and deactivate the instance in batch components
-            for (auto& [key, handle] : batchEntities)
+            // Delete the individual mesh entity
+            auto it = instanceEntities.find(entry.entityId);
+            if (it != instanceEntities.end())
             {
-                if (!handle.isValid()) continue;
-                auto entt = internal::fromHandle(handle);
-                if (!registry.valid(entt)) continue;
-                if (!registry.all_of<components::MeshBrushBatchComponent>(entt)) continue;
-
-                auto& batch = registry.get<components::MeshBrushBatchComponent>(entt);
-                for (auto& inst : batch.instances)
-                {
-                    if (inst.id == entry.entityId && inst.active)
-                    {
-                        inst.active = false;
-                        batch.dirty = true;
-                        goto nextEntry;
-                    }
-                }
+                events::scene::DeleteEntityCommand deleteCmd;
+                deleteCmd.entity = it->second;
+                events::EventDispatcher::instance().execute(deleteCmd);
+                instanceEntities.erase(it);
             }
-            nextEntry:;
         }
     }
 
-    EntityHandle MeshBrushServiceImpl::ensureBatchEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
+    EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
     {
         int32_t sx = static_cast<int32_t>(std::floor(worldPos.x / sectorSize));
         int32_t sz = static_cast<int32_t>(std::floor(worldPos.z / sectorSize));
-        BatchKey key{paletteIdx, sx, sz};
+        GroupKey key{paletteIdx, sx, sz};
 
-        auto it = batchEntities.find(key);
-        if (it != batchEntities.end() && it->second.isValid())
+        auto it = groupEntities.find(key);
+        if (it != groupEntities.end() && it->second.isValid())
         {
             auto entt = internal::fromHandle(it->second);
             auto& registry = scene::EntityRegistry::getRegistry();
             if (registry.valid(entt)) return it->second;
         }
 
-        // Build batch entity name from mesh filename + sector
-        std::string meshLabel = "Batch_" + std::to_string(paletteIdx);
+        // Build group entity name from mesh filename + sector
+        std::string meshLabel = "Group_" + std::to_string(paletteIdx);
         if (paletteIdx < palette.size() && !palette[paletteIdx].meshPath.empty())
         {
             const auto& meshPath = palette[paletteIdx].meshPath;
@@ -378,60 +440,12 @@ namespace services
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Create entity with mesh component (needed for FramePreparationSystem to pick it up)
+        // Create empty group entity (no mesh component - just for hierarchy organization)
         events::scene::CreateEntityCommand createCmd;
         createCmd.name = entityName;
         auto entity = dispatcher.execute(createCmd);
 
-        if (entity.isValid())
-        {
-            // Set position at sector center for correct sector assignment
-            TransformData batchTransform;
-            batchTransform.position = glm::vec3(
-                (static_cast<float>(sx) + 0.5f) * sectorSize,
-                0.0f,
-                (static_cast<float>(sz) + 0.5f) * sectorSize
-            );
-            events::scene::SetTransformCommand transformCmd;
-            transformCmd.entity = entity;
-            transformCmd.transform = batchTransform;
-            dispatcher.execute(transformCmd);
-
-            // Add mesh component with the mesh path
-            events::scene::AddMeshComponentCommand meshCmd;
-            meshCmd.entity = entity;
-            dispatcher.execute(meshCmd);
-
-            if (paletteIdx < palette.size())
-            {
-                MeshData meshData;
-                meshData.meshPath = palette[paletteIdx].meshPath;
-                events::scene::SetMeshDataCommand meshDataCmd;
-                meshDataCmd.entity = entity;
-                meshDataCmd.meshData = meshData;
-                dispatcher.execute(meshDataCmd);
-
-                // Apply material if specified in palette entry
-                if (!palette[paletteIdx].materialPath.empty())
-                {
-                    events::material::AddMaterialComponentCommand matCmd;
-                    matCmd.entity = entity;
-                    dispatcher.execute(matCmd);
-
-                    events::material::SetDefaultMaterialCommand defaultMatCmd;
-                    defaultMatCmd.entity = entity;
-                    defaultMatCmd.materialPath = palette[paletteIdx].materialPath;
-                    dispatcher.execute(defaultMatCmd);
-                }
-            }
-
-            // Add batch component via direct registry access
-            auto enttEntity = internal::fromHandle(entity);
-            auto& registry = scene::EntityRegistry::getRegistry();
-            registry.emplace<components::MeshBrushBatchComponent>(enttEntity);
-        }
-
-        batchEntities[key] = entity;
+        groupEntities[key] = entity;
         return entity;
     }
 
@@ -449,14 +463,15 @@ namespace services
         query.meshPath = meshPath;
         auto result = events::EventDispatcher::instance().query(query);
 
-        float offset = 0.0f;
         if (result.has_value())
         {
-            offset = -result->min.y;
+            float offset = -result->min.y;
+            aabbYOffsetCache[meshPath] = offset;
+            return offset;
         }
 
-        aabbYOffsetCache[meshPath] = offset;
-        return offset;
+        // Mesh not loaded yet - don't cache, will retry next time
+        return 0.0f;
     }
 
     void MeshBrushServiceImpl::publishParamsChanged()
