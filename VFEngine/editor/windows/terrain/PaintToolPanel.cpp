@@ -3,6 +3,7 @@
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "terrain/PaintBrushTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
@@ -135,16 +136,16 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Paint", "Erase", "Smooth", "Fill"};
+        const char* brushLabels[] = {"Paint", "Erase", "Smooth", "Fill", "Base"};
         bool typeChanged = false;
 
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < 5; ++i)
         {
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
             }
-            if (i < 3)
+            if (i < 4)
             {
                 ImGui::SameLine();
             }
@@ -245,6 +246,8 @@ namespace windows
         ImGui::Text("Brush Parameters");
         ImGui::Separator();
 
+        bool isBaseLayerMode = (selectedBrushType == static_cast<int>(terrain::PaintBrushType::SetBaseLayer));
+
         if (ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f, "%.1f"))
         {
             events::paintBrush::SetPaintBrushRadiusCommand cmd;
@@ -252,40 +255,50 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        if (ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f, "%.2f"))
+        if (!isBaseLayerMode)
         {
-            events::paintBrush::SetPaintBrushStrengthCommand cmd;
-            cmd.strength = brushStrength;
-            dispatcher.execute(cmd);
-        }
+            if (ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f, "%.2f"))
+            {
+                events::paintBrush::SetPaintBrushStrengthCommand cmd;
+                cmd.strength = brushStrength;
+                dispatcher.execute(cmd);
+            }
 
-        if (ImGui::SliderFloat("Opacity", &brushOpacity, 0.0f, 1.0f, "%.2f"))
-        {
-            events::paintBrush::SetPaintBrushOpacityCommand cmd;
-            cmd.opacity = brushOpacity;
-            dispatcher.execute(cmd);
-        }
+            if (ImGui::SliderFloat("Opacity", &brushOpacity, 0.0f, 1.0f, "%.2f"))
+            {
+                events::paintBrush::SetPaintBrushOpacityCommand cmd;
+                cmd.opacity = brushOpacity;
+                dispatcher.execute(cmd);
+            }
 
-        const char* falloffLabels[] = {"Constant", "Linear", "Smooth", "Sharp"};
-        if (ImGui::Combo("Falloff", &falloffIndex, falloffLabels, 4))
-        {
-            events::paintBrush::SetPaintBrushFalloffCommand cmd;
-            cmd.falloff = static_cast<terrain::BrushFalloff>(falloffIndex);
-            dispatcher.execute(cmd);
-        }
+            const char* falloffLabels[] = {"Constant", "Linear", "Smooth", "Sharp"};
+            if (ImGui::Combo("Falloff", &falloffIndex, falloffLabels, 4))
+            {
+                events::paintBrush::SetPaintBrushFalloffCommand cmd;
+                cmd.falloff = static_cast<terrain::BrushFalloff>(falloffIndex);
+                dispatcher.execute(cmd);
+            }
 
-        const char* shapeLabels[] = {"Circle", "Square"};
-        if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
-        {
-            events::paintBrush::SetPaintBrushShapeCommand cmd;
-            cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
-            dispatcher.execute(cmd);
+            const char* shapeLabels[] = {"Circle", "Square"};
+            if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
+            {
+                events::paintBrush::SetPaintBrushShapeCommand cmd;
+                cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
+                dispatcher.execute(cmd);
+            }
         }
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("Left-click to paint");
-        ImGui::TextDisabled("Hold Shift to erase");
+        if (isBaseLayerMode)
+        {
+            ImGui::TextDisabled("Left-click to set base layer on tiles");
+        }
+        else
+        {
+            ImGui::TextDisabled("Left-click to paint");
+            ImGui::TextDisabled("Hold Shift to erase");
+        }
 
         ImGui::End();
 

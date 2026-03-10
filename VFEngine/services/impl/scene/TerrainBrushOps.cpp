@@ -189,6 +189,20 @@ namespace services
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
                 continue;
 
+            // SetBaseLayer operates per-tile: change the base palette layer and reset weights
+            if (brushType == terrain::PaintBrushType::SetBaseLayer)
+            {
+                uint8_t newBase = static_cast<uint8_t>(brushParams.activeLayer);
+                if (tile->weightMap.layerIndices[0] != newBase)
+                {
+                    tile->weightMap.initializeDefault(tile->weightMap.resolution);
+                    tile->weightMap.layerIndices[0] = newBase;
+                    tile->weightMapDirty = true;
+                    tile->weightMapGPUDirty = true;
+                }
+                continue;
+            }
+
             terrain::WeightBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = brushCenter;
             applyParams.tileWorldOrigin = glm::vec2(

@@ -1,5 +1,6 @@
 #include "OrmTexturePacker.hpp"
 #include "../resource/ResourceManager.hpp"
+#include "../resource/EndianUtils.hpp"
 #include "../config/Config.hpp"
 #include <filesystem>
 #include <fstream>
@@ -248,23 +249,21 @@ namespace texture
                 return false;
             }
 
-            resource::FileType fileType = resource::FileType::TEXTURE;
-            FileVersion version{0, 0, 3};
-
-            file.write(reinterpret_cast<const char*>(&fileType), sizeof(fileType));
-            file.write(reinterpret_cast<const char*>(&version), sizeof(version));
-            file.write(reinterpret_cast<const char*>(&ormTexture.width), sizeof(ormTexture.width));
-            file.write(reinterpret_cast<const char*>(&ormTexture.height), sizeof(ormTexture.height));
-            file.write(reinterpret_cast<const char*>(&ormTexture.numbersOfChannels),
-                       sizeof(ormTexture.numbersOfChannels));
+            resource::endian::writeLE<uint8_t>(file, static_cast<uint8_t>(resource::FileType::TEXTURE));
+            resource::endian::writeLE<uint32_t>(file, Version::major);
+            resource::endian::writeLE<uint32_t>(file, Version::minor);
+            resource::endian::writeLE<uint32_t>(file, Version::patch);
+            resource::endian::writeLE<uint32_t>(file, ormTexture.width);
+            resource::endian::writeLE<uint32_t>(file, ormTexture.height);
+            resource::endian::writeLE<uint32_t>(file, ormTexture.numbersOfChannels);
 
             uint32_t mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
-            file.write(reinterpret_cast<const char*>(&mipLevels), sizeof(mipLevels));
+            resource::endian::writeLE<uint32_t>(file, mipLevels);
 
             for (const auto& mip : ormTexture.mipData)
             {
-                file.write(reinterpret_cast<const char*>(&mip.width), sizeof(mip.width));
-                file.write(reinterpret_cast<const char*>(&mip.height), sizeof(mip.height));
+                resource::endian::writeLE<uint32_t>(file, mip.width);
+                resource::endian::writeLE<uint32_t>(file, mip.height);
                 file.write(reinterpret_cast<const char*>(mip.data.data()), mip.data.size());
             }
 

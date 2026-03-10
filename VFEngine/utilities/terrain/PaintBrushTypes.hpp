@@ -11,7 +11,8 @@ namespace terrain
         PaintLayer = 0,
         EraseLayer = 1,
         SmoothWeights = 2,
-        FillLayer = 3
+        FillLayer = 3,
+        SetBaseLayer = 4
     };
 
     struct PaintBrushParams
