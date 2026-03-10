@@ -11,6 +11,7 @@
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
+#include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "time/Timer.hpp"
@@ -73,6 +74,7 @@ namespace windows
             updatePaintCursorUV(vp, vs);
             updateHoleCursorUV(vp, vs);
             updateVegetationCursorUV(vp, vs);
+            updateMeshBrushCursorUV(vp, vs);
 
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
@@ -96,6 +98,7 @@ namespace windows
             handlePaintBrush();
             handleHoleBrush();
             handleVegetationBrush();
+            handleMeshBrush();
         }
         ImGui::End();
     }
@@ -268,6 +271,7 @@ namespace windows
         if (sculptDispatcher.query(events::paint::IsPaintModeActiveQuery{})) return;
         if (sculptDispatcher.query(events::hole::IsHoleModeActiveQuery{})) return;
         if (sculptDispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{})) return;
+        if (sculptDispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{})) return;
 
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
@@ -347,7 +351,8 @@ namespace windows
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
             bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
             bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            if (!paintActive && !holeActive && !vegActive)
+            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+            if (!paintActive && !holeActive && !vegActive && !meshBrushActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -410,7 +415,8 @@ namespace windows
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
             bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            if (!sculptActive && !holeActive && !vegActive)
+            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+            if (!sculptActive && !holeActive && !vegActive && !meshBrushActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -473,7 +479,8 @@ namespace windows
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
             bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            if (!sculptActive && !paintActive && !vegActive)
+            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+            if (!sculptActive && !paintActive && !vegActive && !meshBrushActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -527,7 +534,8 @@ namespace windows
             bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
             bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            if (!sculptActive && !paintActive && !holeActive)
+            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+            if (!sculptActive && !paintActive && !holeActive && !meshBrushActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
@@ -577,6 +585,69 @@ namespace windows
         else
         {
             vegetationDragging = false;
+        }
+    }
+
+    void ViewPort::updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+
+        if (!meshBrushActive || !ImGui::IsWindowHovered())
+        {
+            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
+            if (!sculptActive && !paintActive && !holeActive && !vegActive)
+            {
+                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            }
+            return;
+        }
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handleMeshBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+
+        if (!meshBrushActive || !ImGui::IsWindowHovered())
+        {
+            meshBrushDragging = false;
+            return;
+        }
+
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::meshBrush::ApplyMeshBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.surfaceNormal = hitResult.normal;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.isFirstApplication = !meshBrushDragging;
+                dispatcher.execute(applyCmd);
+
+                meshBrushDragging = true;
+            }
+        }
+        else
+        {
+            meshBrushDragging = false;
         }
     }
 

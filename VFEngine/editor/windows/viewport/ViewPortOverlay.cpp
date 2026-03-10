@@ -6,6 +6,7 @@
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
+#include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
@@ -82,7 +83,8 @@ namespace windows
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
                 bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
                 bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode);
+                bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode || isMeshBrushMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -226,6 +228,16 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Mesh brush mode toggle - always enabled (places meshes on terrain)
+                if (iconButton(ViewportIcon::MeshBrush, isMeshBrushMode, isMeshBrushMode ? "Exit Mesh Brush" : "Enter Mesh Brush"))
+                {
+                    events::meshBrush::SetMeshBrushModeActiveCommand cmd;
+                    cmd.active = !isMeshBrushMode;
+                    dispatcher.execute(cmd);
+                }
 
             }
         }

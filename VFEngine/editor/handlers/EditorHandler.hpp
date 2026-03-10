@@ -28,6 +28,8 @@
 #include "interfaces/vegetation/IGrassService.hpp"
 #include "interfaces/vegetation/IVegetationBrushService.hpp"
 #include "interfaces/vegetation/IVegetationBrushModeService.hpp"
+#include "interfaces/meshbrush/IMeshBrushService.hpp"
+#include "interfaces/meshbrush/IMeshBrushModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
 #include "interfaces/lightbake/ILightBakeService.hpp"
@@ -113,6 +115,8 @@ namespace handlers {
 		std::shared_ptr<services::IGrassService> grassService;
 		std::shared_ptr<services::IVegetationBrushService> vegetationBrushService;
 		std::shared_ptr<services::IVegetationBrushModeService> vegetationBrushModeService;
+		std::shared_ptr<services::IMeshBrushService> meshBrushService;
+		std::shared_ptr<services::IMeshBrushModeService> meshBrushModeService;
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
 		std::shared_ptr<services::IGIService> giService;
@@ -142,6 +146,7 @@ namespace handlers {
 		void createTerrainServices();
 		void createWaterServices();
 		void createVegetationServices();
+		void createMeshBrushServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();

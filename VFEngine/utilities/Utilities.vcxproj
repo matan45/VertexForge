@@ -107,6 +107,7 @@
     <ClInclude Include="components\IKComponent.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />
+    <ClInclude Include="components\MeshBrushComponents.hpp" />
     <ClInclude Include="components\NavmeshComponents.hpp" />
     <ClInclude Include="components\PhysicsAnimationComponent.hpp" />
     <ClInclude Include="components\PhysicsComponents.hpp" />
@@ -135,6 +136,8 @@
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="math\RayBVH.hpp" />
     <ClInclude Include="math\TransformUtils.hpp" />
+    <ClInclude Include="meshbrush\MeshBrushSpatialGrid.hpp" />
+    <ClInclude Include="meshbrush\MeshBrushTypes.hpp" />
     <ClInclude Include="navigation\NavmeshData.hpp" />
     <ClInclude Include="navigation\NavmeshSerializer.hpp" />
     <ClInclude Include="navigation\NavmeshTileCache.hpp" />
@@ -255,6 +258,7 @@
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\RayBVH.cpp" />
+    <ClCompile Include="meshbrush\MeshBrushSpatialGrid.cpp" />
     <ClCompile Include="navigation\NavmeshSerializer.cpp" />
     <ClCompile Include="navigation\NavmeshTileCache.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />

@@ -220,6 +220,7 @@
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
     <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
+    <ClInclude Include="windows\meshbrush\MeshBrushToolPanel.hpp" />
     <ClInclude Include="windows\preview\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\FontPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\ImagePreviewWindow.hpp" />
@@ -355,6 +356,7 @@
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
     <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
+    <ClCompile Include="windows\meshbrush\MeshBrushToolPanel.cpp" />
     <ClCompile Include="windows\preview\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\FontPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\ImagePreviewWindow.cpp" />
