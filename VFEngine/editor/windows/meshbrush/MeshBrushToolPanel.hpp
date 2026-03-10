@@ -2,6 +2,7 @@
 
 #include "events/EventTypes.hpp"
 #include "meshbrush/MeshBrushTypes.hpp"
+#include "nfd/FileDialog.hpp"
 
 namespace windows
 {
@@ -18,6 +19,7 @@ namespace windows
         int falloffIndex = 2;
 
         std::vector<meshbrush::MeshPaletteEntry> paletteEntries;
+        nfd::FileDialog fileDialog;
 
         events::SubscriptionToken modeToken;
         bool subscribed = false;

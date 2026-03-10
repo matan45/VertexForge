@@ -25,6 +25,10 @@ namespace windows
             [this](const auto& n)
             {
                 visible = n.isActive;
+                if (n.isActive)
+                {
+                    pushParams();
+                }
             });
 
         subscribed = true;
@@ -104,20 +108,38 @@ namespace windows
 
             if (ImGui::TreeNode("Entry", "Entry %d", i))
             {
-                // Mesh path input
+                // Mesh path input with browse button
                 char meshBuf[256] = {};
                 strncpy(meshBuf, entry.meshPath.c_str(), sizeof(meshBuf) - 1);
-                if (ImGui::InputText("Mesh Path", meshBuf, sizeof(meshBuf)))
+                ImGui::InputText("Mesh Path", meshBuf, sizeof(meshBuf), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse##mesh"))
                 {
-                    entry.meshPath = meshBuf;
+                    std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                        {L"Mesh Files", L"*.vfMesh"}
+                    };
+                    std::string selectedPath = fileDialog.openFileDialog(filters);
+                    if (!selectedPath.empty())
+                    {
+                        entry.meshPath = selectedPath;
+                    }
                 }
 
-                // Material path input
+                // Material path input with browse button
                 char matBuf[256] = {};
                 strncpy(matBuf, entry.materialPath.c_str(), sizeof(matBuf) - 1);
-                if (ImGui::InputText("Material Path", matBuf, sizeof(matBuf)))
+                ImGui::InputText("Material Path", matBuf, sizeof(matBuf), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse##mat"))
                 {
-                    entry.materialPath = matBuf;
+                    std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                        {L"Material Files", L"*.vfMat;*.vfMatInstance"}
+                    };
+                    std::string selectedPath = fileDialog.openFileDialog(filters);
+                    if (!selectedPath.empty())
+                    {
+                        entry.materialPath = selectedPath;
+                    }
                 }
 
                 ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
