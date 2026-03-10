@@ -277,22 +277,6 @@ namespace render::gpudriven
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
 
-                    // Log instance group mesh stats (once)
-                    static bool loggedOnce = false;
-                    if (!loggedOnce)
-                    {
-                        vfLogInfo("Instance group: mesh='{}' submesh='{}' instances={} "
-                                  "LOD0: meshlets={} vertices={} indices={} | "
-                                  "LOD1: meshlets={} | LOD2: meshlets={} | LOD3: meshlets={}",
-                                  meshRender.meshPath, submeshLoc.submeshName, instanceCount,
-                                  submeshLoc.meshletLods[0].meshletCount,
-                                  submeshLoc.lods[0].vertexCount, submeshLoc.lods[0].indexCount,
-                                  submeshLoc.meshletLods[1].meshletCount,
-                                  submeshLoc.meshletLods[2].meshletCount,
-                                  submeshLoc.meshletLods[3].meshletCount);
-                        loggedOnce = true;
-                    }
-
                     // ── LOD sub-grouping ──
                     // Bucket instances by distance to camera into LOD bins.
                     // Use squared distance thresholds derived from LOD screen-size thresholds.
@@ -391,15 +375,6 @@ namespace render::gpudriven
             }
         }
 
-        // Log instancing stats (sequential path)
-        static int logCooldown = 0;
-        if (logCooldown <= 0)
-        {
-            vfLogInfo("MergedMeshBuffer::updateObjectsSequential: {} renderData -> {} GPUObjects, {} instances in buffer",
-                      renderData.size(), currentObjectCount, currentInstanceCount);
-            logCooldown = 300;
-        }
-        logCooldown--;
     }
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
@@ -568,15 +543,6 @@ namespace render::gpudriven
             transparentObjectCount += transparentCount.load(std::memory_order_relaxed);
         }
 
-        // Log instancing stats
-        static int logCooldown = 0;
-        if (logCooldown <= 0)
-        {
-            vfLogInfo("MergedMeshBuffer::updateObjects: {} renderData -> {} GPUObjects, {} instances in buffer",
-                      renderData.size(), currentObjectCount, currentInstanceCount);
-            logCooldown = 300;
-        }
-        logCooldown--;
     }
 
 }

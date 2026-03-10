@@ -429,15 +429,4 @@ namespace render
         cameraOcclusionManager->initCameraHiZ(cameraId, depthImage, depthView, depthFormat);
     }
 
-    void RenderPassHandler::updateOcclusionObjects(occlusion::CameraId cameraId,
-                                                   const std::vector<occlusion::GPUObjectData>& objects)
-    {
-        cameraOcclusionManager->updateOcclusionObjects(cameraId, objects);
-    }
-
-    void RenderPassHandler::updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj,
-                                                  float nearPlane)
-    {
-        cameraOcclusionManager->updateCamera(cameraId, viewProj, nearPlane);
-    }
 }

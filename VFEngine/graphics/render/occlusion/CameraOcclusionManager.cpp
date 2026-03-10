@@ -127,12 +127,6 @@ namespace render::occlusion
         }
         camera->hiZInitialized = false;
 
-        if (camera->occlusionManager)
-        {
-            camera->occlusionManager->cleanup();
-        }
-        camera->occlusionInitialized = false;
-
         // Reinitialize Hi-Z with new depth buffer
         if (!camera->hiZBuffer)
         {
@@ -140,48 +134,6 @@ namespace render::occlusion
         }
         camera->hiZBuffer->init(depthImage, depthView, depthFormat);
         camera->hiZInitialized = true;
-
-        // Reinitialize occlusion culling
-        if (!camera->occlusionManager)
-        {
-            camera->occlusionManager = std::make_unique<OcclusionCullingManager>(device, swapChain);
-        }
-        camera->occlusionManager->init(camera->hiZBuffer.get());
-        camera->occlusionInitialized = true;
-
-    }
-
-    void CameraOcclusionManager::initCameraOcclusionCulling(CameraId id)
-    {
-        auto* camera = getCamera(id);
-        if (!camera)
-        {
-            vfLogError("Cannot init occlusion culling for non-existent camera {}", id);
-            return;
-        }
-
-        if (!camera->useOcclusionCulling)
-        {
-            vfLogInfo("Skipping occlusion culling init for camera {} (disabled)", id);
-            return;
-        }
-
-        if (!camera->hiZInitialized)
-        {
-            vfLogError("Cannot init occlusion culling for camera {} - Hi-Z not initialized", id);
-            return;
-        }
-
-        if (camera->occlusionInitialized)
-        {
-            return;
-        }
-
-        camera->occlusionManager = std::make_unique<OcclusionCullingManager>(device, swapChain);
-        camera->occlusionManager->init(camera->hiZBuffer.get());
-        camera->occlusionInitialized = true;
-
-        vfLogInfo("Initialized occlusion culling for camera {}", id);
     }
 
     void CameraOcclusionManager::updateCamera(CameraId id, const glm::mat4& viewProj, float nearPlane)
@@ -191,11 +143,6 @@ namespace render::occlusion
 
         camera->viewProj = viewProj;
         camera->nearPlane = nearPlane;
-
-        if (camera->occlusionManager && camera->occlusionInitialized)
-        {
-            camera->occlusionManager->updateCamera(viewProj, nearPlane);
-        }
     }
 
     void CameraOcclusionManager::updateCameraFrustum(CameraId id, const math::Frustum& frustum)
@@ -206,25 +153,6 @@ namespace render::occlusion
         camera->frustum = frustum;
     }
 
-    void CameraOcclusionManager::updateOcclusionObjects(CameraId id, const std::vector<GPUObjectData>& objects)
-    {
-        auto* camera = getCamera(id);
-        if (!camera || !camera->occlusionManager || !camera->occlusionInitialized) return;
-
-        camera->occlusionManager->updateObjects(objects);
-    }
-
-    std::vector<uint32_t> CameraOcclusionManager::getVisibilityResults(CameraId id)
-    {
-        auto* camera = getCamera(id);
-        if (!camera || !camera->occlusionManager || !camera->occlusionInitialized)
-        {
-            return {};
-        }
-
-        return camera->occlusionManager->getVisibilityResults();
-    }
-
     void CameraOcclusionManager::generateHiZ(CameraId id, vk::CommandBuffer cmd)
     {
         auto* camera = getCamera(id);
@@ -233,22 +161,10 @@ namespace render::occlusion
         camera->hiZBuffer->generate(cmd);
     }
 
-    void CameraOcclusionManager::runOcclusionCulling(CameraId id, vk::CommandBuffer cmd)
-    {
-        auto* camera = getCamera(id);
-        if (!camera || !camera->occlusionManager || !camera->occlusionInitialized) return;
-
-        camera->occlusionManager->cull(cmd);
-    }
-
     void CameraOcclusionManager::cleanup()
     {
         for (auto& [id, camera] : cameras)
         {
-            if (camera->occlusionManager)
-            {
-                camera->occlusionManager->cleanup();
-            }
             if (camera->hiZBuffer)
             {
                 camera->hiZBuffer->cleanup();
@@ -261,11 +177,5 @@ namespace render::occlusion
     {
         auto* camera = getCamera(id);
         return camera && camera->hiZInitialized;
-    }
-
-    bool CameraOcclusionManager::isOcclusionInitialized(CameraId id)
-    {
-        auto* camera = getCamera(id);
-        return camera && camera->occlusionInitialized;
     }
 }

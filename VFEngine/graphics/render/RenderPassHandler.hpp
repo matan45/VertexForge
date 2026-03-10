@@ -56,11 +56,6 @@ namespace render
     class IBL;
     class DebugRenderer;
 
-    namespace occlusion
-    {
-        struct GPUObjectData;
-    }
-
     namespace mesh
     {
         class StaticMeshPipeline;
@@ -320,9 +315,6 @@ namespace render
 
         void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView,
                      vk::Format depthFormat);
-
-        void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
-        void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
 

@@ -399,37 +399,8 @@ namespace controllers::offscreen
             renderHandler->clearVisibleLights();
         }
 
-        // Log batching stats
-        {
-            uint32_t totalEntities = 0;
-            uint32_t batchedGroups = 0;
-            uint32_t unbatchedCount = 0;
-            for (const auto& rd : meshDrawList)
-            {
-                if (!rd.instanceTransforms.empty())
-                {
-                    batchedGroups++;
-                    totalEntities += static_cast<uint32_t>(rd.instanceTransforms.size());
-                }
-                else
-                {
-                    unbatchedCount++;
-                    totalEntities++;
-                }
-            }
-            static int logCooldown = 0;
-            if (logCooldown <= 0)
-            {
-                vfLogInfo("Instancing: {} entities -> {} draw items ({} batched groups, {} unbatched), batchMap size={}",
-                          totalEntities, meshDrawList.size(), batchedGroups, unbatchedCount, batchMap.size());
-                logCooldown = 300; // ~5 seconds at 60fps
-            }
-            logCooldown--;
-        }
-
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
-        ctx.bvhManager->updateOcclusionCullingData(renderHandler);
     }
 
     std::vector<render::billboard::BillboardRenderData> FramePreparationSystem::gatherBillboardData(
