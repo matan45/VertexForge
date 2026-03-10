@@ -5,6 +5,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
+#include "../../events/render/MaterialEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../data/DTOs.hpp"
 #include "../../data/EntityConversion.hpp"
@@ -409,6 +410,19 @@ namespace services
                 meshDataCmd.entity = entity;
                 meshDataCmd.meshData = meshData;
                 dispatcher.execute(meshDataCmd);
+
+                // Apply material if specified in palette entry
+                if (!palette[paletteIdx].materialPath.empty())
+                {
+                    events::material::AddMaterialComponentCommand matCmd;
+                    matCmd.entity = entity;
+                    dispatcher.execute(matCmd);
+
+                    events::material::SetDefaultMaterialCommand defaultMatCmd;
+                    defaultMatCmd.entity = entity;
+                    defaultMatCmd.materialPath = palette[paletteIdx].materialPath;
+                    dispatcher.execute(defaultMatCmd);
+                }
             }
 
             // Add batch component via direct registry access
