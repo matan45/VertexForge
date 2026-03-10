@@ -60,30 +60,16 @@ namespace services
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushPaletteCommand>(
             [this](const events::meshBrush::SetMeshBrushPaletteCommand& cmd)
             {
-                palette = cmd.palette;
-            });
-
-        dispatcher.registerCommandHandler<events::meshBrush::AddMeshPaletteEntryCommand>(
-            [this](const events::meshBrush::AddMeshPaletteEntryCommand& cmd)
-            {
-                palette.push_back(cmd.entry);
-            });
-
-        dispatcher.registerCommandHandler<events::meshBrush::RemoveMeshPaletteEntryCommand>(
-            [this](const events::meshBrush::RemoveMeshPaletteEntryCommand& cmd)
-            {
-                if (cmd.index < palette.size())
+                // Prune group entities for palette indices that no longer exist
+                uint32_t newSize = static_cast<uint32_t>(cmd.palette.size());
+                for (auto it = groupEntities.begin(); it != groupEntities.end();)
                 {
-                    palette.erase(palette.begin() + cmd.index);
-                    // Remove group entities for this palette index
-                    for (auto it = groupEntities.begin(); it != groupEntities.end();)
-                    {
-                        if (it->first.paletteIdx == cmd.index)
-                            it = groupEntities.erase(it);
-                        else
-                            ++it;
-                    }
+                    if (it->first.paletteIdx >= newSize)
+                        it = groupEntities.erase(it);
+                    else
+                        ++it;
                 }
+                palette = cmd.palette;
             });
 
         // Apply brush

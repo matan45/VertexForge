@@ -197,7 +197,6 @@
     <ClInclude Include="impl\lightbake\LightBakeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushServiceImpl.hpp" />
-    <ClInclude Include="impl\meshbrush\MeshBrushUndoCommand.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshStreamer.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />

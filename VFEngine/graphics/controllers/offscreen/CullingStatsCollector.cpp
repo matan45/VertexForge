@@ -31,11 +31,9 @@ namespace controllers::offscreen
             services::CameraCullingStats camStats;
             camStats.cameraId = cameraId;
             camStats.isActive = (cameraId == stats.activeCameraId);
-            camStats.occlusionEnabled = cameraData->useOcclusionCulling;
             camStats.frustumReady = cameraData->frustum.isInitialized();
             camStats.bvhBuilt = bvhManager->isBuilt();
             camStats.totalMeshEntities = totalMeshEntities;
-            camStats.visibleAfterFrustumCull = totalMeshEntities;
 
             stats.cameraStats.push_back(camStats);
         }

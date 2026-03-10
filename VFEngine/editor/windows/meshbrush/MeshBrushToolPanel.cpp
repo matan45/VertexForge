@@ -187,7 +187,7 @@ namespace windows
                 bool changed = false;
 
                 // Mesh path input with browse button
-                char meshBuf[256] = {};
+                char meshBuf[256] = {}; // Read-only display; paths > 255 chars are truncated
                 strncpy(meshBuf, entry.meshPath.c_str(), sizeof(meshBuf) - 1);
                 ImGui::InputText("Mesh Path", meshBuf, sizeof(meshBuf), ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine();
@@ -205,7 +205,7 @@ namespace windows
                 }
 
                 // Material path input with browse button
-                char matBuf[256] = {};
+                char matBuf[256] = {}; // Read-only display; paths > 255 chars are truncated
                 strncpy(matBuf, entry.materialPath.c_str(), sizeof(matBuf) - 1);
                 ImGui::InputText("Material Path", matBuf, sizeof(matBuf), ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine();
@@ -268,9 +268,6 @@ namespace windows
                 events::EventDispatcher::instance().execute(selCmd);
             }
 
-            events::meshBrush::RemoveMeshPaletteEntryCommand cmd;
-            cmd.index = static_cast<uint32_t>(removeIndex);
-            events::EventDispatcher::instance().execute(cmd);
         }
 
         if (ImGui::Button("Add Entry"))
@@ -278,14 +275,9 @@ namespace windows
             paletteDirty = true;
             meshbrush::MeshPaletteEntry newEntry;
             paletteEntries.push_back(newEntry);
-
-            events::meshBrush::AddMeshPaletteEntryCommand cmd;
-            cmd.entry = newEntry;
-            events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Sync palette to service only when entries actually change
-        if (paletteDirty && !paletteEntries.empty())
+        if (paletteDirty)
         {
             events::meshBrush::SetMeshBrushPaletteCommand cmd;
             cmd.palette = paletteEntries;

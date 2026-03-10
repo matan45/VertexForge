@@ -114,6 +114,8 @@ namespace render::gpudriven
                 auto it = pbrCache.find(materialPath);
                 if (it == pbrCache.end())
                 {
+                    // Sequential-only path: the parallel phase pre-populates
+                    // pbrCache so this branch is never taken concurrently.
                     it = pbrCache.emplace(materialPath,
                                           mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
                 }
@@ -141,6 +143,8 @@ namespace render::gpudriven
             }
             else
             {
+                // Sequential-only path: the parallel phase pre-populates
+                // instanceToParentCache so this branch is never taken concurrently.
                 auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
                 if (instanceData && !instanceData->parentMaterialPath.empty())
                 {

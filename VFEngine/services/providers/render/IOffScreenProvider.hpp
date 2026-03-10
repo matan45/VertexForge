@@ -21,11 +21,9 @@ namespace services {
     struct CameraCullingStats {
         CameraId cameraId = 0;
         bool isActive = false;
-        bool occlusionEnabled = false;
         bool frustumReady = false;
         bool bvhBuilt = false;
         uint32_t totalMeshEntities = 0;
-        uint32_t visibleAfterFrustumCull = 0;
     };
 
     struct GPUDrivenDebugStats {

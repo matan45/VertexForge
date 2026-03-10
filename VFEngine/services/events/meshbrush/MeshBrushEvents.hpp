@@ -29,18 +29,6 @@ namespace events::meshBrush {
         std::string_view getName() const override { return "SetMeshBrushPalette"; }
     };
 
-    struct AddMeshPaletteEntryCommand : ICommand<> {
-        meshbrush::MeshPaletteEntry entry;
-
-        std::string_view getName() const override { return "AddMeshPaletteEntry"; }
-    };
-
-    struct RemoveMeshPaletteEntryCommand : ICommand<> {
-        uint32_t index = 0;
-
-        std::string_view getName() const override { return "RemoveMeshPaletteEntry"; }
-    };
-
     struct SetMeshBrushModeCommand : ICommand<> {
         meshbrush::MeshBrushMode mode = meshbrush::MeshBrushMode::Paint;
 

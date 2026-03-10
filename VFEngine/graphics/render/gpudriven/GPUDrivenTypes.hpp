@@ -59,7 +59,9 @@ namespace render::gpudriven
     {
         glm::mat4 modelMatrix;
         glm::vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
-        glm::vec4 aabbMax;  // .w = instanceCount (float-encoded uint, 0 or 1 = non-instanced)
+        // IMPORTANT: aabbMax.w is overloaded to store instanceCount as a uint32_t via memcpy
+        // (not float cast). GPU reads it with floatBitsToUint(). Do NOT use aabbMax.w as a float.
+        glm::vec4 aabbMax;  // .w = instanceCount (uint via memcpy/floatBitsToUint, 0 or 1 = non-instanced)
         glm::uvec4 lod0Data;
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;

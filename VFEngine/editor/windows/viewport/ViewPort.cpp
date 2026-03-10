@@ -69,12 +69,8 @@ namespace windows
                 dispatcher.execute(offsetCmd);
             }
 
-            // Update sculpt/paint/hole/vegetation cursor UV BEFORE render so raycast uses current mouse position
-            updateSculptCursorUV(vp, vs);
-            updatePaintCursorUV(vp, vs);
-            updateHoleCursorUV(vp, vs);
-            updateVegetationCursorUV(vp, vs);
-            updateMeshBrushCursorUV(vp, vs);
+            // Update brush cursor UV BEFORE render so raycast uses current mouse position
+            updateBrushCursors(vp, vs);
 
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
@@ -342,24 +338,36 @@ namespace windows
         }
     }
 
-    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    void ViewPort::updateBrushCursors(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
+        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+        bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
+        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
 
-        if (!sculptActive || !ImGui::IsWindowHovered())
+        bool anyActive = sculptActive || paintActive || holeActive || vegActive || meshBrushActive;
+
+        if (!anyActive || !ImGui::IsWindowHovered())
         {
-            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-            if (!paintActive && !holeActive && !vegActive && !meshBrushActive)
+            if (!anyActive)
             {
                 dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
             }
             return;
         }
 
+        if (sculptActive) updateSculptCursorUV(viewportPos, viewportSize);
+        else if (paintActive) updatePaintCursorUV(viewportPos, viewportSize);
+        else if (holeActive) updateHoleCursorUV(viewportPos, viewportSize);
+        else if (vegActive) updateVegetationCursorUV(viewportPos, viewportSize);
+        else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
+    }
+
+    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         ImVec2 mousePos = ImGui::GetMousePos();
@@ -409,21 +417,6 @@ namespace windows
     void ViewPort::updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-
-        if (!paintActive || !ImGui::IsWindowHovered())
-        {
-            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-            if (!sculptActive && !holeActive && !vegActive && !meshBrushActive)
-            {
-                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            }
-            return;
-        }
-
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         ImVec2 mousePos = ImGui::GetMousePos();
@@ -473,21 +466,6 @@ namespace windows
     void ViewPort::updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-
-        if (!holeActive || !ImGui::IsWindowHovered())
-        {
-            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-            if (!sculptActive && !paintActive && !vegActive && !meshBrushActive)
-            {
-                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            }
-            return;
-        }
-
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         ImVec2 mousePos = ImGui::GetMousePos();
@@ -528,21 +506,6 @@ namespace windows
     void ViewPort::updateVegetationCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-
-        if (!vegActive || !ImGui::IsWindowHovered())
-        {
-            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-            if (!sculptActive && !paintActive && !holeActive && !meshBrushActive)
-            {
-                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            }
-            return;
-        }
-
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         ImVec2 mousePos = ImGui::GetMousePos();
@@ -592,21 +555,6 @@ namespace windows
     void ViewPort::updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-
-        if (!meshBrushActive || !ImGui::IsWindowHovered())
-        {
-            bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-            bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-            bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-            if (!sculptActive && !paintActive && !holeActive && !vegActive)
-            {
-                dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            }
-            return;
-        }
-
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         ImVec2 mousePos = ImGui::GetMousePos();

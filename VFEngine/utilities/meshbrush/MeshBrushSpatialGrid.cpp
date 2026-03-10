@@ -12,23 +12,36 @@ namespace meshbrush
     void MeshBrushSpatialGrid::clear()
     {
         cells.clear();
+        entityToCell.clear();
     }
 
     void MeshBrushSpatialGrid::insert(uint64_t entityId, const glm::vec3& position)
     {
         auto cell = toCell(position);
         cells[cell].push_back({entityId, position});
+        entityToCell[entityId] = cell;
     }
 
     void MeshBrushSpatialGrid::remove(uint64_t entityId)
     {
-        for (auto& [key, entries] : cells)
+        auto it = entityToCell.find(entityId);
+        if (it == entityToCell.end())
+            return;
+
+        auto cellIt = cells.find(it->second);
+        if (cellIt != cells.end())
         {
+            auto& entries = cellIt->second;
             entries.erase(
                 std::remove_if(entries.begin(), entries.end(),
                     [entityId](const SpatialEntry& e) { return e.entityId == entityId; }),
                 entries.end());
+
+            if (entries.empty())
+                cells.erase(cellIt);
         }
+
+        entityToCell.erase(it);
     }
 
     std::vector<SpatialEntry> MeshBrushSpatialGrid::queryRadius(const glm::vec3& center, float radius) const

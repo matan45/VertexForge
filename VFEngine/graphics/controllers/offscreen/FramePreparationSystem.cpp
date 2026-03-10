@@ -218,21 +218,24 @@ namespace controllers::offscreen
         {
             if (rd.showBoundingBox) return false;
             if (!rd.lightmapPath.empty()) return false;
-            if (rd.maxDrawDistance > 0.0f) return false;
             if (registry.all_of<components::AnimatorComponent>(entity)) return false;
             return true;
         };
 
-        // Batch key: meshPath + defaultMaterialPath + submesh material fingerprint
+        // Batch key: meshPath + defaultMaterialPath + submesh material fingerprint + maxDrawDistance.
+        // maxDrawDistance is included because per-object distance override is stored in aabbMin.w of
+        // GPUObjectData, which is shared across all instances in the batch.
         struct BatchKey
         {
             std::string meshPath;
             std::string materialPath;
             size_t submeshMaterialHash;
+            float maxDrawDistance;
             bool operator==(const BatchKey& o) const
             {
                 return meshPath == o.meshPath && materialPath == o.materialPath
-                    && submeshMaterialHash == o.submeshMaterialHash;
+                    && submeshMaterialHash == o.submeshMaterialHash
+                    && maxDrawDistance == o.maxDrawDistance;
             }
         };
         struct BatchKeyHash
@@ -242,6 +245,7 @@ namespace controllers::offscreen
                 size_t h = std::hash<std::string>{}(k.meshPath);
                 h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
                 h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<float>{}(k.maxDrawDistance) + 0x9e3779b9 + (h << 6) + (h >> 2);
                 return h;
             }
         };
@@ -270,7 +274,8 @@ namespace controllers::offscreen
             if (canBatch(entity, renderData))
             {
                 BatchKey key{renderData.meshPath, renderData.defaultMaterialPath,
-                             hashSubmeshMaterials(renderData.submeshMaterials)};
+                             hashSubmeshMaterials(renderData.submeshMaterials),
+                             renderData.maxDrawDistance};
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())
                 {
@@ -533,12 +538,30 @@ namespace controllers::offscreen
 
     void FramePreparationSystem::prepareSceneData(const FrameContext& ctx)
     {
+        auto* renderHandler = ctx.renderHandler;
+
         // Mesh preparation first - mutates ECS (animator, BVH), initializes mesh pipeline
         prepareMeshes(ctx);
 
-        // Billboard and text: init pipelines + gather data sequentially
-        // (parallel submit/future overhead exceeds the cost of these lightweight gathers)
-        prepareBillboards(ctx);
-        prepareText(ctx);
+        // Pipeline init must happen on the main thread (Vulkan state)
+        renderHandler->initBillboardPipeline();
+        renderHandler->initTextPipeline();
+
+        bool billboardReady = renderHandler->isBillboardPipelineInitialized();
+        bool textReady = renderHandler->isTextPipelineInitialized();
+
+        // Gather billboard and text data in parallel (read-only ECS queries)
+        auto& jobs = threading::JobSystem::instance();
+
+        auto billboardFuture = jobs.submit([&]() -> std::vector<render::billboard::BillboardRenderData> {
+            return billboardReady ? gatherBillboardData(ctx) : std::vector<render::billboard::BillboardRenderData>{};
+        }, threading::JobPriority::HIGH);
+
+        auto textFuture = jobs.submit([&]() -> std::vector<render::text::TextRenderData> {
+            return textReady ? gatherTextData(ctx) : std::vector<render::text::TextRenderData>{};
+        }, threading::JobPriority::HIGH);
+
+        renderHandler->setBillboardDrawList(billboardFuture.get());
+        renderHandler->setTextDrawList(textFuture.get());
     }
 }

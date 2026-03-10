@@ -50,7 +50,8 @@ struct GPUObjectData {
     mat4 modelMatrix;
 
     vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
-    vec4 aabbMax;  // .w = instanceCount (uint encoded as float)
+    // IMPORTANT: aabbMax.w stores instanceCount as uint bits (use floatBitsToUint to read).
+    vec4 aabbMax;  // .w = instanceCount (uint via floatBitsToUint, 0 or 1 = non-instanced)
 
     uvec4 lod0Data;
     uvec4 lod1Data;

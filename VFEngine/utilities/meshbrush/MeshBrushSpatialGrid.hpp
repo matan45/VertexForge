@@ -36,6 +36,7 @@ namespace meshbrush
     private:
         float cellSize = 2.0f;
         std::unordered_map<glm::ivec2, std::vector<SpatialEntry>, IVec2Hash, IVec2Equal> cells;
+        std::unordered_map<uint64_t, glm::ivec2> entityToCell;
 
     public:
         MeshBrushSpatialGrid() = default;
