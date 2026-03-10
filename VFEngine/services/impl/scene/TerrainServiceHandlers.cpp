@@ -103,6 +103,12 @@ namespace services
                 return getTerrainHeightfield();
             });
 
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainHeightAtQuery>(
+            [this](const events::terrain::GetTerrainHeightAtQuery& q)
+            {
+                return getTerrainHeightAt(q.worldX, q.worldZ);
+            });
+
         dispatcher.registerCommandHandler<events::terrain::AddTerrainTileCommand>(
             [this](const events::terrain::AddTerrainTileCommand& cmd)
             {

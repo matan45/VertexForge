@@ -2,6 +2,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
@@ -221,7 +222,13 @@ namespace services
 
             candidatePos.x += jitterDist(rng) * currentParams.positionJitter * spacing;
             candidatePos.z += jitterDist(rng) * currentParams.positionJitter * spacing;
-            candidatePos.y = worldPos.y;
+
+            // Sample terrain height at this candidate's XZ position
+            events::terrain::GetTerrainHeightAtQuery heightQuery;
+            heightQuery.worldX = candidatePos.x;
+            heightQuery.worldZ = candidatePos.z;
+            auto heightResult = events::EventDispatcher::instance().query(heightQuery);
+            candidatePos.y = heightResult.valid ? heightResult.height : worldPos.y;
 
             if (spatialGrid.hasNeighborWithin(candidatePos, spacing))
             {
