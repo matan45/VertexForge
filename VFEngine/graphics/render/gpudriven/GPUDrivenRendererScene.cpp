@@ -496,18 +496,21 @@ namespace render::gpudriven
         {
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
         }
 
         if (transparentMeshShaderPipeline)
         {
             transparentMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             transparentMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            transparentMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
         }
 
         if (wboitMeshShaderPipeline)
         {
             wboitMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            wboitMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
         }
 
         if (meshShaderPipeline && hasMeshes)

@@ -86,6 +86,16 @@ namespace render::gpudriven
         vk::DeviceMemory objectStagingMemory;
         void* objectStagingMapped = nullptr;
 
+        // Instance transform buffer for hardware instancing
+        vk::Buffer instanceTransformBuffer;
+        vk::DeviceMemory instanceTransformBufferMemory;
+        vk::Buffer instanceStagingBuffer;
+        vk::DeviceMemory instanceStagingMemory;
+        void* instanceStagingMapped = nullptr;
+        std::vector<GPUInstanceTransform> cpuInstanceTransforms;
+        uint32_t maxInstanceCount = MAX_GPU_INSTANCES;
+        uint32_t currentInstanceCount = 0;
+
         std::vector<GPUObjectData> cpuObjectData;
 
         uint32_t maxVertexCount = 0;
@@ -136,11 +146,14 @@ namespace render::gpudriven
                            const ObjectResolvers& resolvers = {});
 
         void uploadObjects(vk::CommandBuffer cmd);
+        void uploadInstances(vk::CommandBuffer cmd);
 
         vk::Buffer getVertexBuffer() const { return vertexBuffer; }
         vk::Buffer getIndexBuffer() const { return indexBuffer; }
         vk::Buffer getObjectBuffer() const { return objectBuffer; }
+        vk::Buffer getInstanceTransformBuffer() const { return instanceTransformBuffer; }
         const std::vector<GPUObjectData>& getCPUObjectData() const { return cpuObjectData; }
+        uint32_t getInstanceCount() const { return currentInstanceCount; }
 
         uint32_t getTotalVertexCount() const { return totalVertexCount; }
         uint32_t getTotalIndexCount() const { return totalIndexCount; }

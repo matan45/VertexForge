@@ -247,6 +247,10 @@ namespace render::gpudriven
         if (hasMeshObjects)
         {
             mergedBuffer->uploadObjects(cmd);
+            if (mergedBuffer->getInstanceCount() > 0)
+            {
+                mergedBuffer->uploadInstances(cmd);
+            }
         }
 
         if (boneMatrixManager)

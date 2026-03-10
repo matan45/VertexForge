@@ -24,10 +24,10 @@ struct PerDrawData {
 
     uint baseVertexOffset;
     uint boneMatrixOffset;
-    uint boneCount;
+    uint instanceCount;     // Number of instances (1 = non-instanced)
     uint blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
 
-    uvec4 lightmapData; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+    uvec4 lightmapData; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=instanceOffset
 };
 
 // Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
@@ -50,7 +50,7 @@ struct GPUObjectData {
     mat4 modelMatrix;
 
     vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
-    vec4 aabbMax;  // .w unused (padding)
+    vec4 aabbMax;  // .w = instanceCount (uint encoded as float)
 
     uvec4 lod0Data;
     uvec4 lod1Data;

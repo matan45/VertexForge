@@ -107,6 +107,7 @@ namespace render::gpudriven
         void recreate(const MeshPipelineInitInfo& info);
 
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
+        void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);
 

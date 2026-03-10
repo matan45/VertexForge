@@ -270,31 +270,48 @@ namespace render::gpudriven
 
             if (!meshRender.instanceTransforms.empty())
             {
+                uint32_t instanceCount = static_cast<uint32_t>(meshRender.instanceTransforms.size());
+
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
 
-                    GPUObjectData templateObj;
-                    populateObjectData(templateObj, meshRender, submeshLoc, resolvers);
-                    bool isTransparent = (templateObj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT);
-
-                    for (const auto& instanceMatrix : meshRender.instanceTransforms)
+                    if (currentObjectCount >= maxObjectCount)
                     {
-                        if (currentObjectCount >= maxObjectCount)
-                        {
-                            vfLogWarning("MergedMeshBuffer: max object count reached");
-                            return;
-                        }
-
-                        GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                        obj = templateObj;
-                        std::memcpy(&obj.modelMatrix, &instanceMatrix, sizeof(glm::mat4));
-                        obj.entityId = currentObjectCount;
-
-                        if (isTransparent) transparentObjectCount++;
-                        currentObjectCount++;
+                        vfLogWarning("MergedMeshBuffer: max object count reached");
+                        return;
                     }
+
+                    // Check instance buffer capacity
+                    if (currentInstanceCount + instanceCount > maxInstanceCount)
+                    {
+                        vfLogWarning("MergedMeshBuffer: max instance count reached");
+                        return;
+                    }
+
+                    // Emit ONE GPUObjectData for the entire instance group
+                    GPUObjectData& obj = cpuObjectData[currentObjectCount];
+                    populateObjectData(obj, meshRender, submeshLoc, resolvers);
+                    obj.entityId = currentObjectCount;
+
+                    // Pack instancing data into existing fields
+                    uint32_t instCount = instanceCount;
+                    std::memcpy(&obj.aabbMax.w, &instCount, sizeof(uint32_t));
+                    obj.lightmapData.w = currentInstanceCount; // instanceOffset
+                    obj.flags |= ObjectFlags::Instanced;
+
+                    // Fill instance transform buffer
+                    for (uint32_t i = 0; i < instanceCount; ++i)
+                    {
+                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
+                            meshRender.instanceTransforms[i];
+                    }
+                    currentInstanceCount += instanceCount;
+
+                    bool isTransparent = (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT);
+                    if (isTransparent) transparentObjectCount++;
+                    currentObjectCount++;
                 }
                 continue;
             }
@@ -314,6 +331,11 @@ namespace render::gpudriven
                 populateObjectData(obj, meshRender, submeshLoc, resolvers);
                 obj.entityId = currentObjectCount;
 
+                // Non-instanced: instanceCount = 1, no instance buffer needed
+                uint32_t one = 1;
+                std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
+                obj.lightmapData.w = 0;
+
                 if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                     transparentObjectCount++;
 
@@ -327,8 +349,10 @@ namespace render::gpudriven
     {
         currentObjectCount = 0;
         transparentObjectCount = 0;
+        currentInstanceCount = 0;
 
-        // For small scenes, use the original sequential path (no overhead)
+        // Hardware instancing is handled by updateObjectsSequential for all scene sizes.
+        // The parallel path is used only for large scenes with many unique (non-instanced) objects.
         if (renderData.size() < PARALLEL_OBJECT_THRESHOLD)
         {
             updateObjectsSequential(renderData, resolvers);
@@ -336,8 +360,9 @@ namespace render::gpudriven
         }
 
         // ── Phase 1: Sequential pre-pass ──
-        // Pre-populate mutable caches, build work items, build instanced templates.
-        // Use persistent member vectors to avoid per-frame allocation.
+        // Pre-populate mutable caches, build work items, handle instanced groups.
+        // Instanced groups are processed here (sequential) because they write to
+        // the shared instance transform buffer with offsets.
         parallelWorkItems.clear();
         parallelTemplates.clear();
 
@@ -350,20 +375,35 @@ namespace render::gpudriven
 
             if (!meshRender.instanceTransforms.empty())
             {
+                // Hardware instancing: 1 GPUObjectData per submesh, N transforms in SSBO
+                uint32_t instanceCount = static_cast<uint32_t>(meshRender.instanceTransforms.size());
+
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
+                    if (currentObjectCount >= maxObjectCount) break;
+                    if (currentInstanceCount + instanceCount > maxInstanceCount) break;
 
-                    int32_t tmplIdx = static_cast<int32_t>(parallelTemplates.size());
-                    parallelTemplates.emplace_back();
-                    populateObjectData(parallelTemplates.back(), meshRender, submeshLoc, resolvers);
+                    GPUObjectData& obj = cpuObjectData[currentObjectCount];
+                    populateObjectData(obj, meshRender, submeshLoc, resolvers);
+                    obj.entityId = currentObjectCount;
 
-                    for (const auto& instanceMatrix : meshRender.instanceTransforms)
+                    uint32_t instCount = instanceCount;
+                    std::memcpy(&obj.aabbMax.w, &instCount, sizeof(uint32_t));
+                    obj.lightmapData.w = currentInstanceCount;
+                    obj.flags |= ObjectFlags::Instanced;
+
+                    for (uint32_t i = 0; i < instanceCount; ++i)
                     {
-                        if (parallelWorkItems.size() >= maxObjectCount) break;
-                        parallelWorkItems.push_back({&meshRender, &submeshLoc, &instanceMatrix, tmplIdx});
+                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
+                            meshRender.instanceTransforms[i];
                     }
+                    currentInstanceCount += instanceCount;
+
+                    if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
+                        transparentObjectCount++;
+                    currentObjectCount++;
                 }
             }
             else
@@ -372,7 +412,7 @@ namespace render::gpudriven
                 {
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
-                    if (parallelWorkItems.size() >= maxObjectCount) break;
+                    if (parallelWorkItems.size() + currentObjectCount >= maxObjectCount) break;
 
                     const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
                     std::string materialPath;
@@ -406,49 +446,43 @@ namespace render::gpudriven
                     parallelWorkItems.push_back({&meshRender, &submeshLoc, nullptr, -1});
                 }
             }
-
-            if (parallelWorkItems.size() >= maxObjectCount)
-            {
-                vfLogWarning("MergedMeshBuffer: max object count reached");
-                break;
-            }
         }
 
+        uint32_t nonInstancedStart = currentObjectCount;
         uint32_t totalWork = static_cast<uint32_t>(parallelWorkItems.size());
-        if (totalWork == 0) return;
 
-        // ── Phase 2: Parallel object data population ──
-        std::atomic<uint32_t> transparentCount{0};
+        if (totalWork > 0)
+        {
+            // ── Phase 2: Parallel object data population for non-instanced objects ──
+            std::atomic<uint32_t> transparentCount{0};
 
-        threading::JobSystem::instance().parallelFor(totalWork,
-            [&](uint32_t begin, uint32_t end)
-            {
-                for (uint32_t i = begin; i < end; ++i)
+            threading::JobSystem::instance().parallelFor(totalWork,
+                [&](uint32_t begin, uint32_t end)
                 {
-                    const auto& work = parallelWorkItems[i];
-                    GPUObjectData& obj = cpuObjectData[i];
+                    for (uint32_t i = begin; i < end; ++i)
+                    {
+                        const auto& work = parallelWorkItems[i];
+                        uint32_t objIdx = nonInstancedStart + i;
+                        GPUObjectData& obj = cpuObjectData[objIdx];
 
-                    if (work.templateIndex >= 0)
-                    {
-                        obj = parallelTemplates[work.templateIndex];
-                        std::memcpy(&obj.modelMatrix, work.instanceTransform, sizeof(glm::mat4));
-                    }
-                    else
-                    {
                         populateObjectData(obj, *work.meshRender, *work.submeshLoc, resolvers);
+                        obj.entityId = objIdx;
+
+                        // Non-instanced: instanceCount = 1
+                        uint32_t one = 1;
+                        std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
+                        obj.lightmapData.w = 0;
+
+                        if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
+                        {
+                            transparentCount.fetch_add(1, std::memory_order_relaxed);
+                        }
                     }
+                }, 256);
 
-                    obj.entityId = i;
-
-                    if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
-                    {
-                        transparentCount.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-            }, 256);
-
-        currentObjectCount = totalWork;
-        transparentObjectCount = transparentCount.load(std::memory_order_relaxed);
+            currentObjectCount += totalWork;
+            transparentObjectCount += transparentCount.load(std::memory_order_relaxed);
+        }
     }
 
 }

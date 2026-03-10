@@ -305,8 +305,11 @@ void main() {
     uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
     uint taskGroupCount = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
 
+    uint instanceCount = floatBitsToUint(obj.aabbMax.w);
+    if (instanceCount == 0u) instanceCount = 1u;
+
     drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
-    drawCommands[globalDrawIndex].groupCountY = 1u;
+    drawCommands[globalDrawIndex].groupCountY = instanceCount;
     drawCommands[globalDrawIndex].groupCountZ = 1u;
 
     perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
@@ -335,7 +338,7 @@ void main() {
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
     perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
-    perDrawData[globalDrawIndex].boneCount = 0u;
+    perDrawData[globalDrawIndex].instanceCount = instanceCount;
 
     // blendModeAndOpacity: bits 0-7 = blend mode, bits 8-15 = alpha cutoff, bits 16-31 = opacity
     uint blendMode = 0u;
@@ -347,5 +350,5 @@ void main() {
     uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
     perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);
 
-    perDrawData[globalDrawIndex].lightmapData = obj.lightmapData;
+    perDrawData[globalDrawIndex].lightmapData = obj.lightmapData;  // .w = instanceOffset
 }

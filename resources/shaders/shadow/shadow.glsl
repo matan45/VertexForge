@@ -22,8 +22,14 @@ layout(push_constant) uniform ShadowPushConstants {
     float normalBias;
 } pc;
 
+const uint FLAG_INSTANCED = (1u << 15u);
+
 layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
+};
+
+layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
+    mat4 instanceTransforms[];
 };
 
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
@@ -38,6 +44,7 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+    mat4 instanceModelMatrix;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -70,6 +77,15 @@ void main() {
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
     PerDrawData drawData = perDrawData[drawIndex];
 
+    uint instanceIndex = gl_WorkGroupID.y;
+    mat4 modelMatrix;
+    if ((drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u) {
+        uint instanceOffset = drawData.lightmapData.w;
+        modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
+    } else {
+        modelMatrix = drawData.modelMatrix;
+    }
+
     uint localMeshletIndex = gl_LocalInvocationID.x;
     uint workgroupMeshletBase = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
     uint meshletIndex = workgroupMeshletBase + localMeshletIndex;
@@ -99,7 +115,7 @@ void main() {
     if (isValidMeshlet) {
         uint globalMeshletIndex = drawData.meshletOffset + meshletIndex;
         GPUMeshlet meshlet = meshlets[globalMeshletIndex];
-        vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
+        vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, modelMatrix);
         isVisible = sphereInFrustum(worldSphere, sharedFrustumPlanes);
 
         // Shadow distance culling: cull objects beyond (categoryDist * multiplier)
@@ -137,6 +153,7 @@ void main() {
         uint visibleCount = min(sharedVisibleCount, MAX_MESHLETS_PER_PAYLOAD);
         payload.drawIndex = drawIndex;
         payload.meshletCount = visibleCount;
+        payload.instanceModelMatrix = modelMatrix;
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
@@ -171,6 +188,10 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
+layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
+    mat4 instanceTransforms[];
+};
+
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -197,6 +218,7 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+    mat4 instanceModelMatrix;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -227,7 +249,7 @@ void main() {
     unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
-    mat4 modelMatrix = drawData.modelMatrix;
+    mat4 modelMatrix = payload.instanceModelMatrix;
     mat4 mvp = pc.lightViewProjection * modelMatrix;
 
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;

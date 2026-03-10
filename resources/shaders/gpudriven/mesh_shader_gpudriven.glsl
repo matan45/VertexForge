@@ -52,6 +52,8 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+    mat4 instanceModelMatrix;
+    mat4 instanceNormalMatrix;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -91,8 +93,9 @@ void main() {
     unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
-    mat4 modelMatrix = drawData.modelMatrix;
-    mat3 normalMatrix = mat3(drawData.normalMatrix);
+    // Use instance-specific matrices from task shader payload
+    mat4 modelMatrix = payload.instanceModelMatrix;
+    mat3 normalMatrix = mat3(payload.instanceNormalMatrix);
     mat4 viewProjection = camera.projection * camera.view;
 
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;

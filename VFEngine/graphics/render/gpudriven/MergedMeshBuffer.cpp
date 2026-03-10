@@ -59,6 +59,7 @@ namespace render::gpudriven
         maxObjectCount = MAX_GPU_OBJECTS;
 
         cpuObjectData.resize(maxObjectCount);
+        cpuInstanceTransforms.resize(maxInstanceCount);
 
         vertexAllocator.reset(maxVertexCount);
         indexAllocator.reset(maxIndexCount);
@@ -110,10 +111,12 @@ namespace render::gpudriven
         allSubmeshLocations.clear();
         submeshKeyToIndex.clear();
         cpuObjectData.clear();
+        cpuInstanceTransforms.clear();
 
         totalVertexCount = 0;
         totalIndexCount = 0;
         currentObjectCount = 0;
+        currentInstanceCount = 0;
         initialized = false;
 
     }
@@ -168,11 +171,44 @@ namespace render::gpudriven
                 objectStagingMemory, 0, request.size, vk::MemoryMapFlags{}
             );
         }
+
+        // Instance transform buffer (device-local)
+        {
+            core::BufferInfoRequest request(logicalDevice, physicalDevice);
+            request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, instanceTransformBuffer, instanceTransformBufferMemory);
+        }
+
+        // Instance transform staging buffer (host-visible)
+        {
+            core::BufferInfoRequest request(logicalDevice, physicalDevice);
+            request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
+            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, instanceStagingBuffer, instanceStagingMemory);
+
+            instanceStagingMapped = logicalDevice.mapMemory(
+                instanceStagingMemory, 0, request.size, vk::MemoryMapFlags{}
+            );
+        }
     }
 
     void MergedMeshBuffer::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+
+        if (instanceStagingMapped)
+        {
+            logicalDevice.unmapMemory(instanceStagingMemory);
+            instanceStagingMapped = nullptr;
+        }
+
+        core::BufferUtilities::destroyBuffer(logicalDevice, instanceStagingBuffer, instanceStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, instanceTransformBuffer, instanceTransformBufferMemory);
 
         if (objectStagingMapped)
         {
@@ -219,6 +255,44 @@ namespace render::gpudriven
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            barrier,
+            {}
+        );
+    }
+
+    void MergedMeshBuffer::uploadInstances(vk::CommandBuffer cmd)
+    {
+        if (currentInstanceCount == 0) return;
+
+        if (currentInstanceCount > maxInstanceCount)
+        {
+            vfLogError("MergedMeshBuffer: instance count {} exceeds max {}", currentInstanceCount, maxInstanceCount);
+            return;
+        }
+
+        size_t copySize = currentInstanceCount * sizeof(GPUInstanceTransform);
+        std::memcpy(instanceStagingMapped, cpuInstanceTransforms.data(), copySize);
+
+        vk::BufferCopy copyRegion;
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = copySize;
+        cmd.copyBuffer(instanceStagingBuffer, instanceTransformBuffer, copyRegion);
+
+        vk::BufferMemoryBarrier barrier;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = instanceTransformBuffer;
+        barrier.offset = 0;
+        barrier.size = copySize;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eTaskShaderEXT | vk::PipelineStageFlagBits::eComputeShader,
             {},
             {},
             barrier,

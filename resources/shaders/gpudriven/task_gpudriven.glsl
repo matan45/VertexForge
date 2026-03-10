@@ -19,6 +19,10 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
+layout(std430, set = 1, binding = 1) readonly buffer InstanceTransformBuffer {
+    mat4 instanceTransforms[];
+};
+
 layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -45,6 +49,8 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+    mat4 instanceModelMatrix;
+    mat4 instanceNormalMatrix;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -82,9 +88,22 @@ bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCente
     return dotProduct < cone.w;
 }
 
+const uint FLAG_UNIFORM_SCALE = 1u << 9;
+const uint FLAG_INSTANCED     = 1u << 15;
+
 void main() {
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
     PerDrawData drawData = perDrawData[drawIndex];
+
+    // Determine the model matrix for this instance
+    uint instanceIndex = gl_WorkGroupID.y;
+    mat4 modelMatrix;
+    if ((drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u) {
+        uint instanceOffset = drawData.lightmapData.w;
+        modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
+    } else {
+        modelMatrix = drawData.modelMatrix;
+    }
 
     uint localMeshletIndex = gl_LocalInvocationID.x;
     uint workgroupMeshletBase = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
@@ -101,7 +120,7 @@ void main() {
     if (isValidMeshlet) {
         uint globalMeshletIndex = drawData.meshletOffset + meshletIndex;
         GPUMeshlet meshlet = meshlets[globalMeshletIndex];
-        vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
+        vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, modelMatrix);
 
         atomicAdd(stats.totalMeshlets, 1);
         isVisible = true;
@@ -115,7 +134,7 @@ void main() {
         }
 
         if (isVisible && (pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
-            bool backfaceVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+            bool backfaceVisible = coneCullTest(meshlet.cone, modelMatrix,
                                                 camera.cameraPos, worldSphere.xyz);
             if (!backfaceVisible) {
                 atomicAdd(stats.culledByBackface, 1);
@@ -142,6 +161,20 @@ void main() {
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
         }
+
+        // Pass instance-specific matrices to mesh shader via payload
+        payload.instanceModelMatrix = modelMatrix;
+
+        // Compute normal matrix
+        mat3 modelMat3 = mat3(modelMatrix);
+        mat3 normalMat3;
+        if ((drawData.flags & FLAG_UNIFORM_SCALE) != 0u) {
+            float scale = length(modelMat3[0]);
+            normalMat3 = modelMat3 * (1.0 / scale);
+        } else {
+            normalMat3 = transpose(inverse(modelMat3));
+        }
+        payload.instanceNormalMatrix = mat4(normalMat3);
 
         EmitMeshTasksEXT(visibleCount, 1, 1);
     }
