@@ -121,6 +121,9 @@ namespace core::physics
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
 
+        // Vegetation collider bodies per tile
+        std::unordered_map<TileCoordKey, std::vector<JPH::BodyID>> vegetationBodies;
+
         std::unordered_map<uint64_t, RagdollInstanceData> entityRagdolls;
         std::unordered_map<uint64_t, std::vector<JPH::BodyID>> entityBoneBodies;
         std::unordered_map<uint32_t, int> bodyToBoneIndex;
@@ -192,6 +195,14 @@ namespace core::physics
         void removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
         void removeAllTerrainBodies(uint64_t entityId);
         bool hasTerrainBodies(uint64_t entityId) const;
+
+        // Vegetation static capsule colliders per tile
+        void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                         const std::vector<JPH::BodyID>& bodyIds);
+        JPH::BodyID addStaticCapsule(const glm::vec3& position, float yRotation, float scale,
+                                      float radius, float height, uint8_t collisionLayer = 0);
+        void removeVegetationTileColliders(int32_t tileX, int32_t tileZ);
+        void removeAllVegetationColliders();
 
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);

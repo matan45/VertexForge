@@ -163,6 +163,12 @@ namespace services
                     return it->second->isEnabled();
                 return false;
             });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadAllTilesCommand>(
+            [this](const events::terrain::LoadAllTilesCommand& cmd)
+            {
+                loadAllTiles(cmd.terrainEntity);
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)
@@ -192,12 +198,6 @@ namespace services
             [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
             {
                 applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
-            });
-
-        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationPlacementBrushCommand>(
-            [this](const events::vegetationBrush::ApplyVegetationPlacementBrushCommand& cmd)
-            {
-                applyVegetationPlacementBrush(cmd.worldPosition, cmd.deltaTime);
             });
     }
 

@@ -41,6 +41,8 @@ namespace core
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) override;
 
+        std::vector<terrain::TerrainTile*> getAllLoadedTiles() override;
+
         bool hasActiveTerrain() const override;
 
         std::string getTerrainMaterialPath() const override;

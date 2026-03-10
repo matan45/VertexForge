@@ -230,9 +230,6 @@
     <ClInclude Include="impl\vegetation\GrassServiceImpl.hpp" />
     <ClInclude Include="impl\vegetation\VegetationBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\vegetation\VegetationBrushServiceImpl.hpp" />
-    <ClInclude Include="impl\vegetation\VegetationPhysicsIntegration.hpp" />
-    <ClInclude Include="impl\vegetation\VegetationPlacementModeServiceImpl.hpp" />
-    <ClInclude Include="impl\vegetation\VegetationServiceImpl.hpp" />
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
     <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
@@ -273,8 +270,6 @@
     <ClInclude Include="interfaces\vegetation\IGrassService.hpp" />
     <ClInclude Include="interfaces\vegetation\IVegetationBrushModeService.hpp" />
     <ClInclude Include="interfaces\vegetation\IVegetationBrushService.hpp" />
-    <ClInclude Include="interfaces\vegetation\IVegetationPlacementModeService.hpp" />
-    <ClInclude Include="interfaces\vegetation\IVegetationService.hpp" />
     <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
@@ -303,7 +298,6 @@
     <ClInclude Include="providers\terrain\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\terrain\IWaterRenderProvider.hpp" />
     <ClInclude Include="providers\vegetation\IGrassRenderProvider.hpp" />
-    <ClInclude Include="providers\vegetation\IVegetationProvider.hpp" />
     <ClInclude Include="providers\vegetation\IVegetationRenderProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXRuntimeProvider.hpp" />
@@ -383,9 +377,6 @@
     <ClCompile Include="impl\vegetation\GrassServiceImpl.cpp" />
     <ClCompile Include="impl\vegetation\VegetationBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\vegetation\VegetationBrushServiceImpl.cpp" />
-    <ClCompile Include="impl\vegetation\VegetationPhysicsIntegration.cpp" />
-    <ClCompile Include="impl\vegetation\VegetationPlacementModeServiceImpl.cpp" />
-    <ClCompile Include="impl\vegetation\VegetationServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />

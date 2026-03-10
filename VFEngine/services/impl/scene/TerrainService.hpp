@@ -76,6 +76,8 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<terrain::TerrainTile*> getAllLoadedTiles();
+
         std::vector<terrain::TerrainTile*> queryVisibleTiles(
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
@@ -91,7 +93,10 @@ namespace services
         void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
-        void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        void setPhysicsProvider(IPhysicsProvider* provider)
+        {
+            physicsProvider = provider;
+        }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
         void removeTerrainCollider(EntityHandle terrainEntity);
@@ -112,6 +117,7 @@ namespace services
         bool streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         void commitStreamingChanges(EntityHandle terrainEntity);
+        void loadAllTiles(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
@@ -155,7 +161,6 @@ namespace services
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
-        void applyVegetationPlacementBrush(const glm::vec3& worldPosition, float deltaTime);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
     };

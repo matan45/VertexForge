@@ -1,14 +1,11 @@
 #include "GPUDrivenRenderer.hpp"
+#include "print/Log.hpp"
 #include "../vegetation/GrassComputePipeline.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationGPUTypes.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
-#include "../vegetation/VegetationStreamManager.hpp"
-#include "../vegetation/VegetationCullLODPipeline.hpp"
-#include "../vegetation/VegetationMeshShaderPipeline.hpp"
-#include "../vegetation/ImposterPipeline.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
 #include "../../core/Device.hpp"
@@ -17,15 +14,7 @@
 #include "../../core/Utilities.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "vegetation/WindConfig.hpp"
-#include "vegetation/VegetationPlacementData.hpp"
-#include "resource/MeshStreamHandle.hpp"
-#include "resource/ResourceManager.hpp"
-#include "../material/MaterialTextureCache.hpp"
-#include "../material/MaterialPBRExtractor.hpp"
-#include "material/MaterialInstanceTypes.hpp"
 #include "BindlessTextureManager.hpp"
-#include "resource/AssetLifecycleManager.hpp"
-#include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -86,10 +75,6 @@ namespace render::gpudriven
         vegetation.grassStreamManager = std::make_unique<vegetation::GrassStreamManager>();
         vegetation.grassStreamManager->init(device, *vegetation.bufferManager);
 
-        // Vegetation (tree) stream manager
-        vegetation.vegetationStreamManager = std::make_unique<vegetation::VegetationStreamManager>();
-        vegetation.vegetationStreamManager->init(device, *vegetation.bufferManager);
-
         // Grass instance buffers - start with reasonable capacity
         // Can be resized later when more tiles are streamed
         constexpr uint32_t initialGrassCapacity = 1024 * 1024; // ~1M instances
@@ -111,8 +96,8 @@ namespace render::gpudriven
 
         vegetation.grassInitialized = true;
 
-        // --- Tree LOD pipeline (cull/LOD compute + mesh + imposter) ---
-        initTreeLODPipeline(iblDescriptorSetLayout, renderPass);
+        vegetation.cachedIBLLayout = iblDescriptorSetLayout;
+        vegetation.cachedRenderPass = renderPass;
 
         vfLogInfo("GPUDrivenRenderer: Vegetation subsystems initialized");
     }
@@ -125,690 +110,41 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::updateVegetationSpecies(uint32_t speciesId,
-                                                      const ::vegetation::VegetationSpeciesConfig& config)
-    {
-        auto& cached = vegetation.cachedSpecies[speciesId];
-
-        // Load imposter atlas if path changed
-        if (!config.imposterAtlasPath.empty() && config.imposterAtlasPath != cached.imposterAtlasPath)
-        {
-            // Unload old atlas if different
-            if (cached.hasImposter && !cached.imposterAtlasPath.empty())
-            {
-                unloadImposterAtlas(cached.imposterAtlasPath);
-            }
-
-            uint32_t bindlessIdx = loadImposterAtlas(config.imposterAtlasPath);
-            cached.bindlessTextureIndex = bindlessIdx;
-            cached.hasImposter = (bindlessIdx != 0 && bindlessIdx != 0xFFFFFFFF);
-        }
-        else if (config.imposterAtlasPath.empty() && cached.hasImposter)
-        {
-            // Atlas removed
-            if (!cached.imposterAtlasPath.empty())
-            {
-                unloadImposterAtlas(cached.imposterAtlasPath);
-            }
-            cached.bindlessTextureIndex = 0;
-            cached.hasImposter = false;
-        }
-
-        cached.imposterAtlasPath = config.imposterAtlasPath;
-
-        // Estimate billboard size from species scale
-        float avgScale = (config.minScale + config.maxScale) * 0.5f;
-        cached.billboardSize = glm::vec2(avgScale * 2.0f, avgScale * 4.0f);
-        cached.treeHeight = avgScale * 4.0f;
-        cached.treeWidth = avgScale * 2.0f;
-
-        // LOD distances from species config
-        cached.lod1Distance = config.lod1Distance;
-        cached.lod2Distance = config.lod2Distance;
-        cached.imposterDistance = config.imposterDistance;
-        cached.maxRenderDistance = config.maxRenderDistance;
-
-        // Update imposter atlas info from loaded texture
-        if (cached.hasImposter)
-        {
-            auto* impTex = getImposterTexture(config.imposterAtlasPath);
-            if (impTex)
-            {
-                cached.horizontalAngles = impTex->hAngles > 0 ? impTex->hAngles : 8;
-                cached.verticalAngles = impTex->vAngles > 0 ? impTex->vAngles : 1;
-                cached.atlasWidth = static_cast<float>(impTex->width);
-                cached.atlasHeight = static_cast<float>(impTex->height);
-                // Compute view resolution from atlas layout
-                uint32_t totalViews = cached.horizontalAngles * cached.verticalAngles;
-                uint32_t cols = impTex->atlasCols > 0 ? impTex->atlasCols
-                    : static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(totalViews))));
-                cached.viewResolution = cols > 0 ? impTex->width / cols : 256;
-            }
-        }
-
-        // Load/reload species mesh if path changed
-        if (!config.meshPath.empty() && config.meshPath != cached.meshPath)
-        {
-            loadSpeciesMesh(speciesId, config.meshPath);
-        }
-        else if (config.meshPath.empty() && cached.hasMesh)
-        {
-            unloadSpeciesMesh(speciesId);
-        }
-
-        // Load/reload species material if path changed
-        if (!config.materialPath.empty() && config.materialPath != cached.materialPath)
-        {
-            // Release old material from lifecycle manager
-            if (!cached.materialPath.empty())
-            {
-                resource::AssetLifecycleManager::instance().release(cached.materialPath);
-            }
-
-            // Acquire BEFORE registerMaterialTextures so isTracked() returns true
-            // when setting up texture dependencies
-            resource::AssetLifecycleManager::instance().acquire(
-                config.materialPath, resource::AssetType::Material);
-
-            if (registerMaterialTextures(config.materialPath))
-            {
-                // Extract albedo texture path from material
-                mesh::ExtractedPBRValues pbrValues;
-                if (material::isInstanceFile(config.materialPath))
-                {
-                    auto instData = resource::ResourceManager::loadMaterialInstance(config.materialPath);
-                    if (instData && !instData->parentMaterialPath.empty())
-                    {
-                        auto parentMat = resource::ResourceManager::loadMaterial(instData->parentMaterialPath);
-                        if (parentMat)
-                            pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instData, *parentMat);
-                    }
-                }
-                else
-                {
-                    auto matData = resource::ResourceManager::loadMaterial(config.materialPath);
-                    if (matData)
-                        pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
-                }
-
-                if (!pbrValues.albedoTexturePath.empty() && bindlessTextures)
-                {
-                    cached.materialTextureIndex = bindlessTextures->getTextureIndex(pbrValues.albedoTexturePath);
-                    cached.hasMaterial = (cached.materialTextureIndex != 0 && cached.materialTextureIndex != 0xFFFFFFFF);
-                }
-                cached.materialPath = config.materialPath;
-                vegetation.speciesRenderInfoDirty = true;
-            }
-            else
-            {
-                // Registration failed, release the acquire
-                resource::AssetLifecycleManager::instance().release(config.materialPath);
-            }
-        }
-        else if (config.materialPath.empty() && cached.hasMaterial)
-        {
-            // Release material from lifecycle manager
-            if (!cached.materialPath.empty())
-            {
-                resource::AssetLifecycleManager::instance().release(cached.materialPath);
-            }
-            cached.materialTextureIndex = 0;
-            cached.hasMaterial = false;
-            cached.materialPath.clear();
-            vegetation.speciesRenderInfoDirty = true;
-        }
-
-        vegetation.imposterConfigDirty = true;
-    }
-
-    void GPUDrivenRenderer::removeVegetationSpecies(uint32_t speciesId)
-    {
-        auto it = vegetation.cachedSpecies.find(speciesId);
-        if (it != vegetation.cachedSpecies.end())
-        {
-            // Release material from lifecycle manager
-            if (!it->second.materialPath.empty())
-            {
-                resource::AssetLifecycleManager::instance().release(it->second.materialPath);
-            }
-            if (it->second.hasImposter && !it->second.imposterAtlasPath.empty())
-            {
-                unloadImposterAtlas(it->second.imposterAtlasPath);
-            }
-            if (it->second.hasMesh)
-            {
-                unloadSpeciesMesh(speciesId);
-            }
-            vegetation.cachedSpecies.erase(it);
-            vegetation.imposterConfigDirty = true;
-            vegetation.speciesRenderInfoDirty = true;
-        }
-    }
-
-    void GPUDrivenRenderer::clearAllVegetationSpecies()
-    {
-        // Clear cached tile pointers to prevent dangling pointer access
-        // if terrain is deleted while vegetation species are being cleared
-        vegetation.cachedVisibleTiles.clear();
-        vegetation.currentTreeInstanceCount = 0;
-
-        for (auto& [id, cached] : vegetation.cachedSpecies)
-        {
-            // Release material from lifecycle manager
-            if (!cached.materialPath.empty())
-            {
-                resource::AssetLifecycleManager::instance().release(cached.materialPath);
-            }
-            if (cached.hasImposter && !cached.imposterAtlasPath.empty())
-            {
-                unloadImposterAtlas(cached.imposterAtlasPath);
-            }
-            if (cached.hasMesh && meshletBuffer)
-            {
-                meshletBuffer->freeAllMeshlets(cached.meshPath);
-            }
-        }
-        vegetation.cachedSpecies.clear();
-        vegetation.imposterConfigDirty = true;
-        vegetation.speciesRenderInfoDirty = true;
-    }
-
-    void GPUDrivenRenderer::loadSpeciesMesh(uint32_t speciesId, const std::string& meshPath)
-    {
-        auto it = vegetation.cachedSpecies.find(speciesId);
-        if (it == vegetation.cachedSpecies.end()) return;
-        auto& cached = it->second;
-
-        if (cached.meshPath == meshPath && cached.hasMesh) return; // Already loaded
-
-        // Unload previous mesh if any
-        if (cached.hasMesh && !cached.meshPath.empty())
-        {
-            unloadSpeciesMesh(speciesId);
-        }
-
-        if (meshPath.empty()) return;
-
-        // Open the .vfMesh stream
-        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
-        if (!streamHandle)
-        {
-            vfLogError("GPUDrivenRenderer: Failed to open vegetation mesh: {}", meshPath);
-            return;
-        }
-
-        const auto& header = streamHandle->getHeader();
-        if (header.numSubmeshes == 0)
-        {
-            vfLogError("GPUDrivenRenderer: Vegetation mesh has no submeshes: {}", meshPath);
-            return;
-        }
-
-        // Use the first submesh (primary tree geometry)
-        const auto& submesh = header.submeshes[0];
-
-        // Reserve meshlets in the shared meshlet buffer
-        if (meshletBuffer && streamHandle->hasMeshletData())
-        {
-            auto* alloc = meshletBuffer->reserveMeshlets(meshPath, header);
-            if (!alloc)
-            {
-                vfLogError("GPUDrivenRenderer: Failed to reserve meshlets for vegetation mesh: {}", meshPath);
-                return;
-            }
-
-            // Read and upload meshlet data
-            resource::SubmeshMeshletData meshletData;
-            if (streamHandle->readMeshletData(0, meshletData))
-            {
-                // Upload vertex data to merged buffer first, to get base vertex offset
-                uint32_t baseVertexOffset = 0;
-
-                // Reserve space in merged mesh buffer
-                if (mergedBuffer)
-                {
-                    mergedBuffer->reserveMesh(meshPath, header);
-                }
-
-                // Upload each LOD's vertex/index data and meshlet data
-                for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                {
-                    const auto& lodInfo = submesh.lods[lod];
-                    if (lodInfo.vertexCount == 0) continue;
-
-                    // Read vertex/index data for this LOD
-                    std::vector<resource::Vertex> vertices;
-                    std::vector<uint32_t> indices;
-                    if (!streamHandle->readLODLevel(0, lod, vertices, indices))
-                    {
-                        continue;
-                    }
-
-                    // Upload vertex/index to merged buffer
-                    if (mergedBuffer)
-                    {
-                        gpudriven::LODUploadData uploadData;
-                        uploadData.vertexData = vertices.data();
-                        uploadData.vertexCount = static_cast<uint32_t>(vertices.size());
-                        uploadData.indexData = indices.data();
-                        uploadData.indexCount = static_cast<uint32_t>(indices.size());
-                        mergedBuffer->uploadLOD(meshPath, submesh.name, 0, lod, uploadData);
-                        mergedBuffer->markLODReady(meshPath, submesh.name, 0, lod);
-
-                        // Get the base vertex offset from the first LOD
-                        if (lod == 0)
-                        {
-                            auto* submeshLoc = mergedBuffer->getSubmeshLocation(meshPath, submesh.name, 0);
-                            if (submeshLoc && submeshLoc->lods[0].vertexCount > 0)
-                            {
-                                baseVertexOffset = submeshLoc->lods[0].vertexOffset;
-                            }
-                        }
-                    }
-
-                    // Upload meshlet data for this LOD
-                    const auto& lodMeshletInfo = meshletData.lodLevels[lod];
-                    if (lodMeshletInfo.meshletCount > 0)
-                    {
-                        meshletBuffer->uploadMeshletData(
-                            meshPath, submesh.name, 0, lod, meshletData, baseVertexOffset);
-                    }
-                }
-
-                // Flush transfers
-                if (meshletBuffer) meshletBuffer->flushPendingTransfers();
-                if (mergedBuffer) mergedBuffer->flushPendingTransfers();
-
-                // Record per-LOD meshlet offsets in cached species data
-                const auto* meshletAlloc = meshletBuffer->getAllocation(meshPath, submesh.name, 0);
-                if (meshletAlloc)
-                {
-                    cached.hasMesh = true;
-                    cached.meshPath = meshPath;
-                    cached.baseVertexOffset = baseVertexOffset;
-                    cached.availableLODMask = 0;
-
-                    for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                    {
-                        const auto& lodAlloc = meshletAlloc->lods[lod];
-                        if (lodAlloc.isAllocated && lodAlloc.meshletCount > 0)
-                        {
-                            cached.meshletOffset[lod] = lodAlloc.meshletOffset;
-                            cached.meshletCount[lod] = lodAlloc.meshletCount;
-                            cached.availableLODMask |= (1u << lod);
-                        }
-                        else
-                        {
-                            cached.meshletOffset[lod] = 0;
-                            cached.meshletCount[lod] = 0;
-                        }
-                    }
-
-                    vegetation.speciesRenderInfoDirty = true;
-                    vfLogInfo("GPUDrivenRenderer: Loaded vegetation mesh '{}' for species {} "
-                              "(LOD mask: 0x{:X}, meshlets: {}/{}/{}/{})",
-                              meshPath, speciesId, cached.availableLODMask,
-                              cached.meshletCount[0], cached.meshletCount[1],
-                              cached.meshletCount[2], cached.meshletCount[3]);
-                }
-            }
-            else
-            {
-                vfLogError("GPUDrivenRenderer: Failed to read meshlet data for: {}", meshPath);
-            }
-        }
-        else
-        {
-            vfLogWarning("GPUDrivenRenderer: No meshlet buffer or mesh has no meshlet data: {}", meshPath);
-        }
-    }
-
-    void GPUDrivenRenderer::unloadSpeciesMesh(uint32_t speciesId)
-    {
-        auto it = vegetation.cachedSpecies.find(speciesId);
-        if (it == vegetation.cachedSpecies.end()) return;
-        auto& cached = it->second;
-
-        if (!cached.hasMesh || cached.meshPath.empty()) return;
-
-        // Free meshlet allocations
-        if (meshletBuffer)
-        {
-            meshletBuffer->freeAllMeshlets(cached.meshPath);
-        }
-
-        // Release mesh from merged buffer
-        if (mergedBuffer)
-        {
-            // The releaseMeshAsset method handles this
-            releaseMeshAsset(cached.meshPath);
-        }
-
-        cached.hasMesh = false;
-        cached.meshPath.clear();
-        cached.baseVertexOffset = 0;
-        cached.availableLODMask = 0;
-        for (uint32_t i = 0; i < 4; ++i)
-        {
-            cached.meshletOffset[i] = 0;
-            cached.meshletCount[i] = 0;
-        }
-
-        vegetation.speciesRenderInfoDirty = true;
-    }
-
-    void GPUDrivenRenderer::uploadSpeciesRenderInfo()
-    {
-        if (!vegetation.treeLODInitialized) return;
-
-        std::vector<vegetation::SpeciesRenderInfoGPU> infos(vegetation::MAX_SPECIES);
-
-        for (const auto& [speciesId, cached] : vegetation.cachedSpecies)
-        {
-            if (speciesId >= vegetation::MAX_SPECIES) continue;
-
-            auto& info = infos[speciesId];
-            for (uint32_t lod = 0; lod < 4; ++lod)
-            {
-                info.meshletOffset[lod] = cached.meshletOffset[lod];
-                info.meshletCount[lod] = cached.meshletCount[lod];
-            }
-            info.baseVertexOffset = cached.baseVertexOffset;
-            info.materialTextureIndex = cached.materialTextureIndex;
-        }
-
-        // Direct write to host-visible buffer
-        vk::Device vkDevice = device.getLogicalDevice();
-        vk::DeviceSize dataSize = infos.size() * sizeof(vegetation::SpeciesRenderInfoGPU);
-
-        void* mapped = vkDevice.mapMemory(vegetation.speciesRenderInfoBufferMemory, 0, dataSize);
-        std::memcpy(mapped, infos.data(), dataSize);
-        vkDevice.unmapMemory(vegetation.speciesRenderInfoBufferMemory);
-
-        vegetation.speciesRenderInfoDirty = false;
-    }
-
-    void GPUDrivenRenderer::createTreeLODBuffers(uint32_t maxInstances)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        auto createStorageBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory,
-                                        vk::BufferUsageFlags extraUsage = {})
-        {
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = size;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | extraUsage;
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, buffer, memory);
-        };
-
-        // Tree instance buffer (device-local)
-        vk::DeviceSize instanceSize = maxInstances * sizeof(vegetation::TreeInstanceGPU);
-        createStorageBuffer(instanceSize, vegetation.treeInstanceBuffer, vegetation.treeInstanceBufferMemory);
-
-        // Instance count buffer (single uint32_t)
-        createStorageBuffer(sizeof(uint32_t), vegetation.treeInstanceCountBuffer, vegetation.treeInstanceCountBufferMemory);
-
-        // Visible LOD output buffers (VisibleInstance = 8 bytes each)
-        vk::DeviceSize visibleSize = maxInstances * 8; // sizeof(VisibleInstance) = 2 * uint32_t
-        createStorageBuffer(visibleSize, vegetation.visibleLOD0Buffer, vegetation.visibleLOD0BufferMemory);
-        createStorageBuffer(visibleSize, vegetation.visibleLOD1Buffer, vegetation.visibleLOD1BufferMemory);
-        createStorageBuffer(visibleSize, vegetation.visibleLOD2Buffer, vegetation.visibleLOD2BufferMemory);
-
-        // LOD counters buffer (3 x 16 bytes for alignment: lod0Count@0, lod1Count@16, lod2Count@32)
-        createStorageBuffer(3 * 16, vegetation.lodCountersBuffer, vegetation.lodCountersBufferMemory);
-
-        // Zero-initialize the LOD counters buffer to prevent reading stale GPU memory
-        {
-            auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
-            cmd->fillBuffer(vegetation.lodCountersBuffer, 0, 3 * 16, 0);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-        }
-
-        // Imposter config buffer (per-species) - host-visible for easy updates
-        auto createHostVisibleStorageBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory)
-        {
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = size;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, buffer, memory);
-        };
-
-        vk::DeviceSize imposterConfigSize = vegetation::MAX_SPECIES * sizeof(vegetation::ImposterConfigGPU);
-        createHostVisibleStorageBuffer(imposterConfigSize, vegetation.imposterConfigBuffer, vegetation.imposterConfigBufferMemory);
-
-        // Species render info buffer (per-species meshlet lookup) - host-visible for easy updates
-        vk::DeviceSize speciesInfoSize = vegetation::MAX_SPECIES * sizeof(vegetation::SpeciesRenderInfoGPU);
-        createHostVisibleStorageBuffer(speciesInfoSize, vegetation.speciesRenderInfoBuffer, vegetation.speciesRenderInfoBufferMemory);
-
-        // Staging buffer for tree instances (host-visible, persistently mapped)
-        {
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = instanceSize;
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, vegetation.treeInstanceStagingBuffer, vegetation.treeInstanceStagingMemory);
-            vegetation.treeInstanceStagingMapped = vkDevice.mapMemory(vegetation.treeInstanceStagingMemory, 0, instanceSize);
-        }
-
-        vegetation.treeInstanceCapacity = maxInstances;
-    }
-
-    void GPUDrivenRenderer::initTreeLODPipeline(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                   vk::RenderPass renderPass)
-    {
-        constexpr uint32_t initialTreeCapacity = vegetation::MAX_TREE_INSTANCES;
-        createTreeLODBuffers(initialTreeCapacity);
-
-        // Cull/LOD compute pipeline
-        vegetation.cullLODPipeline = std::make_unique<vegetation::VegetationCullLODPipeline>();
-        vegetation.cullLODPipeline->init(device);
-
-        // Update cull/LOD descriptors
-        vegetation.cullLODPipeline->updateDescriptors(
-            vegetation.treeInstanceBuffer,
-            vegetation.treeInstanceCountBuffer,
-            vegetation.visibleLOD0Buffer,
-            vegetation.visibleLOD1Buffer,
-            vegetation.visibleLOD2Buffer,
-            vegetation.lodCountersBuffer
-        );
-
-        // Bind camera buffer
-        if (cameraBuffer)
-        {
-            vegetation.cullLODPipeline->updateCameraDescriptor(cameraBuffer->getBuffer());
-        }
-
-        // Imposter pipeline (LOD2 billboard rendering)
-        vegetation.imposterPipeline = std::make_unique<vegetation::ImposterPipeline>();
-        vegetation.imposterPipeline->init(
-            device,
-            iblDescriptorSetLayout,
-            bindlessTextures->getDescriptorSetLayout(),
-            renderPass
-        );
-
-        // Update imposter instance descriptors (imposterCount at offset 16 = 2nd 16-byte slot)
-        vegetation.imposterPipeline->updateInstanceDescriptors(
-            vegetation.visibleLOD1Buffer,   // reused as imposter visible buffer
-            vegetation.lodCountersBuffer,
-            vegetation.treeInstanceBuffer,
-            16  // imposterCount offset (2nd slot at 16-byte alignment)
-        );
-
-        // Update imposter config descriptor
-        vegetation.imposterPipeline->updateImposterConfigDescriptor(vegetation.imposterConfigBuffer);
-
-        // Vegetation mesh shader pipeline (LOD0/LOD1) - needs meshlet data from shared buffers
-        if (meshShaderPipeline)
-        {
-            vegetation.vegMeshPipeline = std::make_unique<vegetation::VegetationMeshShaderPipeline>();
-            vegetation.vegMeshPipeline->init(
-                device,
-                iblDescriptorSetLayout,
-                vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
-                meshShaderPipeline->getMeshletDataLayout(),
-                meshShaderPipeline->getVertexDataLayout(),
-                bindlessTextures->getDescriptorSetLayout(),
-                renderPass
-            );
-
-            // Update mesh instance descriptors (meshCount at offset 0) + species render info
-            vegetation.vegMeshPipeline->updateInstanceDescriptors(
-                vegetation.visibleLOD0Buffer,   // reused as combined mesh visible buffer
-                vegetation.lodCountersBuffer,
-                vegetation.treeInstanceBuffer,
-                0,  // meshCount offset
-                vegetation.speciesRenderInfoBuffer
-            );
-        }
-
-        vegetation.treeLODInitialized = true;
-        vegetation.cachedIBLLayout = iblDescriptorSetLayout;
-        vegetation.cachedRenderPass = renderPass;
-
-        vfLogInfo("GPUDrivenRenderer: Tree LOD pipeline initialized (cull/LOD + imposter + mesh)");
-    }
-
-    void GPUDrivenRenderer::uploadImposterConfigs()
-    {
-        if (!vegetation.treeLODInitialized) return;
-
-        // Build GPU imposter config array indexed by speciesId
-        std::vector<vegetation::ImposterConfigGPU> configs(vegetation::MAX_SPECIES);
-
-        for (const auto& [speciesId, cached] : vegetation.cachedSpecies)
-        {
-            if (speciesId >= vegetation::MAX_SPECIES) continue;
-
-            auto& config = configs[speciesId];
-            config.atlasTextureIndex = cached.hasImposter ? cached.bindlessTextureIndex : 0;
-            config.horizontalAngles = cached.horizontalAngles;
-            config.verticalAngles = cached.verticalAngles;
-            config.viewResolution = cached.viewResolution;
-            config.atlasWidth = cached.atlasWidth;
-            config.atlasHeight = cached.atlasHeight;
-            config.treeHeight = cached.treeHeight;
-            config.treeWidth = cached.treeWidth;
-        }
-
-        // Direct write to host-visible buffer
-        vk::Device vkDevice = device.getLogicalDevice();
-        vk::DeviceSize dataSize = configs.size() * sizeof(vegetation::ImposterConfigGPU);
-
-        void* mapped = vkDevice.mapMemory(vegetation.imposterConfigBufferMemory, 0, dataSize);
-        std::memcpy(mapped, configs.data(), dataSize);
-        vkDevice.unmapMemory(vegetation.imposterConfigBufferMemory);
-
-        vegetation.imposterConfigDirty = false;
-    }
-
-    void GPUDrivenRenderer::dispatchVegetationCullLOD(vk::CommandBuffer cmd)
-    {
-        if (!vegetation.treeLODInitialized || vegetation.currentTreeInstanceCount == 0) return;
-        if (!vegetation.cullLODPipeline || !vegetation.cullLODPipeline->isInitialized()) return;
-
-        // Reset LOD counters to 0
-        cmd.fillBuffer(vegetation.lodCountersBuffer, 0, 3 * 16, 0);
-
-        vk::MemoryBarrier fillBarrier(
-            vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite);
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eComputeShader,
-            vk::DependencyFlags{},
-            1, &fillBarrier, 0, nullptr, 0, nullptr);
-
-        // Dispatch cull/LOD compute
-        vegetation.cullLODPipeline->dispatch(cmd, vegetation.currentTreeInstanceCount);
-
-        // Barrier: compute writes → task/mesh shader reads
-        vk::MemoryBarrier computeBarrier(
-            vk::AccessFlagBits::eShaderWrite,
-            vk::AccessFlagBits::eShaderRead);
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eComputeShader,
-            vk::PipelineStageFlagBits::eTaskShaderEXT | vk::PipelineStageFlagBits::eMeshShaderEXT,
-            vk::DependencyFlags{},
-            1, &computeBarrier, 0, nullptr, 0, nullptr);
-    }
-
-    void GPUDrivenRenderer::renderVegetationDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                                    uint32_t screenWidth, uint32_t screenHeight)
-    {
-        if (!vegetation.treeLODInitialized || !vegetation.vegetationRenderingEnabled) return;
-        if (vegetation.currentTreeInstanceCount == 0) return;
-
-        // Render LOD2 (imposters) via ImposterPipeline
-        if (vegetation.imposterPipeline && vegetation.imposterPipeline->isInitialized())
-        {
-            vegetation.imposterPipeline->updateSharedDescriptors(
-                iblDescriptorSet,
-                bindlessTextures->getDescriptorSet()
-            );
-
-            // Use currentTreeInstanceCount as upper bound for visible LOD2
-            // (actual count is in lodCountersBuffer on GPU)
-            vegetation.imposterPipeline->dispatch(cmd, vegetation.currentTreeInstanceCount);
-        }
-
-        // Render LOD0/LOD1 via VegetationMeshShaderPipeline
-        // (Currently placeholder - will render actual meshlets when species mesh loading is implemented)
-        if (vegetation.vegMeshPipeline && vegetation.vegMeshPipeline->isInitialized() && meshShaderPipeline)
-        {
-            vegetation.vegMeshPipeline->updateSharedDescriptors(
-                iblDescriptorSet,
-                vegetation.windSystem ? vegetation.windSystem->getDescriptorSet() : vk::DescriptorSet{},
-                meshShaderPipeline->getMeshletDataDescriptorSet(),
-                meshShaderPipeline->getVertexDataDescriptorSet(),
-                bindlessTextures->getDescriptorSet()
-            );
-
-            vegetation.vegMeshPipeline->dispatch(cmd, vegetation.currentTreeInstanceCount);
-        }
-    }
-
     void GPUDrivenRenderer::updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                                       const std::vector<terrain::TerrainTile*>& allLoadedTiles,
                                                        const glm::vec3& cameraPosition)
     {
         if (!initialized || !vegetation.grassInitialized) return;
 
-        // Cache visible tiles for grass compute dispatch later in the frame
-        vegetation.cachedVisibleTiles.assign(visibleTiles.begin(), visibleTiles.end());
+        // Cache ALL loaded tiles for grass compute dispatch later in the frame
+        // Using allLoadedTiles instead of visibleTiles prevents grass from disappearing
+        // when tiles leave the camera frustum or stream out and back in
+        vegetation.cachedVisibleTiles.assign(allLoadedTiles.begin(), allLoadedTiles.end());
 
         // Sync tile size from actual terrain config (may differ from default 32)
-        if (!visibleTiles.empty() && visibleTiles[0])
+        if (!allLoadedTiles.empty() && allLoadedTiles[0])
         {
-            float actualTileSize = visibleTiles[0]->config.worldTileSize;
+            float actualTileSize = allLoadedTiles[0]->config.worldTileSize;
             if (vegetation.grassStreamManager)
             {
                 auto cfg = vegetation.grassStreamManager->getConfig();
                 cfg.worldTileSize = actualTileSize;
                 vegetation.grassStreamManager->setConfig(cfg);
             }
-            if (vegetation.vegetationStreamManager)
-            {
-                auto cfg = vegetation.vegetationStreamManager->getConfig();
-                cfg.worldTileSize = actualTileSize;
-                vegetation.vegetationStreamManager->setConfig(cfg);
-            }
         }
 
-        // Sync vegetation tiles with visible terrain tiles.
-        // Auto-register tiles that appear and auto-remove tiles that disappear.
-        std::unordered_set<uint64_t> currentlyVisible;
+        // Sync vegetation tiles with all loaded terrain tiles.
+        // Auto-register tiles that appear and auto-remove tiles that stream out.
+        std::unordered_set<uint64_t> currentlyLoaded;
 
-        for (const auto* tile : visibleTiles)
+        for (const auto* tile : allLoadedTiles)
         {
             if (!tile) continue;
 
             int32_t cx = tile->coord.x;
             int32_t cz = tile->coord.z;
             uint64_t key = makeTileKey(cx, cz);
-            currentlyVisible.insert(key);
+            currentlyLoaded.insert(key);
 
             // Register new tiles with stream managers
             if (!vegetation.registeredTileKeys.contains(key))
@@ -819,18 +155,14 @@ namespace render::gpudriven
                 {
                     vegetation.grassStreamManager->addTile(cx, cz);
                 }
-                if (vegetation.vegetationStreamManager)
-                {
-                    vegetation.vegetationStreamManager->addTile(cx, cz);
-                }
             }
         }
 
-        // Remove tiles that are no longer visible
+        // Remove tiles that are no longer loaded (streamed out)
         auto it = vegetation.registeredTileKeys.begin();
         while (it != vegetation.registeredTileKeys.end())
         {
-            if (!currentlyVisible.contains(*it))
+            if (!currentlyLoaded.contains(*it))
             {
                 uint64_t key = *it;
                 int32_t cx = static_cast<int32_t>(key >> 32);
@@ -839,10 +171,6 @@ namespace render::gpudriven
                 if (vegetation.grassStreamManager)
                 {
                     vegetation.grassStreamManager->removeTile(cx, cz);
-                }
-                if (vegetation.vegetationStreamManager)
-                {
-                    vegetation.vegetationStreamManager->removeTile(cx, cz);
                 }
 
                 it = vegetation.registeredTileKeys.erase(it);
@@ -858,131 +186,6 @@ namespace render::gpudriven
         {
             vegetation.grassStreamManager->update(cameraPosition);
         }
-        if (vegetation.vegetationStreamManager)
-        {
-            vegetation.vegetationStreamManager->update(cameraPosition);
-        }
-
-        // Build TreeInstanceGPU array from placement data for the LOD pipeline
-        if (vegetation.treeLODInitialized)
-        {
-            std::vector<vegetation::TreeInstanceGPU> treeInstances;
-            treeInstances.reserve(4096);
-
-            uint32_t totalPlacementInstances = 0;
-            uint32_t speciesMissCount = 0;
-
-            for (const auto* tile : visibleTiles)
-            {
-                if (!tile) continue;
-                if (tile->vegetationPlacement.getInstanceCount() == 0) continue;
-                totalPlacementInstances += static_cast<uint32_t>(tile->vegetationPlacement.getInstanceCount());
-
-                for (const auto& instance : tile->vegetationPlacement.getInstances())
-                {
-                    auto speciesIt = vegetation.cachedSpecies.find(instance.speciesId);
-                    // Fallback: if speciesId 0 (unset default) and only one species cached, use it
-                    if (speciesIt == vegetation.cachedSpecies.end() && instance.speciesId == 0
-                        && vegetation.cachedSpecies.size() == 1)
-                    {
-                        speciesIt = vegetation.cachedSpecies.begin();
-                    }
-                    if (speciesIt == vegetation.cachedSpecies.end())
-                    {
-                        ++speciesMissCount;
-                        continue;
-                    }
-
-                    const auto& species = speciesIt->second;
-
-                    vegetation::TreeInstanceGPU gpu{};
-
-                    // Build model matrix from position, rotation, scale
-                    float finalScale = instance.scale;
-                    glm::mat4 model = glm::translate(glm::mat4(1.0f), instance.position);
-                    model = glm::rotate(model, instance.rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-                    model = glm::scale(model, glm::vec3(finalScale));
-                    gpu.modelMatrix = model;
-
-                    // Bounding sphere centered at instance position, radius based on tree size
-                    float maxDim = std::max(species.treeWidth, species.treeHeight) * instance.scale;
-                    gpu.boundingSphere = glm::vec4(instance.position + glm::vec3(0, maxDim * 0.5f, 0), maxDim * 0.5f);
-
-                    gpu.speciesId = speciesIt->first;
-
-                    // LOD mask: bits 0-2=mesh LODs, bit 3=imposter
-                    gpu.lodMask = 0;
-
-                    // Set mesh LOD bits from loaded mesh data
-                    if (species.hasMesh)
-                    {
-                        if (species.availableLODMask & 0x1u) gpu.lodMask |= (1u << 0);
-                        if (species.availableLODMask & 0x2u) gpu.lodMask |= (1u << 1);
-                        if (species.availableLODMask & 0x4u) gpu.lodMask |= (1u << 2);
-                    }
-                    if (species.hasImposter) gpu.lodMask |= (1u << 3); // bit 3 = imposter
-
-                    // Set LOD transition distances from species config
-                    gpu.lodDistances[0] = species.lod1Distance;        // LOD0→LOD1
-                    gpu.lodDistances[1] = species.lod2Distance;        // LOD1→LOD2
-                    gpu.lodDistances[2] = species.imposterDistance;     // LOD2→imposter
-                    gpu.lodDistances[3] = species.maxRenderDistance;    // max render
-
-                    treeInstances.push_back(gpu);
-
-                    if (treeInstances.size() >= vegetation.treeInstanceCapacity) break;
-                }
-                if (treeInstances.size() >= vegetation.treeInstanceCapacity) break;
-            }
-
-            vegetation.currentTreeInstanceCount = static_cast<uint32_t>(treeInstances.size());
-
-            // Upload tree instances to staging buffer
-            if (vegetation.currentTreeInstanceCount > 0 && vegetation.treeInstanceStagingMapped)
-            {
-                vk::DeviceSize dataSize = vegetation.currentTreeInstanceCount * sizeof(vegetation::TreeInstanceGPU);
-                std::memcpy(vegetation.treeInstanceStagingMapped, treeInstances.data(), dataSize);
-
-                // Also upload instance count
-                // (count will be uploaded via fillBuffer in the compute dispatch)
-            }
-
-            // Upload imposter configs if dirty
-            if (vegetation.imposterConfigDirty)
-            {
-                uploadImposterConfigs();
-            }
-
-            // Upload species render info if dirty
-            if (vegetation.speciesRenderInfoDirty)
-            {
-                uploadSpeciesRenderInfo();
-            }
-        }
-    }
-
-    void GPUDrivenRenderer::uploadTreeInstances(vk::CommandBuffer cmd)
-    {
-        if (!vegetation.treeLODInitialized || vegetation.currentTreeInstanceCount == 0) return;
-
-        vk::DeviceSize dataSize = vegetation.currentTreeInstanceCount * sizeof(vegetation::TreeInstanceGPU);
-
-        // Copy staging → device-local tree instance buffer
-        vk::BufferCopy copyRegion(0, 0, dataSize);
-        cmd.copyBuffer(vegetation.treeInstanceStagingBuffer, vegetation.treeInstanceBuffer, copyRegion);
-
-        // Write instance count to the count buffer
-        cmd.fillBuffer(vegetation.treeInstanceCountBuffer, 0, sizeof(uint32_t), vegetation.currentTreeInstanceCount);
-
-        // Barrier: transfer writes → compute reads
-        vk::MemoryBarrier barrier(
-            vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eShaderRead);
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eComputeShader,
-            vk::DependencyFlags{},
-            1, &barrier, 0, nullptr, 0, nullptr);
     }
 
     void GPUDrivenRenderer::addVegetationTile(int32_t coordX, int32_t coordZ)
@@ -994,10 +197,6 @@ namespace render::gpudriven
         {
             vegetation.grassStreamManager->addTile(coordX, coordZ);
         }
-        if (vegetation.vegetationStreamManager)
-        {
-            vegetation.vegetationStreamManager->addTile(coordX, coordZ);
-        }
     }
 
     void GPUDrivenRenderer::removeVegetationTile(int32_t coordX, int32_t coordZ)
@@ -1008,10 +207,6 @@ namespace render::gpudriven
         if (vegetation.grassStreamManager)
         {
             vegetation.grassStreamManager->removeTile(coordX, coordZ);
-        }
-        if (vegetation.vegetationStreamManager)
-        {
-            vegetation.vegetationStreamManager->removeTile(coordX, coordZ);
         }
     }
 
@@ -1027,10 +222,6 @@ namespace render::gpudriven
             {
                 vegetation.grassStreamManager->removeTile(coordX, coordZ);
             }
-            if (vegetation.vegetationStreamManager)
-            {
-                vegetation.vegetationStreamManager->removeTile(coordX, coordZ);
-            }
         }
         vegetation.registeredTileKeys.clear();
 
@@ -1045,10 +236,6 @@ namespace render::gpudriven
         if (vegetation.grassStreamManager)
         {
             vegetation.grassStreamManager->markTileDirty(coordX, coordZ);
-        }
-        if (vegetation.vegetationStreamManager)
-        {
-            vegetation.vegetationStreamManager->markTileDirty(coordX, coordZ);
         }
     }
 
@@ -1345,42 +532,6 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Cleanup tree LOD pipelines
-        if (vegetation.cullLODPipeline)
-        {
-            vegetation.cullLODPipeline->cleanup();
-            vegetation.cullLODPipeline.reset();
-        }
-
-        if (vegetation.vegMeshPipeline)
-        {
-            vegetation.vegMeshPipeline->cleanup();
-            vegetation.vegMeshPipeline.reset();
-        }
-
-        if (vegetation.imposterPipeline)
-        {
-            vegetation.imposterPipeline->cleanup();
-            vegetation.imposterPipeline.reset();
-        }
-
-        // Cleanup tree LOD buffers
-        if (vegetation.treeInstanceStagingMapped)
-        {
-            vkDevice.unmapMemory(vegetation.treeInstanceStagingMemory);
-            vegetation.treeInstanceStagingMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.treeInstanceBuffer, vegetation.treeInstanceBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.treeInstanceCountBuffer, vegetation.treeInstanceCountBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.visibleLOD0Buffer, vegetation.visibleLOD0BufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.visibleLOD1Buffer, vegetation.visibleLOD1BufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.visibleLOD2Buffer, vegetation.visibleLOD2BufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.lodCountersBuffer, vegetation.lodCountersBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.imposterConfigBuffer, vegetation.imposterConfigBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.speciesRenderInfoBuffer, vegetation.speciesRenderInfoBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.treeInstanceStagingBuffer, vegetation.treeInstanceStagingMemory);
-        vegetation.treeLODInitialized = false;
-
         if (vegetation.grassMeshPipeline)
         {
             vegetation.grassMeshPipeline->cleanup();
@@ -1403,12 +554,6 @@ namespace render::gpudriven
         {
             vegetation.grassStreamManager->cleanup();
             vegetation.grassStreamManager.reset();
-        }
-
-        if (vegetation.vegetationStreamManager)
-        {
-            vegetation.vegetationStreamManager->cleanup();
-            vegetation.vegetationStreamManager.reset();
         }
 
         if (vegetation.bufferManager)

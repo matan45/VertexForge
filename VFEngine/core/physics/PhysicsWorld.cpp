@@ -196,6 +196,12 @@ namespace core::physics
             for (auto& [tileKey, bodyId] : tileMap)
                 removeAndDestroyBody(bodyInterface, bodyId);
         terrainBodies.clear();
+
+        for (auto& [key, bodies] : vegetationBodies)
+            for (auto& bodyId : bodies)
+                removeAndDestroyBody(bodyInterface, bodyId);
+        vegetationBodies.clear();
+
         bodyToEntity.clear();
 
         contactListener.reset();
@@ -623,6 +629,106 @@ namespace core::physics
     {
         auto it = terrainBodies.find(entityId);
         return it != terrainBodies.end() && !it->second.empty();
+    }
+
+    JPH::BodyID PhysicsWorld::addStaticCapsule(const glm::vec3& position, float yRotation, float scale,
+                                                float radius, float height, uint8_t collisionLayer)
+    {
+        if (!initialized || !physicsSystem) return JPH::BodyID();
+
+        float scaledRadius = radius * scale;
+        float scaledHeight = height * scale;
+        float halfHeight = scaledHeight * 0.5f - scaledRadius;
+
+        constexpr float MIN_DIM = 0.001f;
+        if (halfHeight < MIN_DIM)
+        {
+            halfHeight = MIN_DIM;
+            scaledRadius = std::max(MIN_DIM, scaledHeight * 0.5f - MIN_DIM);
+        }
+
+        JPH::Ref<JPH::Shape> shape = new JPH::CapsuleShape(halfHeight, scaledRadius);
+
+        // Offset capsule center to half height (capsule centered at base)
+        glm::vec3 capsuleCenter = position + glm::vec3(0.0f, scaledHeight * 0.5f, 0.0f);
+
+        JPH::Quat rot = JPH::Quat::sRotation(JPH::Vec3::sAxisY(), yRotation);
+
+        JPH::BodyCreationSettings settings(
+            shape, toJoltR(capsuleCenter), rot,
+            JPH::EMotionType::Static,
+            static_cast<JPH::ObjectLayer>(collisionLayer));
+
+        settings.mFriction = 0.5f;
+        settings.mRestitution = 0.0f;
+
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+        return bodyId;
+    }
+
+    void PhysicsWorld::addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                                    const std::vector<JPH::BodyID>& bodyIds)
+    {
+        TileCoordKey key = makeTileKey(tileX, tileZ);
+
+        auto it = vegetationBodies.find(key);
+        if (it != vegetationBodies.end())
+        {
+            if (initialized && physicsSystem)
+            {
+                auto& bodyInterface = physicsSystem->GetBodyInterface();
+                for (auto& oldId : it->second)
+                {
+                    if (!oldId.IsInvalid())
+                    {
+                        removeAndDestroyBody(bodyInterface, oldId);
+                    }
+                }
+            }
+            it->second = bodyIds;
+        }
+        else
+        {
+            vegetationBodies[key] = bodyIds;
+        }
+    }
+
+    void PhysicsWorld::removeVegetationTileColliders(int32_t tileX, int32_t tileZ)
+    {
+        if (!initialized || !physicsSystem) return;
+
+        TileCoordKey key = makeTileKey(tileX, tileZ);
+        auto it = vegetationBodies.find(key);
+        if (it == vegetationBodies.end()) return;
+
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+        for (auto& bodyId : it->second)
+        {
+            if (!bodyId.IsInvalid())
+            {
+                removeAndDestroyBody(bodyInterface, bodyId);
+            }
+        }
+        vegetationBodies.erase(it);
+    }
+
+    void PhysicsWorld::removeAllVegetationColliders()
+    {
+        if (!initialized || !physicsSystem) return;
+
+        auto& bodyInterface = physicsSystem->GetBodyInterface();
+        for (auto& [key, bodies] : vegetationBodies)
+        {
+            for (auto& bodyId : bodies)
+            {
+                if (!bodyId.IsInvalid())
+                {
+                    removeAndDestroyBody(bodyInterface, bodyId);
+                }
+            }
+        }
+        vegetationBodies.clear();
     }
 
     bool PhysicsWorld::addCharacter(uint64_t entityId, const CharacterCreateInfo& info)

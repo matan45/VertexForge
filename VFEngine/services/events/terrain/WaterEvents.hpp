@@ -171,6 +171,12 @@ namespace events::water
         std::string_view getName() const override { return "GetWaterStreamingStats"; }
     };
 
+    struct LoadAllWaterTilesCommand : ICommand<> {
+        services::EntityHandle waterEntity;
+
+        std::string_view getName() const override { return "LoadAllWaterTiles"; }
+    };
+
     // === Ocean FFT Commands ===
 
     struct SetOceanFFTEnabledCommand : ICommand<void> {

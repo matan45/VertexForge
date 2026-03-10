@@ -15,6 +15,7 @@
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -238,7 +239,6 @@ namespace controllers::offscreen
         std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
         collectStandardColliders(colliderDrawList);
         collectTerrainColliders(colliderDrawList);
-
         if (!colliderDrawList.empty())
         {
             if (!renderHandler->isMeshPipelineInitialized())
