@@ -271,7 +271,8 @@ namespace windows
         if (sculptDispatcher.query(events::paint::IsPaintModeActiveQuery{})) return;
         if (sculptDispatcher.query(events::hole::IsHoleModeActiveQuery{})) return;
         if (sculptDispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{})) return;
-        if (sculptDispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{})) return;
+        bool meshBrushActive = sculptDispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+        if (meshBrushActive && !ImGui::GetIO().KeyCtrl) return;
 
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
@@ -622,7 +623,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
 
-        if (!meshBrushActive || !ImGui::IsWindowHovered())
+        if (!meshBrushActive || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl)
         {
             meshBrushDragging = false;
             return;

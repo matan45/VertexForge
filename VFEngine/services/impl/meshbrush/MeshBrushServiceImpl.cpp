@@ -129,6 +129,13 @@ namespace services
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        // Ensure normal points upward (terrain raycast may return inverted normals)
+        glm::vec3 surfaceNormal = normal;
+        if (surfaceNormal.y < 0.0f)
+        {
+            surfaceNormal = -surfaceNormal;
+        }
+
         // Build weight distribution
         std::vector<float> weights;
         for (const auto& entry : palette)
@@ -177,7 +184,7 @@ namespace services
             const auto& entry = palette[paletteIdx];
 
             // Check slope
-            float slopeAngle = std::acos(std::clamp(glm::dot(normal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
+            float slopeAngle = std::acos(std::clamp(glm::dot(surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
             float slopeDeg = glm::degrees(slopeAngle);
             if (slopeDeg > entry.maxSlope)
             {
@@ -215,10 +222,10 @@ namespace services
             transform.rotation = glm::vec3(rotX, rotY, rotZ);
             transform.scale = glm::vec3(scale);
 
-            if (entry.alignToNormal && glm::length(normal) > 0.001f)
+            if (entry.alignToNormal && glm::length(surfaceNormal) > 0.001f)
             {
                 glm::vec3 up(0.0f, 1.0f, 0.0f);
-                glm::vec3 n = glm::normalize(normal);
+                glm::vec3 n = glm::normalize(surfaceNormal);
                 float alignAngle = glm::degrees(std::acos(std::clamp(glm::dot(n, up), -1.0f, 1.0f)));
                 glm::vec3 axis = glm::cross(up, n);
                 if (glm::length(axis) > 0.001f)
@@ -255,7 +262,7 @@ namespace services
             auto enttEntity = internal::fromHandle(entity);
             auto& registry = scene::EntityRegistry::getRegistry();
             registry.emplace<components::MeshBrushInstanceComponent>(enttEntity,
-                components::MeshBrushInstanceComponent{0, paletteIdx, normal});
+                components::MeshBrushInstanceComponent{0, paletteIdx, surfaceNormal});
 
             spatialGrid.insert(entity.id, candidatePos);
 
