@@ -3,6 +3,7 @@
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
@@ -121,6 +122,26 @@ namespace render::gpudriven
             gpuLayer.metallic = layer.metallic;
             gpuLayer.ao = layer.ao;
             gpuLayer.emissionStrength = layer.emissionStrength;
+        }
+
+        // Register texture dependencies so textures stay alive while terrain material is in use
+        {
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (!lifecycle.isTracked(materialPath))
+            {
+                lifecycle.acquire(materialPath, resource::AssetType::Material);
+            }
+            auto addDep = [&](const std::string& texPath) {
+                if (!texPath.empty())
+                    lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
+            };
+            for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+            {
+                const auto& layer = materialData->layers[i];
+                addDep(layer.albedoTexturePath);
+                addDep(layer.normalTexturePath);
+                addDep(layer.ormTexturePath);
+            }
         }
 
         if (terrain.pipeline)
