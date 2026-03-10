@@ -356,15 +356,6 @@ namespace render
             provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) {
                 renderer->markVegetationTileDirty(x, z);
             });
-            provider->setUpdateSpeciesCallback([renderer](uint32_t id, const ::vegetation::VegetationSpeciesConfig& config) {
-                renderer->updateVegetationSpecies(id, config);
-            });
-            provider->setRemoveSpeciesCallback([renderer](uint32_t id) {
-                renderer->removeVegetationSpecies(id);
-            });
-            provider->setClearAllSpeciesCallback([renderer]() {
-                renderer->clearAllVegetationSpecies();
-            });
         }
     }
 

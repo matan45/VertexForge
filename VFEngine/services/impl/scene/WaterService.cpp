@@ -777,6 +777,67 @@ namespace services
 
                 return {loaded, total};
             });
+
+        dispatcher.registerCommandHandler<events::water::LoadAllWaterTilesCommand>(
+            [this](const events::water::LoadAllWaterTilesCommand& cmd)
+            {
+                loadAllWaterTiles(cmd.waterEntity);
+            });
+    }
+
+    void WaterService::loadAllWaterTiles(EntityHandle waterEntity)
+    {
+        uint64_t entityId = waterEntity.id;
+
+        auto gridIt = waterGrids.find(entityId);
+        if (gridIt == waterGrids.end())
+            return;
+
+        auto defIt = definitionMaps.find(entityId);
+        if (defIt == definitionMaps.end())
+            return;
+
+        auto& grid = *gridIt->second;
+        float tileSize = grid.getConfig().worldTileSize;
+
+        // Disable streaming so tiles won't be unloaded again
+        auto streamerIt = waterStreamers.find(entityId);
+        if (streamerIt != waterStreamers.end() && streamerIt->second)
+        {
+            streamerIt->second->setEnabled(false);
+        }
+
+        // Load all defined tiles that aren't already in the grid
+        defIt->second.forEachDefinition([&](const water::TileCoord& coord,
+                                             const water::WaterTileDefinition& def)
+        {
+            if (grid.hasTile(coord))
+                return;
+
+            water::WaterTile* tile = grid.getOrCreateTile(coord);
+            if (tile)
+            {
+                tile->updateHeight(def.waterHeight, tileSize);
+                tile->waveIntensity = def.waveIntensity;
+                tile->physicsEnabled = def.physicsEnabled;
+                createTileEntity(waterEntity, tile, tileSize);
+            }
+        });
+
+        // Sync component bounds
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(waterEntity);
+        if (registry.valid(ent) && registry.all_of<components::WaterComponent>(ent))
+        {
+            auto& comp = registry.get<components::WaterComponent>(ent);
+            int32_t minX, minZ, maxX, maxZ;
+            grid.computeBounds(minX, minZ, maxX, maxZ);
+            comp.gridMinX = minX;
+            comp.gridMinZ = minZ;
+            comp.gridMaxX = maxX;
+            comp.gridMaxZ = maxZ;
+            comp.activeTileCount = static_cast<uint32_t>(grid.getTileCount());
+        }
     }
 
     void WaterService::populateDefinitionMap(uint64_t entityId, const water::WaterGrid& grid)

@@ -40,6 +40,10 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) = 0;
 
+        /// Returns all tiles currently loaded in memory (not just frustum-visible).
+        /// Used for vegetation tree instance building where GPU cull handles visibility.
+        virtual std::vector<terrain::TerrainTile*> getAllLoadedTiles() = 0;
+
         virtual bool hasActiveTerrain() const = 0;
 
         virtual std::string getTerrainMaterialPath() const = 0;

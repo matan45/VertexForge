@@ -24,9 +24,7 @@
 #include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
-#include "../../adapters/vegetation/VegetationAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
-#include "../../adapters/vegetation/VegetationRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
@@ -69,9 +67,7 @@ namespace core
         lightBakeAdapter = std::make_unique<LightBakeAdapter>();
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
-        vegetationAdapter = std::make_unique<adapters::VegetationAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
-        vegetationRenderAdapter = std::make_unique<adapters::VegetationRenderAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
         lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
@@ -100,8 +96,6 @@ namespace core
 
         // Wire vegetation render providers to offscreen renderer
         offScreenAdapter->setGrassRenderProvider(grassRenderAdapter.get());
-        offScreenAdapter->setVegetationRenderProvider(vegetationRenderAdapter.get());
-
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
         physicsAdapter->applySettings(types::PhysicsSettings::createDefault());

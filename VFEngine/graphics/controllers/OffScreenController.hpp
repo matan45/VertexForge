@@ -250,16 +250,6 @@ namespace controllers
         void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
         void unregisterSectorLights(uint32_t sectorId);
 
-    // Impostor baking — renders mesh from multiple angles to create billboard atlas
-        struct ImposterBakeResult
-        {
-            bool success = false;
-            std::string outputPath;
-            std::string errorMessage;
-        };
-        ImposterBakeResult bakeImposter(const std::string& meshPath, const std::string& outputPath,
-                                        const glm::vec3& meshCenter = glm::vec3(0.0f), float meshScale = 1.0f);
-
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
     };

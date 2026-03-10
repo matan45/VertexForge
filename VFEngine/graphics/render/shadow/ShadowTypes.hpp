@@ -272,4 +272,5 @@ namespace render::shadow
         uint32_t tileCount = 0;
         uint32_t shadowLOD = 2;  // Default to LOD 2 (coarse) for shadows
     };
+
 }

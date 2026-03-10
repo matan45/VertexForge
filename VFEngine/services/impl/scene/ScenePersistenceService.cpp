@@ -16,7 +16,6 @@
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
-#include "../../events/vegetation/VegetationEvents.hpp"
 #include <functional>
 #include <fstream>
 
@@ -162,32 +161,6 @@ namespace services
         }
 
         bool result = serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
-
-        // Inject vegetation species data into the saved file
-        if (result)
-        {
-            try
-            {
-                std::ifstream inFile(filePath);
-                if (inFile.is_open())
-                {
-                    auto sceneJson = nlohmann::json::parse(inFile);
-                    inFile.close();
-
-                    auto allSpecies = events::EventDispatcher::instance().query(
-                        events::vegetation::GetAllVegetationSpeciesQuery{});
-                    sceneJson["vegetationSpecies"] = serialization::SceneSerialization::serializeVegetationSpecies(allSpecies);
-
-                    std::ofstream outFile(filePath);
-                    outFile << sceneJson.dump(2);
-                    outFile.close();
-                }
-            }
-            catch (const std::exception&)
-            {
-                // Species save failure is non-fatal
-            }
-        }
 
         return result;
     }
@@ -371,34 +344,6 @@ namespace services
             events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
             postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;
             dispatcher.execute(postProcessCmd);
-
-            // Restore vegetation species from the scene file
-            try
-            {
-                std::ifstream speciesFile(filePath);
-                if (speciesFile.is_open())
-                {
-                    auto sceneJson = nlohmann::json::parse(speciesFile);
-                    speciesFile.close();
-
-                    if (sceneJson.contains("vegetationSpecies") && sceneJson["vegetationSpecies"].is_array())
-                    {
-                        auto speciesList = serialization::SceneSerialization::deserializeVegetationSpecies(
-                            sceneJson["vegetationSpecies"]);
-
-                        for (const auto& config : speciesList)
-                        {
-                            events::vegetation::AddVegetationSpeciesCommand addCmd;
-                            addCmd.config = config;
-                            dispatcher.execute(addCmd);
-                        }
-                    }
-                }
-            }
-            catch (const std::exception&)
-            {
-                // Species restore failure is non-fatal
-            }
 
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;

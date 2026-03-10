@@ -565,18 +565,4 @@ namespace controllers {
 		offScreenController->unregisterSectorLights(sectorId);
 	}
 
-	OffScreen::ImposterBakeResult OffScreen::bakeImposter(const std::string& meshPath, const std::string& outputPath,
-	                                                      const glm::vec3& meshCenter, float meshScale)
-	{
-		if (!offScreenController)
-		{
-			return {false, "", "No OffScreenController available"};
-		}
-		auto controllerResult = offScreenController->bakeImposter(meshPath, outputPath, meshCenter, meshScale);
-		ImposterBakeResult result;
-		result.success = controllerResult.success;
-		result.outputPath = controllerResult.outputPath;
-		result.errorMessage = controllerResult.errorMessage;
-		return result;
-	}
 }

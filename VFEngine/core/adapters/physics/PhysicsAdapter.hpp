@@ -82,6 +82,11 @@ namespace core
         void removeTerrainTileCollider(services::EntityHandle entity,
                                         int32_t tileX, int32_t tileZ) override;
 
+        void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                         const std::vector<VegetationColliderInstance>& instances) override;
+        void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) override;
+        void removeAllVegetationColliders() override;
+
         void addWaterSensorBody(services::EntityHandle entity, const glm::vec3& position,
                                 const glm::vec3& halfExtents) override;
         void removeWaterSensorBody(services::EntityHandle entity) override;

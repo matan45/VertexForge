@@ -442,7 +442,8 @@ namespace render::shadow
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, terrainParams, atlasManager.get(), resourcePool.get(),
+        passRecorder->recordShadowPass(cmd, params, terrainParams,
+            atlasManager.get(), resourcePool.get(),
             shadowPassPipeline.get(), terrainShadowPipeline.get(),
             directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
     }

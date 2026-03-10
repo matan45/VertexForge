@@ -127,6 +127,7 @@ namespace services
         void registerOceanFFTHandlers(::events::EventDispatcher& dispatcher);
         void registerStreamingHandlers(::events::EventDispatcher& dispatcher);
 
+        void loadAllWaterTiles(EntityHandle waterEntity);
         void populateDefinitionMap(uint64_t entityId, const water::WaterGrid& grid);
 
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);

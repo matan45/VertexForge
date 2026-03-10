@@ -21,8 +21,6 @@
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
 #include "vegetation/GrassDensityPanel.hpp"
-#include "vegetation/VegetationPlacementPanel.hpp"
-#include "vegetation/VegetationSpeciesPanel.hpp"
 #include "config/GIConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "MainMenuBar.hpp"
@@ -62,8 +60,6 @@ namespace windows
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;
         GrassDensityPanel grassDensityPanel;
-        VegetationPlacementPanel vegetationPlacementPanel;
-        VegetationSpeciesPanel vegetationSpeciesPanel;
         GIConfigWindow giConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
         MainMenuBar menuBar;

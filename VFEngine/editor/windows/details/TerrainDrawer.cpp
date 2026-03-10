@@ -224,6 +224,18 @@ namespace windows::details {
                     cmd.maxUnloadsPerFrame = streamConfig.maxUnloadsPerFrame;
                     dispatcher.execute(cmd);
                 }
+
+                if (streamingEnabled && ImGui::Button("Load All Tiles"))
+                {
+                    events::terrain::LoadAllTilesCommand cmd;
+                    cmd.terrainEntity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
+                                      "Re-enable streaming via the checkbox above.");
+                }
             }
 
             ImGui::Separator();

@@ -197,6 +197,18 @@ namespace windows::details {
                     statsQuery.waterEntity = handle;
                     auto [loaded, total] = dispatcher.query(statsQuery);
                     ImGui::Text("Loaded: %u / %u tiles", loaded, total);
+
+                    if (ImGui::Button("Load All Tiles"))
+                    {
+                        events::water::LoadAllWaterTilesCommand cmd;
+                        cmd.waterEntity = handle;
+                        dispatcher.execute(cmd);
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
+                                          "Re-enable streaming via the checkbox above.");
+                    }
                 }
                 else
                 {

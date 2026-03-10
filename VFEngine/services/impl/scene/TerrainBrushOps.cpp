@@ -8,14 +8,12 @@
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
 #include "vegetation/VegetationDensityBrushApplicator.hpp"
-#include "vegetation/VegetationPlacementBrushApplicator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
-#include "../../events/vegetation/VegetationEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
@@ -531,135 +529,6 @@ namespace services
         if (anyModified)
         {
             events::vegetationBrush::VegetationDensityBrushAppliedNotification notification;
-            notification.position = worldPosition;
-            notification.type = brushType;
-            dispatcher.publish(notification);
-
-            auto& registry = scene::EntityRegistry::getRegistry();
-            entt::entity ent = internal::fromHandle(*targetEntity);
-            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
-            {
-                registry.get<components::TerrainComponent>(ent).saveDirty = true;
-            }
-        }
-    }
-
-    void TerrainService::applyVegetationPlacementBrush(
-        const glm::vec3& worldPosition, float deltaTime)
-    {
-        if (saveInProgress.load(std::memory_order_acquire)) return;
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationPlacementTargetEntityQuery{});
-        if (!targetEntity.has_value()) return;
-
-        auto gridIt = terrainGrids.find(targetEntity->id);
-        if (gridIt == terrainGrids.end()) return;
-
-        terrain::TerrainGrid* grid = gridIt->second.get();
-
-        auto brushParams = dispatcher.query(events::vegetationBrush::GetPlacementBrushParamsQuery{});
-        auto brushType = dispatcher.query(events::vegetationBrush::GetPlacementBrushTypeQuery{});
-
-        // Auto-resolve species ID if not set (default 0 is never a valid species)
-        if (brushParams.speciesId == 0)
-        {
-            auto allSpecies = dispatcher.query(events::vegetation::GetAllVegetationSpeciesQuery{});
-            if (!allSpecies.empty())
-            {
-                brushParams.speciesId = allSpecies.begin()->first;
-            }
-        }
-
-        float worldTileSize = 32.0f;
-        const auto& allTiles = grid->getAllTiles();
-        if (!allTiles.empty())
-            worldTileSize = allTiles[0]->config.worldTileSize;
-
-        // Query species collision settings for placement spacing
-        float speciesCollisionRadius = 0.0f;
-        if (brushParams.speciesId > 0)
-        {
-            events::vegetation::GetVegetationSpeciesQuery speciesQuery;
-            speciesQuery.speciesId = brushParams.speciesId;
-            auto speciesConfig = dispatcher.query(speciesQuery);
-            if (speciesConfig.hasCollision)
-            {
-                speciesCollisionRadius = speciesConfig.collisionRadius;
-            }
-        }
-
-        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
-        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
-            brushCenter, brushParams.radius, worldTileSize);
-
-        auto cacheIt = fileCaches.find(targetEntity->id);
-        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
-
-        bool anyModified = false;
-        for (const auto& coord : affectedTiles)
-        {
-            terrain::TerrainTile* tile = grid->getTile(coord);
-            if (!tile)
-            {
-                if (fileCache && fileCache->hasCoord(coord))
-                {
-                    streamInTile(*targetEntity, coord.x, coord.z);
-                    tile = grid->getTile(coord);
-                }
-                if (!tile)
-                    continue;
-            }
-
-            if (fileCache)
-                fileCache->markDirty(coord);
-
-            glm::vec2 tileOrigin(
-                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
-                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
-
-            if (brushType == vegetation::PlacementBrushType::Scatter)
-            {
-                vegetation::VegetationPlacementBrushApplicator::ScatterParams params;
-                params.brushCenter = brushCenter;
-                params.tileWorldOrigin = tileOrigin;
-                params.brushRadius = brushParams.radius;
-                params.density = brushParams.density;
-                params.minScale = brushParams.minScale;
-                params.maxScale = brushParams.maxScale;
-                params.randomRotation = brushParams.randomRotation;
-                params.speciesId = brushParams.speciesId;
-                params.falloff = brushParams.falloff;
-                params.shape = brushParams.shape;
-                params.tileWorldSize = tile->config.worldTileSize;
-                params.collisionRadius = speciesCollisionRadius;
-
-                if (vegetation::VegetationPlacementBrushApplicator::scatter(tile->vegetationPlacement, params))
-                {
-                    tile->vegetationPlacementDirty = true;
-                    tile->vegetationPlacementGPUDirty = true;
-                    anyModified = true;
-                }
-            }
-            else if (brushType == vegetation::PlacementBrushType::Erase)
-            {
-                vegetation::VegetationPlacementBrushApplicator::EraseParams params;
-                params.brushCenter3D = worldPosition;
-                params.brushRadius = brushParams.radius;
-
-                if (vegetation::VegetationPlacementBrushApplicator::erase(tile->vegetationPlacement, params))
-                {
-                    tile->vegetationPlacementDirty = true;
-                    tile->vegetationPlacementGPUDirty = true;
-                    anyModified = true;
-                }
-            }
-        }
-
-        if (anyModified)
-        {
-            events::vegetationBrush::VegetationPlacementBrushAppliedNotification notification;
             notification.position = worldPosition;
             notification.type = brushType;
             dispatcher.publish(notification);

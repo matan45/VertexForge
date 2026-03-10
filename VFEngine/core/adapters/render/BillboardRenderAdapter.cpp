@@ -37,25 +37,4 @@ namespace core::adapters
         return stats;
     }
 
-    services::ImposterBakeResult BillboardRenderAdapter::bakeImposter(const std::string& meshPath,
-                                                                        const std::string& outputPath,
-                                                                        const glm::vec3& meshCenter,
-                                                                        float meshScale)
-    {
-        if (!offScreen)
-        {
-            services::ImposterBakeResult result;
-            result.success = false;
-            result.errorMessage = "No OffScreenController available";
-            return result;
-        }
-
-        auto controllerResult = offScreen->bakeImposter(meshPath, outputPath, meshCenter, meshScale);
-
-        services::ImposterBakeResult result;
-        result.success = controllerResult.success;
-        result.outputPath = controllerResult.outputPath;
-        result.errorMessage = controllerResult.errorMessage;
-        return result;
-    }
 }

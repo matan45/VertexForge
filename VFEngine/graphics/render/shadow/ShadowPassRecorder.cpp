@@ -217,6 +217,7 @@ namespace render::shadow
                         view->slopeBias * terrainBiasScale
                     );
                 }
+
             }
 
             cmd.endRenderPass();
@@ -249,8 +250,9 @@ namespace render::shadow
             atlasFirstUse = false;
         }
 
-        renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool, shadowPassPipeline,
-                                     terrainShadowPipeline, lightShadowData);
+        renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool,
+                                     shadowPassPipeline, terrainShadowPipeline,
+                                     lightShadowData);
     }
 
     void ShadowPassRecorder::renderPointLightCubeShadows(

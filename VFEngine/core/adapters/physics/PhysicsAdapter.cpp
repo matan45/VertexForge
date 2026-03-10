@@ -454,6 +454,52 @@ namespace core
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
     }
 
+    void PhysicsAdapter::addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                                     const std::vector<VegetationColliderInstance>& instances)
+    {
+        if (!physicsWorld || instances.empty()) return;
+
+        std::vector<JPH::BodyID> bodyIds;
+        bodyIds.reserve(instances.size());
+
+        for (const auto& inst : instances)
+        {
+            if (inst.scale <= 0.0f || inst.height * inst.scale < 0.01f)
+                continue;
+
+            JPH::BodyID bodyId = physicsWorld->addStaticCapsule(
+                inst.position, inst.rotation, inst.scale,
+                inst.radius, inst.height, 0); // layer 0 = STATIC
+
+            if (!bodyId.IsInvalid())
+            {
+                bodyIds.push_back(bodyId);
+            }
+            else
+            {
+                vfLogWarning("PhysicsAdapter: Failed to create vegetation collider at ({}, {}, {}) scale={} for tile ({}, {})",
+                    inst.position.x, inst.position.y, inst.position.z, inst.scale, tileX, tileZ);
+            }
+        }
+
+        if (!bodyIds.empty())
+        {
+            physicsWorld->addVegetationTileColliders(tileX, tileZ, bodyIds);
+        }
+    }
+
+    void PhysicsAdapter::removeVegetationTileColliders(int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeVegetationTileColliders(tileX, tileZ);
+    }
+
+    void PhysicsAdapter::removeAllVegetationColliders()
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeAllVegetationColliders();
+    }
+
     void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
                                             const glm::vec3& position,
                                             const glm::vec3& halfExtents)

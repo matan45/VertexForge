@@ -27,11 +27,6 @@ namespace core::adapters
 
         services::BillboardRenderStats getBillboardStats() const override;
 
-        services::ImposterBakeResult bakeImposter(const std::string& meshPath,
-                                                    const std::string& outputPath,
-                                                    const glm::vec3& meshCenter = glm::vec3(0.0f),
-                                                    float meshScale = 1.0f) override;
-
     private:
         controllers::OffScreen* offScreen = nullptr;
         bool billboardEnabled = true;

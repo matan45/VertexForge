@@ -1,6 +1,7 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../print/Log.hpp"
 
 // Helper to clean null terminators from strings
 static void cleanNullTerminators(std::string& str)
@@ -272,12 +273,6 @@ namespace serialization
         {
             j["renderTextureSourceName"] = billboard.renderTextureSourceName;
         }
-        j["billboardDistance"] = billboard.billboardDistance;
-        j["maxRenderDistance"] = billboard.maxRenderDistance;
-        if (!billboard.imposterPath.empty())
-        {
-            j["imposterPath"] = billboard.imposterPath;
-        }
         return j;
     }
 
@@ -302,9 +297,12 @@ namespace serialization
         billboard.texturePath = j.value("texturePath", std::string(""));
         billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         billboard.renderTextureSource = entt::null; // Resolved post-load
-        billboard.billboardDistance = j.value("billboardDistance", 100.0f);
-        billboard.maxRenderDistance = j.value("maxRenderDistance", 1000.0f);
-        billboard.imposterPath = j.value("imposterPath", std::string(""));
+
+        // Warn about deprecated imposter fields from older scene files
+        if (j.contains("imposterPath"))
+            vfLogWarning("Scene contains deprecated 'imposterPath' field — impostor system has been removed.");
+        if (j.contains("billboardDistance") || j.contains("maxRenderDistance"))
+            vfLogWarning("Scene contains deprecated billboard distance fields — impostor system has been removed.");
     }
 
     json SceneSerialization::serializeText(const components::TextComponent& text)

@@ -891,17 +891,6 @@ namespace services
                 }
             }
 
-            if (tile->vegetationPlacement.getInstanceCount() > 0)
-            {
-                anyData = true;
-                std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
-                    vegDir, tile->coord.x, tile->coord.z);
-                if (!vegetation::VegetationSerializer::savePlacementData(placementPath, tile->vegetationPlacement))
-                {
-                    vfLogError("TerrainService: Failed to save vegetation placement for tile ({}, {})",
-                               tile->coord.x, tile->coord.z);
-                }
-            }
         }
 
         if (anyData)
@@ -924,7 +913,6 @@ namespace services
 
         auto allTiles = gridIt->second->getAllTiles();
         uint32_t loadedDensity = 0;
-        uint32_t loadedPlacement = 0;
 
         for (auto* tile : allTiles)
         {
@@ -942,23 +930,12 @@ namespace services
                 }
             }
 
-            std::string placementPath = std::format("{}/tile_{}_{}.vfVegPlacement",
-                vegDir, tile->coord.x, tile->coord.z);
-            if (fs::exists(placementPath))
-            {
-                if (vegetation::VegetationSerializer::loadPlacementData(placementPath, tile->vegetationPlacement))
-                {
-                    tile->vegetationPlacementDirty = true;
-                    tile->vegetationPlacementGPUDirty = true;
-                    loadedPlacement++;
-                }
-            }
         }
 
-        if (loadedDensity > 0 || loadedPlacement > 0)
+        if (loadedDensity > 0)
         {
-            vfLogInfo("TerrainService: Loaded vegetation data ({} density, {} placement) from {}",
-                      loadedDensity, loadedPlacement, vegDir);
+            vfLogInfo("TerrainService: Loaded vegetation density data ({} tiles) from {}",
+                      loadedDensity, vegDir);
         }
 
         return true;

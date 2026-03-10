@@ -200,7 +200,6 @@
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
-    <ClInclude Include="render\impostor\ImposterBaker.hpp" />
     <ClInclude Include="render\lighting\ClusterGridManager.hpp" />
     <ClInclude Include="render\lighting\ClusterGridTypes.hpp" />
     <ClInclude Include="render\lighting\GPULightBufferManager.hpp" />
@@ -277,13 +276,8 @@
     <ClInclude Include="render\vegetation\GrassComputePipeline.hpp" />
     <ClInclude Include="render\vegetation\GrassMeshShaderPipeline.hpp" />
     <ClInclude Include="render\vegetation\GrassStreamManager.hpp" />
-    <ClInclude Include="render\vegetation\ImposterAtlasManager.hpp" />
-    <ClInclude Include="render\vegetation\ImposterPipeline.hpp" />
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
-    <ClInclude Include="render\vegetation\VegetationCullLODPipeline.hpp" />
     <ClInclude Include="render\vegetation\VegetationGPUTypes.hpp" />
-    <ClInclude Include="render\vegetation\VegetationMeshShaderPipeline.hpp" />
-    <ClInclude Include="render\vegetation\VegetationStreamManager.hpp" />
     <ClInclude Include="render\vegetation\WindSystem.hpp" />
     <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
@@ -423,7 +417,6 @@
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
-    <ClCompile Include="render\impostor\ImposterBaker.cpp" />
     <ClCompile Include="render\lighting\ClusterGridManager.cpp" />
     <ClCompile Include="render\lighting\GPULightBufferManager.cpp" />
     <ClCompile Include="render\lighting\GPULightBufferManagerScene.cpp" />
@@ -499,12 +492,7 @@
     <ClCompile Include="render\vegetation\GrassComputePipeline.cpp" />
     <ClCompile Include="render\vegetation\GrassMeshShaderPipeline.cpp" />
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
-    <ClCompile Include="render\vegetation\ImposterAtlasManager.cpp" />
-    <ClCompile Include="render\vegetation\ImposterPipeline.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
-    <ClCompile Include="render\vegetation\VegetationCullLODPipeline.cpp" />
-    <ClCompile Include="render\vegetation\VegetationMeshShaderPipeline.cpp" />
-    <ClCompile Include="render\vegetation\VegetationStreamManager.cpp" />
     <ClCompile Include="render\vegetation\WindSystem.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManagerCreate.cpp" />
@@ -596,7 +584,6 @@
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_grass.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
-    <None Include="..\..\resources\shaders\shadow\shadow_vegetation.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
     <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />
@@ -612,16 +599,9 @@
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vegetation\frag_grass.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\frag_imposter.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\frag_vegetation.glsl" />
     <None Include="..\..\resources\shaders\vegetation\grass_placement.glsl" />
     <None Include="..\..\resources\shaders\vegetation\mesh_grass.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\mesh_imposter.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\mesh_vegetation.glsl" />
     <None Include="..\..\resources\shaders\vegetation\task_grass.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\task_imposter.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\task_vegetation.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\vegetation_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\vegetation\wind_common.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />

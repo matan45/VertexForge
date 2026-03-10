@@ -39,11 +39,9 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
-#include "impl/vegetation/VegetationServiceImpl.hpp"
 #include "impl/vegetation/GrassServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
-#include "impl/vegetation/VegetationPlacementModeServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -232,7 +230,6 @@ namespace handlers
         audioSceneUpdater.reset();
         worldSectorService.reset();
         assetLifecycleService.reset();
-        vegetationService.reset();
         grassService.reset();
         vegetationBrushService.reset();
         vegetationBrushModeService.reset();
@@ -441,14 +438,9 @@ namespace handlers
 
     void EditorHandler::createVegetationServices()
     {
-        vegetationService = std::make_shared<services::VegetationServiceImpl>(
-            bootstrap->getVegetationProvider(),
-            bootstrap->getVegetationRenderProvider());
         grassService = std::make_shared<services::GrassServiceImpl>();
         vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
-        vegetationPlacementModeService = std::make_shared<services::VegetationPlacementModeServiceImpl>();
-
         // Wire grass config callback so the adapter doesn't access EntityRegistry directly
         auto* grassProvider = bootstrap->getGrassRenderProvider();
         if (grassProvider)
@@ -503,11 +495,9 @@ namespace handlers
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
-        vegetationService->registerEventHandlers();
         grassService->registerEventHandlers();
         vegetationBrushService->registerEventHandlers();
         vegetationBrushModeService->registerEventHandlers();
-        vegetationPlacementModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();
         giService->registerEventHandlers();

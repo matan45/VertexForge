@@ -243,6 +243,17 @@ namespace math
             return intersectsAABB(worldAABB);
         }
 
-   
+        // Test if a sphere intersects with the frustum
+        bool intersectsSphere(const glm::vec3& center, float radius) const
+        {
+            for (const auto& plane : planes)
+            {
+                float dist = glm::dot(glm::vec3(plane), center) + plane.w;
+                if (dist < -radius)
+                    return false;
+            }
+            return true;
+        }
+
     };
 }

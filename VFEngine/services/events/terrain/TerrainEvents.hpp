@@ -308,4 +308,11 @@ namespace events::terrain
 
         std::string_view getName() const override { return "IsTerrainStreamingEnabled"; }
     };
+
+    struct LoadAllTilesCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "LoadAllTiles"; }
+    };
 }

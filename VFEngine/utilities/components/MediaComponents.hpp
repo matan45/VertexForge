@@ -48,11 +48,6 @@ namespace components
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
 
-        // GPU-driven billboard fields (used when sizeMode == WorldSpace)
-        float billboardDistance = 100.0f;    // Distance at which mesh transitions to billboard
-        float maxRenderDistance = 1000.0f;   // Maximum render distance for billboard
-        std::string imposterPath;            // Path to .vfImposter atlas (baked from mesh)
-
         uint32_t getEffectiveAtlasIndex() const
         {
             if (iconType == BillboardIconType::Custom)

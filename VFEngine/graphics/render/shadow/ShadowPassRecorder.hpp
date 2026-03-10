@@ -16,7 +16,6 @@ namespace render::shadow
     class ShadowResourcePool;
     class ShadowPassPipeline;
     class TerrainShadowPipeline;
-
     struct ShadowPassParams
     {
         vk::DescriptorSet perDrawDataDescSet;
