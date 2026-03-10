@@ -140,8 +140,6 @@ namespace windows
                             ? paletteEntries[i].meshPath.substr(pos + 1) : paletteEntries[i].meshPath;
                         itemLabel += " - " + filename;
                     }
-                    if (!paletteEntries[i].enabled) itemLabel += " (disabled)";
-
                     bool isSelected = (selectedPaletteIndex == i);
                     if (ImGui::Selectable(itemLabel.c_str(), isSelected))
                     {
@@ -166,15 +164,10 @@ namespace windows
             ImGui::PushID(i);
             auto& entry = paletteEntries[i];
 
-            // Color indicator: green if enabled, gray if disabled, blue border if selected
-            ImVec4 headerColor = entry.enabled
-                ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f)
-                : ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
-
-            if (selectedPaletteIndex == i)
-            {
-                headerColor = ImVec4(0.2f, 0.4f, 0.8f, 1.0f);
-            }
+            // Color indicator: blue if selected, default otherwise
+            ImVec4 headerColor = (selectedPaletteIndex == i)
+                ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
+                : ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
 
             ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
@@ -189,13 +182,9 @@ namespace windows
                     ? entry.meshPath.substr(pos + 1) : entry.meshPath;
                 label += " - " + filename;
             }
-            if (!entry.enabled) label += " (disabled)";
-
             if (ImGui::TreeNode("Entry", "%s", label.c_str()))
             {
                 bool changed = false;
-
-                changed |= ImGui::Checkbox("Enabled", &entry.enabled);
 
                 // Mesh path input with browse button
                 char meshBuf[256] = {};
@@ -241,7 +230,6 @@ namespace windows
                 changed |= ImGui::Checkbox("Random Rotation Z", &entry.randomRotationZ);
                 changed |= ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
                 changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
-                changed |= ImGui::DragFloat2("Height Range", &entry.heightRange.x, 1.0f, -10000.0f, 10000.0f);
                 changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
 
                 if (changed) paletteDirty = true;

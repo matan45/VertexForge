@@ -231,13 +231,34 @@ namespace windows
 
                 ImGui::SameLine();
 
-                // Mesh brush mode toggle - always enabled (places meshes on terrain)
+                // Mesh brush mode toggle - enabled when terrain is selected or already in mesh brush mode
+                bool canMeshBrush = isMeshBrushMode;
+                if (!canMeshBrush)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery5;
+                        terrainQuery5.entity = *selectedEntity;
+                        canMeshBrush = dispatcher.query(terrainQuery5);
+
+                        if (!canMeshBrush)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery5;
+                            tileQuery5.entity = *selectedEntity;
+                            canMeshBrush = dispatcher.query(tileQuery5);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canMeshBrush);
                 if (iconButton(ViewportIcon::MeshBrush, isMeshBrushMode, isMeshBrushMode ? "Exit Mesh Brush" : "Enter Mesh Brush"))
                 {
                     events::meshBrush::SetMeshBrushModeActiveCommand cmd;
                     cmd.active = !isMeshBrushMode;
                     dispatcher.execute(cmd);
                 }
+                ImGui::EndDisabled();
 
             }
         }

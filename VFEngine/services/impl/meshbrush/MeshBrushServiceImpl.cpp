@@ -181,7 +181,7 @@ namespace services
         if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(palette.size()))
         {
             const auto& entry = palette[selectedPaletteIndex];
-            if (!entry.enabled || entry.meshPath.empty()) return;
+            if (entry.meshPath.empty()) return;
             enabledIndices.push_back(static_cast<uint32_t>(selectedPaletteIndex));
             weights.push_back(1.0f);
         }
@@ -189,7 +189,7 @@ namespace services
         {
             for (uint32_t idx = 0; idx < palette.size(); ++idx)
             {
-                if (palette[idx].enabled && !palette[idx].meshPath.empty())
+                if (!palette[idx].meshPath.empty())
                 {
                     enabledIndices.push_back(idx);
                     weights.push_back(palette[idx].weight);
@@ -247,9 +247,6 @@ namespace services
             // Apply AABB + manual Y offset
             candidatePos.y += getAABBYOffset(entry.meshPath);
             candidatePos.y += entry.yOffset;
-
-            // Check height range
-            if (candidatePos.y < entry.heightRange.x || candidatePos.y > entry.heightRange.y) continue;
 
             // Compute random transform
             std::uniform_real_distribution<float> scaleDist(entry.scaleRange.x, entry.scaleRange.y);
