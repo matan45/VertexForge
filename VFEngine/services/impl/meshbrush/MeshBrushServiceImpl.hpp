@@ -34,9 +34,31 @@ namespace services
         // Global entity counter for unique names
         uint32_t entityCounter = 0;
 
-        // Per-palette-entry group parent entities
-        std::unordered_map<uint32_t, EntityHandle> groupEntities;
-        EntityHandle ensureGroupEntity(uint32_t paletteIdx);
+        // Per-palette-entry + per-sector group parent entities
+        // Key: (paletteIdx, sectorX, sectorZ)
+        struct GroupKey
+        {
+            uint32_t paletteIdx;
+            int32_t sectorX;
+            int32_t sectorZ;
+            bool operator==(const GroupKey& o) const
+            {
+                return paletteIdx == o.paletteIdx && sectorX == o.sectorX && sectorZ == o.sectorZ;
+            }
+        };
+        struct GroupKeyHash
+        {
+            size_t operator()(const GroupKey& k) const
+            {
+                size_t h = std::hash<uint32_t>{}(k.paletteIdx);
+                h ^= std::hash<int32_t>{}(k.sectorX) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<int32_t>{}(k.sectorZ) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+        static constexpr float sectorSize = 128.0f;
+        std::unordered_map<GroupKey, EntityHandle, GroupKeyHash> groupEntities;
+        EntityHandle ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
 
         // AABB Y-offset cache (meshPath -> -aabb.min.y)
         std::unordered_map<std::string, float> aabbYOffsetCache;

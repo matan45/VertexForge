@@ -71,8 +71,14 @@ namespace services
                 if (cmd.index < palette.size())
                 {
                     palette.erase(palette.begin() + cmd.index);
-                    // Remove group entity for this index and shift higher indices
-                    groupEntities.erase(cmd.index);
+                    // Remove all group entities for this palette index
+                    for (auto it = groupEntities.begin(); it != groupEntities.end();)
+                    {
+                        if (it->first.paletteIdx == cmd.index)
+                            it = groupEntities.erase(it);
+                        else
+                            ++it;
+                    }
                 }
             });
 
@@ -294,13 +300,23 @@ namespace services
                 }
             }
 
-            // Create entity under per-entry group
-            auto groupEntity = ensureGroupEntity(paletteIdx);
+            // Create entity under per-entry per-sector group
+            auto groupEntity = ensureGroupEntity(paletteIdx, candidatePos);
             events::scene::CreateEntityCommand createCmd;
             createCmd.name = "MeshBrush_" + std::to_string(entityCounter++);
             createCmd.parent = groupEntity;
             auto entity = dispatcher.execute(createCmd);
             if (!entity.isValid()) continue;
+
+            // Convert world position to local space relative to parent group
+            int32_t sx = static_cast<int32_t>(std::floor(candidatePos.x / sectorSize));
+            int32_t sz = static_cast<int32_t>(std::floor(candidatePos.z / sectorSize));
+            glm::vec3 parentPos(
+                (static_cast<float>(sx) + 0.5f) * sectorSize,
+                0.0f,
+                (static_cast<float>(sz) + 0.5f) * sectorSize
+            );
+            transform.position = candidatePos - parentPos;
 
             events::scene::AddMeshComponentCommand meshCmd;
             meshCmd.entity = entity;
@@ -363,9 +379,14 @@ namespace services
         }
     }
 
-    EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx)
+    EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
     {
-        auto it = groupEntities.find(paletteIdx);
+        // Compute sector coordinates from world position
+        int32_t sx = static_cast<int32_t>(std::floor(worldPos.x / sectorSize));
+        int32_t sz = static_cast<int32_t>(std::floor(worldPos.z / sectorSize));
+        GroupKey key{paletteIdx, sx, sz};
+
+        auto it = groupEntities.find(key);
         if (it != groupEntities.end() && it->second.isValid())
         {
             // Verify it still exists in registry
@@ -374,22 +395,40 @@ namespace services
             if (registry.valid(entt)) return it->second;
         }
 
-        // Create group entity named after the mesh file
-        std::string groupName = "MeshBrush_Group_" + std::to_string(paletteIdx);
+        // Build group name: "MeshBrush_<filename>_(sX,sZ)"
+        std::string meshLabel = "Group_" + std::to_string(paletteIdx);
         if (paletteIdx < palette.size() && !palette[paletteIdx].meshPath.empty())
         {
             const auto& meshPath = palette[paletteIdx].meshPath;
             auto pos = meshPath.find_last_of("\\/");
-            std::string filename = (pos != std::string::npos)
+            meshLabel = (pos != std::string::npos)
                 ? meshPath.substr(pos + 1) : meshPath;
-            groupName = "MeshBrush_" + filename;
         }
+        std::string groupName = "MeshBrush_" + meshLabel
+            + "_(" + std::to_string(sx) + "," + std::to_string(sz) + ")";
 
+        // Position the group entity at the center of the sector
+        // so it gets assigned to the correct sector by WorldSectorManager
         auto& dispatcher = events::EventDispatcher::instance();
         events::scene::CreateEntityCommand createCmd;
         createCmd.name = groupName;
         auto entity = dispatcher.execute(createCmd);
-        groupEntities[paletteIdx] = entity;
+
+        if (entity.isValid())
+        {
+            TransformData groupTransform;
+            groupTransform.position = glm::vec3(
+                (static_cast<float>(sx) + 0.5f) * sectorSize,
+                0.0f,
+                (static_cast<float>(sz) + 0.5f) * sectorSize
+            );
+            events::scene::SetTransformCommand transformCmd;
+            transformCmd.entity = entity;
+            transformCmd.transform = groupTransform;
+            dispatcher.execute(transformCmd);
+        }
+
+        groupEntities[key] = entity;
         return entity;
     }
 
