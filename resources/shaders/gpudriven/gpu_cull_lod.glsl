@@ -212,6 +212,10 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
+    uint instanceCount = floatBitsToUint(obj.aabbMax.w);
+    if (instanceCount == 0u) instanceCount = 1u;
+    bool isInstanced = instanceCount > 1u;
+
     vec3 worldAabbMin, worldAabbMax;
     transformAABB(obj.aabbMin.xyz, obj.aabbMax.xyz, obj.modelMatrix, worldAabbMin, worldAabbMax);
 
@@ -219,74 +223,98 @@ void main() {
     float worldRadius = length(worldAabbMax - worldCenter);
     vec4 worldSphere = vec4(worldCenter, worldRadius);
 
-    // Distance culling - cheap squared-distance check before frustum/occlusion
-    if (camera.enableDistanceCulling != 0u) {
-        vec3 diff = worldCenter - camera.cameraPosition.xyz;
-        float distSq = dot(diff, diff);
+    // Skip group-level culling for instanced objects — the task shader
+    // handles per-instance frustum, distance, and LOD culling individually.
+    if (!isInstanced) {
+        // Distance culling - cheap squared-distance check before frustum/occlusion
+        if (camera.enableDistanceCulling != 0u) {
+            vec3 diff = worldCenter - camera.cameraPosition.xyz;
+            float distSq = dot(diff, diff);
 
-        // Per-object override stored in aabbMin.w (0 = use category default)
-        float maxDistSq = obj.aabbMin.w;
-        if (maxDistSq <= 0.0) {
-            uint cat = (obj.flags >> CATEGORY_SHIFT) & CATEGORY_MASK;
-            maxDistSq = (cat < 4u)
-                ? camera.categoryDistSq0[cat]
-                : camera.categoryDistSq1[cat - 4u];
-        }
+            // Per-object override stored in aabbMin.w (0 = use category default)
+            float maxDistSq = obj.aabbMin.w;
+            if (maxDistSq <= 0.0) {
+                uint cat = (obj.flags >> CATEGORY_SHIFT) & CATEGORY_MASK;
+                maxDistSq = (cat < 4u)
+                    ? camera.categoryDistSq0[cat]
+                    : camera.categoryDistSq1[cat - 4u];
+            }
 
-        if (maxDistSq > 0.0 && distSq > maxDistSq) {
-            atomicAdd(batchStats[sectionIndex].culledByDistance, 1);
-            return;
-        }
-    }
-
-    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
-        if (!aabbInFrustum(worldAabbMin, worldAabbMax, camera.frustumPlanes)) {
-            atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
-            return;
-        }
-    }
-
-    bool isTransparent = (obj.flags & FLAG_TRANSLUCENT) != 0u;
-    if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u && !isTransparent) {
-        if (camera.hiZMipLevels > 0u) {
-            if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
-                atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
+            if (maxDistSq > 0.0 && distSq > maxDistSq) {
+                atomicAdd(batchStats[sectionIndex].culledByDistance, 1);
                 return;
+            }
+        }
+
+        if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
+            if (!aabbInFrustum(worldAabbMin, worldAabbMax, camera.frustumPlanes)) {
+                atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
+                return;
+            }
+        }
+
+        bool isTransparent = (obj.flags & FLAG_TRANSLUCENT) != 0u;
+        if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u && !isTransparent) {
+            if (camera.hiZMipLevels > 0u) {
+                if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
+                    atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
+                    return;
+                }
             }
         }
     }
 
     uint targetLOD = 0;
-    if (camera.enableLODSelection != 0u) {
-        vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
-        viewSphere.w = worldSphere.w;
-        float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
-    }
+    uint lodLevel;
+    uvec4 meshletLodData;
+    uint meshletOffset;
+    uint meshletCount;
+    uint baseVertexOffset;
 
-    uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
-    if (lodLevel == 0xFFFFFFFFu) {
-        return;
-    }
-
-    uvec4 meshletLodData = getMeshletLODData(obj, lodLevel);
-    uint meshletOffset = meshletLodData.x;
-    uint meshletCount = meshletLodData.y;
-    uint baseVertexOffset = meshletLodData.z;
-
-    while (lodLevel > 0u && meshletCount == 0u) {
-        lodLevel--;
-        if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
-            continue;
+    if (isInstanced) {
+        // For instanced objects, the task shader handles per-instance LOD selection.
+        // Here we just need LOD 0 (base) for the perDrawData fields; the task shader
+        // will override meshletOffset/meshletCount per-instance.
+        lodLevel = findBestAvailableLOD(0u, obj.availableLODMask);
+        if (lodLevel == 0xFFFFFFFFu) {
+            return;
         }
         meshletLodData = getMeshletLODData(obj, lodLevel);
         meshletOffset = meshletLodData.x;
         meshletCount = meshletLodData.y;
         baseVertexOffset = meshletLodData.z;
-    }
+    } else {
+        if (camera.enableLODSelection != 0u) {
+            vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
+            viewSphere.w = worldSphere.w;
+            float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
+            targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
+        }
 
-    if (meshletCount == 0u) {
-        return;
+        lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
+        if (lodLevel == 0xFFFFFFFFu) {
+            return;
+        }
+
+        meshletLodData = getMeshletLODData(obj, lodLevel);
+        meshletOffset = meshletLodData.x;
+        meshletCount = meshletLodData.y;
+        baseVertexOffset = meshletLodData.z;
+
+        while (lodLevel > 0u && meshletCount == 0u) {
+            lodLevel--;
+            if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
+                continue;
+            }
+            meshletLodData = getMeshletLODData(obj, lodLevel);
+            meshletOffset = meshletLodData.x;
+            meshletCount = meshletLodData.y;
+            baseVertexOffset = meshletLodData.z;
+        }
+
+        if (meshletCount == 0u) {
+            return;
+        }
     }
 
     uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
@@ -303,10 +331,19 @@ void main() {
     }
 
     uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
-    uint taskGroupCount = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
 
-    uint instanceCount = floatBitsToUint(obj.aabbMax.w);
-    if (instanceCount == 0u) instanceCount = 1u;
+    // For instanced objects, use max meshlet count across all available LODs
+    // so each instance's task workgroup can independently select its own LOD.
+    uint maxMeshletCount = meshletCount;
+    if (isInstanced) {
+        for (uint lod = 0u; lod < 4u; ++lod) {
+            if ((obj.availableLODMask & (1u << lod)) != 0u) {
+                uvec4 ld = getMeshletLODData(obj, lod);
+                maxMeshletCount = max(maxMeshletCount, ld.y);
+            }
+        }
+    }
+    uint taskGroupCount = (maxMeshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
 
     drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
     drawCommands[globalDrawIndex].groupCountY = instanceCount;

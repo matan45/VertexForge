@@ -17,6 +17,7 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
+layout(location = 5) flat out uint fragLodLevel[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -54,6 +55,7 @@ struct MeshletPayload {
     uint meshletCount;
     mat4 instanceModelMatrix;
     mat4 instanceNormalMatrix;
+    uint instanceLodLevel;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -169,6 +171,7 @@ void main() {
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
+            fragLodLevel[localVertexIndex] = payload.instanceLodLevel;
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
         }
     }
@@ -198,6 +201,7 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
+layout(location = 5) in flat uint fragLodLevel;
 
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
@@ -896,7 +900,7 @@ void main() {
             vec3(1.0, 0.5, 0.0),
             vec3(1.0, 0.0, 0.0)
         );
-        uint lod = min(drawData.lodLevel, 3u);
+        uint lod = min(fragLodLevel, 3u);
         color = mix(color, lodColors[lod], 0.5);
     }
 

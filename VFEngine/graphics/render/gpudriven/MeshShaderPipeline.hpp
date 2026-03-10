@@ -108,6 +108,7 @@ namespace render::gpudriven
 
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
         void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
+        void updateObjectBufferDescriptor(vk::Buffer objectBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);
 

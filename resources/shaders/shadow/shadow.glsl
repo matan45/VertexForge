@@ -32,6 +32,10 @@ layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
     mat4 instanceTransforms[];
 };
 
+layout(std430, set = 0, binding = 2) readonly buffer ObjectBuffer {
+    GPUObjectData objects[];
+};
+
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -79,11 +83,44 @@ void main() {
 
     uint instanceIndex = gl_WorkGroupID.y;
     mat4 modelMatrix;
-    if ((drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u) {
+    bool isInstanced = (drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u;
+    if (isInstanced) {
         uint instanceOffset = drawData.lightmapData.w;
         modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
     } else {
         modelMatrix = drawData.modelMatrix;
+    }
+
+    // Per-instance light frustum culling for instanced objects
+    if (isInstanced) {
+        GPUObjectData obj = objects[drawData.objectIndex];
+        vec3 localCenter = (obj.aabbMin.xyz + obj.aabbMax.xyz) * 0.5;
+        float localRadius = length(obj.aabbMax.xyz - localCenter);
+        vec4 worldSphere = transformBoundingSphere(vec4(localCenter, localRadius), modelMatrix);
+
+        // Extract light frustum planes and test
+        mat4 vp = pc.lightViewProjection;
+        vec4 lightPlanes[6];
+        lightPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+        lightPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+        lightPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+        lightPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+        lightPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+        lightPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
+        for (int i = 0; i < 6; i++) {
+            float len = max(length(lightPlanes[i].xyz), 0.0001);
+            lightPlanes[i] /= len;
+        }
+
+        if (!sphereInFrustum(worldSphere, lightPlanes)) {
+            if (gl_LocalInvocationID.x == 0) {
+                payload.drawIndex = drawIndex;
+                payload.meshletCount = 0;
+                payload.instanceModelMatrix = modelMatrix;
+                EmitMeshTasksEXT(0, 1, 1);
+            }
+            return;
+        }
     }
 
     uint localMeshletIndex = gl_LocalInvocationID.x;

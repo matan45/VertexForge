@@ -277,73 +277,40 @@ namespace render::gpudriven
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
 
-                    // ── LOD sub-grouping ──
-                    // Bucket instances by distance to camera into LOD bins.
-                    // Use squared distance thresholds derived from LOD screen-size thresholds.
-                    // Rough mapping: LOD0 < 30m, LOD1 < 60m, LOD2 < 120m, LOD3 >= 120m
-                    constexpr float LOD_DIST_SQ_0 = 30.0f * 30.0f;   // LOD0: close
-                    constexpr float LOD_DIST_SQ_1 = 60.0f * 60.0f;   // LOD1: medium
-                    constexpr float LOD_DIST_SQ_2 = 120.0f * 120.0f; // LOD2: far
+                    if (currentObjectCount >= maxObjectCount)
+                    {
+                        vfLogWarning("MergedMeshBuffer: max object count reached");
+                        return;
+                    }
+                    if (currentInstanceCount + instanceCount > maxInstanceCount)
+                    {
+                        vfLogWarning("MergedMeshBuffer: max instance count reached");
+                        return;
+                    }
 
-                    // Sort instances into LOD buckets (indices into instanceTransforms)
-                    std::array<std::vector<uint32_t>, LOD_LEVEL_COUNT> lodBuckets;
+                    GPUObjectData& obj = cpuObjectData[currentObjectCount];
+                    populateObjectData(obj, meshRender, submeshLoc, resolvers);
+                    obj.entityId = currentObjectCount;
+
+                    // Use the first instance as representative for LOD/culling
+                    obj.modelMatrix = meshRender.instanceTransforms[0];
+
+                    // Pack instancing data
+                    std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
+                    obj.lightmapData.w = currentInstanceCount; // instanceOffset
+                    obj.flags |= ObjectFlags::Instanced;
+
+                    // Fill instance transform buffer
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
-                        glm::vec3 instancePos = glm::vec3(meshRender.instanceTransforms[i][3]);
-                        glm::vec3 diff = instancePos - resolvers.cameraPosition;
-                        float distSq = glm::dot(diff, diff);
-
-                        if (distSq < LOD_DIST_SQ_0) lodBuckets[0].push_back(i);
-                        else if (distSq < LOD_DIST_SQ_1) lodBuckets[1].push_back(i);
-                        else if (distSq < LOD_DIST_SQ_2) lodBuckets[2].push_back(i);
-                        else lodBuckets[3].push_back(i);
+                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
+                            meshRender.instanceTransforms[i];
                     }
+                    currentInstanceCount += instanceCount;
 
-                    // Emit one GPUObjectData per non-empty LOD bucket
-                    for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-                    {
-                        if (lodBuckets[lod].empty()) continue;
-
-                        uint32_t bucketSize = static_cast<uint32_t>(lodBuckets[lod].size());
-
-                        if (currentObjectCount >= maxObjectCount)
-                        {
-                            vfLogWarning("MergedMeshBuffer: max object count reached");
-                            return;
-                        }
-                        if (currentInstanceCount + bucketSize > maxInstanceCount)
-                        {
-                            vfLogWarning("MergedMeshBuffer: max instance count reached");
-                            return;
-                        }
-
-                        GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                        populateObjectData(obj, meshRender, submeshLoc, resolvers);
-                        obj.entityId = currentObjectCount;
-
-                        // Use the first instance in this bucket as representative position
-                        // so the GPU cull shader picks the correct LOD for the group
-                        uint32_t repIdx = lodBuckets[lod][0];
-                        obj.modelMatrix = meshRender.instanceTransforms[repIdx];
-
-                        // Pack instancing data
-                        uint32_t instCount = bucketSize;
-                        std::memcpy(&obj.aabbMax.w, &instCount, sizeof(uint32_t));
-                        obj.lightmapData.w = currentInstanceCount; // instanceOffset
-                        obj.flags |= ObjectFlags::Instanced;
-
-                        // Fill instance transform buffer for this LOD bucket
-                        for (uint32_t i = 0; i < bucketSize; ++i)
-                        {
-                            cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
-                                meshRender.instanceTransforms[lodBuckets[lod][i]];
-                        }
-                        currentInstanceCount += bucketSize;
-
-                        bool isTransparent = (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT);
-                        if (isTransparent) transparentObjectCount++;
-                        currentObjectCount++;
-                    }
+                    if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
+                        transparentObjectCount++;
+                    currentObjectCount++;
                 }
                 continue;
             }
@@ -408,61 +375,35 @@ namespace render::gpudriven
 
             if (!meshRender.instanceTransforms.empty())
             {
-                // Hardware instancing with LOD sub-grouping
                 uint32_t instanceCount = static_cast<uint32_t>(meshRender.instanceTransforms.size());
 
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
                     const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                     if (!submeshLoc.hasRenderableLOD()) continue;
+                    if (currentObjectCount >= maxObjectCount) break;
+                    if (currentInstanceCount + instanceCount > maxInstanceCount) break;
 
-                    constexpr float LOD_DIST_SQ_0 = 30.0f * 30.0f;
-                    constexpr float LOD_DIST_SQ_1 = 60.0f * 60.0f;
-                    constexpr float LOD_DIST_SQ_2 = 120.0f * 120.0f;
+                    GPUObjectData& obj = cpuObjectData[currentObjectCount];
+                    populateObjectData(obj, meshRender, submeshLoc, resolvers);
+                    obj.entityId = currentObjectCount;
 
-                    std::array<std::vector<uint32_t>, LOD_LEVEL_COUNT> lodBuckets;
+                    obj.modelMatrix = meshRender.instanceTransforms[0];
+
+                    std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
+                    obj.lightmapData.w = currentInstanceCount;
+                    obj.flags |= ObjectFlags::Instanced;
+
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
-                        glm::vec3 instancePos = glm::vec3(meshRender.instanceTransforms[i][3]);
-                        glm::vec3 diff = instancePos - resolvers.cameraPosition;
-                        float distSq = glm::dot(diff, diff);
-
-                        if (distSq < LOD_DIST_SQ_0) lodBuckets[0].push_back(i);
-                        else if (distSq < LOD_DIST_SQ_1) lodBuckets[1].push_back(i);
-                        else if (distSq < LOD_DIST_SQ_2) lodBuckets[2].push_back(i);
-                        else lodBuckets[3].push_back(i);
+                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
+                            meshRender.instanceTransforms[i];
                     }
+                    currentInstanceCount += instanceCount;
 
-                    for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-                    {
-                        if (lodBuckets[lod].empty()) continue;
-                        uint32_t bucketSize = static_cast<uint32_t>(lodBuckets[lod].size());
-                        if (currentObjectCount >= maxObjectCount) break;
-                        if (currentInstanceCount + bucketSize > maxInstanceCount) break;
-
-                        GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                        populateObjectData(obj, meshRender, submeshLoc, resolvers);
-                        obj.entityId = currentObjectCount;
-
-                        uint32_t repIdx = lodBuckets[lod][0];
-                        obj.modelMatrix = meshRender.instanceTransforms[repIdx];
-
-                        uint32_t instCount = bucketSize;
-                        std::memcpy(&obj.aabbMax.w, &instCount, sizeof(uint32_t));
-                        obj.lightmapData.w = currentInstanceCount;
-                        obj.flags |= ObjectFlags::Instanced;
-
-                        for (uint32_t i = 0; i < bucketSize; ++i)
-                        {
-                            cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
-                                meshRender.instanceTransforms[lodBuckets[lod][i]];
-                        }
-                        currentInstanceCount += bucketSize;
-
-                        if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
-                            transparentObjectCount++;
-                        currentObjectCount++;
-                    }
+                    if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
+                        transparentObjectCount++;
+                    currentObjectCount++;
                 }
             }
             else

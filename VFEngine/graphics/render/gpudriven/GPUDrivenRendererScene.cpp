@@ -497,6 +497,7 @@ namespace render::gpudriven
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            meshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (transparentMeshShaderPipeline)
@@ -504,6 +505,7 @@ namespace render::gpudriven
             transparentMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             transparentMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             transparentMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            transparentMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (wboitMeshShaderPipeline)
@@ -511,6 +513,7 @@ namespace render::gpudriven
             wboitMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             wboitMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            wboitMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (meshShaderPipeline && hasMeshes)
