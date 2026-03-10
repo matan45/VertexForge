@@ -7,6 +7,7 @@
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/meshbrush/MeshBrushEvents.hpp"
 
 namespace services
 {
@@ -37,6 +38,10 @@ namespace services
         if (holeModeToken.isValid())
         {
             dispatcher.unsubscribe(holeModeToken);
+        }
+        if (meshBrushModeToken.isValid())
+        {
+            dispatcher.unsubscribe(meshBrushModeToken);
         }
     }
 
@@ -129,6 +134,16 @@ namespace services
                 }
             });
 
+        // Auto-deactivate when mesh brush mode activates
+        meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
+            [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
+            {
+                if (n.isActive && vegetationBrushActive)
+                {
+                    deactivate();
+                }
+            });
+
     }
 
     bool VegetationBrushModeServiceImpl::activate()
@@ -163,6 +178,15 @@ namespace services
         if (holeActive)
         {
             events::hole::SetHoleModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+
+        // Deactivate mesh brush mode if active
+        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+        if (meshBrushActive)
+        {
+            events::meshBrush::SetMeshBrushModeActiveCommand cmd;
             cmd.active = false;
             dispatcher.execute(cmd);
         }

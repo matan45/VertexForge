@@ -188,6 +188,19 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainHeightfield"; }
     };
 
+    struct TerrainHeightAtResult
+    {
+        float height = 0.0f;
+        bool valid = false;
+    };
+
+    struct GetTerrainHeightAtQuery : IQuery<TerrainHeightAtResult>
+    {
+        float worldX = 0.0f;
+        float worldZ = 0.0f;
+        std::string_view getName() const override { return "GetTerrainHeightAt"; }
+    };
+
     struct TerrainGeometryResult
     {
         std::vector<float> vertices; // Flat: x,y,z,x,y,z,...

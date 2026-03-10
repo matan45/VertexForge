@@ -102,6 +102,7 @@ namespace windows
             paintToolPanel.draw();
             holeToolPanel.draw();
             grassDensityPanel.draw();
+            meshBrushToolPanel.draw();
             giConfigWindow.draw();
             lightStreamingDebugWindow.draw();
         }

@@ -93,6 +93,11 @@ namespace events {
         return handler(queryObj);
     }
 
+    // Thread safety: publish() and unsubscribe() are safe when called from the same
+    // thread (all current usage). The shared_lock prevents concurrent modification
+    // from subscribe/unregister on other threads. Subscriber lambdas that capture
+    // 'this' are safe as long as the owning object calls unsubscribe() before
+    // destruction, which is guaranteed by ScopedSubscription and panel destructors.
     template<typename TNotification>
     void EventDispatcher::publish(const TNotification& notification) {
         std::shared_lock lock(mutex);

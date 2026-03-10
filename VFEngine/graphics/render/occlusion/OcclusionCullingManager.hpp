@@ -68,6 +68,12 @@ namespace render::occlusion
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingBufferMemory;
 
+        // Persistent staging buffer for object uploads (avoids per-frame alloc + waitIdle)
+        vk::Buffer uploadStagingBuffer;
+        vk::DeviceMemory uploadStagingBufferMemory;
+        uint32_t uploadStagingCapacity = 0;
+        bool pendingObjectUpload = false;
+
         uint32_t maxObjectCount = 0;
         uint32_t currentObjectCount = 0;
         CullCameraData cameraData{};
@@ -82,6 +88,8 @@ namespace render::occlusion
         void init(HiZBuffer* hiZBuffer);
 
         void updateObjects(const std::vector<GPUObjectData>& objects);
+
+        void uploadObjects(vk::CommandBuffer cmd);
 
         void updateCamera(const glm::mat4& viewProj, float nearPlane);
 

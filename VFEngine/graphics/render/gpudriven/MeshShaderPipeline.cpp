@@ -167,6 +167,42 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(perDrawWrite, {});
     }
 
+    void MeshShaderPipeline::updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer)
+    {
+        vk::DescriptorBufferInfo instanceInfo{};
+        instanceInfo.buffer = instanceTransformBuffer;
+        instanceInfo.offset = 0;
+        instanceInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet instanceWrite{};
+        instanceWrite.dstSet = perDrawDataDescriptorSet;
+        instanceWrite.dstBinding = 1;
+        instanceWrite.dstArrayElement = 0;
+        instanceWrite.descriptorCount = 1;
+        instanceWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        instanceWrite.pBufferInfo = &instanceInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(instanceWrite, {});
+    }
+
+    void MeshShaderPipeline::updateObjectBufferDescriptor(vk::Buffer objectBuffer)
+    {
+        vk::DescriptorBufferInfo objectInfo{};
+        objectInfo.buffer = objectBuffer;
+        objectInfo.offset = 0;
+        objectInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet objectWrite{};
+        objectWrite.dstSet = perDrawDataDescriptorSet;
+        objectWrite.dstBinding = 2;
+        objectWrite.dstArrayElement = 0;
+        objectWrite.descriptorCount = 1;
+        objectWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        objectWrite.pBufferInfo = &objectInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(objectWrite, {});
+    }
+
     void MeshShaderPipeline::updateMeshletDescriptors(MeshletBuffer& meshletBuffer)
     {
         std::array<vk::DescriptorBufferInfo, 3> bufferInfos{};
@@ -245,24 +281,38 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::DescriptorSetLayoutBinding perDrawBinding{};
-        perDrawBinding.binding = 0;
-        perDrawBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
-        perDrawBinding.descriptorCount = 1;
-        perDrawBinding.stageFlags = vk::ShaderStageFlagBits::eVertex |
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+
+        // Binding 0: PerDrawData SSBO
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex |
             vk::ShaderStageFlagBits::eTaskEXT |
             vk::ShaderStageFlagBits::eMeshEXT |
             vk::ShaderStageFlagBits::eFragment;
 
+        // Binding 1: Instance transform SSBO (read by task shader)
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
+        // Binding 2: GPUObjectData SSBO (read by task shader for per-instance LOD + culling)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &perDrawBinding;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
 
         perDrawDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 1;
+        poolSize.descriptorCount = 3;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;

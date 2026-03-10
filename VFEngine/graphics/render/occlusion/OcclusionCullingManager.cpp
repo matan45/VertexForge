@@ -171,6 +171,7 @@ namespace render::occlusion
         if (objects.empty())
         {
             currentObjectCount = 0;
+            pendingObjectUpload = false;
             return;
         }
 
@@ -181,48 +182,62 @@ namespace render::occlusion
 
         currentObjectCount = static_cast<uint32_t>(objects.size());
 
-        vk::Buffer uploadStaging;
-        vk::DeviceMemory uploadStagingMemory;
+        // Grow persistent staging buffer if needed
+        if (currentObjectCount > uploadStagingCapacity)
+        {
+            if (uploadStagingBuffer)
+            {
+                device.getLogicalDevice().destroyBuffer(uploadStagingBuffer);
+                device.getLogicalDevice().freeMemory(uploadStagingBufferMemory);
+            }
+            uploadStagingCapacity = currentObjectCount * 2;
+            core::BufferInfoRequest stagingRequest(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                sizeof(GPUObjectData) * uploadStagingCapacity,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+            );
+            core::BufferUtilities::createBuffer(stagingRequest, uploadStagingBuffer, uploadStagingBufferMemory);
+        }
+
+        // Copy to persistent staging buffer (CPU only, no GPU stall)
         vk::DeviceSize uploadSize = sizeof(GPUObjectData) * objects.size();
-
-        core::BufferInfoRequest uploadRequest(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            uploadSize,
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-        core::BufferUtilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
-
-        void* data = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, uploadSize);
+        void* data = device.getLogicalDevice().mapMemory(uploadStagingBufferMemory, 0, uploadSize);
         std::memcpy(data, objects.data(), uploadSize);
-        device.getLogicalDevice().unmapMemory(uploadStagingMemory);
+        device.getLogicalDevice().unmapMemory(uploadStagingBufferMemory);
 
-        vk::CommandBufferAllocateInfo cmdAllocInfo{};
-        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-        cmdAllocInfo.commandPool = device.getStagingCommandPool();
-        cmdAllocInfo.commandBufferCount = 1;
-        vk::CommandBuffer cmd = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo)[0];
+        pendingObjectUpload = true;
+    }
 
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
+    void OcclusionCullingManager::uploadObjects(vk::CommandBuffer cmd)
+    {
+        if (!pendingObjectUpload || currentObjectCount == 0)
+        {
+            return;
+        }
 
         vk::BufferCopy copyRegion{};
-        copyRegion.size = uploadSize;
-        cmd.copyBuffer(uploadStaging, objectBuffer, copyRegion);
+        copyRegion.size = sizeof(GPUObjectData) * currentObjectCount;
+        cmd.copyBuffer(uploadStagingBuffer, objectBuffer, copyRegion);
 
-        cmd.end();
+        // Barrier: transfer must complete before compute shader reads the buffer
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = objectBuffer;
+        barrier.offset = 0;
+        barrier.size = copyRegion.size;
 
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, barrier, {}
+        );
 
-        device.getLogicalDevice().freeCommandBuffers(device.getStagingCommandPool(), 1, &cmd);
-        device.getLogicalDevice().destroyBuffer(uploadStaging);
-        device.getLogicalDevice().freeMemory(uploadStagingMemory);
+        pendingObjectUpload = false;
     }
 
     void OcclusionCullingManager::updateCamera(const glm::mat4& viewProj, float nearPlane)
@@ -385,6 +400,14 @@ namespace render::occlusion
         device.getLogicalDevice().freeMemory(cameraBufferMemory);
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+        if (uploadStagingBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(uploadStagingBuffer);
+            device.getLogicalDevice().freeMemory(uploadStagingBufferMemory);
+            uploadStagingBuffer = nullptr;
+            uploadStagingCapacity = 0;
+        }
 
         if (shader)
         {

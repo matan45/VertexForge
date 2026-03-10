@@ -56,6 +56,7 @@ namespace services
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainGeometryQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightfieldQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::physics::HasTerrainColliderQuery>();
@@ -483,6 +484,86 @@ namespace services
                         copyCount * sizeof(float));
         }
 
+        result.valid = true;
+        return result;
+    }
+
+    events::terrain::TerrainHeightAtResult TerrainService::getTerrainHeightAt(float worldX, float worldZ)
+    {
+        events::terrain::TerrainHeightAtResult result;
+
+        if (terrainGrids.empty())
+            return result;
+
+        auto& [entityId, grid] = *terrainGrids.begin();
+        auto allTiles = grid->getAllTiles();
+        if (allTiles.empty())
+            return result;
+
+        const auto& config = allTiles[0]->config;
+        float tileSize = config.worldTileSize;
+        uint32_t quadCount = config.getQuadCount();
+        float vertexSpacing = config.getVertexSpacing();
+
+        // Determine which tile this world position falls in
+        int32_t tileX = static_cast<int32_t>(std::floor(worldX / tileSize));
+        int32_t tileZ = static_cast<int32_t>(std::floor(worldZ / tileSize));
+
+        // Find the tile
+        terrain::TerrainTile* tile = nullptr;
+        for (auto* t : allTiles)
+        {
+            if (t && t->coord.x == tileX && t->coord.z == tileZ)
+            {
+                tile = t;
+                break;
+            }
+        }
+
+        if (!tile || !tile->hasHeightData())
+            return result;
+
+        // Local position within the tile (0..tileSize)
+        float localX = worldX - static_cast<float>(tileX) * tileSize;
+        float localZ = worldZ - static_cast<float>(tileZ) * tileSize;
+
+        // Convert to grid coordinates (fractional)
+        float gx = localX / vertexSpacing;
+        float gz = localZ / vertexSpacing;
+
+        // Clamp to valid range
+        float maxCoord = static_cast<float>(quadCount);
+        gx = std::clamp(gx, 0.0f, maxCoord);
+        gz = std::clamp(gz, 0.0f, maxCoord);
+
+        // Integer grid indices
+        uint32_t ix = static_cast<uint32_t>(gx);
+        uint32_t iz = static_cast<uint32_t>(gz);
+        ix = std::min(ix, quadCount - 1);
+        iz = std::min(iz, quadCount - 1);
+
+        // Fractional part for bilinear interpolation
+        float fx = gx - static_cast<float>(ix);
+        float fz = gz - static_cast<float>(iz);
+
+        uint32_t vpt = quadCount + 1;
+        auto getHeight = [&](uint32_t x, uint32_t z) -> float
+        {
+            return tile->heightData[z * vpt + x];
+        };
+
+        // Bilinear interpolation of the four surrounding vertices
+        float h00 = getHeight(ix, iz);
+        float h10 = getHeight(ix + 1, iz);
+        float h01 = getHeight(ix, iz + 1);
+        float h11 = getHeight(ix + 1, iz + 1);
+
+        float h = h00 * (1.0f - fx) * (1.0f - fz)
+                + h10 * fx * (1.0f - fz)
+                + h01 * (1.0f - fx) * fz
+                + h11 * fx * fz;
+
+        result.height = h;
         result.valid = true;
         return result;
     }

@@ -42,6 +42,8 @@
 #include "impl/vegetation/GrassServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
+#include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
+#include "impl/meshbrush/MeshBrushServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -233,6 +235,8 @@ namespace handlers
         grassService.reset();
         vegetationBrushService.reset();
         vegetationBrushModeService.reset();
+        meshBrushService.reset();
+        meshBrushModeService.reset();
         lightStreamingService.reset();
         giService.reset();
         audioService.reset();
@@ -277,6 +281,7 @@ namespace handlers
         createTerrainServices();
         createWaterServices();
         createVegetationServices();
+        createMeshBrushServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
@@ -452,6 +457,12 @@ namespace handlers
         }
     }
 
+    void EditorHandler::createMeshBrushServices()
+    {
+        meshBrushService = std::make_shared<services::MeshBrushServiceImpl>();
+        meshBrushModeService = std::make_shared<services::MeshBrushModeServiceImpl>();
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -498,6 +509,8 @@ namespace handlers
         grassService->registerEventHandlers();
         vegetationBrushService->registerEventHandlers();
         vegetationBrushModeService->registerEventHandlers();
+        meshBrushService->registerEventHandlers();
+        meshBrushModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();
         giService->registerEventHandlers();

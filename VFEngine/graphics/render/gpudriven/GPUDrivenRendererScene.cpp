@@ -56,7 +56,7 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time});
+        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time, cameraPosition});
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -496,18 +496,24 @@ namespace render::gpudriven
         {
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            meshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (transparentMeshShaderPipeline)
         {
             transparentMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             transparentMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            transparentMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            transparentMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (wboitMeshShaderPipeline)
         {
             wboitMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            wboitMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            wboitMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (meshShaderPipeline && hasMeshes)

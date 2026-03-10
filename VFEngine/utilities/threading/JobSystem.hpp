@@ -24,6 +24,12 @@ namespace threading {
 		// Returns the number of worker threads (excludes the main thread)
 		uint32_t getThreadCount() const;
 
+		// Parallel for-loop: splits [0, count) into ranges across worker threads.
+		// body(begin, end) is called for each range partition.
+		// Blocks until all partitions complete. Falls back to inline execution for small counts.
+		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& body,
+			uint32_t minBatchSize = 64);
+
 		// Submit a callable, returns std::future<T> (drop-in replacement for std::async)
 		template<typename F>
 		auto submit(F&& callable, JobPriority priority = JobPriority::NORMAL)

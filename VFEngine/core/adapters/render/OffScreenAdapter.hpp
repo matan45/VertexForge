@@ -57,6 +57,7 @@ namespace core
 
         void prepareFrameBillboards() override;
         void prepareFrameText() override;
+        void prepareSceneData() override;
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;
         bool loadBillboardAtlas(const std::string& atlasPath) override;

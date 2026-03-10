@@ -4,6 +4,8 @@
 #include "UIInteractionSystem.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
+#include "../../render/billboard/BillboardTypes.hpp"
+#include "../../render/text/TextTypes.hpp"
 #include <string>
 #include <functional>
 #include <unordered_map>
@@ -69,6 +71,16 @@ namespace controllers::offscreen
         void prepareMeshes(const FrameContext& ctx);
         void prepareBillboards(const FrameContext& ctx);
         void prepareText(const FrameContext& ctx);
+
+        // Parallel variant: runs billboard and text data gathering concurrently
+        // with mesh preparation. Vulkan pipeline init stays on main thread.
+        void prepareSceneData(const FrameContext& ctx);
+
+    private:
+        std::vector<render::billboard::BillboardRenderData> gatherBillboardData(const FrameContext& ctx);
+        std::vector<render::text::TextRenderData> gatherTextData(const FrameContext& ctx);
+
+    public:
 
         void prepareCameraFrustums(const FrameContext& ctx) { debugBuilder.prepareCameraFrustums(ctx); }
         void prepareAudioSpheres(const FrameContext& ctx) { debugBuilder.prepareAudioSpheres(ctx); }

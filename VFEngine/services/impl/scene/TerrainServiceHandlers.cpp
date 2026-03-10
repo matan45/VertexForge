@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -101,6 +102,12 @@ namespace services
             [this](const events::terrain::GetTerrainHeightfieldQuery&)
             {
                 return getTerrainHeightfield();
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainHeightAtQuery>(
+            [this](const events::terrain::GetTerrainHeightAtQuery& q)
+            {
+                return getTerrainHeightAt(q.worldX, q.worldZ);
             });
 
         dispatcher.registerCommandHandler<events::terrain::AddTerrainTileCommand>(
@@ -210,7 +217,23 @@ namespace services
                 entt::entity ent = internal::fromHandle(cmd.terrainEntity);
                 if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
                 {
-                    registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
+                    auto& comp = registry.get<components::TerrainComponent>(ent);
+                    auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+                    // Release old terrain material
+                    if (!comp.terrainMaterialPath.empty() && comp.terrainMaterialPath != cmd.materialPath)
+                    {
+                        lifecycle.release(comp.terrainMaterialPath);
+                    }
+
+                    comp.terrainMaterialPath = cmd.materialPath;
+
+                    // Acquire new terrain material
+                    if (!cmd.materialPath.empty())
+                    {
+                        lifecycle.acquire(cmd.materialPath, resource::AssetType::Material);
+                    }
+
                     syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
                 }
             });

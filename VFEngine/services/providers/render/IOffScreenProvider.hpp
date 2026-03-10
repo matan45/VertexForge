@@ -21,14 +21,9 @@ namespace services {
     struct CameraCullingStats {
         CameraId cameraId = 0;
         bool isActive = false;
-        bool occlusionEnabled = false;
-        bool occlusionInitialized = false;
         bool frustumReady = false;
         bool bvhBuilt = false;
         uint32_t totalMeshEntities = 0;
-        uint32_t visibleAfterFrustumCull = 0;
-        uint32_t visibleAfterOcclusionCull = 0;
-        uint32_t occludedCount = 0;
     };
 
     struct GPUDrivenDebugStats {
@@ -163,6 +158,7 @@ namespace services {
 
         virtual void prepareFrameBillboards() = 0;
         virtual void prepareFrameText() = 0;
+        virtual void prepareSceneData() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;

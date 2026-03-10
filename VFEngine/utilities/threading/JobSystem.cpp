@@ -64,6 +64,29 @@ namespace threading {
 		vfLogInfo("JobSystem shutdown complete");
 	}
 
+	void JobSystem::parallelFor(uint32_t count,
+		const std::function<void(uint32_t, uint32_t)>& body,
+		uint32_t minBatchSize)
+	{
+		if (count == 0) return;
+
+		// For small counts, run inline to avoid scheduling overhead
+		if (count <= minBatchSize)
+		{
+			body(0, count);
+			return;
+		}
+
+		enki::TaskSet task(count,
+			[&body](enki::TaskSetPartition range, uint32_t) {
+				body(range.start, range.end);
+			}
+		);
+		task.m_MinRange = minBatchSize;
+		pImpl->scheduler.AddTaskSetToPipe(&task);
+		pImpl->scheduler.WaitforTask(&task);
+	}
+
 	void JobSystem::submitTask(std::function<void()> func, JobPriority priority)
 	{
 		// Auto-register external threads (e.g. detached std::thread, std::async)

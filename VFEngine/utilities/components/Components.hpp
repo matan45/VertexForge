@@ -11,6 +11,7 @@
 #include "ControllerComponents.hpp"
 #include "IKComponent.hpp"
 #include "VegetationComponents.hpp"
+#include "MeshBrushComponents.hpp"
 
 namespace components
 {
@@ -28,5 +29,5 @@ namespace components
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent, LightmapComponent,
                                                IKTargetComponent, WorldSectorComponent,
-                                               GrassComponent>;
+                                               GrassComponent, MeshBrushInstanceComponent>;
 }

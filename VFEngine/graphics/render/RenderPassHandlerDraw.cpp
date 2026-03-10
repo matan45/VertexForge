@@ -426,11 +426,6 @@ namespace render
 
         cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
 
-        if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
-        {
-            cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
-        }
-
         if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
         {
             dispatchTerrainRaycast(commandBuffer);

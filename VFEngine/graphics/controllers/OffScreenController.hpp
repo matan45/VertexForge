@@ -120,6 +120,7 @@ namespace controllers
         void prepareFrameMeshes();
         void prepareFrameBillboards();
         void prepareFrameText();
+        void prepareSceneData();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
         void prepareFrameLightGizmos();

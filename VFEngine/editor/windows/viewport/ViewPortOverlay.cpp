@@ -6,6 +6,7 @@
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
+#include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
@@ -82,7 +83,8 @@ namespace windows
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
                 bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
                 bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode);
+                bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode || isMeshBrushMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -223,6 +225,37 @@ namespace windows
                 {
                     events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
                     cmd.active = !isVegBrushMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Mesh brush mode toggle - enabled when terrain is selected or already in mesh brush mode
+                bool canMeshBrush = isMeshBrushMode;
+                if (!canMeshBrush)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery5;
+                        terrainQuery5.entity = *selectedEntity;
+                        canMeshBrush = dispatcher.query(terrainQuery5);
+
+                        if (!canMeshBrush)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery5;
+                            tileQuery5.entity = *selectedEntity;
+                            canMeshBrush = dispatcher.query(tileQuery5);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canMeshBrush);
+                if (iconButton(ViewportIcon::MeshBrush, isMeshBrushMode, isMeshBrushMode ? "Exit Mesh Brush" : "Enter Mesh Brush"))
+                {
+                    events::meshBrush::SetMeshBrushModeActiveCommand cmd;
+                    cmd.active = !isMeshBrushMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();
