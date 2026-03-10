@@ -218,20 +218,21 @@ namespace controllers::offscreen
         {
             if (rd.showBoundingBox) return false;
             if (!rd.lightmapPath.empty()) return false;
-            if (!rd.submeshMaterials.empty()) return false;
             if (rd.maxDrawDistance > 0.0f) return false;
             if (registry.all_of<components::AnimatorComponent>(entity)) return false;
             return true;
         };
 
-        // Batch key: meshPath + defaultMaterialPath
+        // Batch key: meshPath + defaultMaterialPath + submesh material fingerprint
         struct BatchKey
         {
             std::string meshPath;
             std::string materialPath;
+            size_t submeshMaterialHash;
             bool operator==(const BatchKey& o) const
             {
-                return meshPath == o.meshPath && materialPath == o.materialPath;
+                return meshPath == o.meshPath && materialPath == o.materialPath
+                    && submeshMaterialHash == o.submeshMaterialHash;
             }
         };
         struct BatchKeyHash
@@ -240,8 +241,22 @@ namespace controllers::offscreen
             {
                 size_t h = std::hash<std::string>{}(k.meshPath);
                 h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2);
                 return h;
             }
+        };
+
+        auto hashSubmeshMaterials = [](const std::unordered_map<std::string, render::mesh::SubMeshMaterialInfo>& mats) -> size_t
+        {
+            if (mats.empty()) return 0;
+            size_t h = 0;
+            for (const auto& [name, info] : mats)
+            {
+                size_t entry = std::hash<std::string>{}(name);
+                entry ^= std::hash<std::string>{}(info.materialPath) + 0x9e3779b9 + (entry << 6) + (entry >> 2);
+                h ^= entry;
+            }
+            return h;
         };
 
         // Map from batch key to index in meshDrawList (for the template MeshRenderData)
@@ -254,7 +269,8 @@ namespace controllers::offscreen
 
             if (canBatch(entity, renderData))
             {
-                BatchKey key{renderData.meshPath, renderData.defaultMaterialPath};
+                BatchKey key{renderData.meshPath, renderData.defaultMaterialPath,
+                             hashSubmeshMaterials(renderData.submeshMaterials)};
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())
                 {
@@ -381,6 +397,34 @@ namespace controllers::offscreen
         else if (useGPUDrivenCulling)
         {
             renderHandler->clearVisibleLights();
+        }
+
+        // Log batching stats
+        {
+            uint32_t totalEntities = 0;
+            uint32_t batchedGroups = 0;
+            uint32_t unbatchedCount = 0;
+            for (const auto& rd : meshDrawList)
+            {
+                if (!rd.instanceTransforms.empty())
+                {
+                    batchedGroups++;
+                    totalEntities += static_cast<uint32_t>(rd.instanceTransforms.size());
+                }
+                else
+                {
+                    unbatchedCount++;
+                    totalEntities++;
+                }
+            }
+            static int logCooldown = 0;
+            if (logCooldown <= 0)
+            {
+                vfLogInfo("Instancing: {} entities -> {} draw items ({} batched groups, {} unbatched), batchMap size={}",
+                          totalEntities, meshDrawList.size(), batchedGroups, unbatchedCount, batchMap.size());
+                logCooldown = 300; // ~5 seconds at 60fps
+            }
+            logCooldown--;
         }
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));

@@ -58,6 +58,7 @@ namespace render::gpudriven
         BoneOffsetResolver boneOffsetResolver;
         LightmapIndexResolver lightmapResolver;
         float time = 0.0f;
+        glm::vec3 cameraPosition{0.0f};
     };
 
     struct LODUploadData
