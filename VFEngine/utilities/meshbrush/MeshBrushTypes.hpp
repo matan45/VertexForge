@@ -20,6 +20,8 @@ namespace meshbrush
         bool alignToNormal = false;
         float maxSlope = 90.0f; // degrees
         glm::vec2 heightRange{-10000.0f, 10000.0f};
+        float yOffset = 0.0f; // Manual vertical offset from terrain surface
+        bool enabled = true;
     };
 
     struct MeshBrushParams

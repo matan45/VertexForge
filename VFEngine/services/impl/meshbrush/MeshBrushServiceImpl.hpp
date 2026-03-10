@@ -6,6 +6,8 @@
 #include "../../data/EntityHandle.hpp"
 #include <vector>
 #include <random>
+#include <string>
+#include <unordered_map>
 #include <glm/glm.hpp>
 
 namespace services
@@ -18,11 +20,27 @@ namespace services
         std::vector<meshbrush::MeshPaletteEntry> palette;
         meshbrush::MeshBrushSpatialGrid spatialGrid;
         bool meshBrushModeActive = false;
+        int selectedPaletteIndex = -1; // -1 = all (weighted random)
 
         std::mt19937 rng{std::random_device{}()};
 
         ::events::SubscriptionToken modeChangedToken;
         ::events::SubscriptionToken sceneClearedToken;
+
+        // Rate limiting for continuous painting
+        glm::vec3 lastPlacementPos{0.0f};
+        bool hasLastPlacement = false;
+
+        // Global entity counter for unique names
+        uint32_t entityCounter = 0;
+
+        // Per-palette-entry group parent entities
+        std::unordered_map<uint32_t, EntityHandle> groupEntities;
+        EntityHandle ensureGroupEntity(uint32_t paletteIdx);
+
+        // AABB Y-offset cache (meshPath -> -aabb.min.y)
+        std::unordered_map<std::string, float> aabbYOffsetCache;
+        float getAABBYOffset(const std::string& meshPath);
 
     public:
         MeshBrushServiceImpl() = default;

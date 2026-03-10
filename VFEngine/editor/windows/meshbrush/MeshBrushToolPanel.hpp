@@ -18,6 +18,7 @@ namespace windows
         float positionJitter = 0.5f;
         int falloffIndex = 2;
 
+        int selectedPaletteIndex = -1; // -1 = All (weighted random)
         std::vector<meshbrush::MeshPaletteEntry> paletteEntries;
         nfd::FileDialog fileDialog;
 

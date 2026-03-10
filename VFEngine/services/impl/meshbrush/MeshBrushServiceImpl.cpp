@@ -1,6 +1,7 @@
 #include "MeshBrushServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
+#include "../../events/render/RenderEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
@@ -44,6 +45,13 @@ namespace services
                 currentMode = cmd.mode;
             });
 
+        // Selected entry command
+        dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushSelectedEntryCommand>(
+            [this](const events::meshBrush::SetMeshBrushSelectedEntryCommand& cmd)
+            {
+                selectedPaletteIndex = cmd.selectedIndex;
+            });
+
         // Palette commands
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushPaletteCommand>(
             [this](const events::meshBrush::SetMeshBrushPaletteCommand& cmd)
@@ -63,6 +71,8 @@ namespace services
                 if (cmd.index < palette.size())
                 {
                     palette.erase(palette.begin() + cmd.index);
+                    // Remove group entity for this index and shift higher indices
+                    groupEntities.erase(cmd.index);
                 }
             });
 
@@ -107,6 +117,10 @@ namespace services
             [this](const events::scene::SceneClearedNotification&)
             {
                 spatialGrid.clear();
+                entityCounter = 0;
+                hasLastPlacement = false;
+                groupEntities.clear();
+                aabbYOffsetCache.clear();
             });
     }
 
@@ -115,9 +129,26 @@ namespace services
     {
         if (palette.empty()) return;
 
+        if (isFirst)
+        {
+            hasLastPlacement = false;
+        }
+
+        // Rate limit: only place when brush has moved at least half the spacing distance
+        if (hasLastPlacement && currentMode == meshbrush::MeshBrushMode::Paint)
+        {
+            float dist = glm::length(glm::vec2(worldPos.x - lastPlacementPos.x, worldPos.z - lastPlacementPos.z));
+            if (dist < currentParams.spacing * 0.5f)
+            {
+                return;
+            }
+        }
+
         if (currentMode == meshbrush::MeshBrushMode::Paint)
         {
             placeMeshes(worldPos, normal);
+            lastPlacementPos = worldPos;
+            hasLastPlacement = true;
         }
         else
         {
@@ -136,12 +167,31 @@ namespace services
             surfaceNormal = -surfaceNormal;
         }
 
-        // Build weight distribution
+        // Build weight distribution from enabled entries only
+        std::vector<uint32_t> enabledIndices;
         std::vector<float> weights;
-        for (const auto& entry : palette)
+
+        if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(palette.size()))
         {
-            weights.push_back(entry.weight);
+            // Single entry selected
+            const auto& entry = palette[selectedPaletteIndex];
+            if (!entry.enabled || entry.meshPath.empty()) return;
+            enabledIndices.push_back(static_cast<uint32_t>(selectedPaletteIndex));
+            weights.push_back(1.0f);
         }
+        else
+        {
+            // All enabled entries (weighted random)
+            for (uint32_t idx = 0; idx < palette.size(); ++idx)
+            {
+                if (palette[idx].enabled && !palette[idx].meshPath.empty())
+                {
+                    enabledIndices.push_back(idx);
+                    weights.push_back(palette[idx].weight);
+                }
+            }
+        }
+        if (enabledIndices.empty()) return;
         std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
 
         // Generate candidate positions using simple random sampling within brush radius
@@ -179,8 +229,9 @@ namespace services
                 continue;
             }
 
-            // Select palette entry
-            uint32_t paletteIdx = paletteDist(rng);
+            // Select palette entry from enabled entries
+            uint32_t enabledIdx = paletteDist(rng);
+            uint32_t paletteIdx = enabledIndices[enabledIdx];
             const auto& entry = palette[paletteIdx];
 
             // Check slope
@@ -190,6 +241,13 @@ namespace services
             {
                 continue;
             }
+
+            // Apply AABB-based Y offset so mesh bottom sits on terrain surface
+            float aabbOffset = getAABBYOffset(entry.meshPath);
+            candidatePos.y += aabbOffset;
+
+            // Apply manual Y offset from palette entry
+            candidatePos.y += entry.yOffset;
 
             // Check height range
             if (candidatePos.y < entry.heightRange.x || candidatePos.y > entry.heightRange.y)
@@ -236,9 +294,11 @@ namespace services
                 }
             }
 
-            // Create entity
+            // Create entity under per-entry group
+            auto groupEntity = ensureGroupEntity(paletteIdx);
             events::scene::CreateEntityCommand createCmd;
-            createCmd.name = "MeshBrush_" + std::to_string(placedCount);
+            createCmd.name = "MeshBrush_" + std::to_string(entityCounter++);
+            createCmd.parent = groupEntity;
             auto entity = dispatcher.execute(createCmd);
             if (!entity.isValid()) continue;
 
@@ -301,6 +361,62 @@ namespace services
             deleteCmd.entity = entityHandle;
             dispatcher.execute(deleteCmd);
         }
+    }
+
+    EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx)
+    {
+        auto it = groupEntities.find(paletteIdx);
+        if (it != groupEntities.end() && it->second.isValid())
+        {
+            // Verify it still exists in registry
+            auto entt = internal::fromHandle(it->second);
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.valid(entt)) return it->second;
+        }
+
+        // Create group entity named after the mesh file
+        std::string groupName = "MeshBrush_Group_" + std::to_string(paletteIdx);
+        if (paletteIdx < palette.size() && !palette[paletteIdx].meshPath.empty())
+        {
+            const auto& meshPath = palette[paletteIdx].meshPath;
+            auto pos = meshPath.find_last_of("\\/");
+            std::string filename = (pos != std::string::npos)
+                ? meshPath.substr(pos + 1) : meshPath;
+            groupName = "MeshBrush_" + filename;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::CreateEntityCommand createCmd;
+        createCmd.name = groupName;
+        auto entity = dispatcher.execute(createCmd);
+        groupEntities[paletteIdx] = entity;
+        return entity;
+    }
+
+    float MeshBrushServiceImpl::getAABBYOffset(const std::string& meshPath)
+    {
+        if (meshPath.empty()) return 0.0f;
+
+        auto it = aabbYOffsetCache.find(meshPath);
+        if (it != aabbYOffsetCache.end())
+        {
+            return it->second;
+        }
+
+        // Query the mesh AABB from the render service
+        events::render::GetMeshBoundingBoxQuery query;
+        query.meshPath = meshPath;
+        auto result = events::EventDispatcher::instance().query(query);
+
+        float offset = 0.0f;
+        if (result.has_value())
+        {
+            // Offset by -min.y so the bottom of the mesh sits on the terrain surface
+            offset = -result->min.y;
+        }
+
+        aabbYOffsetCache[meshPath] = offset;
+        return offset;
     }
 
     void MeshBrushServiceImpl::publishParamsChanged()

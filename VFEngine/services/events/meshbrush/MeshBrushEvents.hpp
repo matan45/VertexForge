@@ -47,6 +47,12 @@ namespace events::meshBrush {
         std::string_view getName() const override { return "SetMeshBrushMode"; }
     };
 
+    struct SetMeshBrushSelectedEntryCommand : ICommand<> {
+        int selectedIndex = -1; // -1 = all (weighted random)
+
+        std::string_view getName() const override { return "SetMeshBrushSelectedEntry"; }
+    };
+
     struct ApplyMeshBrushCommand : ICommand<> {
         glm::vec3 worldPosition{0.0f};
         glm::vec3 surfaceNormal{0.0f, 1.0f, 0.0f};

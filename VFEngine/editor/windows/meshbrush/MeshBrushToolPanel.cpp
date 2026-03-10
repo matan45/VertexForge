@@ -99,6 +99,66 @@ namespace windows
         if (!ImGui::CollapsingHeader("Mesh Palette", ImGuiTreeNodeFlags_DefaultOpen))
             return;
 
+        // Dropdown to select which entry to paint
+        {
+            // Build combo items: "All (Random)" + one per entry
+            std::string preview = "All (Random)";
+            if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(paletteEntries.size()))
+            {
+                const auto& sel = paletteEntries[selectedPaletteIndex];
+                preview = "Entry " + std::to_string(selectedPaletteIndex);
+                if (!sel.meshPath.empty())
+                {
+                    auto pos = sel.meshPath.find_last_of("\\/");
+                    std::string filename = (pos != std::string::npos)
+                        ? sel.meshPath.substr(pos + 1) : sel.meshPath;
+                    preview += " - " + filename;
+                }
+            }
+
+            if (ImGui::BeginCombo("Paint Entry", preview.c_str()))
+            {
+                // "All (Random)" option
+                bool isAllSelected = (selectedPaletteIndex == -1);
+                if (ImGui::Selectable("All (Random)", isAllSelected))
+                {
+                    selectedPaletteIndex = -1;
+                    events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
+                    cmd.selectedIndex = -1;
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+                if (isAllSelected) ImGui::SetItemDefaultFocus();
+
+                // Per-entry options
+                for (int i = 0; i < static_cast<int>(paletteEntries.size()); ++i)
+                {
+                    std::string itemLabel = "Entry " + std::to_string(i);
+                    if (!paletteEntries[i].meshPath.empty())
+                    {
+                        auto pos = paletteEntries[i].meshPath.find_last_of("\\/");
+                        std::string filename = (pos != std::string::npos)
+                            ? paletteEntries[i].meshPath.substr(pos + 1) : paletteEntries[i].meshPath;
+                        itemLabel += " - " + filename;
+                    }
+                    if (!paletteEntries[i].enabled) itemLabel += " (disabled)";
+
+                    bool isSelected = (selectedPaletteIndex == i);
+                    if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+                    {
+                        selectedPaletteIndex = i;
+                        events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
+                        cmd.selectedIndex = i;
+                        events::EventDispatcher::instance().execute(cmd);
+                    }
+                    if (isSelected) ImGui::SetItemDefaultFocus();
+                }
+
+                ImGui::EndCombo();
+            }
+        }
+
+        ImGui::Separator();
+
         int removeIndex = -1;
 
         for (int i = 0; i < static_cast<int>(paletteEntries.size()); ++i)
@@ -106,8 +166,35 @@ namespace windows
             ImGui::PushID(i);
             auto& entry = paletteEntries[i];
 
-            if (ImGui::TreeNode("Entry", "Entry %d", i))
+            // Color indicator: green if enabled, gray if disabled, blue border if selected
+            ImVec4 headerColor = entry.enabled
+                ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f)
+                : ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
+
+            if (selectedPaletteIndex == i)
             {
+                headerColor = ImVec4(0.2f, 0.4f, 0.8f, 1.0f);
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+                ImVec4(headerColor.x + 0.1f, headerColor.y + 0.1f, headerColor.z + 0.1f, 1.0f));
+
+            // Show mesh filename in header
+            std::string label = "Entry " + std::to_string(i);
+            if (!entry.meshPath.empty())
+            {
+                auto pos = entry.meshPath.find_last_of("\\/");
+                std::string filename = (pos != std::string::npos)
+                    ? entry.meshPath.substr(pos + 1) : entry.meshPath;
+                label += " - " + filename;
+            }
+            if (!entry.enabled) label += " (disabled)";
+
+            if (ImGui::TreeNode("Entry", "%s", label.c_str()))
+            {
+                ImGui::Checkbox("Enabled", &entry.enabled);
+
                 // Mesh path input with browse button
                 char meshBuf[256] = {};
                 strncpy(meshBuf, entry.meshPath.c_str(), sizeof(meshBuf) - 1);
@@ -151,6 +238,7 @@ namespace windows
                 ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
                 ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
                 ImGui::DragFloat2("Height Range", &entry.heightRange.x, 1.0f, -10000.0f, 10000.0f);
+                ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
 
                 if (ImGui::Button("Remove"))
                 {
@@ -160,12 +248,29 @@ namespace windows
                 ImGui::TreePop();
             }
 
+            ImGui::PopStyleColor(2);
             ImGui::PopID();
         }
 
         if (removeIndex >= 0)
         {
             paletteEntries.erase(paletteEntries.begin() + removeIndex);
+
+            // Adjust selected index if needed
+            if (selectedPaletteIndex == removeIndex)
+            {
+                selectedPaletteIndex = -1;
+                events::meshBrush::SetMeshBrushSelectedEntryCommand selCmd;
+                selCmd.selectedIndex = -1;
+                events::EventDispatcher::instance().execute(selCmd);
+            }
+            else if (selectedPaletteIndex > removeIndex)
+            {
+                --selectedPaletteIndex;
+                events::meshBrush::SetMeshBrushSelectedEntryCommand selCmd;
+                selCmd.selectedIndex = selectedPaletteIndex;
+                events::EventDispatcher::instance().execute(selCmd);
+            }
 
             events::meshBrush::RemoveMeshPaletteEntryCommand cmd;
             cmd.index = static_cast<uint32_t>(removeIndex);
