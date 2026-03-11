@@ -470,33 +470,11 @@ namespace render::gpudriven
                 gpuTile.flags |= ObjectFlags::Selected;
             gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
-            auto lmIt = tileLightmapData_.find(key);
-            if (lmIt != tileLightmapData_.end())
-            {
-                gpuTile.lightmapData = lmIt->second;
-            }
-
             cachedGPUTileData_.push_back(gpuTile);
         }
 
         gpuTileDataDirty_ = false;
         return cachedGPUTileData_;
-    }
-
-    void TerrainGPUAdapter::setTileLightmapData(int coordX, int coordZ, glm::uvec4 lightmapData)
-    {
-        TerrainTileKey key{coordX, coordZ};
-        tileLightmapData_[key] = lightmapData;
-        gpuTileDataDirty_ = true;
-    }
-
-    void TerrainGPUAdapter::clearTileLightmapData()
-    {
-        if (!tileLightmapData_.empty())
-        {
-            tileLightmapData_.clear();
-            gpuTileDataDirty_ = true;
-        }
     }
 
     void TerrainGPUAdapter::setSelectedTile(int32_t coordX, int32_t coordZ)

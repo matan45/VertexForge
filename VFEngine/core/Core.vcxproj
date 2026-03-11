@@ -131,7 +131,6 @@
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="adapters\api\WaterAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
-    <ClInclude Include="adapters\lightbake\LightBakeAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\physics\IKAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsAdapter.hpp" />
@@ -222,7 +221,6 @@
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="adapters\api\WaterAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
-    <ClCompile Include="adapters\lightbake\LightBakeAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
     <ClCompile Include="adapters\physics\IKAdapter.cpp" />

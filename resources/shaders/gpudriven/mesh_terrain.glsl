@@ -520,17 +520,6 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    vec3 lightmapContribution = vec3(0.0);
-    TerrainTileGPUData currentTile = tiles[fragTileIndex];
-    if (currentTile.lightmapData.x != 0xFFFFFFFFu) {
-        vec2 lmScale = unpackHalf2x16(currentTile.lightmapData.y);
-        vec2 lmOffset = unpackHalf2x16(currentTile.lightmapData.z);
-        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
-        uint lmIdx = currentTile.lightmapData.x;
-        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
-        lightmapContribution = lightmapIrradiance * albedo;
-    }
-
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -606,7 +595,7 @@ void main() {
     ambient *= mix(1.0, 0.3, giStrength);
 #endif
 
-    vec3 color = ambient + directLighting + lightmapContribution + giContribution + mat_emission;
+    vec3 color = ambient + directLighting + giContribution + mat_emission;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
@@ -759,7 +748,7 @@ void main() {
 
     // Tile selection highlight
     const uint FLAG_SELECTED = 1u << 13;
-    if ((currentTile.flags & FLAG_SELECTED) != 0u) {
+    if ((tiles[fragTileIndex].flags & FLAG_SELECTED) != 0u) {
         vec3 highlightColor = vec3(1.0, 1.0, 0.0);
         color = mix(color, highlightColor, 0.25);
     }

@@ -80,7 +80,7 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=instanceOffset
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
     };
     static_assert(sizeof(GPUObjectData) == 352);
 
@@ -127,7 +127,7 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+        glm::uvec4 reserved{0, 0, 0, 0}; // Reserved for future use
     };
     static_assert(sizeof(TerrainTileGPUData) == 224);
 
@@ -179,7 +179,7 @@ namespace render::gpudriven
         uint32_t boneMatrixOffset;
         uint32_t instanceCount;     // Number of instances (1 = non-instanced)
         uint32_t blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=instanceOffset
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
     };
     static_assert(sizeof(PerDrawData) == 256);
 

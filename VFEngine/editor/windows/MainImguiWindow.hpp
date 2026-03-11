@@ -12,7 +12,6 @@
 #include "terrain/TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "config/NavmeshWindow.hpp"
-#include "lighting/LightBakeWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
@@ -52,7 +51,6 @@ namespace windows
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
         NavmeshWindow navmeshWindow;
-        LightBakeWindow lightBakeWindow;
         AssetLifecycleWindow assetLifecycleWindow;
         WorldSectorWindow worldSectorWindow;
         VFXDebugWindow vfxDebugWindow;

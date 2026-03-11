@@ -9,16 +9,6 @@
 namespace services {
 
     void BakeInfoComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
-        dispatcher.registerQueryHandler<events::scene::HasLightmapRootQuery>(
-            [this](const events::scene::HasLightmapRootQuery& query) {
-                return hasLightmapRoot(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetLightmapRootDataQuery>(
-            [this](const events::scene::GetLightmapRootDataQuery& query) {
-                return getLightmapRootData(query.entity);
-            });
-
         dispatcher.registerQueryHandler<events::scene::HasNavmeshRootQuery>(
             [this](const events::scene::HasNavmeshRootQuery& query) {
                 return hasNavmeshRoot(query.entity);
@@ -28,34 +18,6 @@ namespace services {
             [this](const events::scene::GetNavmeshRootDataQuery& query) {
                 return getNavmeshRootData(query.entity);
             });
-    }
-
-    bool BakeInfoComponentService::hasLightmapRoot(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::LightmapComponent>();
-    }
-
-    std::optional<LightmapRootData> BakeInfoComponentService::getLightmapRootData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::LightmapComponent>()) {
-            return std::nullopt;
-        }
-
-        auto& comp = sceneEntity.getComponent<components::LightmapComponent>();
-        LightmapRootData data;
-        data.lightmapPath = comp.lightmapPath;
-        data.texelsPerUnit = comp.texelsPerUnit;
-        return data;
     }
 
     bool BakeInfoComponentService::hasNavmeshRoot(EntityHandle entity) const {

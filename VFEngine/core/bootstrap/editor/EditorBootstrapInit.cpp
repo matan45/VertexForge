@@ -21,7 +21,6 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
-#include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
@@ -64,7 +63,6 @@ namespace core
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
-        lightBakeAdapter = std::make_unique<LightBakeAdapter>();
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();

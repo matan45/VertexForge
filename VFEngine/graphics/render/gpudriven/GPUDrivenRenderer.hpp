@@ -224,8 +224,6 @@ namespace render::gpudriven
             std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loaded;
             std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
             material::CallbackId changeCallbackId{};
-            std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
-            std::unordered_set<std::string> registeredLightmapPaths;
         };
 
         struct CullingConfig
@@ -460,14 +458,6 @@ namespace render::gpudriven
         void setSelectedTerrainTile(int32_t coordX, int32_t coordZ);
         void clearSelectedTerrainTile();
 
-        struct TerrainTileLightmapData
-        {
-            int32_t coordX = 0;
-            int32_t coordZ = 0;
-            glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
-            std::string lightmapPath;
-        };
-        void setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data);
         void invalidateTerrainLayerData() { terrain.layerDataDirty = true; }
 
         void setTerrainRenderingEnabled(bool enabled) { terrain.renderingEnabled = enabled; }
@@ -548,8 +538,6 @@ namespace render::gpudriven
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
-        void registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
-        LightmapIndexResolver createLightmapResolver();
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);

@@ -258,22 +258,6 @@ namespace events::scene {
     };
 
     // ============================================
-    // Lightmap Root Component Events (read-only on root entity)
-    // ============================================
-
-    struct HasLightmapRootQuery : IQuery<bool> {
-        services::EntityHandle entity;
-
-        std::string_view getName() const override { return "HasLightmapRoot"; }
-    };
-
-    struct GetLightmapRootDataQuery : IQuery<std::optional<services::LightmapRootData>> {
-        services::EntityHandle entity;
-
-        std::string_view getName() const override { return "GetLightmapRootData"; }
-    };
-
-    // ============================================
     // Navmesh Root Component Events (read-only on root entity)
     // ============================================
 

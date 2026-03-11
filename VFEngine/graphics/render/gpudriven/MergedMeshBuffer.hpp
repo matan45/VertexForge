@@ -49,14 +49,11 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
-    using LightmapIndexResolver = std::function<uint32_t(const std::string& lightmapPath)>;
-
     struct ObjectResolvers
     {
         TextureIndexResolver textureResolver;
         ShaderGroupResolver shaderGroupResolver;
         BoneOffsetResolver boneOffsetResolver;
-        LightmapIndexResolver lightmapResolver;
         float time = 0.0f;
         glm::vec3 cameraPosition{0.0f};
     };

@@ -20,11 +20,7 @@ namespace core
     {
     private:
         services::TerrainService* terrainService = nullptr;
-        std::atomic<bool> terrainLightmapDirty{false};
         std::atomic<bool> terrainMaterialDirty{false};
-        std::unique_ptr<events::SubscriptionToken> bakeCompleteToken;
-        std::unique_ptr<events::SubscriptionToken> lightmapLoadedToken;
-        std::unique_ptr<events::SubscriptionToken> lightmapClearedToken;
         std::unique_ptr<events::SubscriptionToken> materialCompiledToken;
 
     public:
@@ -52,9 +48,6 @@ namespace core
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) override;
         void releaseTileRAMData(terrain::TerrainTile& tile) override;
-
-        std::vector<services::TerrainTileLightmapInfo> getTerrainLightmapData() const override;
-        bool consumeTerrainLightmapDirty() override;
 
         void markTerrainMaterialDirty() override;
         bool consumeTerrainMaterialDirty() override;

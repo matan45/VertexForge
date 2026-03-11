@@ -42,12 +42,6 @@ namespace services
         std::string fileName;
     };
 
-    struct LightmapRootData
-    {
-        std::string lightmapPath;
-        float texelsPerUnit = 16.0f;
-    };
-
     struct NavmeshRootData
     {
         std::string navmeshPath;

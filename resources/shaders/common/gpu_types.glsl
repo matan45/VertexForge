@@ -27,7 +27,7 @@ struct PerDrawData {
     uint instanceCount;     // Number of instances (1 = non-instanced)
     uint blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
 
-    uvec4 lightmapData; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=instanceOffset
+    uvec4 instanceData; // .w=instanceOffset
 };
 
 // Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
@@ -77,7 +77,7 @@ struct GPUObjectData {
     uvec4 meshletLod2;
     uvec4 meshletLod3;
 
-    uvec4 lightmapData; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+    uvec4 instanceData; // .w=instanceOffset
 };
 
 // Must match BatchDrawStats in GPUDrivenTypes.hpp (32 bytes)
@@ -114,7 +114,7 @@ struct TerrainTileGPUData {
     int coordZ;
     uint flags;
     uint weightMapOffset;       // Byte offset into weight map SSBO
-    uvec4 lightmapData;         // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+    uvec4 reserved;             // Reserved for future use
 };
 
 // Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (32 bytes)

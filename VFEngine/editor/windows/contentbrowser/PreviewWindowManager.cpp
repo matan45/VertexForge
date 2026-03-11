@@ -10,7 +10,6 @@
 #include "../animation/AnimatorEditorWindow.hpp"
 #include "../vfx/VFXEditorWindow.hpp"
 #include "../terrain/TerrainMaterialEditorWindow.hpp"
-#include "../preview/LightmapPreviewWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -29,7 +28,6 @@ namespace windows
         eraseExpired(openAnimatorEditors);
         eraseExpired(openVFXEditors);
         eraseExpired(openTerrainMaterialEditors);
-        eraseExpired(openLightmapPreviews);
     }
 
     bool PreviewWindowManager::openPreview(const fs::path& filePath, AssetType type)
@@ -75,9 +73,6 @@ namespace windows
             return true;
         case AssetType::TerrainMaterial:
             openTerrainMaterialEditor(path);
-            return true;
-        case AssetType::Lightmap:
-            openLightmapPreview(path);
             return true;
         default:
             return false;
@@ -128,10 +123,6 @@ namespace windows
 
         auto terrainMatIt = openTerrainMaterialEditors.find(path);
         if (terrainMatIt != openTerrainMaterialEditors.end() && !terrainMatIt->second.expired())
-            return true;
-
-        auto lightmapIt = openLightmapPreviews.find(path);
-        if (lightmapIt != openLightmapPreviews.end() && !lightmapIt->second.expired())
             return true;
 
         return false;
@@ -258,14 +249,4 @@ namespace windows
         }
     }
 
-    void PreviewWindowManager::openLightmapPreview(const std::string& path)
-    {
-        auto it = openLightmapPreviews.find(path);
-        if (it == openLightmapPreviews.end() || it->second.expired())
-        {
-            auto previewWindow = std::make_shared<LightmapPreviewWindow>(path);
-            controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
-            openLightmapPreviews[path] = previewWindow;
-        }
-    }
 }

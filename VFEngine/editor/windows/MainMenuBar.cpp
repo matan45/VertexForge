@@ -11,7 +11,6 @@
 #include "WaterEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
-#include "lighting/LightBakeWindow.hpp"
 #include "config/GIConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
@@ -237,13 +236,6 @@ namespace windows
                 if (navmeshWindow)
                 {
                     navmeshWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Light Bake"))
-            {
-                if (lightBakeWindow)
-                {
-                    lightBakeWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Global Illumination"))

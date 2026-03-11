@@ -451,7 +451,6 @@ namespace windows
         if (extension == ".vfNavIndex") return Navmesh;
         if (extension == ".vfNavTile") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
-        if (extension == ".vfLightmap") return Lightmap;
         if (extension == ".vfWater") return Water;
         if (extension == ".mt") return Script;
 

@@ -17,7 +17,6 @@
 #include "../../adapters/terrain/TerrainBrushComputeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
-#include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
@@ -115,11 +114,6 @@ namespace core
     services::IRenderTextureProvider* EditorBootstrap::getRenderTextureProvider()
     {
         return renderTextureAdapter.get();
-    }
-
-    services::ILightBakeProvider* EditorBootstrap::getLightBakeProvider()
-    {
-        return lightBakeAdapter.get();
     }
 
     services::IRenderHookProvider* EditorBootstrap::getRenderHookProvider()

@@ -102,12 +102,6 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
-        if (entity.hasComponent<components::LightmapComponent>())
-        {
-            componentsJson["lightmap"] = serializeLightmap(
-                entity.getComponent<components::LightmapComponent>());
-        }
-
         if (entity.hasComponent<components::TerrainComponent>())
         {
             componentsJson["terrain"] = serializeTerrain(
@@ -405,12 +399,6 @@ namespace serialization
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::SpotLight;
             }
-        }
-
-        if (componentsJson.contains("lightmap"))
-        {
-            auto& lmComp = entity.addOrReplaceComponent<components::LightmapComponent>();
-            deserializeLightmap(componentsJson["lightmap"], lmComp);
         }
 
         if (componentsJson.contains("terrain"))

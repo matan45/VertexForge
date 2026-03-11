@@ -191,10 +191,6 @@ namespace render::mesh
         int forceLODLevel = -1;
         float maxDrawDistance = 0.0f;
 
-        std::string lightmapPath;
-        uint32_t lightmapTextureIndex = 0xFFFFFFFF; // INVALID = no lightmap
-        glm::vec4 lightmapScaleOffset{0.0f}; // xy=scale, zw=offset
-
         // Instance batching: if non-empty, render N instances with different transforms
         // Material/texture resolution happens once; only modelMatrix varies per instance
         std::vector<glm::mat4> instanceTransforms;
