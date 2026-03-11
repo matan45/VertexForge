@@ -748,7 +748,7 @@ void main() {
 
     // Tile selection highlight
     const uint FLAG_SELECTED = 1u << 13;
-    if ((currentTile.flags & FLAG_SELECTED) != 0u) {
+    if ((tiles[fragTileIndex].flags & FLAG_SELECTED) != 0u) {
         vec3 highlightColor = vec3(1.0, 1.0, 0.0);
         color = mix(color, highlightColor, 0.25);
     }
