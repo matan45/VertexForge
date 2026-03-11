@@ -17,7 +17,6 @@ namespace windows
     class PostProcessConfigWindow;
     class WaterEditorWindow;
     class NavmeshWindow;
-    class LightBakeWindow;
     class AssetLifecycleWindow;
     class WorldSectorWindow;
     class VFXDebugWindow;
@@ -44,7 +43,6 @@ namespace windows
         WaterEditorWindow* waterEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
-        LightBakeWindow* lightBakeWindow = nullptr;
         AssetLifecycleWindow* assetLifecycleWindow = nullptr;
         WorldSectorWindow* worldSectorWindow = nullptr;
         VFXDebugWindow* vfxDebugWindow = nullptr;
@@ -93,11 +91,6 @@ namespace windows
         void setNavmeshWindow(NavmeshWindow* window)
         {
             navmeshWindow = window;
-        }
-
-        void setLightBakeWindow(LightBakeWindow* window)
-        {
-            lightBakeWindow = window;
         }
 
         void setAssetLifecycleWindow(AssetLifecycleWindow* window)

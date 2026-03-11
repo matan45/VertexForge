@@ -89,25 +89,6 @@ namespace render
 
         if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
         {
-            // Apply terrain lightmap data if changed (must happen before updateTerrain
-            // which calls buildGPUTileData that reads the lightmap data)
-            if (terrainRenderProvider->consumeTerrainLightmapDirty())
-            {
-                auto lmEntries = terrainRenderProvider->getTerrainLightmapData();
-                std::vector<render::gpudriven::GPUDrivenRenderer::TerrainTileLightmapData> lmData;
-                lmData.reserve(lmEntries.size());
-                for (const auto& entry : lmEntries)
-                {
-                    render::gpudriven::GPUDrivenRenderer::TerrainTileLightmapData d;
-                    d.coordX = entry.coordX;
-                    d.coordZ = entry.coordZ;
-                    d.scaleOffset = entry.scaleOffset;
-                    d.lightmapPath = entry.lightmapPath;
-                    lmData.push_back(std::move(d));
-                }
-                gpuDrivenRenderer->setTerrainLightmapData(lmData);
-            }
-
             if (terrainRenderProvider->consumeTerrainMaterialDirty())
             {
                 gpuDrivenRenderer->invalidateTerrainLayerData();

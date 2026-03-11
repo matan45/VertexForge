@@ -4,7 +4,7 @@
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
 #include <material/MaterialInstanceTypes.hpp>
-#include <glm/gtc/packing.hpp>
+
 #include <cmath>
 #include <cstring>
 #include <atomic>
@@ -241,25 +241,7 @@ namespace render::gpudriven
         obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;
 
-        uint32_t lightmapIdx = INVALID_TEXTURE_INDEX;
-        if (!meshRender.lightmapPath.empty() && resolvers.lightmapResolver)
-        {
-            lightmapIdx = resolvers.lightmapResolver(meshRender.lightmapPath);
-        }
-
-        if (lightmapIdx != INVALID_TEXTURE_INDEX)
-        {
-            obj.lightmapData = glm::uvec4(
-                lightmapIdx,
-                glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.x, meshRender.lightmapScaleOffset.y)),
-                glm::packHalf2x16(glm::vec2(meshRender.lightmapScaleOffset.z, meshRender.lightmapScaleOffset.w)),
-                0
-            );
-        }
-        else
-        {
-            obj.lightmapData = glm::uvec4(INVALID_TEXTURE_INDEX, 0, 0, 0);
-        }
+        obj.instanceData = glm::uvec4(INVALID_TEXTURE_INDEX, 0, 0, 0);
     }
 
     void MergedMeshBuffer::updateObjectsSequential(const std::vector<mesh::MeshRenderData>& renderData,
@@ -301,7 +283,7 @@ namespace render::gpudriven
 
                     // Pack instancing data
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
-                    obj.lightmapData.w = currentInstanceCount; // instanceOffset
+                    obj.instanceData.w = currentInstanceCount; // instanceOffset
                     obj.flags |= ObjectFlags::Instanced;
 
                     // Fill instance transform buffer
@@ -337,7 +319,7 @@ namespace render::gpudriven
                 // Non-instanced: instanceCount = 1, no instance buffer needed
                 uint32_t one = 1;
                 std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
-                obj.lightmapData.w = 0;
+                obj.instanceData.w = 0;
 
                 if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                     transparentObjectCount++;
@@ -395,7 +377,7 @@ namespace render::gpudriven
                     obj.modelMatrix = meshRender.instanceTransforms[0];
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
-                    obj.lightmapData.w = currentInstanceCount;
+                    obj.instanceData.w = currentInstanceCount;
                     obj.flags |= ObjectFlags::Instanced;
 
                     for (uint32_t i = 0; i < instanceCount; ++i)
@@ -475,7 +457,7 @@ namespace render::gpudriven
                         // Non-instanced: instanceCount = 1
                         uint32_t one = 1;
                         std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
-                        obj.lightmapData.w = 0;
+                        obj.instanceData.w = 0;
 
                         if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                         {

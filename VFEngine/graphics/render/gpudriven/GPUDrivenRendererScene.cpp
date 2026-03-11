@@ -14,7 +14,6 @@
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "lightbake/LightmapAtlas.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <unordered_map>
@@ -37,10 +36,8 @@ namespace render::gpudriven
 
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
-        registerSceneLightmapTextures(opaqueObjects);
 
         TextureIndexResolver textureResolver = createTextureResolver();
-        LightmapIndexResolver lightmapResolver = createLightmapResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
             auto it = materials.pbrCache.find(materialPath);
@@ -56,7 +53,7 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time, cameraPosition});
+        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition});
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -256,82 +253,6 @@ namespace render::gpudriven
                 }
             }
         }
-    }
-
-    void GPUDrivenRenderer::registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
-    {
-        if (!bindlessTextures)
-        {
-            return;
-        }
-
-        for (const auto& meshRender : opaqueObjects)
-        {
-            if (meshRender.lightmapPath.empty())
-            {
-                continue;
-            }
-
-            if (materials.registeredLightmapPaths.contains(meshRender.lightmapPath))
-            {
-                continue;
-            }
-
-            auto lightmapData = lightbake::LightmapAtlas::load(meshRender.lightmapPath);
-            if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
-            {
-                vfLogWarning("GPUDrivenRenderer: Failed to load lightmap: {}", meshRender.lightmapPath);
-                materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
-                continue;
-            }
-
-            // Convert 3-channel (RGB) lightmap to 4-channel (RGBA) HDRData
-            resource::HDRData hdrData;
-            hdrData.width = lightmapData.width;
-            hdrData.height = lightmapData.height;
-            hdrData.numbersOfChannels = 4;
-            hdrData.pixels.resize(lightmapData.width * lightmapData.height * 4);
-
-            const uint32_t channels = lightmapData.channels;
-            for (uint32_t i = 0; i < lightmapData.width * lightmapData.height; ++i)
-            {
-                hdrData.pixels[i * 4 + 0] = (channels > 0) ? lightmapData.texels[i * channels + 0] : 0.0f;
-                hdrData.pixels[i * 4 + 1] = (channels > 1) ? lightmapData.texels[i * channels + 1] : 0.0f;
-                hdrData.pixels[i * 4 + 2] = (channels > 2) ? lightmapData.texels[i * channels + 2] : 0.0f;
-                hdrData.pixels[i * 4 + 3] = 1.0f;
-            }
-
-            auto texture = std::make_unique<core::Texture>(device);
-            texture->loadHDRFromData(hdrData, false);
-
-            vk::ImageView view = texture->getImageView();
-            vk::Sampler sampler = texture->getSampler();
-
-            if (view && sampler)
-            {
-                bindlessTextures->registerTexture(meshRender.lightmapPath, view, sampler);
-                materials.lightmapTextureCache[meshRender.lightmapPath] = std::move(texture);
-            }
-
-            materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
-        }
-    }
-
-    LightmapIndexResolver GPUDrivenRenderer::createLightmapResolver()
-    {
-        if (!bindlessTextures)
-        {
-            return nullptr;
-        }
-
-        return [this](const std::string& lightmapPath) -> uint32_t
-        {
-            if (lightmapPath.empty())
-            {
-                return INVALID_TEXTURE_INDEX;
-            }
-            return bindlessTextures->getTextureIndex(lightmapPath);
-        };
     }
 
     TextureIndexResolver GPUDrivenRenderer::createTextureResolver()

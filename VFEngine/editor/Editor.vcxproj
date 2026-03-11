@@ -175,7 +175,6 @@
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\IKDrawer.hpp" />
-    <ClInclude Include="windows\details\LightmapRootDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
@@ -215,7 +214,6 @@
     <ClInclude Include="windows\import\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\import\SceneLoadProgressWindow.hpp" />
     <ClInclude Include="windows\lighting\IBLWindow.hpp" />
-    <ClInclude Include="windows\lighting\LightBakeWindow.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
@@ -224,7 +222,6 @@
     <ClInclude Include="windows\preview\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\FontPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\ImagePreviewWindow.hpp" />
-    <ClInclude Include="windows\preview\LightmapPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\scene\EntityDetailsPanel.hpp" />
@@ -311,7 +308,6 @@
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\IKDrawer.cpp" />
-    <ClCompile Include="windows\details\LightmapRootDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
@@ -351,7 +347,6 @@
     <ClCompile Include="windows\import\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\import\SceneLoadProgressWindow.cpp" />
     <ClCompile Include="windows\lighting\IBLWindow.cpp" />
-    <ClCompile Include="windows\lighting\LightBakeWindow.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
@@ -360,7 +355,6 @@
     <ClCompile Include="windows\preview\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\FontPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\ImagePreviewWindow.cpp" />
-    <ClCompile Include="windows\preview\LightmapPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\scene\EntityDetailsPanel.cpp" />

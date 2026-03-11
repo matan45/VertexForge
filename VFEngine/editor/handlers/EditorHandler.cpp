@@ -30,7 +30,6 @@
 #include "impl/terrain/TerrainRaycastServiceImpl.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
-#include "impl/lightbake/LightBakeServiceImpl.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
@@ -224,7 +223,6 @@ namespace handlers
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
-        lightBakeService.reset();
         controllerService.reset();
         ikComponentService.reset();
         renderHookService.reset();
@@ -319,10 +317,6 @@ namespace handlers
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
             renderTexturePlayModeHandler->subscribeToEvents();
         }
-
-        lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
-            bootstrap->getLightBakeProvider()
-        );
 
         renderHookService = std::make_shared<services::RenderHookServiceImpl>(
             bootstrap->getRenderHookProvider()
@@ -495,7 +489,6 @@ namespace handlers
         holeBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
-        lightBakeService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {

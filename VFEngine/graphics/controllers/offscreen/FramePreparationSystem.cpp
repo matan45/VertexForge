@@ -179,13 +179,6 @@ namespace controllers::offscreen
                                              : false;
             renderData.maxDrawDistance = meshComp.maxDrawDistance;
 
-            if (registry.all_of<components::LightmapComponent>(entity))
-            {
-                const auto& lmComp = registry.get<components::LightmapComponent>(entity);
-                renderData.lightmapPath = lmComp.lightmapPath;
-                renderData.lightmapScaleOffset = lmComp.atlasScaleOffset;
-            }
-
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
@@ -213,11 +206,10 @@ namespace controllers::offscreen
         };
 
         // Check if an entity can be instanced-batched with others sharing the same mesh+material.
-        // Entities with per-instance unique data (lightmaps, bounding box debug, animations) cannot be batched.
+        // Entities with per-instance unique data (bounding box debug, animations) cannot be batched.
         auto canBatch = [&](entt::entity entity, const render::mesh::MeshRenderData& rd) -> bool
         {
             if (rd.showBoundingBox) return false;
-            if (!rd.lightmapPath.empty()) return false;
             if (registry.all_of<components::AnimatorComponent>(entity)) return false;
             return true;
         };

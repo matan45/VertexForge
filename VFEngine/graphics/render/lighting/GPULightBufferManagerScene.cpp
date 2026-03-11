@@ -95,10 +95,6 @@ namespace render::lighting
 
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
 
-            bool isStaticLight = false;
-            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
-                isStaticLight = transform->isStatic;
-
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
@@ -110,8 +106,6 @@ namespace render::lighting
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::DirectionalCSM, settings});
             }
-
-            if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
@@ -167,12 +161,6 @@ namespace render::lighting
 
             const auto& light = view.get<components::PointLightComponent>(entity);
 
-            bool isStaticLight = false;
-            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
-            {
-                isStaticLight = transform->isStatic;
-            }
-
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
@@ -184,8 +172,6 @@ namespace render::lighting
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::PointCube, settings});
             }
-
-            if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -251,12 +237,6 @@ namespace render::lighting
 
             const auto& light = view.get<components::SpotLightComponent>(entity);
 
-            bool isStaticLight = false;
-            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
-            {
-                isStaticLight = transform->isStatic;
-            }
-
             uint32_t entityId = static_cast<uint32_t>(entity);
             if (shadowSystem)
             {
@@ -268,8 +248,6 @@ namespace render::lighting
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::Spot2D, settings});
             }
-
-            if (isStaticLight) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 

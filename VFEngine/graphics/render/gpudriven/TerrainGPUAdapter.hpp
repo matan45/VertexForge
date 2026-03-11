@@ -97,8 +97,6 @@ namespace render::gpudriven
         std::vector<TerrainTileGPUData> cachedGPUTileData_;
         bool gpuTileDataDirty_ = true;
 
-        std::unordered_map<TerrainTileKey, glm::uvec4, TerrainTileKeyHash> tileLightmapData_;
-
         int32_t selectedCoordX_ = 0;
         int32_t selectedCoordZ_ = 0;
         bool hasSelectedTile_ = false;
@@ -124,9 +122,6 @@ namespace render::gpudriven
         void clear();
 
         void markGPUTileDataDirty() { gpuTileDataDirty_ = true; }
-
-        void setTileLightmapData(int coordX, int coordZ, glm::uvec4 lightmapData);
-        void clearTileLightmapData();
 
         void setSelectedTile(int32_t coordX, int32_t coordZ);
         void clearSelectedTile();

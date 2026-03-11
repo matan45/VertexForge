@@ -20,7 +20,6 @@ namespace windows
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
         menuBar.setWaterEditorWindow(&waterEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
-        menuBar.setLightBakeWindow(&lightBakeWindow);
         menuBar.setAssetLifecycleWindow(&assetLifecycleWindow);
         menuBar.setWorldSectorWindow(&worldSectorWindow);
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
@@ -93,7 +92,6 @@ namespace windows
             terrainCreationWindow.draw();
             waterEditorWindow.draw();
             navmeshWindow.draw();
-            lightBakeWindow.draw();
             assetLifecycleWindow.draw();
             worldSectorWindow.draw();
             vfxDebugWindow.draw();

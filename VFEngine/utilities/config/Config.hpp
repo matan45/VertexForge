@@ -33,7 +33,6 @@ struct FileExtension
     inline static const std::string terrainMaterial = "vfTerrainMat";
     inline static const std::string terrainWeights = "vfTerrainWeights";
     inline static const std::string terrain = "vfTerrain";
-    inline static const std::string lightmap = "vfLightmap";
     inline static const std::string water = "vfWater";
 };
 

@@ -85,7 +85,7 @@ void main() {
     mat4 modelMatrix;
     bool isInstanced = (drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u;
     if (isInstanced) {
-        uint instanceOffset = drawData.lightmapData.w;
+        uint instanceOffset = drawData.instanceData.w;
         modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
     } else {
         modelMatrix = drawData.modelMatrix;

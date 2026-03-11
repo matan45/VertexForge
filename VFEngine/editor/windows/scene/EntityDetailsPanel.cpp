@@ -68,7 +68,6 @@ namespace windows
         transformDrawer.draw(handle);
         bool hasCamera = cameraDrawer.draw(handle);
         iblDrawer.draw(handle);
-        lightmapRootDrawer.draw(handle);
         navmeshRootDrawer.draw(handle);
         worldSectorDrawer.draw(handle);
         bool hasMesh = meshDrawer.draw(handle);

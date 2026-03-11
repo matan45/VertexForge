@@ -104,12 +104,6 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
-        if (entity.hasComponent<components::LightmapComponent>())
-        {
-            out["lightmap"] = SceneSerialization::serializeLightmap(
-                entity.getComponent<components::LightmapComponent>());
-        }
-
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
             out["socketAttachment"] = SceneSerialization::serializeSocketAttachment(
@@ -336,11 +330,6 @@ namespace serialization
             }
         }
 
-        if (componentsJson.contains("lightmap"))
-        {
-            auto& lmComp = entity.addOrReplaceComponent<components::LightmapComponent>();
-            SceneSerialization::deserializeLightmap(componentsJson["lightmap"], lmComp);
-        }
     }
 
     void PrefabSerialization::deserializeComponents(const json& componentsJson, scene::Entity& entity)

@@ -149,7 +149,7 @@ void main() {
     uint actualLodLevel = drawData.lodLevel;
 
     if (isInstanced) {
-        uint instanceOffset = drawData.lightmapData.w;
+        uint instanceOffset = drawData.instanceData.w;
         modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
 
         // Read object data for AABB and LOD info

@@ -77,7 +77,6 @@ namespace resource
         if (ext == ".vfanim") return FileType::ANIMATION;
         if (ext == ".vffont") return FileType::FONT;
         if (ext == ".vfterrain") return FileType::TERRAIN;
-        if (ext == ".vflightmap") return FileType::LIGHTMAP;
         return FileType::UNKNOWN;
     }
 
@@ -94,7 +93,6 @@ namespace resource
             case FileType::SKELETON: return "SKELETON";
             case FileType::ANIMATOR: return "ANIMATOR";
             case FileType::TERRAIN: return "TERRAIN";
-            case FileType::LIGHTMAP: return "LIGHTMAP";
             default: return "UNKNOWN";
         }
     }
@@ -112,7 +110,6 @@ namespace resource
             case FileType::SKELETON:
             case FileType::ANIMATOR:
             case FileType::TERRAIN:
-            case FileType::LIGHTMAP:
                 return true;
             default:
                 return false;

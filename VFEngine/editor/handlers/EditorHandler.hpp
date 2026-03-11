@@ -32,7 +32,6 @@
 #include "interfaces/meshbrush/IMeshBrushModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
-#include "interfaces/lightbake/ILightBakeService.hpp"
 #include "interfaces/physics/IControllerService.hpp"
 #include "interfaces/render/IRenderHookService.hpp"
 #include "interfaces/render/IDebugDrawService.hpp"
@@ -105,7 +104,6 @@ namespace handlers {
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
-		std::shared_ptr<services::ILightBakeService> lightBakeService;
 		std::shared_ptr<services::IControllerService> controllerService;
 		std::shared_ptr<services::IKComponentService> ikComponentService;
 		std::shared_ptr<services::IRenderHookService> renderHookService;

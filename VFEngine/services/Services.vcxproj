@@ -118,7 +118,6 @@
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
     <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
-    <ClInclude Include="events\lightbake\LightBakeEvents.hpp" />
     <ClInclude Include="events\meshbrush\MeshBrushEvents.hpp" />
     <ClInclude Include="events\navmesh\NavmeshEvents.hpp" />
     <ClInclude Include="events\physics\ControllerEvents.hpp" />
@@ -194,7 +193,6 @@
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
-    <ClInclude Include="impl\lightbake\LightBakeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
@@ -244,7 +242,6 @@
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
     <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
-    <ClInclude Include="interfaces\lightbake\ILightBakeService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushModeService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushService.hpp" />
     <ClInclude Include="interfaces\navmesh\INavmeshService.hpp" />
@@ -280,7 +277,6 @@
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\audio\IAudioProvider.hpp" />
-    <ClInclude Include="providers\lightbake\ILightBakeProvider.hpp" />
     <ClInclude Include="providers\navmesh\INavmeshProvider.hpp" />
     <ClInclude Include="providers\physics\IIKProvider.hpp" />
     <ClInclude Include="providers\physics\IPhysicsProvider.hpp" />
@@ -337,7 +333,6 @@
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
-    <ClCompile Include="impl\lightbake\LightBakeServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshGeometryCollector.cpp" />

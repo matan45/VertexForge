@@ -1,7 +1,6 @@
 #include "TerrainRenderAdapter.hpp"
 #include "../../services/impl/scene/TerrainService.hpp"
 #include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/lightbake/LightBakeEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
 
 namespace core
@@ -9,27 +8,6 @@ namespace core
     TerrainRenderAdapter::TerrainRenderAdapter()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-
-        auto bakeToken = dispatcher.subscribe<services::events::lightbake::BakeCompletedNotification>(
-            [this](const services::events::lightbake::BakeCompletedNotification&)
-            {
-                terrainLightmapDirty.store(true);
-            });
-        bakeCompleteToken = std::make_unique<events::SubscriptionToken>(bakeToken);
-
-        auto loadToken = dispatcher.subscribe<services::events::lightbake::LightmapLoadedNotification>(
-            [this](const services::events::lightbake::LightmapLoadedNotification&)
-            {
-                terrainLightmapDirty.store(true);
-            });
-        lightmapLoadedToken = std::make_unique<events::SubscriptionToken>(loadToken);
-
-        auto clearToken = dispatcher.subscribe<services::events::lightbake::LightmapClearedNotification>(
-            [this](const services::events::lightbake::LightmapClearedNotification&)
-            {
-                terrainLightmapDirty.store(true);
-            });
-        lightmapClearedToken = std::make_unique<events::SubscriptionToken>(clearToken);
 
         auto matToken = dispatcher.subscribe<::events::terrain::TerrainMaterialCompiledNotification>(
             [this](const ::events::terrain::TerrainMaterialCompiledNotification&)
@@ -42,12 +20,6 @@ namespace core
     TerrainRenderAdapter::~TerrainRenderAdapter()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        if (bakeCompleteToken && bakeCompleteToken->isValid())
-            dispatcher.unsubscribe(*bakeCompleteToken);
-        if (lightmapLoadedToken && lightmapLoadedToken->isValid())
-            dispatcher.unsubscribe(*lightmapLoadedToken);
-        if (lightmapClearedToken && lightmapClearedToken->isValid())
-            dispatcher.unsubscribe(*lightmapClearedToken);
         if (materialCompiledToken && materialCompiledToken->isValid())
             dispatcher.unsubscribe(*materialCompiledToken);
     }
@@ -117,31 +89,6 @@ namespace core
     {
         if (!terrainService) return;
         terrainService->releaseTileRAMData(tile);
-    }
-
-    std::vector<services::TerrainTileLightmapInfo> TerrainRenderAdapter::getTerrainLightmapData() const
-    {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-        services::events::lightbake::GetTerrainLightmapDataQuery query;
-        auto entries = dispatcher.query(query);
-
-        std::vector<services::TerrainTileLightmapInfo> result;
-        result.reserve(entries.size());
-        for (const auto& entry : entries)
-        {
-            services::TerrainTileLightmapInfo info;
-            info.coordX = entry.coordX;
-            info.coordZ = entry.coordZ;
-            info.scaleOffset = entry.scaleOffset;
-            info.lightmapPath = entry.lightmapPath;
-            result.push_back(std::move(info));
-        }
-        return result;
-    }
-
-    bool TerrainRenderAdapter::consumeTerrainLightmapDirty()
-    {
-        return terrainLightmapDirty.exchange(false);
     }
 
     void TerrainRenderAdapter::markTerrainMaterialDirty()

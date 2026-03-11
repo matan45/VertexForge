@@ -121,9 +121,6 @@
     <ClInclude Include="export\ExportConfig.hpp" />
     <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
-    <ClInclude Include="lightbake\BakeSceneMesh.hpp" />
-    <ClInclude Include="lightbake\LightBaker.hpp" />
-    <ClInclude Include="lightbake\LightmapAtlas.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
     <ClInclude Include="material\MaterialGraphHelper.hpp" />
     <ClInclude Include="material\MaterialInstanceAsset.hpp" />
@@ -249,9 +246,6 @@
     <ClCompile Include="export\ExeIconEmbedder.cpp" />
     <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
-    <ClCompile Include="lightbake\BakeSceneMesh.cpp" />
-    <ClCompile Include="lightbake\LightBaker.cpp" />
-    <ClCompile Include="lightbake\LightmapAtlas.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialAsset_Load.cpp" />
     <ClCompile Include="material\MaterialGraphHelper.cpp" />

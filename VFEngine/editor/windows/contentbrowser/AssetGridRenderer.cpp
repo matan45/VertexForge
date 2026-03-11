@@ -210,9 +210,6 @@ namespace windows
         case PhysAnim:
             icon = AtlasIcon::PhysAnim;
             break;
-        case Lightmap:
-            icon = AtlasIcon::Texture;
-            break;
         case Water:
             icon = AtlasIcon::Water;
             break;

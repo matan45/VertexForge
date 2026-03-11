@@ -24,7 +24,6 @@ namespace services
     class IPostProcessProvider;
     class IWaterRenderProvider;
     class IRenderTextureProvider;
-    class ILightBakeProvider;
     class IRenderHookProvider;
     class IDebugDrawProvider;
     class IGrassRenderProvider;
@@ -71,7 +70,6 @@ namespace core
     class PostProcessAdapter;
     class WaterRenderAdapter;
     class RenderTextureAdapter;
-    class LightBakeAdapter;
     class RenderHookAdapter;
     class DebugDrawAdapter;
 
@@ -109,7 +107,6 @@ namespace core
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
-        std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
@@ -169,8 +166,6 @@ namespace core
         services::IPostProcessProvider* getPostProcessProvider();
 
         services::IRenderTextureProvider* getRenderTextureProvider();
-
-        services::ILightBakeProvider* getLightBakeProvider();
 
         services::IRenderHookProvider* getRenderHookProvider();
 

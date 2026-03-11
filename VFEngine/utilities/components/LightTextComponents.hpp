@@ -41,10 +41,4 @@ namespace components
         float maxWidth = 0.0f;
     };
 
-    struct LightmapComponent
-    {
-        std::string lightmapPath;
-        float texelsPerUnit = 16.0f;
-        glm::vec4 atlasScaleOffset{1.0f, 1.0f, 0.0f, 0.0f}; // xy=scale, zw=offset
-    };
 }
