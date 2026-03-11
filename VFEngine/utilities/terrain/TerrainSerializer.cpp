@@ -524,7 +524,6 @@ namespace terrain
         header.maxHeight = config.maxHeight;
         header.minHeight = config.minHeight;
         header.skirtDepth = config.skirtDepth;
-        header.lodDistances = config.lodDistances;
         header.gridMinX = gridMinX;
         header.gridMinZ = gridMinZ;
         header.gridMaxX = gridMaxX;

@@ -93,12 +93,12 @@ namespace terrain
         return heightData[getHeightIndex(x, z)];
     }
 
-    void TerrainTile::setNeighbor(TileEdge edge, const TileCoord& neighborCoord, uint8_t lod)
+    void TerrainTile::setNeighbor(TileEdge edge, const TileCoord& neighborCoord)
     {
         uint8_t edgeIndex = static_cast<uint8_t>(edge);
         if (edgeIndex < 4)
         {
-            neighbors[edgeIndex] = NeighborInfo(neighborCoord, lod);
+            neighbors[edgeIndex] = NeighborInfo(neighborCoord);
         }
     }
 
@@ -108,35 +108,6 @@ namespace terrain
         if (edgeIndex < 4)
         {
             neighbors[edgeIndex] = NeighborInfo();
-        }
-    }
-
-    bool TerrainTile::stitchingChanged() const
-    {
-        for (uint8_t i = 0; i < 4; ++i)
-        {
-            const auto& current = edgeStitchInfo[i];
-            const auto& previous = previousStitchState[i];
-
-            if (current.needsSnapping != previous.needsSnapping)
-            {
-                return true;
-            }
-
-            if (current.needsSnapping && current.neighborLOD != previous.neighborLOD)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void TerrainTile::saveStitchState()
-    {
-        for (uint8_t i = 0; i < 4; ++i)
-        {
-            previousStitchState[i].needsSnapping = edgeStitchInfo[i].needsSnapping;
-            previousStitchState[i].neighborLOD = edgeStitchInfo[i].neighborLOD;
         }
     }
 
@@ -172,16 +143,6 @@ namespace terrain
             glm::vec3(worldOrigin.x, minH, worldOrigin.z),
             glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)
         );
-    }
-
-    TileLODData& TerrainTile::getCurrentLODData()
-    {
-        return lodLevels[currentLOD];
-    }
-
-    const TileLODData& TerrainTile::getCurrentLODData() const
-    {
-        return lodLevels[currentLOD];
     }
 
     TileLODData& TerrainTile::getLODData(uint32_t level)

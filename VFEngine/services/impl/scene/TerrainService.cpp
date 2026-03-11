@@ -187,7 +187,6 @@ namespace services
         TerrainTileData data;
         data.tileX = comp.tileX;
         data.tileZ = comp.tileZ;
-        data.currentLOD = comp.currentLOD;
         data.isVisible = comp.isVisible;
         data.isDirty = comp.isDirty;
         data.isGPUResident = comp.isGPUResident;

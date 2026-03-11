@@ -41,30 +41,6 @@ namespace terrain
         }
     };
 
-    struct EdgeVertices
-    {
-        std::vector<uint32_t> indices;
-        std::vector<glm::vec3> positions;
-
-        void clear()
-        {
-            indices.clear();
-            positions.clear();
-        }
-    };
-
-    struct EdgeStitchInfo
-    {
-        bool needsSnapping = false;
-        uint8_t neighborLOD = 0;
-
-        void clear()
-        {
-            needsSnapping = false;
-            neighborLOD = 0;
-        }
-    };
-
     class TerrainTile
     {
     public:
@@ -75,12 +51,8 @@ namespace terrain
         math::AABB worldBounds;
 
         std::array<TileLODData, TERRAIN_LOD_COUNT> lodLevels;
-        uint8_t currentLOD = 0;
 
         std::array<NeighborInfo, 4> neighbors;
-
-        std::array<std::array<EdgeVertices, 4>, TERRAIN_LOD_COUNT> edgeVertices;
-        std::array<EdgeStitchInfo, 4> edgeStitchInfo;
 
         std::vector<float> heightData;
 
@@ -121,11 +93,8 @@ namespace terrain
         [[nodiscard]] glm::vec3 computeWorldOrigin() const;
         [[nodiscard]] float getHeight(uint32_t x, uint32_t z) const;
 
-        void setNeighbor(TileEdge edge, const TileCoord& neighborCoord, uint8_t lod);
+        void setNeighbor(TileEdge edge, const TileCoord& neighborCoord);
         void clearNeighbor(TileEdge edge);
-
-        [[nodiscard]] bool stitchingChanged() const;
-        void saveStitchState();
 
         [[nodiscard]] bool hasHeightData() const { return !heightData.empty(); }
         [[nodiscard]] bool hasLODData(uint32_t lod) const { return lod < TERRAIN_LOD_COUNT && !lodLevels[lod].isEmpty(); }
@@ -136,8 +105,6 @@ namespace terrain
         void setHole(uint32_t x, uint32_t z, bool isHoleValue);
         void initializeHoleMask();
 
-        [[nodiscard]] TileLODData& getCurrentLODData();
-        [[nodiscard]] const TileLODData& getCurrentLODData() const;
         [[nodiscard]] TileLODData& getLODData(uint32_t level);
         [[nodiscard]] const TileLODData& getLODData(uint32_t level) const;
 
@@ -155,12 +122,6 @@ namespace terrain
         [[nodiscard]] bool isValidHeightIndex(uint32_t x, uint32_t z) const;
         [[nodiscard]] size_t getHeightIndex(uint32_t x, uint32_t z) const;
 
-        struct StitchState
-        {
-            bool needsSnapping = false;
-            uint8_t neighborLOD = 0;
-        };
-        std::array<StitchState, 4> previousStitchState;
     };
 
 } // namespace terrain

@@ -34,11 +34,6 @@ namespace services
         tileConfig.maxHeight = config.maxHeight;
         tileConfig.minHeight = config.minHeight;
 
-        for (int i = 0; i < 4; ++i)
-        {
-            tileConfig.lodDistances[i] = config.lodDistances[i];
-        }
-
         int32_t halfX = config.tilesX / 2;
         int32_t halfZ = config.tilesZ / 2;
         int32_t minX = -halfX;
@@ -99,7 +94,6 @@ namespace services
         terrainComp.gridMinZ = minZ;
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
-        terrainComp.lodDistances = config.lodDistances;
         terrainComp.heightmapPath = config.heightmapPath;
         terrainComp.terrainMaterialPath = config.terrainMaterialPath;
         terrainComp.weightMapPath = config.weightMapPath;
@@ -269,8 +263,6 @@ namespace services
                 }
             }
 
-            (void)grid->updateLODs(cameraPosition);
-
             grid->regenerateDirtyTiles(cameraPosition);
 
             // Create physics bodies for tiles that streamed in and now have height data
@@ -430,7 +422,6 @@ namespace services
         auto& tileComp = tileEntity.addComponent<components::TerrainTileComponent>();
         tileComp.tileX = tileX;
         tileComp.tileZ = tileZ;
-        tileComp.currentLOD = tile->currentLOD;
         tileComp.isVisible = tile->isVisible;
         tileComp.isDirty = tile->isDirty;
         tileComp.isGPUResident = false;

@@ -29,7 +29,6 @@ namespace terrain
 
         [[nodiscard]] std::vector<TerrainTile*> getVisibleTiles(const math::Frustum& frustum);
 
-        [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
         void regenerateDirtyTiles(const glm::vec3& cameraPosition);
 
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();

@@ -42,7 +42,6 @@ namespace windows::details {
             const auto& tile = *tileOpt;
 
             ImGui::Text("Coordinates: (%d, %d)", tile.tileX, tile.tileZ);
-            ImGui::Text("Current LOD: %u", tile.currentLOD);
             ImGui::Text("Visible: %s", tile.isVisible ? "Yes" : "No");
 
             ImGui::Separator();

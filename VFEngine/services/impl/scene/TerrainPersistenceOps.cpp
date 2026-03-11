@@ -672,8 +672,6 @@ namespace services
         tileConfig.worldTileSize = comp.worldTileSize;
         tileConfig.maxHeight = comp.maxHeight;
         tileConfig.minHeight = comp.minHeight;
-        for (int i = 0; i < 4; ++i)
-            tileConfig.lodDistances[i] = comp.lodDistances[i];
 
         terrain::TerrainPhysicsConfig physicsConfig;
         if (registry.all_of<components::TerrainColliderComponent>(ent))
@@ -774,7 +772,6 @@ namespace services
         tileConfig.worldTileSize = header.worldTileSize;
         tileConfig.maxHeight = header.maxHeight;
         tileConfig.minHeight = header.minHeight;
-        tileConfig.lodDistances = header.lodDistances;
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
@@ -795,7 +792,6 @@ namespace services
         terrainComp.gridMinZ = header.gridMinZ;
         terrainComp.gridMaxX = header.gridMaxX;
         terrainComp.gridMaxZ = header.gridMaxZ;
-        terrainComp.lodDistances = header.lodDistances;
         terrainComp.terrainMaterialPath = header.materialPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
@@ -835,8 +831,6 @@ namespace services
         notification.config.terrainMaterialPath = header.materialPath;
         notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
         notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
-        for (int i = 0; i < 4; ++i)
-            notification.config.lodDistances[i] = header.lodDistances[i];
         events::EventDispatcher::instance().publish(notification);
 
         if (header.physicsConfig.hasCollider && physicsProvider)

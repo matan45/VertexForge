@@ -277,8 +277,8 @@ namespace terrain
             TerrainTile* neighbor = getTile(neighborCoord);
             if (neighbor)
             {
-                tile.setNeighbor(edge, neighborCoord, neighbor->currentLOD);
-                neighbor->setNeighbor(TileCoord::getOppositeEdge(edge), tile.coord, tile.currentLOD);
+                tile.setNeighbor(edge, neighborCoord);
+                neighbor->setNeighbor(TileCoord::getOppositeEdge(edge), tile.coord);
             }
             else
             {
@@ -293,43 +293,6 @@ namespace terrain
         {
             updateNeighborReferences(*tile);
         }
-    }
-
-    std::vector<TileCoord> TerrainGrid::updateLODs(const glm::vec3& cameraPosition)
-    {
-        std::vector<TileCoord> changedTiles;
-        changedTiles.reserve(tiles.size() / 4);
-
-        for (auto& [coord, tile] : tiles)
-        {
-            uint32_t newLOD = generator->calculateLOD(cameraPosition, *tile);
-            if (newLOD != tile->currentLOD)
-            {
-                tile->currentLOD = static_cast<uint8_t>(newLOD);
-                changedTiles.push_back(coord);
-            }
-        }
-
-        updateAllNeighborReferences();
-
-        for (auto& [coord, tile] : tiles)
-        {
-            generator->updateEdgeStitching(*tile);
-
-            if (tile->stitchingChanged())
-            {
-                tile->setAllLODsDirty();
-                tile->edgeSyncDirty = true;
-                tile->saveStitchState();
-
-                if (std::find(changedTiles.begin(), changedTiles.end(), coord) == changedTiles.end())
-                {
-                    changedTiles.push_back(coord);
-                }
-            }
-        }
-
-        return changedTiles;
     }
 
     std::vector<TerrainTile*> TerrainGrid::getAllTiles()
