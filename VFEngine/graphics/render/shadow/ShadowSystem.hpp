@@ -77,7 +77,7 @@ namespace render
             };
 
             // Shadow cache stats for current frame
-            mutable ShadowCacheStats lastCacheStats;
+            mutable ShadowCacheStats lastCacheStats{};
 
             lighting::GPULightBufferManager* lightBufferManager = nullptr;
 

@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <algorithm>
+#include <iostream>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -280,11 +281,18 @@ namespace render::gpudriven
 
         if (lightCullingPipeline && lightBufferManager)
         {
+            uint32_t ptCount = lightBufferManager->getPointLightCount();
+            uint32_t spCount = lightBufferManager->getSpotLightCount();
+            static uint32_t logCounter = 0;
+            if (++logCounter % 300 == 1)
+            {
+                std::cout << "[DEBUG] LightCulling dispatch: pointCount=" << ptCount << ", spotCount=" << spCount << std::endl;
+            }
             lightCullingPipeline->dispatch(
                 cmd,
                 cameraBuffer->getData().view,
-                lightBufferManager->getPointLightCount(),
-                lightBufferManager->getSpotLightCount()
+                ptCount,
+                spCount
             );
         }
 

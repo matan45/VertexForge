@@ -8,6 +8,7 @@
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
 #include <cmath>
+#include <iostream>
 
 namespace render::lighting
 {
@@ -193,6 +194,19 @@ namespace render::lighting
             gpuLight.padding[2] = 0;
 
             ++pointCount;
+        }
+
+        if (pointCount > 0)
+        {
+            const auto& first = cpuPointLights[0];
+            static uint32_t ptLogCounter = 0;
+            if (++ptLogCounter % 300 == 1)
+            {
+                std::cout << "[DEBUG] collectPointLights count=" << pointCount
+                          << " pos=(" << first.position.x << "," << first.position.y << "," << first.position.z << ")"
+                          << " radius=" << first.radius << " intensity=" << first.intensity
+                          << " shadowIdx=" << first.shadowIndex << std::endl;
+            }
         }
 
         if (hitLimit && !warnedPointLimit)
