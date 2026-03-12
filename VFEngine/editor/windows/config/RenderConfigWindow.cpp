@@ -286,6 +286,27 @@ namespace windows
                                shadowStats.pointLightCount,
                                shadowStats.spotLightCount);
         }
+
+        // Shadow cache stats for static lights
+        if (shadowStats.totalStaticLights > 0)
+        {
+            ImGui::Spacing();
+            ImGui::Text("Shadow Cache");
+            ImGui::Text("  Static lights: %u", shadowStats.totalStaticLights);
+            ImGui::Text("  Cached: %u  Rendered: %u  Skipped: %u",
+                       shadowStats.cachedShadowMaps,
+                       shadowStats.renderedThisFrame,
+                       shadowStats.skippedThisFrame);
+
+            if (shadowStats.activeShadowCasters > 0)
+            {
+                float cacheRatio = static_cast<float>(shadowStats.skippedThisFrame) /
+                    static_cast<float>(shadowStats.skippedThisFrame + shadowStats.renderedThisFrame);
+                ImVec4 cacheColor = cacheRatio > 0.5f ? ImVec4(0.3f, 1, 0.3f, 1)
+                                                      : ImVec4(1, 0.8f, 0.2f, 1);
+                ImGui::TextColored(cacheColor, "  Cache hit: %.0f%%", cacheRatio * 100.0f);
+            }
+        }
     }
 
     void RenderConfigWindow::drawShadowSection()

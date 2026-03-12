@@ -129,6 +129,12 @@ namespace services {
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
         uint32_t pointResolution = 512;
+
+        // Shadow cache stats for static lights
+        uint32_t totalStaticLights = 0;
+        uint32_t cachedShadowMaps = 0;
+        uint32_t renderedThisFrame = 0;
+        uint32_t skippedThisFrame = 0;
     };
 
     class IOffScreenProvider {

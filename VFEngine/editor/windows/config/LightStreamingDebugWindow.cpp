@@ -144,9 +144,13 @@ namespace windows
                 configDirty = true;
             if (ImGui::SliderFloat("Shadow Bonus", &config.shadowWeight, 0.0f, 10.0f))
                 configDirty = true;
+            if (ImGui::SliderFloat("Static Bonus", &config.staticBonus, 0.0f, 2.0f))
+                configDirty = true;
 
             ImGui::Spacing();
             if (ImGui::SliderFloat("Hysteresis Margin", &config.hysteresisMargin, 0.0f, 0.5f))
+                configDirty = true;
+            if (ImGui::SliderFloat("Static Hysteresis x", &config.staticHysteresisMultiplier, 1.0f, 5.0f))
                 configDirty = true;
 
             ImGui::Spacing();

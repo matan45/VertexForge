@@ -114,6 +114,13 @@ namespace controllers
         auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
         stats.pointResolution = atlasConfig.pointResolution;
 
+        // Shadow cache stats
+        auto cacheStats = shadowSystem->getShadowCacheStats();
+        stats.totalStaticLights = cacheStats.totalStaticLights;
+        stats.cachedShadowMaps = cacheStats.cachedShadowMaps;
+        stats.renderedThisFrame = cacheStats.renderedThisFrame;
+        stats.skippedThisFrame = cacheStats.skippedThisFrame;
+
         return stats;
     }
 
