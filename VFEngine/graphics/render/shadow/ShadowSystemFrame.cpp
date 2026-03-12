@@ -429,14 +429,20 @@ namespace render::shadow
         f3.get();
 
         // Mark static point/spot lights as cached after matrices are computed
+        // Require at least 2 rendered frames before caching, so the shadow map
+        // is fully rendered (first frame may have incomplete state)
         for (auto& [entityId, data] : lightShadowData)
         {
             if (data.isStatic && !data.shadowCached &&
                 data.settings.enabled && data.settings.castShadows &&
                 data.type != ShadowMapType::DirectionalCSM)
             {
-                data.shadowCached = true;
-                data.lastRenderedFrame = frameCounter;
+                ++data.renderedFrameCount;
+                if (data.renderedFrameCount >= 2)
+                {
+                    data.shadowCached = true;
+                    data.lastRenderedFrame = frameCounter;
+                }
             }
         }
 

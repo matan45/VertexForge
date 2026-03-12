@@ -179,6 +179,7 @@ namespace render::shadow
         bool isStatic = false;
         bool shadowCached = false;
         uint32_t lastRenderedFrame = 0;
+        uint32_t renderedFrameCount = 0;
 
         bool matricesDirty = true;
         bool settingsDirty = true;
@@ -197,6 +198,7 @@ namespace render::shadow
         void invalidateCache()
         {
             shadowCached = false;
+            renderedFrameCount = 0;
             for (auto& view : views)
             {
                 view.cached = false;

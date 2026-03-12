@@ -10,6 +10,7 @@ namespace render::shadow
     ShadowSystem::ShadowSystem(core::Device& device)
         : device(device)
     {
+        lastCacheStats = {};
     }
 
     ShadowSystem::~ShadowSystem()
