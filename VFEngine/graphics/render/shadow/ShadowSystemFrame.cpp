@@ -724,6 +724,12 @@ namespace render::shadow
             uint32_t currentRes = (currentResIt != currentShadowResolutions.end())
                 ? currentResIt->second : data.settings.resolution;
 
+            // Track initial resolution so first LOD pass can trigger a change
+            if (currentResIt == currentShadowResolutions.end() && data.resourceHandle.isValid())
+            {
+                currentShadowResolutions[entityId] = currentRes;
+            }
+
             if (!shouldHaveShadow && data.resourceHandle.isValid())
             {
                 // Light too far, remove shadow
