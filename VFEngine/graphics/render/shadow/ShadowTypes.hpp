@@ -156,6 +156,7 @@ namespace render::shadow
         bool filterEnabled = true;
 
         uint32_t entityId = 0;
+        bool cached = false;
 
         ShadowMapHandle handle;
 
@@ -175,6 +176,10 @@ namespace render::shadow
 
         uint32_t lightEntityId = 0;
 
+        bool isStatic = false;
+        bool shadowCached = false;
+        uint32_t lastRenderedFrame = 0;
+
         bool matricesDirty = true;
         bool settingsDirty = true;
 
@@ -186,6 +191,16 @@ namespace render::shadow
             }
             resourceHandle.invalidate();
             matricesDirty = true;
+            shadowCached = false;
+        }
+
+        void invalidateCache()
+        {
+            shadowCached = false;
+            for (auto& view : views)
+            {
+                view.cached = false;
+            }
         }
 
         [[nodiscard]] bool usesAtlas() const
@@ -248,6 +263,11 @@ namespace render::shadow
         uint32_t tier1Resolution = 1024;
         uint32_t tier2Resolution = 512;
 
+        // Tighter tiers for static lights (cached shadows tolerate lower resolution)
+        float staticTier0Distance = 20.0f;
+        float staticTier1Distance = 50.0f;
+        float staticTier2Distance = 100.0f;
+
         uint32_t getResolutionForDistance(float distance) const
         {
             if (!enabled) return tier0Resolution;
@@ -257,10 +277,25 @@ namespace render::shadow
             return 0; // No shadow beyond tier2
         }
 
+        uint32_t getResolutionForStaticLight(float distance) const
+        {
+            if (!enabled) return tier0Resolution;
+            if (distance < staticTier0Distance) return tier0Resolution;
+            if (distance < staticTier1Distance) return tier1Resolution;
+            if (distance < staticTier2Distance) return tier2Resolution;
+            return 0;
+        }
+
         bool shouldHaveShadow(float distance) const
         {
             if (!enabled) return true;
             return distance < tier2Distance;
+        }
+
+        bool shouldStaticHaveShadow(float distance) const
+        {
+            if (!enabled) return true;
+            return distance < staticTier2Distance;
         }
     };
 

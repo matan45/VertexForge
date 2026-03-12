@@ -81,10 +81,12 @@ namespace render::gi
         cascades.clear();
         totalProbeCount = 0;
 
+        // Build standard near-field cascades
         for (uint32_t i = 0; i < config.cascadeCount; ++i)
         {
             CascadeLevel cascade;
             cascade.spacing = config.baseSpacing * std::pow(config.cascadeMultiplier, static_cast<float>(i));
+            cascade.gridDimensions = config.gridDimensions;
 
             uint32_t probes = static_cast<uint32_t>(
                 config.gridDimensions.x * config.gridDimensions.y * config.gridDimensions.z);
@@ -92,6 +94,7 @@ namespace render::gi
             cascade.probeCount = probes;
             cascade.probeOffset = totalProbeCount;
             cascade.updateCursor = 0;
+            cascade.isFarField = false;
 
             // Center grid on camera position
             glm::vec3 halfExtent = glm::vec3(config.gridDimensions) * cascade.spacing * 0.5f;
@@ -99,6 +102,44 @@ namespace render::gi
 
             totalProbeCount += probes;
             cascades.push_back(cascade);
+        }
+
+        // Build far-field cascades for open-world coverage
+        if (settings.farFieldEnabled && settings.farFieldCascadeCount > 0)
+        {
+            // Far-field uses smaller grid (4x2x4) with much larger spacing
+            constexpr glm::ivec3 farFieldGrid{4, 2, 4};
+
+            float lastNearFieldSpacing = cascades.empty()
+                ? config.baseSpacing
+                : cascades.back().spacing;
+
+            for (uint32_t i = 0; i < settings.farFieldCascadeCount; ++i)
+            {
+                CascadeLevel cascade;
+                cascade.gridDimensions = farFieldGrid;
+
+                // Far-field spacing starts from the configured value and doubles per cascade
+                cascade.spacing = settings.farFieldProbeSpacing *
+                    std::pow(config.cascadeMultiplier, static_cast<float>(i));
+
+                // Ensure far-field spacing is larger than the last near-field cascade
+                cascade.spacing = std::max(cascade.spacing, lastNearFieldSpacing * 2.0f);
+
+                uint32_t probes = static_cast<uint32_t>(
+                    farFieldGrid.x * farFieldGrid.y * farFieldGrid.z);
+
+                cascade.probeCount = probes;
+                cascade.probeOffset = totalProbeCount;
+                cascade.updateCursor = 0;
+                cascade.isFarField = true;
+
+                glm::vec3 halfExtent = glm::vec3(farFieldGrid) * cascade.spacing * 0.5f;
+                cascade.gridOrigin = lastCameraPosition - halfExtent;
+
+                totalProbeCount += probes;
+                cascades.push_back(cascade);
+            }
         }
     }
 
@@ -116,13 +157,13 @@ namespace render::gi
 
             // Check if camera has moved enough to scroll the grid
             glm::vec3 gridCenter = cascade.gridOrigin +
-                glm::vec3(config.gridDimensions) * cascade.spacing * 0.5f;
+                glm::vec3(cascade.gridDimensions) * cascade.spacing * 0.5f;
             glm::vec3 offset = cameraPos - gridCenter;
 
             // Scroll if camera moved more than one probe spacing
             if (glm::length(offset) > cascade.spacing)
             {
-                glm::vec3 halfExtent = glm::vec3(config.gridDimensions) * cascade.spacing * 0.5f;
+                glm::vec3 halfExtent = glm::vec3(cascade.gridDimensions) * cascade.spacing * 0.5f;
                 glm::vec3 newOrigin = cameraPos - halfExtent;
 
                 // Snap to grid
@@ -166,8 +207,14 @@ namespace render::gi
         for (uint32_t i = 0; i < cascades.size(); ++i)
         {
             const auto& cascade = cascades[i];
+
+            // Far-field cascades update at a slower rate
+            float updateRate = cascade.isFarField
+                ? settings.farFieldUpdateRate
+                : settings.probeUpdateRate;
+
             uint32_t updateCount = static_cast<uint32_t>(
-                std::ceil(cascade.probeCount * settings.probeUpdateRate));
+                std::ceil(cascade.probeCount * updateRate));
             updateCount = std::min(updateCount, cascade.probeCount);
 
             if (updateCount == 0)
@@ -178,6 +225,7 @@ namespace render::gi
             ProbeUpdateBatch batch;
             batch.cascadeIndex = i;
             batch.probeStartOffset = cascade.probeOffset + cascade.updateCursor;
+            batch.isFarField = cascade.isFarField;
 
             // Wrap around
             if (cascade.updateCursor + updateCount > cascade.probeCount)
@@ -205,7 +253,10 @@ namespace render::gi
     void RadianceCascadeManager::applySettings(const GISettings& newSettings)
     {
         bool needsRebuild = (newSettings.quality != settings.quality) ||
-                            (newSettings.probeSpacing != settings.probeSpacing);
+                            (newSettings.probeSpacing != settings.probeSpacing) ||
+                            (newSettings.farFieldEnabled != settings.farFieldEnabled) ||
+                            (newSettings.farFieldCascadeCount != settings.farFieldCascadeCount) ||
+                            (newSettings.farFieldProbeSpacing != settings.farFieldProbeSpacing);
 
         settings = newSettings;
 

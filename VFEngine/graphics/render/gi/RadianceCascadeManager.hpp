@@ -49,6 +49,7 @@ namespace render::gi
             uint32_t cascadeIndex;
             uint32_t probeStartOffset; // Global offset
             uint32_t probeCount;       // Number to update
+            bool isFarField = false;   // Far-field cascades use fewer rays
         };
         std::vector<ProbeUpdateBatch> getProbeUpdateBatches();
 

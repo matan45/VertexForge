@@ -392,8 +392,12 @@ namespace render::gpudriven
                     push.cascadeIndex = batch.cascadeIndex;
                     push.probeStartIndex = batch.probeStartOffset;
                     push.probeCount = batch.probeCount;
-                    push.raysPerProbe = cachedGISettings.probeRaysPerUpdate;
-                    push.maxDistance = cachedGISettings.maxProbeDistance;
+                    push.raysPerProbe = batch.isFarField
+                        ? cachedGISettings.farFieldRaysPerUpdate
+                        : cachedGISettings.probeRaysPerUpdate;
+                    push.maxDistance = batch.isFarField
+                        ? cachedGISettings.farFieldMaxDistance
+                        : cachedGISettings.maxProbeDistance;
                     push.temporalBlend = cachedGISettings.temporalBlendFactor;
                     push.frameRandom = static_cast<float>(giCascadeManager->getFrameIndex()) * 0.1f;
                     push.frameIndex = giCascadeManager->getFrameIndex();

@@ -397,7 +397,11 @@ namespace render::gi
         for (uint32_t i = 0; i < cascades.size() && i < MAX_CASCADES; ++i)
         {
             gpuCascades[i].gridOriginSpacing = glm::vec4(cascades[i].gridOrigin, cascades[i].spacing);
-            gpuCascades[i].gridDimsOffset = glm::ivec4(8, 4, 8, static_cast<int>(cascades[i].probeOffset));
+            gpuCascades[i].gridDimsOffset = glm::ivec4(
+                cascades[i].gridDimensions.x,
+                cascades[i].gridDimensions.y,
+                cascades[i].gridDimensions.z,
+                static_cast<int>(cascades[i].probeOffset));
         }
     }
 

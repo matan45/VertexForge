@@ -20,6 +20,7 @@ namespace render::lighting
         float intensity = 0.0f;
         float radius = 0.0f;
         bool castsShadow = false;
+        bool isStatic = false;      // Static lights get priority bonus (cheaper to keep active)
         bool active = true;         // Whether currently uploaded to GPU
 
         enum class LightType : uint8_t { Point, Spot } type = LightType::Point;
@@ -35,6 +36,10 @@ namespace render::lighting
         float intensityWeight = 0.5f;
         float radiusWeight = 0.3f;
         float shadowWeight = 2.0f;
+
+        // Static light optimization: bonus priority for static lights (cached shadows are cheaper)
+        float staticBonus = 0.3f;
+        float staticHysteresisMultiplier = 2.0f;
 
         // Hysteresis: lights within this margin of the cutoff priority won't pop in/out
         float hysteresisMargin = 0.05f;

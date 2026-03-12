@@ -70,6 +70,12 @@ namespace render::lighting
                 continue;
             }
 
+            // Check static flag from TransformComponent
+            if (registry.all_of<components::TransformComponent>(entity))
+            {
+                entry.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+            }
+
             entries.push_back(entry);
         }
 
@@ -263,7 +269,11 @@ namespace render::lighting
                             break;
                         }
                     }
-                    if (entry.priority >= cutoffPriority - config.hysteresisMargin)
+                    // Static lights get wider hysteresis (harder to deactivate)
+                    float margin = entry.isStatic
+                        ? config.hysteresisMargin * config.staticHysteresisMultiplier
+                        : config.hysteresisMargin;
+                    if (entry.priority >= cutoffPriority - margin)
                     {
                         shouldDeactivate = false;
                     }
@@ -359,11 +369,13 @@ namespace render::lighting
         float intensityFactor = entry.intensity;
         float radiusFactor = entry.radius;
         float shadowFactor = entry.castsShadow ? 1.0f : 0.0f;
+        float staticFactor = entry.isStatic ? config.staticBonus : 0.0f;
 
         return distanceFactor * config.distanceWeight +
                intensityFactor * config.intensityWeight +
                radiusFactor * config.radiusWeight +
-               shadowFactor * config.shadowWeight;
+               shadowFactor * config.shadowWeight +
+               staticFactor;
     }
 
     bool LightStreamManager::allocateSlot(LightStreamEntry& entry)

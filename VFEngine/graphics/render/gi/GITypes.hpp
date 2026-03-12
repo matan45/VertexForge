@@ -27,6 +27,14 @@ namespace render::gi
         float irradianceGamma = 5.0f;         // Encoding gamma for SH
         float maxProbeDistance = 200.0f;      // Max ray distance
 
+        // Far-field GI extension for open worlds
+        bool farFieldEnabled = false;
+        float farFieldMaxDistance = 500.0f;   // Extended GI range in meters
+        uint32_t farFieldCascadeCount = 2;    // Additional coarse cascades
+        float farFieldProbeSpacing = 32.0f;   // Coarse spacing for far-field probes
+        uint32_t farFieldRaysPerUpdate = 32;  // Fewer rays for far-field (cheaper)
+        float farFieldUpdateRate = 0.1f;      // 10% probes updated per frame (slower)
+
         // Debug
         bool showProbes = false;
         bool showCascadeBounds = false;
@@ -49,10 +57,16 @@ namespace render::gi
             case GIQuality::High:
                 s.probeSpacing = 2.0f;
                 s.probeRaysPerUpdate = 128;
+                s.farFieldEnabled = true;
+                s.farFieldCascadeCount = 1;
+                s.farFieldMaxDistance = 500.0f;
                 break;
             case GIQuality::Ultra:
                 s.probeSpacing = 2.0f;
                 s.probeRaysPerUpdate = 256;
+                s.farFieldEnabled = true;
+                s.farFieldCascadeCount = 2;
+                s.farFieldMaxDistance = 1000.0f;
                 break;
             }
 
@@ -71,10 +85,12 @@ namespace render::gi
     struct CascadeLevel
     {
         glm::vec3 gridOrigin{0.0f};          // World-space origin of this cascade grid
+        glm::ivec3 gridDimensions{8, 4, 8};  // Grid dimensions for this cascade
         float spacing = 2.0f;                 // Probe spacing for this cascade
         uint32_t probeCount = 0;              // Total probes in this cascade
         uint32_t probeOffset = 0;             // Offset into global probe buffer
         uint32_t updateCursor = 0;            // Which probe to update next (cycling)
+        bool isFarField = false;              // Far-field cascades use fewer rays and update slower
     };
 
     // SH coefficients for irradiance (L0 + L1 = 4 coefficients, RGB = 12 floats)

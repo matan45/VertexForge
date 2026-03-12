@@ -326,10 +326,15 @@ namespace render::shadow
         if (!shadowsEnabled)
             return;
 
+        ++frameCounter;
+
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
+
+        // Reset per-frame cache stats
+        lastCacheStats = {};
 
         // Pre-collect entity data on main thread (EnTT registry is not thread-safe),
         // then dispatch pure computation in parallel.
@@ -351,6 +356,23 @@ namespace render::shadow
             auto entity = static_cast<entt::entity>(entityId);
             if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
                 continue;
+
+            // Track static light stats
+            if (data.isStatic)
+                ++lastCacheStats.totalStaticLights;
+
+            // Skip matrix computation for cached static point/spot lights
+            // (Directional CSM always needs update because cascades depend on camera position)
+            if (data.isStatic && data.shadowCached && data.type != ShadowMapType::DirectionalCSM)
+            {
+                // Mark all views as cached so the recorder skips them
+                for (auto& view : data.views)
+                    view.cached = true;
+
+                ++lastCacheStats.cachedShadowMaps;
+                ++lastCacheStats.skippedThisFrame;
+                continue;
+            }
 
             const auto& worldMatrix = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
 
@@ -376,6 +398,11 @@ namespace render::shadow
             {
                 directionalLights.push_back({&data, worldMatrix});
             }
+
+            // Mark views as not cached (will be rendered this frame)
+            for (auto& view : data.views)
+                view.cached = false;
+            ++lastCacheStats.renderedThisFrame;
         }
 
         auto f1 = threading::JobSystem::instance().submit(
@@ -400,6 +427,18 @@ namespace render::shadow
         f1.get();
         f2.get();
         f3.get();
+
+        // Mark static point/spot lights as cached after matrices are computed
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.isStatic && !data.shadowCached &&
+                data.settings.enabled && data.settings.castShadows &&
+                data.type != ShadowMapType::DirectionalCSM)
+            {
+                data.shadowCached = true;
+                data.lastRenderedFrame = frameCounter;
+            }
+        }
 
         collectShadowViewsForGPU(visibleLightIds);
     }
@@ -662,8 +701,12 @@ namespace render::shadow
             glm::vec3 lightPos = glm::vec3(transform.worldMatrix[3]);
             float distance = glm::distance(cameraPosition, lightPos);
 
-            uint32_t desiredResolution = shadowLODConfig.getResolutionForDistance(distance);
-            bool shouldHaveShadow = shadowLODConfig.shouldHaveShadow(distance);
+            uint32_t desiredResolution = data.isStatic
+                ? shadowLODConfig.getResolutionForStaticLight(distance)
+                : shadowLODConfig.getResolutionForDistance(distance);
+            bool shouldHaveShadow = data.isStatic
+                ? shadowLODConfig.shouldStaticHaveShadow(distance)
+                : shadowLODConfig.shouldHaveShadow(distance);
 
             auto currentResIt = currentShadowResolutions.find(entityId);
             uint32_t currentRes = (currentResIt != currentShadowResolutions.end())
@@ -689,6 +732,7 @@ namespace render::shadow
                 {
                     currentShadowResolutions[entityId] = desiredResolution;
                     data.settingsDirty = true;
+                    data.invalidateCache(); // Force re-render at new resolution
                     needsUpdate = true;
                 }
             }

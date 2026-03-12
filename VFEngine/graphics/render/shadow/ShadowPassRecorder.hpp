@@ -37,6 +37,7 @@ namespace render::shadow
     private:
         core::Device& device;
         bool atlasFirstUse = true;
+        bool hasCachedAtlasTiles = false;  // True after first frame with cached static shadows
 
     public:
         explicit ShadowPassRecorder(core::Device& device);
@@ -58,7 +59,7 @@ namespace render::shadow
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
             bool shadowsEnabled);
 
-        void resetAtlasFirstUse() { atlasFirstUse = true; }
+        void resetAtlasFirstUse() { atlasFirstUse = true; hasCachedAtlasTiles = false; }
 
     private:
         void renderPointLightCubeShadows(

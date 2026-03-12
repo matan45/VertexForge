@@ -26,11 +26,13 @@ namespace render::shadow
     private:
         core::Device& device;
 
-        vk::RenderPass shadowRenderPass;
+        vk::RenderPass shadowRenderPass;          // eClear - used when no cached tiles
+        vk::RenderPass shadowRenderPassLoad;      // eLoad  - preserves cached tiles
         std::unique_ptr<core::Shader> shadowShader;
         vk::Pipeline shadowPipeline;
         vk::PipelineLayout shadowPipelineLayout;
         vk::Framebuffer atlasFramebuffer;
+        vk::Framebuffer atlasFramebufferLoad;     // Framebuffer for the eLoad render pass
 
         vk::DescriptorSetLayout cachedPerDrawLayout;
         vk::DescriptorSetLayout cachedMeshletDataLayout;
@@ -65,13 +67,16 @@ namespace render::shadow
         void destroyFramebuffer();
 
         [[nodiscard]] vk::RenderPass getRenderPass() const { return shadowRenderPass; }
+        [[nodiscard]] vk::RenderPass getRenderPassLoad() const { return shadowRenderPassLoad; }
         [[nodiscard]] vk::Pipeline getPipeline() const { return shadowPipeline; }
         [[nodiscard]] vk::PipelineLayout getPipelineLayout() const { return shadowPipelineLayout; }
         [[nodiscard]] vk::Framebuffer getFramebuffer() const { return atlasFramebuffer; }
+        [[nodiscard]] vk::Framebuffer getFramebufferLoad() const { return atlasFramebufferLoad; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:
         void createShadowRenderPass();
+        void createShadowRenderPassLoad();
         void createShadowPipeline();
         void createCameraDescriptorResources();
     };

@@ -44,21 +44,11 @@ vec3 evaluateGISH(GIProbeData probe, vec3 normal) {
     ), vec3(0.0));
 }
 
-// Trilinear probe interpolation
-vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
-    if (giCascadeCount == 0) return vec3(0.0);
-
-    // Select cascade based on camera distance
-    uint selectedCascade = 0;
-    for (uint i = 1; i < giCascadeCount; ++i) {
-        float cascadeRange = giCascades[i].gridOriginSpacing.w *
-                             float(giCascades[i].gridDimsOffset.x) * 0.5;
-        if (cameraDistance > cascadeRange * 0.7) {
-            selectedCascade = i;
-        }
-    }
-
-    GICascadeInfo cascade = giCascades[selectedCascade];
+// Internal: sample irradiance from a specific cascade via trilinear interpolation
+// Returns interpolated irradiance and sets outCoverage (0-1) based on how well
+// the fragment is covered by the cascade grid (0 = at edge/outside, 1 = well inside)
+vec3 sampleCascadeIrradiance(uint cascadeIdx, vec3 worldPos, vec3 normal, out float outCoverage) {
+    GICascadeInfo cascade = giCascades[cascadeIdx];
     float spacing = cascade.gridOriginSpacing.w;
     vec3 origin = cascade.gridOriginSpacing.xyz;
     ivec3 gridDims = cascade.gridDimsOffset.xyz;
@@ -68,6 +58,11 @@ vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
     vec3 localPos = (worldPos - origin) / spacing;
     ivec3 baseCoord = ivec3(floor(localPos));
     vec3 alpha = fract(localPos);
+
+    // Compute coverage: how far inside the grid the fragment is (0=edge, 1=center)
+    vec3 normalizedPos = localPos / vec3(gridDims);
+    vec3 edgeDist = min(normalizedPos, vec3(1.0) - normalizedPos) * 2.0;
+    outCoverage = clamp(min(edgeDist.x, min(edgeDist.y, edgeDist.z)) * 4.0, 0.0, 1.0);
 
     baseCoord = clamp(baseCoord, ivec3(0), gridDims - ivec3(2));
 
@@ -104,6 +99,32 @@ vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
 
     if (totalWeight > 0.0) {
         irradiance /= totalWeight;
+    }
+
+    return irradiance;
+}
+
+// Trilinear probe interpolation with far-field cascade support
+vec3 sampleProbeGI(vec3 worldPos, vec3 normal, float cameraDistance) {
+    if (giCascadeCount == 0) return vec3(0.0);
+
+    // Select cascade based on camera distance
+    uint selectedCascade = 0;
+    for (uint i = 1; i < giCascadeCount; ++i) {
+        float cascadeRange = giCascades[i].gridOriginSpacing.w *
+                             float(giCascades[i].gridDimsOffset.x) * 0.5;
+        if (cameraDistance > cascadeRange * 0.7) {
+            selectedCascade = i;
+        }
+    }
+
+    float coverage = 1.0;
+    vec3 irradiance = sampleCascadeIrradiance(selectedCascade, worldPos, normal, coverage);
+
+    // At the outermost cascade edges, smoothly fade to zero (IBL will fill the gap)
+    // This prevents hard cutoff at the GI boundary
+    if (selectedCascade == giCascadeCount - 1 && coverage < 1.0) {
+        irradiance *= coverage;
     }
 
     // Clamp to reasonable range to prevent flickering from unstable probes
