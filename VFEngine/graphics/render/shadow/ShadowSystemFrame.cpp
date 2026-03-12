@@ -333,6 +333,9 @@ namespace render::shadow
         spotShadowViews.clear();
         entityToShadowIndex.clear();
 
+        // Sync static flags from ECS (handles checkbox toggles in editor)
+        updateStaticFlags();
+
         // Reset per-frame cache stats
         lastCacheStats = {};
 
