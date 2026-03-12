@@ -11,8 +11,12 @@ namespace core::adapters
 {
     class BillboardRenderAdapter : public services::IBillboardRenderProvider
     {
+    private:
+        controllers::OffScreen* offScreen = nullptr;
+        bool billboardEnabled = true;
+        float maxDistance = 500.0f;
     public:
-        BillboardRenderAdapter() = default;
+        explicit BillboardRenderAdapter() = default;
         ~BillboardRenderAdapter() override = default;
 
         void setOffScreenController(controllers::OffScreen* controller)
@@ -26,10 +30,6 @@ namespace core::adapters
         void setBillboardMaxDistance(float distance) override;
 
         services::BillboardRenderStats getBillboardStats() const override;
-
-    private:
-        controllers::OffScreen* offScreen = nullptr;
-        bool billboardEnabled = true;
-        float maxDistance = 500.0f;
+   
     };
 }
