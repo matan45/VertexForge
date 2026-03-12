@@ -5,7 +5,6 @@
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-// Grass instances from compute pass
 layout(std430, set = 0, binding = 0) readonly buffer GrassInstanceBuffer {
     vec4 grassInstances[];  // 3 vec4s per instance
 };
@@ -23,7 +22,6 @@ layout(set = 1, binding = 0) uniform CameraUBO {
     vec4 frustumPlanes[6];
 };
 
-// Grass config push constants (must match all stages and C++ struct)
 layout(push_constant) uniform PushConstants {
     vec4 baseColor;
     vec4 tipColor;
@@ -58,13 +56,11 @@ void main() {
     float dist = 0.0;
 
     if (instanceIdx < totalInstances) {
-        // Read instance position and dimensions
         vec4 posAndRot = grassInstances[instanceIdx * 3];
         vec4 dimensions = grassInstances[instanceIdx * 3 + 1];
         vec3 worldPos = posAndRot.xyz;
         float bladeHeight = dimensions.x;
 
-        // Distance culling
         dist = distance(worldPos, cameraPos);
         if (dist < fadeEndDistance) {
             // Frustum culling with bounding sphere centered at mid-blade
@@ -78,7 +74,6 @@ void main() {
         }
     }
 
-    // Compact visible instances
     uvec4 ballot = subgroupBallot(visible);
     uint visibleCount = subgroupBallotBitCount(ballot);
     uint localIdx = subgroupBallotExclusiveBitCount(ballot);

@@ -71,10 +71,8 @@ void main() {
         foam = rawFoam * smoothstep(1.0, 3.0, displacementMag);
     }
 
-    // Store displacement (Dx, Dy, Dz, foam)
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));
 
-    // Compute normal from height gradients
     float dyDx = imageLoad(heightField, ivec2(xp, y)).r * signXP -
                  imageLoad(heightField, ivec2(xm, y)).r * signXM;
     float dyDz = imageLoad(heightField, ivec2(x, yp)).r * signYP -

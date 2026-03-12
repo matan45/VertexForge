@@ -1,8 +1,6 @@
 
-    // Convert albedo from sRGB to linear space for PBR calculations
     vec3 albedo_linear = pow(mat_albedo, vec3(2.2));
 
-    // PBR Lighting
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
@@ -24,7 +22,6 @@
     vec3 viewDirTangent = normalize(transpose(TBN) * V);
     vec2 parallaxUV = parallaxOcclusionMapping(fragTexCoord, viewDirTangent, abs(heightScale));
 
-    // Re-sample textures with parallax-adjusted UV for proper displacement effect
     vec4 parallaxAlbedo = texture(u_Textures[TEX_SLOT_ALBEDO], parallaxUV);
     if (parallaxAlbedo.a > 0.01) {
         albedo_linear = pow(parallaxAlbedo.rgb, vec3(2.2));
@@ -54,19 +51,15 @@
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - mat_metallic;
 
-    // Diffuse IBL
     vec3 irradiance = texture(irradianceMap, N).rgb;
     vec3 diffuse = irradiance * albedo_linear * mat_iblDiffuse;
 
-    // Specular IBL
     vec3 prefilteredColor = textureLod(prefilterMap, R, mat_roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), mat_roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * mat_iblSpecular;
 
-    // Combine
     vec3 ambient = (kD * diffuse + specular) * mat_ao;
 
-    // Emission - convert from sRGB to linear space if from texture
     vec3 emission_linear = pow(mat_emissionColor, vec3(2.2)) * mat_emissionStrength;
 
     vec3 color = ambient + emission_linear;

@@ -27,7 +27,6 @@ void main() {
 
     color *= (ambient + diffuse);
 
-    // Alpha test for distance fade
     if (inAlpha < 0.01) discard;
 
     outColor = vec4(color, inAlpha);

@@ -25,22 +25,18 @@ void main() {
 
     if (x >= pc.N || y >= pc.N) return;
 
-    // The coordinate along the FFT dimension
     uint coord = (pc.direction == 0u) ? x : y;
 
     uint halfButterfly = 1u << pc.stage;
     uint butterflySize = halfButterfly << 1u;
 
-    // Position within the butterfly group
     uint localIdx = coord % butterflySize;
     uint pairIdx = localIdx % halfButterfly;
 
-    // Indices of the two elements to combine
     uint groupStart = (coord / butterflySize) * butterflySize;
     uint topCoord = groupStart + pairIdx;
     uint botCoord = topCoord + halfButterfly;
 
-    // Read the two input elements
     vec2 topVal, botVal;
     if (pc.direction == 0u) {
         topVal = imageLoad(inputImg, ivec2(topCoord, y)).rg;
@@ -55,7 +51,6 @@ void main() {
     vec2 twiddle = vec2(cos(angle), sin(angle));
     vec2 twiddled = complexMul(botVal, twiddle);
 
-    // Butterfly combination
     vec2 result;
     if (localIdx < halfButterfly) {
         result = topVal + twiddled;

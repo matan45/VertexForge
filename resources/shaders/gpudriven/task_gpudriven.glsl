@@ -152,17 +152,14 @@ void main() {
         uint instanceOffset = drawData.instanceData.w;
         modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
 
-        // Read object data for AABB and LOD info
         GPUObjectData obj = objects[drawData.objectIndex];
 
-        // Per-instance frustum culling using object AABB
         vec3 localCenter = (obj.aabbMin.xyz + obj.aabbMax.xyz) * 0.5;
         float localRadius = length(obj.aabbMax.xyz - localCenter);
         vec4 worldSphere = transformBoundingSphere(vec4(localCenter, localRadius), modelMatrix);
 
         if ((pc.viewMode & MESHLET_CULL_FRUSTUM_BIT) != 0u) {
             if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
-                // Instance is outside frustum — emit nothing
                 if (gl_LocalInvocationID.x == 0) {
                     payload.drawIndex = drawIndex;
                     payload.meshletCount = 0;
@@ -174,7 +171,6 @@ void main() {
             }
         }
 
-        // Per-instance LOD selection
         vec4 viewSphere = vec4((camera.view * vec4(worldSphere.xyz, 1.0)).xyz, worldSphere.w);
         float screenPixels = projectSphereToScreenTask(viewSphere, camera.projection,
             vec2(pc.screenWidth, pc.screenHeight));
@@ -249,10 +245,8 @@ void main() {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
         }
 
-        // Pass instance-specific matrices to mesh shader via payload
         payload.instanceModelMatrix = modelMatrix;
 
-        // Compute normal matrix
         mat3 modelMat3 = mat3(modelMatrix);
         mat3 normalMat3;
         if ((drawData.flags & FLAG_UNIFORM_SCALE) != 0u) {

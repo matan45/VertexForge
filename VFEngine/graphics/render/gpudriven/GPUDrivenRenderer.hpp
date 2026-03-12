@@ -232,7 +232,7 @@ namespace render::gpudriven
             bool lodSelectionEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
-            float categoryDistances[7] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
+            float categoryDistances[services::CullingCategory::Count] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
             float shadowDistanceMultiplier = 0.5f;
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
@@ -373,7 +373,7 @@ namespace render::gpudriven
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
-        void setCategoryDistance(uint32_t category, float distance) { if (category < 7) culling.categoryDistances[category] = distance; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < services::CullingCategory::Count) culling.categoryDistances[category] = distance; }
         void setShadowDistanceMultiplier(float mult) { culling.shadowDistanceMultiplier = mult; }
         void setGlobalLodBias(float bias) { culling.globalLodBias = bias; }
         float getGlobalLodBias() const { return culling.globalLodBias; }

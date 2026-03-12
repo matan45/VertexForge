@@ -528,10 +528,6 @@ namespace core
         return waterSensorEntities.contains(entity.id);
     }
 
-    // ============================================
-    // Character Controller
-    // ============================================
-
     bool PhysicsAdapter::addCharacterController(services::EntityHandle entity,
                                                  const CharacterControllerInfo& info,
                                                  const glm::vec3& position,

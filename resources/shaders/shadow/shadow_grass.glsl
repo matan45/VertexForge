@@ -98,8 +98,6 @@ void main() {
 #extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
 
-// Simplified grass blade for shadow pass - 3 vertices (single triangle) per blade
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 3, max_primitives = 1) out;
 
@@ -141,7 +139,6 @@ void main() {
     float scale = inst.positionScale.w;
     float rotation = inst.rotationData.x;
 
-    // Generate simplified triangle blade for shadow
     float bladeWidth = 0.04 * scale;
     float bladeHeight = 0.6 * scale;
 

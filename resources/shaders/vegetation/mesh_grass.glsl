@@ -19,7 +19,6 @@ layout(set = 1, binding = 0) uniform CameraUBO {
     vec4 frustumPlanes[6];
 };
 
-// Wind UBO
 layout(set = 2, binding = 0) uniform WindUBO {
     vec4 windDirectionAndSpeed;
     vec4 windGustParams;
@@ -39,7 +38,6 @@ struct GrassPayload {
 
 taskPayloadSharedEXT GrassPayload payload;
 
-// Outputs
 layout(location = 0) out vec3 outWorldPos[];
 layout(location = 1) out vec3 outNormal[];
 layout(location = 2) out vec2 outUV[];
@@ -77,7 +75,6 @@ void main() {
     uint instanceIdx = payload.instanceIndices[gid];
     float dist = payload.distanceToCamera[gid];
 
-    // Read instance data
     uint base = instanceIdx * 3;
     vec4 posAndRot = grassInstances[base + 0];
     vec4 scaleAndDensity = grassInstances[base + 1];
@@ -89,14 +86,12 @@ void main() {
     float bladeWidth = scaleAndDensity.y;
     float windPhase = scaleAndDensity.w;
 
-    // Distance fade
     float alpha = 1.0;
     if (dist > fadeStartDistance) {
         alpha = 1.0 - (dist - fadeStartDistance) / (fadeEndDistance - fadeStartDistance);
         alpha = clamp(alpha, 0.0, 1.0);
     }
 
-    // Rotation matrix (Y-axis)
     float cosR = cos(rotation);
     float sinR = sin(rotation);
 
@@ -124,19 +119,16 @@ void main() {
     // The blade lies in the XY plane (local), so face normal is along Z, rotated by Y rotation
     vec3 bladeNormal = normalize(vec3(sinR, 0.0, cosR));
 
-    // Apply rotation and wind, emit vertices
     SetMeshOutputsEXT(7, 5);
 
     for (uint v = 0; v < 7; v++) {
         vec3 off = offsets[v];
-        // Rotate around Y
         vec3 rotated = vec3(
             off.x * cosR - off.z * sinR,
             off.y,
             off.x * sinR + off.z * cosR
         );
 
-        // Apply wind
         vec3 windDisp = calculateWindDisp(rootPos, heights[v], windDirectionAndSpeed,
                                            vec4(windGustParams.xyz, windGustParams.w + windPhase));
 
@@ -152,7 +144,6 @@ void main() {
         outAlpha[v] = alpha;
     }
 
-    // 5 triangles forming the blade
     gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
     gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1, 3, 2);
     gl_PrimitiveTriangleIndicesEXT[2] = uvec3(2, 3, 4);

@@ -93,7 +93,6 @@ void main() {
             up = camUp;
         }
 
-        // Apply rotation around view direction
         if (inst.rotation != 0.0) {
             float c = cos(inst.rotation);
             float s = sin(inst.rotation);
@@ -103,14 +102,12 @@ void main() {
             up = newUp;
         }
 
-        // Generate quad vertices
         vec3 positions[4];
         positions[0] = center - right * halfW - up * halfH;
         positions[1] = center + right * halfW - up * halfH;
         positions[2] = center - right * halfW + up * halfH;
         positions[3] = center + right * halfW + up * halfH;
 
-        // Atlas UV rect
         vec2 uvOff = inst.atlasUVRect.xy;
         vec2 uvSize = inst.atlasUVRect.zw;
 

@@ -1,13 +1,11 @@
 #type COMPUTE
 #version 450
 
-// GPU bone matrix evaluation compute shader
 // 1 workgroup per animated entity, 1 thread per bone
 // Evaluates keyframe interpolation and hierarchy transforms
 
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
-// Per-entity evaluation request
 struct AnimEvalRequest
 {
     uint animDataIndex;     // Index into animation data array
@@ -21,7 +19,6 @@ struct AnimEvalRequest
     float secondTime;
 };
 
-// Bone hierarchy info (per skeleton)
 struct BoneInfo
 {
     int parentIndex;
@@ -30,7 +27,6 @@ struct BoneInfo
     mat4 inverseBindPose;
 };
 
-// Keyframe data (packed for GPU)
 struct PositionKey
 {
     float time;
@@ -49,7 +45,6 @@ struct ScaleKey
     vec3 scale;
 };
 
-// Channel header (per bone per animation)
 struct ChannelHeader
 {
     uint positionKeyOffset;
@@ -62,7 +57,6 @@ struct ChannelHeader
     uint _pad;
 };
 
-// Animation clip header
 struct AnimClipHeader
 {
     float duration;
@@ -72,7 +66,6 @@ struct AnimClipHeader
     mat4 globalInverseTransform;
 };
 
-// SSBOs
 layout(set = 0, binding = 0) readonly buffer EvalRequests
 {
     AnimEvalRequest requests[];
@@ -108,17 +101,14 @@ layout(set = 0, binding = 6) readonly buffer ScaleKeys
     ScaleKey scaleKeys[];
 };
 
-// Output: bone matrices (same buffer mesh shader reads)
 layout(set = 0, binding = 7) writeonly buffer OutputBoneMatrices
 {
     mat4 boneMatrices[];
 };
 
-// Shared memory for hierarchy traversal
 shared mat4 localTransforms[128];
 shared mat4 worldTransforms[128];
 
-// Binary search for keyframe index
 uint binarySearchPosition(uint offset, uint count, float time)
 {
     if (count <= 1) return 0;
@@ -219,7 +209,6 @@ void main()
 
     // Find channel for this bone (linear scan - channels are sparse)
     mat4 animTransform = bones[req.skeletonIndex + boneIndex].offsetMatrix;
-    bool foundChannel = false;
 
     for (uint c = 0; c < clip.channelCount; ++c)
     {
@@ -227,9 +216,6 @@ void main()
         if (ch.boneIndex != boneIndex)
             continue;
 
-        foundChannel = true;
-
-        // Interpolate position
         vec3 pos;
         if (ch.positionKeyCount == 0)
         {
@@ -250,7 +236,6 @@ void main()
                       positionKeys[ch.positionKeyOffset + next].position, factor);
         }
 
-        // Interpolate rotation
         vec4 rot;
         if (ch.rotationKeyCount == 0)
         {
@@ -271,7 +256,6 @@ void main()
                         rotationKeys[ch.rotationKeyOffset + next].rotation, factor);
         }
 
-        // Interpolate scale
         vec3 scl;
         if (ch.scaleKeyCount == 0)
         {
@@ -292,7 +276,6 @@ void main()
                       scaleKeys[ch.scaleKeyOffset + next].scale, factor);
         }
 
-        // Build TRS matrix
         mat4 T = mat4(1.0);
         T[3] = vec4(pos, 1.0);
         mat4 R = quatToMat4(rot);
@@ -305,7 +288,6 @@ void main()
         break;
     }
 
-    // Apply pre-transform
     localTransforms[boneIndex] = bones[req.skeletonIndex + boneIndex].preTransform * animTransform;
 
     // Barrier: all bones must have local transforms computed

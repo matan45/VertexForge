@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
+    <ClInclude Include="data\CullingCategories.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
     <ClInclude Include="data\EditorMode.hpp" />
     <ClInclude Include="data\EntityConversion.hpp" />

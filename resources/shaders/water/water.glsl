@@ -44,7 +44,6 @@ layout(push_constant) uniform PushConstants {
     float oceanFoamThreshold;
 } pc;
 
-// Ocean FFT displacement and normal textures (set 8)
 layout(set = 8, binding = 0) uniform sampler2D oceanDisplacementMap;
 layout(set = 8, binding = 1) uniform sampler2D oceanNormalMap;
 
@@ -524,7 +523,6 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
-    // Debug highlight for selected tile
     if ((fragFlags & WATER_FLAG_SELECTED) != 0u)
     {
         color = mix(color, vec3(1.0, 0.6, 0.0), 0.3);

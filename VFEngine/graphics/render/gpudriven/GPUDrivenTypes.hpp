@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <string>
 #include "MeshletBufferTypes.hpp"
+#include "../../../services/data/CullingCategories.hpp"
 
 namespace render::gpudriven
 {
@@ -101,13 +102,7 @@ namespace render::gpudriven
 
     namespace ObjectCategory
     {
-        constexpr uint32_t StaticMesh = 0;
-        constexpr uint32_t Terrain = 1;
-        constexpr uint32_t Foliage = 2;
-        constexpr uint32_t VFX = 3;
-        constexpr uint32_t Decals = 4;
-        constexpr uint32_t Billboard = 5;
-        constexpr uint32_t Water = 6;
+        using namespace services::CullingCategory;
         constexpr uint32_t CategoryShift = 13;
         constexpr uint32_t CategoryMask = 0xFu << CategoryShift; // bits 13-16
     }

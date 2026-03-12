@@ -1,11 +1,10 @@
 #include "BillboardRenderAdapter.hpp"
 #include "../../controllers/OffScreen.hpp"
+#include "../../../services/data/CullingCategories.hpp"
 #include "print/Log.hpp"
 
 namespace core::adapters
 {
-    // Culling category indices (must match OffScreenControllerSettings.cpp)
-    static constexpr uint32_t kBillboardCullingCategory = 5;
 
     void BillboardRenderAdapter::setBillboardRenderingEnabled(bool enabled)
     {
@@ -26,7 +25,7 @@ namespace core::adapters
         maxDistance = distance;
         if (offScreen)
         {
-            offScreen->setCategoryDistance(kBillboardCullingCategory, distance);
+            offScreen->setCategoryDistance(services::CullingCategory::Billboard, distance);
         }
     }
 

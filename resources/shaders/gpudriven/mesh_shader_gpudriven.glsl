@@ -914,7 +914,6 @@ void main() {
     }
 
     if (viewModeValue == 4u) {
-        float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
         uint h = clusterIdx;
@@ -932,7 +931,6 @@ void main() {
     }
 
     if (viewModeValue == 5u) {
-        float linearZ = linearizeDepth(gl_FragCoord.z);
         float near = clusterParams.depthParams.x;
         float far = clusterParams.depthParams.y;
         float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);

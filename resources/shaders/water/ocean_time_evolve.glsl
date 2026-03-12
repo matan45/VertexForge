@@ -44,7 +44,6 @@ void main() {
     // Deep water dispersion relation
     float omega = sqrt(pc.gravity * max(kLen, 0.0001));
 
-    // Read h0(k) and h0conj(-k)
     vec4 h0 = imageLoad(h0Spectrum, ivec2(x, y));
     vec2 h0k = h0.rg;
     vec2 h0conjNegK = h0.ba;
@@ -56,7 +55,6 @@ void main() {
 
     vec2 hkt = complexMul(h0k, expPos) + complexMul(h0conjNegK, expNeg);
 
-    // Height displacement (Dy)
     imageStore(hktDy, ivec2(x, y), vec4(hkt, 0.0, 0.0));
 
     // Horizontal displacements (Dx, Dz) = -i * (kx,kz)/|k| * h(k,t) * choppiness

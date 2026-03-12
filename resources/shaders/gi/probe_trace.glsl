@@ -14,7 +14,6 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// Set 0: Probe data (read + write)
 layout(std430, set = 0, binding = 0) readonly buffer ProbeReadBuffer {
     ProbeData probeDataRead[];
 };
@@ -23,7 +22,6 @@ layout(std430, set = 0, binding = 1) writeonly buffer ProbeWriteBuffer {
     ProbeData probeDataWrite[];
 };
 
-// Set 1: Cascade info (buffer has 16-byte header: cascadeCount + padding)
 layout(std140, set = 1, binding = 0) uniform CascadeInfoUBO {
     uint cascadeCount;
     uint _pad0;
@@ -33,13 +31,10 @@ layout(std140, set = 1, binding = 0) uniform CascadeInfoUBO {
 };
 
 #ifdef USE_RAY_QUERY
-// Set 2: TLAS for ray queries
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 #endif
 
 #ifdef USE_LIGHT_DATA
-// Set 3 (or 2 if no ray query): Light data
-// Binding layout matches GPULightBufferManager
 #ifdef USE_RAY_QUERY
 #define LIGHT_SET 3
 #else
@@ -74,7 +69,6 @@ layout(push_constant) uniform PushConstants {
     uint frameIndex;
 };
 
-// Hash for random ray generation
 float hash31(vec3 p) {
     p = fract(p * vec3(0.1031, 0.1030, 0.0973));
     p += dot(p, p.yxz + 33.33);
@@ -93,7 +87,6 @@ vec3 uniformSphereDirection(float u1, float u2) {
 vec3 evaluateDirectLightingAtHitPoint(vec3 hitPos, vec3 hitNormal) {
     vec3 totalLight = vec3(0.0);
 
-    // Directional lights
     for (uint i = 0; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
         vec3 L = -normalize(light.direction);
@@ -103,7 +96,6 @@ vec3 evaluateDirectLightingAtHitPoint(vec3 hitPos, vec3 hitNormal) {
         }
     }
 
-    // Point lights
     for (uint i = 0; i < lightCounts.pointCount; ++i) {
         PointLight light = pointLights[i];
         vec3 toLight = light.position - hitPos;
@@ -118,7 +110,6 @@ vec3 evaluateDirectLightingAtHitPoint(vec3 hitPos, vec3 hitNormal) {
         totalLight += light.color * light.intensity * attenuation * NdotL;
     }
 
-    // Spot lights
     for (uint i = 0; i < lightCounts.spotCount; ++i) {
         SpotLight light = spotLights[i];
         vec3 toLight = light.position - hitPos;
@@ -201,7 +192,6 @@ void main() {
 
     vec3 probePos = probeWorldPosition(localProbeIndex, cascade);
 
-    // Accumulate new SH coefficients from ray tracing
     vec4 newShR = vec4(0.0);
     vec4 newShG = vec4(0.0);
     vec4 newShB = vec4(0.0);
@@ -209,7 +199,6 @@ void main() {
     float backfaceHits = 0.0;
 
     for (uint ray = 0; ray < raysPerProbe; ++ray) {
-        // Generate random ray direction (uniform sphere)
         float u1 = hash31(vec3(float(localProbeIndex), float(ray), frameRandom));
         float u2 = hash31(vec3(float(ray), frameRandom, float(localProbeIndex)));
 
@@ -219,7 +208,6 @@ void main() {
         bool hit = false;
 
 #ifdef USE_RAY_QUERY
-        // Hardware ray query against TLAS
         rayQueryEXT rayQuery;
         rayQueryInitializeEXT(rayQuery, topLevelAS,
                               gl_RayFlagsOpaqueEXT,
@@ -229,9 +217,8 @@ void main() {
                               rayDir,
                               maxDistance);
 
-        while (rayQueryProceedEXT(rayQuery)) {
-            // Opaque geometry commits automatically
-        }
+        // Empty body: opaque flag means hardware auto-commits intersections
+        while (rayQueryProceedEXT(rayQuery)) {}
 
         if (rayQueryGetIntersectionTypeEXT(rayQuery, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
             hit = true;
@@ -281,7 +268,6 @@ void main() {
         hit = true;
 #endif
 
-        // Accumulate into SH
         accumulateSH(newShR, newShG, newShB, rayDir, radiance);
         if (hit) validHits += 1.0;
     }
@@ -298,7 +284,6 @@ void main() {
     newShG = clamp(newShG, vec4(-MAX_SH), vec4(MAX_SH));
     newShB = clamp(newShB, vec4(-MAX_SH), vec4(MAX_SH));
 
-    // Temporal blending with previous frame
     ProbeData prevProbe = probeDataRead[globalProbeIndex];
     float blend = temporalBlend;
 

@@ -137,11 +137,29 @@ namespace core
         return true;
     }
 
-    static bool createDetourData(const rcConfig& cfg, const types::NavmeshBakeSettings& settings,
-                                  rcPolyMesh& pmesh, rcPolyMeshDetail& dmesh,
-                                  unsigned char*& outNavData, int& outNavDataSize,
-                                  int tileX = 0, int tileZ = 0, int tileLayer = 0)
+    struct DetourBuildInput
     {
+        const rcConfig* cfg;
+        const types::NavmeshBakeSettings* settings;
+        rcPolyMesh* pmesh;
+        rcPolyMeshDetail* dmesh;
+        int tileX = 0;
+        int tileZ = 0;
+        int tileLayer = 0;
+    };
+
+    struct DetourBuildResult
+    {
+        unsigned char* navData = nullptr;
+        int navDataSize = 0;
+        explicit operator bool() const { return navData != nullptr; }
+    };
+
+    static DetourBuildResult createDetourData(const DetourBuildInput& input)
+    {
+        auto& pmesh = *input.pmesh;
+        auto& dmesh = *input.dmesh;
+
         for (int i = 0; i < pmesh.npolys; ++i)
             pmesh.flags[i] = 1;
 
@@ -159,24 +177,24 @@ namespace core
         params.detailVertsCount = dmesh.nverts;
         params.detailTris = dmesh.tris;
         params.detailTriCount = dmesh.ntris;
-        params.walkableHeight = settings.agentHeight;
-        params.walkableRadius = settings.agentRadius;
-        params.walkableClimb = settings.agentMaxClimb;
+        params.walkableHeight = input.settings->agentHeight;
+        params.walkableRadius = input.settings->agentRadius;
+        params.walkableClimb = input.settings->agentMaxClimb;
         rcVcopy(params.bmin, pmesh.bmin);
         rcVcopy(params.bmax, pmesh.bmax);
-        params.cs = cfg.cs;
-        params.ch = cfg.ch;
+        params.cs = input.cfg->cs;
+        params.ch = input.cfg->ch;
         params.buildBvTree = true;
-        params.tileX = tileX;
-        params.tileY = tileZ;
-        params.tileLayer = tileLayer;
+        params.tileX = input.tileX;
+        params.tileY = input.tileZ;
+        params.tileLayer = input.tileLayer;
 
-        if (!dtCreateNavMeshData(&params, &outNavData, &outNavDataSize))
+        DetourBuildResult result;
+        if (!dtCreateNavMeshData(&params, &result.navData, &result.navDataSize))
         {
             vfLogError("NavmeshAdapter: Failed to create Detour navmesh data");
-            return false;
         }
-        return true;
+        return result;
     }
 
     static navigation::NavmeshTileData buildTileData(int tx, int tz,
@@ -239,21 +257,17 @@ namespace core
             return result;
         }
 
-        unsigned char* navData = nullptr;
-        int navDataSize = 0;
-        if (!createDetourData(cfg, settings, *pmesh, *dmesh, navData, navDataSize, tx, tz))
-        {
-            rcFreePolyMesh(pmesh);
-            rcFreePolyMeshDetail(dmesh);
-            return result;
-        }
+        auto detourResult = createDetourData({&cfg, &settings, pmesh, dmesh, tx, tz});
         rcFreePolyMesh(pmesh);
         rcFreePolyMeshDetail(dmesh);
 
-        result.dataSize = static_cast<uint32_t>(navDataSize);
-        result.data.resize(navDataSize);
-        memcpy(result.data.data(), navData, navDataSize);
-        dtFree(navData);
+        if (!detourResult)
+            return result;
+
+        result.dataSize = static_cast<uint32_t>(detourResult.navDataSize);
+        result.data.resize(detourResult.navDataSize);
+        memcpy(result.data.data(), detourResult.navData, detourResult.navDataSize);
+        dtFree(detourResult.navData);
 
         return result;
     }
@@ -309,13 +323,11 @@ namespace core
                 glm::vec3 clipMin(tileBminX - borderExpand, bmin.y, tileBminZ - borderExpand);
                 glm::vec3 clipMax(tileBmaxX + borderExpand, bmax.y, tileBmaxZ + borderExpand);
 
-                // Clip geometry to this tile's expanded bounds
                 navigation::NavmeshInputGeometry tileGeometry;
                 const float* verts = geometry.vertices.data();
                 const int* tris = geometry.triangles.data();
                 const int nTris = geometry.getTriangleCount();
 
-                // Collect triangles that overlap this tile
                 for (int i = 0; i < nTris; ++i)
                 {
                     int ia = tris[i * 3];
@@ -326,7 +338,6 @@ namespace core
                     glm::vec3 vb(verts[ib * 3], verts[ib * 3 + 1], verts[ib * 3 + 2]);
                     glm::vec3 vc(verts[ic * 3], verts[ic * 3 + 1], verts[ic * 3 + 2]);
 
-                    // Triangle AABB overlap test
                     glm::vec3 triMin = glm::min(va, glm::min(vb, vc));
                     glm::vec3 triMax = glm::max(va, glm::max(vb, vc));
 

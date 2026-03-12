@@ -192,7 +192,6 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Set 0: instance data, Set 1: camera, Set 2: bindless textures
         std::array<vk::DescriptorSet, 3> sets = {
             instanceDataDescriptorSet,
             cameraDescriptorSet,
@@ -286,7 +285,6 @@ namespace render::gpudriven
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // 3 descriptor sets: 0=instance, 1=camera, 2=bindless textures
         std::array<vk::DescriptorSetLayout, 3> setLayouts = {
             instanceDataLayout,
             camLayout,
@@ -300,7 +298,6 @@ namespace render::gpudriven
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
-        // Merge shader stages from task shader and mesh+frag shader
         std::vector<vk::PipelineShaderStageCreateInfo> allStages;
         for (const auto& stage : taskShader->getShaderStages())
             allStages.push_back(stage);

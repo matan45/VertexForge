@@ -66,7 +66,6 @@ void main() {
         float maxDim = max(inst.size.x, inst.size.y) * inst.positionAndScale.w;
         float boundRadius = maxDim * 0.707; // ~sqrt(2)/2 for billboard diagonal
 
-        // Frustum culling
         visible = isInsideFrustum(worldPos, boundRadius);
 
         // Distance culling (use far plane as max render distance)

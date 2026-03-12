@@ -41,14 +41,12 @@ void main() {
 
     uint globalProbeIndex = probeStartIndex + localIndex;
 
-    // Read current trace results and previous irradiance
     ProbeData traceResult = probeDataRead[globalProbeIndex];
 
     // Apply irradiance encoding (gamma compression for better precision)
     const float GAMMA = 5.0;
     const float INV_GAMMA = 1.0 / GAMMA;
 
-    // Encode SH coefficients with gamma for better precision in low-intensity regions
     ProbeData encoded;
     encoded.shR = sign(traceResult.shR) * pow(abs(traceResult.shR), vec4(INV_GAMMA));
     encoded.shG = sign(traceResult.shG) * pow(abs(traceResult.shG), vec4(INV_GAMMA));

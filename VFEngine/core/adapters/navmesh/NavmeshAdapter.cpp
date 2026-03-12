@@ -312,7 +312,6 @@ namespace core
 
         memcpy(data, tileData.data.data(), tileData.dataSize);
 
-        // Remove existing tile at this coordinate first
         dtTileRef existingRef = navMesh->getTileRefAt(tileData.x, tileData.y, 0);
         if (existingRef)
         {

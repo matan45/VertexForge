@@ -52,13 +52,14 @@ namespace controllers
 
         gpuDriven->setGlobalLodBias(settings.culling.globalLodBias);
         gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
-        gpuDriven->setCategoryDistance(0, settings.distanceCulling.staticMeshDistance);
-        gpuDriven->setCategoryDistance(1, settings.distanceCulling.terrainDistance);
-        gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
-        gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
-        gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
-        gpuDriven->setCategoryDistance(5, settings.distanceCulling.billboardDistance);
-        gpuDriven->setCategoryDistance(6, settings.distanceCulling.waterDistance);
+        using namespace render::gpudriven::ObjectCategory;
+        gpuDriven->setCategoryDistance(StaticMesh, settings.distanceCulling.staticMeshDistance);
+        gpuDriven->setCategoryDistance(Terrain, settings.distanceCulling.terrainDistance);
+        gpuDriven->setCategoryDistance(Foliage, settings.distanceCulling.foliageDistance);
+        gpuDriven->setCategoryDistance(VFX, settings.distanceCulling.vfxDistance);
+        gpuDriven->setCategoryDistance(Decals, settings.distanceCulling.decalDistance);
+        gpuDriven->setCategoryDistance(Billboard, settings.distanceCulling.billboardDistance);
+        gpuDriven->setCategoryDistance(Water, settings.distanceCulling.waterDistance);
         gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
 
         renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);

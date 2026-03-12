@@ -1,17 +1,14 @@
 // Shared wind functions for vegetation shaders
-// Include via: #include "wind_common.glsl"
 
 // Wind UBO should be bound by the including shader
 // Expected layout:
 // vec4 windDirectionAndSpeed;  // xyz=direction, w=speed
 // vec4 windGustParams;         // x=gustStrength, y=gustFrequency, z=turbulenceScale, w=time
 
-// Simple hash for pseudo-random based on position
 float windHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-// 2D noise for wind variation
 float windNoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -25,7 +22,6 @@ float windNoise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Calculate wind displacement for a vertex
 // vertexHeight: normalized height along blade/branch [0,1] - 0=root, 1=tip
 // worldPos: world-space position of the vertex
 vec3 calculateWindDisplacement(vec3 worldPos, float vertexHeight,

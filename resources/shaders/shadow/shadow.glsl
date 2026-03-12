@@ -98,7 +98,6 @@ void main() {
         float localRadius = length(obj.aabbMax.xyz - localCenter);
         vec4 worldSphere = transformBoundingSphere(vec4(localCenter, localRadius), modelMatrix);
 
-        // Extract light frustum planes and test
         mat4 vp = pc.lightViewProjection;
         vec4 lightPlanes[6];
         lightPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
@@ -287,7 +286,6 @@ void main() {
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
     mat4 modelMatrix = payload.instanceModelMatrix;
-    mat4 mvp = pc.lightViewProjection * modelMatrix;
 
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {

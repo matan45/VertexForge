@@ -29,7 +29,6 @@ vec4 shBasis(vec3 dir) {
     );
 }
 
-// Evaluate SH irradiance for a given direction
 vec3 evaluateSH(ProbeData probe, vec3 normal) {
     vec4 basis = shBasis(normal);
     return vec3(
@@ -39,7 +38,6 @@ vec3 evaluateSH(ProbeData probe, vec3 normal) {
     );
 }
 
-// Accumulate radiance into SH for a given direction
 void accumulateSH(inout vec4 shR, inout vec4 shG, inout vec4 shB,
                   vec3 direction, vec3 radiance) {
     vec4 basis = shBasis(direction);
@@ -48,7 +46,6 @@ void accumulateSH(inout vec4 shR, inout vec4 shG, inout vec4 shB,
     shB += basis * radiance.b;
 }
 
-// Get 3D grid index from linear probe index
 ivec3 probeIndexToGrid(uint probeIndex, ivec3 gridDims) {
     int x = int(probeIndex) % gridDims.x;
     int y = (int(probeIndex) / gridDims.x) % gridDims.y;
@@ -56,26 +53,21 @@ ivec3 probeIndexToGrid(uint probeIndex, ivec3 gridDims) {
     return ivec3(x, y, z);
 }
 
-// Get world position of a probe
 vec3 probeWorldPosition(uint probeIndex, CascadeInfo cascade) {
     ivec3 gridCoord = probeIndexToGrid(probeIndex, cascade.gridDimsOffset.xyz);
     return cascade.gridOriginSpacing.xyz + vec3(gridCoord) * cascade.gridOriginSpacing.w;
 }
 
-// Find 8 nearest probes for trilinear interpolation
-// Returns base grid coord and fractional offset
 void findSurroundingProbes(vec3 worldPos, CascadeInfo cascade,
                            out ivec3 baseCoord, out vec3 alpha) {
     vec3 localPos = (worldPos - cascade.gridOriginSpacing.xyz) / cascade.gridOriginSpacing.w;
     baseCoord = ivec3(floor(localPos));
     alpha = fract(localPos);
 
-    // Clamp to valid range
     ivec3 maxCoord = cascade.gridDimsOffset.xyz - ivec3(2);
     baseCoord = clamp(baseCoord, ivec3(0), maxCoord);
 }
 
-// Convert grid coord to linear probe index
 uint gridToProbeIndex(ivec3 coord, ivec3 gridDims) {
     return uint(coord.x + coord.y * gridDims.x + coord.z * gridDims.x * gridDims.y);
 }

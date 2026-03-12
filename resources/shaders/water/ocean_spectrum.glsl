@@ -48,10 +48,8 @@ float phillipsSpectrum(vec2 k, float kLen, float L, vec2 windDir, float A) {
 
     float kDotW = dot(normalize(k), windDir);
 
-    // Phillips spectrum
     float P = A * exp(-1.0 / (kLen2 * L * L)) / kLen4 * kDotW * kDotW;
 
-    // Suppress very small wavelengths
     float l = pc.cutoffLow;
     P *= exp(-kLen2 * l * l);
 
@@ -75,19 +73,15 @@ void main() {
     vec2 k = vec2(kx, kz);
     float kLen = length(k);
 
-    // Wind parameters
     vec2 windDir = normalize(vec2(pc.windDirX, pc.windDirZ));
     float L = pc.windSpeed * pc.windSpeed / pc.gravity;
 
-    // Phillips spectrum at k and -k
     float sqrtPk = sqrt(max(phillipsSpectrum(k, kLen, L, windDir, pc.amplitude), 0.0));
     float sqrtPnk = sqrt(max(phillipsSpectrum(-k, kLen, L, windDir, pc.amplitude), 0.0));
 
-    // Gaussian random numbers for this pixel
     uint baseSeed = (y * pc.N + x) * 4u + pc.seed;
     vec2 gauss1 = gaussianRandom(baseSeed, baseSeed + 1u);
 
-    // Gaussian random for -k pixel
     uint negX = (pc.N - x) % pc.N;
     uint negY = (pc.N - y) % pc.N;
     uint negSeed = (negY * pc.N + negX) * 4u + pc.seed;

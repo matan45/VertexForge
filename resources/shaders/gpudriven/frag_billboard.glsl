@@ -15,17 +15,14 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 void main() {
     vec4 texColor = texture(bindlessTextures[nonuniformEXT(inTextureIndex)], inUV);
 
-    // Alpha test
     if (texColor.a < 0.5) discard;
 
     // LOD crossfade dither (alpha stored in colorTint.a's fractional part)
-    // When crossfade is active, inColorTint.a encodes both opacity and crossfade
     float crossfadeAlpha = fract(inColorTint.a * 256.0);
     if (crossfadeAlpha > 0.0 && ditherTest(gl_FragCoord.xy, crossfadeAlpha)) {
         discard;
     }
 
-    // Apply color tint
     vec3 finalColor = texColor.rgb * inColorTint.rgb;
     float finalAlpha = texColor.a * floor(inColorTint.a);
 
