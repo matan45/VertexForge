@@ -622,6 +622,19 @@ namespace serialization
             {"wboitEnabled", settings.transparency.wboitEnabled}
         };
 
+        j["shadowLOD"] = {
+            {"enabled", settings.shadowLOD.enabled},
+            {"tier0Distance", settings.shadowLOD.tier0Distance},
+            {"tier1Distance", settings.shadowLOD.tier1Distance},
+            {"tier2Distance", settings.shadowLOD.tier2Distance},
+            {"tier0Resolution", settings.shadowLOD.tier0Resolution},
+            {"tier1Resolution", settings.shadowLOD.tier1Resolution},
+            {"tier2Resolution", settings.shadowLOD.tier2Resolution},
+            {"staticTier0Distance", settings.shadowLOD.staticTier0Distance},
+            {"staticTier1Distance", settings.shadowLOD.staticTier1Distance},
+            {"staticTier2Distance", settings.shadowLOD.staticTier2Distance}
+        };
+
         j["terrain"] = {
             {"enabled", settings.terrain.enabled},
             {"lodBias", settings.terrain.lodBias},
@@ -656,6 +669,32 @@ namespace serialization
     void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
     {
         deserializeShadowSettings(j, settings.shadows);
+
+        if (j.contains("shadowLOD") && j["shadowLOD"].is_object())
+        {
+            const auto& sl = j["shadowLOD"];
+            if (sl.contains("enabled") && sl["enabled"].is_boolean())
+                settings.shadowLOD.enabled = sl["enabled"].get<bool>();
+            if (sl.contains("tier0Distance") && sl["tier0Distance"].is_number())
+                settings.shadowLOD.tier0Distance = sl["tier0Distance"].get<float>();
+            if (sl.contains("tier1Distance") && sl["tier1Distance"].is_number())
+                settings.shadowLOD.tier1Distance = sl["tier1Distance"].get<float>();
+            if (sl.contains("tier2Distance") && sl["tier2Distance"].is_number())
+                settings.shadowLOD.tier2Distance = sl["tier2Distance"].get<float>();
+            if (sl.contains("tier0Resolution") && sl["tier0Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier0Resolution = sl["tier0Resolution"].get<uint32_t>();
+            if (sl.contains("tier1Resolution") && sl["tier1Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier1Resolution = sl["tier1Resolution"].get<uint32_t>();
+            if (sl.contains("tier2Resolution") && sl["tier2Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier2Resolution = sl["tier2Resolution"].get<uint32_t>();
+            if (sl.contains("staticTier0Distance") && sl["staticTier0Distance"].is_number())
+                settings.shadowLOD.staticTier0Distance = sl["staticTier0Distance"].get<float>();
+            if (sl.contains("staticTier1Distance") && sl["staticTier1Distance"].is_number())
+                settings.shadowLOD.staticTier1Distance = sl["staticTier1Distance"].get<float>();
+            if (sl.contains("staticTier2Distance") && sl["staticTier2Distance"].is_number())
+                settings.shadowLOD.staticTier2Distance = sl["staticTier2Distance"].get<float>();
+        }
+
         deserializeCullingSettings(j, settings.culling);
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);

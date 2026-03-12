@@ -221,6 +221,73 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::drawShadowLODSection()
+    {
+        ImGui::Separator();
+        ImGui::Text("Shadow LOD");
+        ImGui::Spacing();
+
+        if (ImGui::Checkbox("Enable Shadow LOD", &settings.shadowLOD.enabled))
+        {
+            isDirty = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Adjusts shadow map resolution based on distance to camera.\n"
+                              "Closer lights get higher resolution, distant lights get lower.");
+        }
+
+        if (settings.shadowLOD.enabled)
+        {
+            ImGui::Text("Dynamic Light Tiers");
+            if (ImGui::DragFloat("Tier 0 Distance##dyn", &settings.shadowLOD.tier0Distance, 1.0f, 5.0f, 200.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::DragFloat("Tier 1 Distance##dyn", &settings.shadowLOD.tier1Distance, 1.0f, 10.0f, 500.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::DragFloat("Tier 2 Distance##dyn", &settings.shadowLOD.tier2Distance, 1.0f, 20.0f, 1000.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Beyond Tier 2 distance, shadows are removed entirely.");
+            }
+
+            ImGui::Spacing();
+            ImGui::Text("Resolutions");
+
+            const char* resOptions[] = { "256", "512", "1024", "2048", "4096" };
+            uint32_t resValues[] = { 256, 512, 1024, 2048, 4096 };
+
+            auto resCombo = [&](const char* label, uint32_t& resolution) {
+                int current = 1; // default to 512
+                for (int i = 0; i < 5; ++i) {
+                    if (resValues[i] == resolution) { current = i; break; }
+                }
+                if (ImGui::Combo(label, &current, resOptions, 5)) {
+                    resolution = resValues[current];
+                    isDirty = true;
+                }
+            };
+
+            resCombo("Tier 0 Resolution", settings.shadowLOD.tier0Resolution);
+            resCombo("Tier 1 Resolution", settings.shadowLOD.tier1Resolution);
+            resCombo("Tier 2 Resolution", settings.shadowLOD.tier2Resolution);
+
+            ImGui::Spacing();
+            ImGui::Text("Static Light Tiers");
+            if (ImGui::DragFloat("Tier 0 Distance##static", &settings.shadowLOD.staticTier0Distance, 1.0f, 5.0f, 200.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::DragFloat("Tier 1 Distance##static", &settings.shadowLOD.staticTier1Distance, 1.0f, 10.0f, 500.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::DragFloat("Tier 2 Distance##static", &settings.shadowLOD.staticTier2Distance, 1.0f, 20.0f, 1000.0f, "%.0f m"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Static lights use tighter distance tiers.\n"
+                                  "Their shadows are cached, so lower resolution saves atlas space.");
+            }
+        }
+    }
+
     void RenderConfigWindow::drawShadowDebugSection()
     {
         ImGui::Separator();
@@ -327,6 +394,7 @@ namespace windows
                 drawShadowCSMSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
+                drawShadowLODSection();
             }
 
             drawShadowDebugSection();

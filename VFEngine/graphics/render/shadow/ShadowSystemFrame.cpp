@@ -677,6 +677,9 @@ namespace render::shadow
         shadowLODConfig.tier0Resolution = settings.shadowLOD.tier0Resolution;
         shadowLODConfig.tier1Resolution = settings.shadowLOD.tier1Resolution;
         shadowLODConfig.tier2Resolution = settings.shadowLOD.tier2Resolution;
+        shadowLODConfig.staticTier0Distance = settings.shadowLOD.staticTier0Distance;
+        shadowLODConfig.staticTier1Distance = settings.shadowLOD.staticTier1Distance;
+        shadowLODConfig.staticTier2Distance = settings.shadowLOD.staticTier2Distance;
     }
 
     void ShadowSystem::applyShadowLODSettings(const ShadowLODConfig& config)

@@ -170,6 +170,11 @@ namespace types
         uint32_t tier0Resolution = 2048;
         uint32_t tier1Resolution = 1024;
         uint32_t tier2Resolution = 512;
+
+        // Tighter tiers for static lights (cached shadows)
+        float staticTier0Distance = 20.0f;
+        float staticTier1Distance = 50.0f;
+        float staticTier2Distance = 100.0f;
     };
 
     struct LightStreamingSettings
