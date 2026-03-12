@@ -68,6 +68,14 @@ namespace render
             bool needsUpdate = true;
             uint32_t frameCounter = 0;
 
+            struct ShadowCacheStats
+            {
+                uint32_t totalStaticLights = 0;
+                uint32_t cachedShadowMaps = 0;
+                uint32_t renderedThisFrame = 0;
+                uint32_t skippedThisFrame = 0;
+            };
+
             // Shadow cache stats for current frame
             mutable ShadowCacheStats lastCacheStats;
 
@@ -134,13 +142,6 @@ namespace render
             void invalidateAllStaticShadows();
             void updateStaticFlags();
 
-            struct ShadowCacheStats
-            {
-                uint32_t totalStaticLights = 0;
-                uint32_t cachedShadowMaps = 0;
-                uint32_t renderedThisFrame = 0;
-                uint32_t skippedThisFrame = 0;
-            };
             [[nodiscard]] ShadowCacheStats getShadowCacheStats() const;
 
             [[nodiscard]] uint32_t getActiveShadowCasterCount() const;
