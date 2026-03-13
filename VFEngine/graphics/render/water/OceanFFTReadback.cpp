@@ -3,6 +3,7 @@
 #include "../../core/BufferUtilities.hpp"
 
 #include <cmath>
+#include <immintrin.h>
 
 namespace render::water
 {
@@ -122,37 +123,12 @@ namespace render::water
         const uint16_t* halfData = static_cast<const uint16_t*>(mapped);
         cpuDisplacementData.resize(N * N);
 
+        // Use F16C SIMD: _mm_cvtph_ps converts 4 half-floats to 4 floats in one instruction
         for (uint32_t i = 0; i < N * N; ++i)
         {
-            auto halfToFloat = [](uint16_t h) -> float
-            {
-                uint32_t sign = (h >> 15) & 0x1;
-                uint32_t exp = (h >> 10) & 0x1F;
-                uint32_t mant = h & 0x3FF;
-
-                if (exp == 0)
-                {
-                    if (mant == 0) return sign ? -0.0f : 0.0f;
-                    float f = std::ldexp(static_cast<float>(mant), -24);
-                    return sign ? -f : f;
-                }
-                if (exp == 31)
-                {
-                    if (mant == 0) return sign ? -INFINITY : INFINITY;
-                    return NAN;
-                }
-
-                float f = std::ldexp(static_cast<float>(mant | 0x400), static_cast<int>(exp) - 25);
-                float result = sign ? -f : f;
-                return std::isnan(result) ? 0.0f : result;
-            };
-
-            cpuDisplacementData[i] = glm::vec4(
-                halfToFloat(halfData[i * 4 + 0]),
-                halfToFloat(halfData[i * 4 + 1]),
-                halfToFloat(halfData[i * 4 + 2]),
-                halfToFloat(halfData[i * 4 + 3])
-            );
+            __m128i half4 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(&halfData[i * 4]));
+            __m128 float4 = _mm_cvtph_ps(half4);
+            _mm_storeu_ps(&cpuDisplacementData[i].x, float4);
         }
     }
 
