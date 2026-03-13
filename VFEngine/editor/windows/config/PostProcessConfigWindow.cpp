@@ -497,7 +497,7 @@ namespace windows
                 ImGui::SeparatorText("LUT");
 
                 {
-                    char primaryBuf[256] = {};
+                    char primaryBuf[512] = {};
                     std::strncpy(primaryBuf, settings.colorGrading.primaryLutPath.c_str(), sizeof(primaryBuf) - 1);
                     if (ImGui::InputText("##PrimaryLUT", primaryBuf, sizeof(primaryBuf)))
                     {
@@ -520,7 +520,7 @@ namespace windows
                 }
 
                 {
-                    char secondaryBuf[256] = {};
+                    char secondaryBuf[512] = {};
                     std::strncpy(secondaryBuf, settings.colorGrading.secondaryLutPath.c_str(), sizeof(secondaryBuf) - 1);
                     if (ImGui::InputText("##SecondaryLUT", secondaryBuf, sizeof(secondaryBuf)))
                     {

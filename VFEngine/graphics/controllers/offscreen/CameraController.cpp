@@ -71,7 +71,7 @@ namespace controllers::offscreen
         if (taaEnabled && cameraId == renderHandler.getActiveCameraId())
         {
             glm::vec2 jitter = render::postprocess::JitterSequence::halton23(taaFrameIndex % 16);
-            currentJitterOffset = (jitter - 0.5f) * 2.0f; // center around 0
+            currentJitterOffset = jitter - 0.5f; // center to [-0.5, 0.5] sub-pixel range
 
             effectiveProjection = render::postprocess::JitterSequence::applyJitter(
                 projection, currentJitterOffset, viewportWidth, viewportHeight);
@@ -123,19 +123,21 @@ namespace controllers::offscreen
             return;
         }
 
-        // Update camera's frustum
-        cameraData->frustum.extractFromMatrix(effectiveProjection * view);
-        cameraData->viewProj = effectiveProjection * view;
+        // Use unjittered projection for frustum culling and camera state
+        // to avoid per-frame culling flicker from TAA jitter
+        glm::mat4 stableVP = unjitteredProjection * view;
+        cameraData->frustum.extractFromMatrix(stableVP);
+        cameraData->viewProj = stableVP;
         cameraData->nearPlane = currentNearPlane;
 
         // Update camera data
-        cameraManager->updateCamera(cameraId, effectiveProjection * view, currentNearPlane);
+        cameraManager->updateCamera(cameraId, stableVP, currentNearPlane);
 
         // Keep backward compatibility for main camera ready flag
         if (cameraId == types::MAIN_CAMERA_ID)
         {
             occlusionCullingReady = cameraData->hiZInitialized;
-            currentViewProj = effectiveProjection * view;
+            currentViewProj = stableVP;
             currentFrustum = cameraData->frustum;
         }
     }

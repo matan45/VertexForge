@@ -66,6 +66,7 @@ namespace render::postprocess
         bool firstFrame = true;
 
         vk::Extent2D currentExtent{};
+        vk::ImageView lastSceneImageView{};
 
     public:
         AutoExposureEffect(core::Device& device, core::SwapChain& swapChain,

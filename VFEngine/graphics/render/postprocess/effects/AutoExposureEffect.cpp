@@ -131,6 +131,7 @@ namespace render::postprocess
     void AutoExposureEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
     {
         currentExtent = extent;
+        lastSceneImageView = nullptr;
         cleanupPipelines();
 
         auto& dev = device.getLogicalDevice();
@@ -436,6 +437,10 @@ namespace render::postprocess
 
     void AutoExposureEffect::updateHistogramDescriptorSet(vk::ImageView sceneImageView)
     {
+        if (sceneImageView == lastSceneImageView)
+            return;
+        lastSceneImageView = sceneImageView;
+
         auto& dev = device.getLogicalDevice();
 
         vk::DescriptorImageInfo imageInfo{};

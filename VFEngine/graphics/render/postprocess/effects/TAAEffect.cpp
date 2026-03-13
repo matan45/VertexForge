@@ -151,6 +151,9 @@ namespace render::postprocess
     {
         updateParamsBuffer(inputDescriptorSet);
 
+        // Transition depth to read-only for TAA reprojection.
+        // Assumes depth is in eDepthStencilAttachmentOptimal after the geometry pass.
+        // TAA runs at priority 5 (first post-process effect), so no prior effect modifies depth layout.
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,

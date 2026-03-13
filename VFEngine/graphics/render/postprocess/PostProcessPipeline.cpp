@@ -86,7 +86,7 @@ namespace render::postprocess
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
 
-        autoExposureOverride = -1.0f;
+        autoExposureOverride.reset();
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
@@ -103,9 +103,9 @@ namespace render::postprocess
                 autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
             }
 
-            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride > 0.0f)
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride.has_value())
             {
-                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride);
+                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
             }
 
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);

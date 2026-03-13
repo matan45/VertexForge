@@ -23,6 +23,7 @@ namespace render::postprocess
 
         static glm::vec2 halton23(uint32_t index)
         {
+            // +1 to skip the degenerate (0,0) sample at Halton index 0
             return {halton(index + 1, 2), halton(index + 1, 3)};
         }
 

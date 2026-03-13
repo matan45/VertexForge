@@ -3,6 +3,7 @@
 #include "PostProcessEffect.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace core
@@ -68,7 +69,7 @@ namespace render::postprocess
         CameraInfo cameraInfo{};
 
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
-        float autoExposureOverride = -1.0f;
+        std::optional<float> autoExposureOverride;
 
     public:
         explicit PostProcessPipeline(core::Device& device, core::SwapChain& swapChain,

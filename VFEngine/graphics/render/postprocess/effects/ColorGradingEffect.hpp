@@ -61,6 +61,10 @@ namespace render::postprocess
 
         std::string currentPrimaryPath;
         std::string currentSecondaryPath;
+        std::string pendingPrimaryPath;
+        std::string pendingSecondaryPath;
+        bool primaryPathPending = false;
+        bool secondaryPathPending = false;
         bool descriptorsDirty = true;
 
     public:
@@ -69,6 +73,9 @@ namespace render::postprocess
         void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
         void cleanup() override;
         void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+
+        void preRecord(const vk::CommandBuffer& commandBuffer,
+                       vk::DescriptorSet inputDescriptorSet) override;
 
         void record(const vk::CommandBuffer& commandBuffer,
                     vk::DescriptorSet inputDescriptorSet) override;

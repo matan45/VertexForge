@@ -11,6 +11,27 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cmath>
+
+namespace
+{
+    // Convert float32 to float16 (IEEE 754 half-precision)
+    uint16_t floatToHalf(float value)
+    {
+        uint32_t f;
+        std::memcpy(&f, &value, sizeof(f));
+        uint32_t sign = (f >> 16) & 0x8000;
+        int32_t exponent = ((f >> 23) & 0xFF) - 127 + 15;
+        uint32_t mantissa = f & 0x7FFFFF;
+
+        if (exponent <= 0)
+            return static_cast<uint16_t>(sign);
+        if (exponent >= 31)
+            return static_cast<uint16_t>(sign | 0x7C00);
+
+        return static_cast<uint16_t>(sign | (exponent << 10) | (mantissa >> 13));
+    }
+}
 
 namespace render::postprocess
 {
@@ -129,33 +150,31 @@ namespace render::postprocess
         commandBuffer.draw(3, 1, 0, 0);
     }
 
-    void ColorGradingEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)
+    void ColorGradingEffect::preRecord(const vk::CommandBuffer& commandBuffer,
+                                        vk::DescriptorSet inputDescriptorSet)
     {
-        const auto& cg = settings.colorGrading;
-        enabled = cg.enabled;
-
-        // Check if LUT paths changed
-        if (currentPrimaryPath != cg.primaryLutPath)
+        // Deferred LUT reload - safe to destroy/create since previous frame is complete
+        if (primaryPathPending)
         {
-            device.getLogicalDevice().waitIdle();
             destroyLUT(primaryLut);
-            currentPrimaryPath = cg.primaryLutPath;
+            currentPrimaryPath = pendingPrimaryPath;
             if (!currentPrimaryPath.empty())
             {
                 loadLUT(currentPrimaryPath, primaryLut);
             }
+            primaryPathPending = false;
             descriptorsDirty = true;
         }
 
-        if (currentSecondaryPath != cg.secondaryLutPath)
+        if (secondaryPathPending)
         {
-            device.getLogicalDevice().waitIdle();
             destroyLUT(secondaryLut);
-            currentSecondaryPath = cg.secondaryLutPath;
+            currentSecondaryPath = pendingSecondaryPath;
             if (!currentSecondaryPath.empty())
             {
                 loadLUT(currentSecondaryPath, secondaryLut);
             }
+            secondaryPathPending = false;
             descriptorsDirty = true;
         }
 
@@ -163,6 +182,25 @@ namespace render::postprocess
         {
             updateDescriptorSets();
             descriptorsDirty = false;
+        }
+    }
+
+    void ColorGradingEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)
+    {
+        const auto& cg = settings.colorGrading;
+        enabled = cg.enabled;
+
+        // Flag LUT path changes for deferred reload in preRecord
+        if (currentPrimaryPath != cg.primaryLutPath && !primaryPathPending)
+        {
+            pendingPrimaryPath = cg.primaryLutPath;
+            primaryPathPending = true;
+        }
+
+        if (currentSecondaryPath != cg.secondaryLutPath && !secondaryPathPending)
+        {
+            pendingSecondaryPath = cg.secondaryLutPath;
+            secondaryPathPending = true;
         }
 
         // Update UBO
@@ -374,7 +412,7 @@ namespace render::postprocess
 
     void ColorGradingEffect::generateIdentityLUT(uint32_t size)
     {
-        std::vector<uint8_t> data(size * size * size * 4);
+        std::vector<uint16_t> data(size * size * size * 4);
 
         for (uint32_t z = 0; z < size; z++)
         {
@@ -383,16 +421,16 @@ namespace render::postprocess
                 for (uint32_t x = 0; x < size; x++)
                 {
                     uint32_t idx = (z * size * size + y * size + x) * 4;
-                    data[idx + 0] = static_cast<uint8_t>(x * 255 / (size - 1));
-                    data[idx + 1] = static_cast<uint8_t>(y * 255 / (size - 1));
-                    data[idx + 2] = static_cast<uint8_t>(z * 255 / (size - 1));
-                    data[idx + 3] = 255;
+                    data[idx + 0] = floatToHalf(static_cast<float>(x) / static_cast<float>(size - 1));
+                    data[idx + 1] = floatToHalf(static_cast<float>(y) / static_cast<float>(size - 1));
+                    data[idx + 2] = floatToHalf(static_cast<float>(z) / static_cast<float>(size - 1));
+                    data[idx + 3] = floatToHalf(1.0f);
                 }
             }
         }
 
         create3DImage(size, identityLut);
-        upload3DImageData(identityLut, data.data(), data.size());
+        upload3DImageData(identityLut, data.data(), data.size() * sizeof(uint16_t));
     }
 
     void ColorGradingEffect::create3DImage(uint32_t size, LUTTexture& lut)
@@ -405,7 +443,7 @@ namespace render::postprocess
         imageInfo.extent = vk::Extent3D{size, size, size};
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
-        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
+        imageInfo.format = vk::Format::eR16G16B16A16Sfloat;
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.initialLayout = vk::ImageLayout::eUndefined;
         imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
@@ -424,7 +462,7 @@ namespace render::postprocess
         dev.bindImageMemory(lut.image, lut.memory, 0);
 
         core::ImageViewInfoRequest viewReq(dev, lut.image);
-        viewReq.format = vk::Format::eR8G8B8A8Unorm;
+        viewReq.format = vk::Format::eR16G16B16A16Sfloat;
         viewReq.imageType = vk::ImageViewType::e3D;
         viewReq.aspectFlags = vk::ImageAspectFlagBits::eColor;
         core::ImageUtilities::createImageView(viewReq, lut.imageView);
@@ -535,18 +573,18 @@ namespace render::postprocess
             return;
         }
 
-        // Convert to RGBA8
-        std::vector<uint8_t> data(lutSize * lutSize * lutSize * 4);
+        // Convert to RGBA16F (half-precision float)
+        std::vector<uint16_t> data(lutSize * lutSize * lutSize * 4);
         for (size_t i = 0; i < lutSize * lutSize * lutSize; i++)
         {
-            data[i * 4 + 0] = static_cast<uint8_t>(std::clamp(rgbData[i * 3 + 0], 0.0f, 1.0f) * 255.0f + 0.5f);
-            data[i * 4 + 1] = static_cast<uint8_t>(std::clamp(rgbData[i * 3 + 1], 0.0f, 1.0f) * 255.0f + 0.5f);
-            data[i * 4 + 2] = static_cast<uint8_t>(std::clamp(rgbData[i * 3 + 2], 0.0f, 1.0f) * 255.0f + 0.5f);
-            data[i * 4 + 3] = 255;
+            data[i * 4 + 0] = floatToHalf(std::clamp(rgbData[i * 3 + 0], 0.0f, 1.0f));
+            data[i * 4 + 1] = floatToHalf(std::clamp(rgbData[i * 3 + 1], 0.0f, 1.0f));
+            data[i * 4 + 2] = floatToHalf(std::clamp(rgbData[i * 3 + 2], 0.0f, 1.0f));
+            data[i * 4 + 3] = floatToHalf(1.0f);
         }
 
         create3DImage(lutSize, lut);
-        upload3DImageData(lut, data.data(), data.size());
+        upload3DImageData(lut, data.data(), data.size() * sizeof(uint16_t));
     }
 
     void ColorGradingEffect::destroyLUT(LUTTexture& lut)
