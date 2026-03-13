@@ -67,21 +67,17 @@ namespace editor::graph
             needsPositionInit = false;
         }
 
-        // Draw all nodes
         for (auto& node : currentGraph->nodes)
         {
             drawNode(node);
         }
 
-        // Draw all links
         drawLinks();
 
-        // Handle interactions
         handleCreation();
         handleDeletion();
         handleContextMenu();
 
-        // Sync positions back to graph
         for (auto& node : currentGraph->nodes)
         {
             ImVec2 pos = ed::GetNodePosition(toEditorNodeId(node.id));
@@ -90,13 +86,10 @@ namespace editor::graph
 
         ed::End();
 
-        // Selection must be checked after ed::End() (matches VFX/Shader editor pattern)
         handleSelection();
 
         ed::SetCurrentEditor(nullptr);
     }
-
-    // === ID helpers ===
 
     ed::NodeId BTGraphEditor::toEditorNodeId(uint32_t nodeId) const
     {
@@ -150,8 +143,6 @@ namespace editor::graph
         ed::NavigateToContent(0.0f);
     }
 
-    // === Helpers ===
-
     ImU32 BTGraphEditor::getNodeColor(behaviortree::BTNodeType type) const
     {
         using namespace behaviortree;
@@ -160,16 +151,6 @@ namespace editor::graph
         if (isDecoratorNode(type)) return IM_COL32(160, 100, 40, 255);
         if (isTaskNode(type)) return IM_COL32(50, 120, 60, 255);
         return IM_COL32(100, 100, 100, 255);
-    }
-
-    ImU32 BTGraphEditor::getNodeHeaderColor(behaviortree::BTNodeType type) const
-    {
-        using namespace behaviortree;
-        if (isRootNode(type)) return IM_COL32(100, 100, 100, 255);
-        if (isCompositeNode(type)) return IM_COL32(60, 100, 170, 255);
-        if (isDecoratorNode(type)) return IM_COL32(190, 120, 50, 255);
-        if (isTaskNode(type)) return IM_COL32(60, 150, 70, 255);
-        return IM_COL32(120, 120, 120, 255);
     }
 
     const char* BTGraphEditor::getCategoryName(behaviortree::BTNodeType type) const

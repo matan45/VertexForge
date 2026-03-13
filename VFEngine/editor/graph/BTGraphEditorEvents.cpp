@@ -15,12 +15,10 @@ namespace editor::graph
             {
                 if (startPinId && endPinId && startPinId != endPinId)
                 {
-                    // Determine which is output (source/parent) and which is input (target/child)
                     uint32_t sourceNodeId, targetNodeId;
 
                     if (isInputPin(startPinId))
                     {
-                        // Started from input pin - swap direction
                         targetNodeId = nodeIdFromPin(startPinId);
                         sourceNodeId = nodeIdFromPin(endPinId);
                     }
@@ -34,7 +32,6 @@ namespace editor::graph
                     {
                         if (ed::AcceptNewItem(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), 3.0f))
                         {
-                            // Determine sort order (append after existing children)
                             uint32_t maxSort = 0;
                             for (const auto& link : currentGraph->links)
                             {
@@ -88,7 +85,6 @@ namespace editor::graph
                 uint32_t nodeId = fromEditorNodeId(deletedNodeId);
                 const auto* node = currentGraph->findNodeById(nodeId);
 
-                // Protect root node from deletion
                 if (node && isRootNode(node->type))
                 {
                     ed::RejectDeletedItem();
@@ -97,7 +93,6 @@ namespace editor::graph
 
                 if (ed::AcceptDeletedItem())
                 {
-                    // Remove all links connected to this node
                     auto linkIt = std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                                   [nodeId](const BTLink& l)
                                                   {
@@ -105,7 +100,6 @@ namespace editor::graph
                                                   });
                     currentGraph->links.erase(linkIt, currentGraph->links.end());
 
-                    // Remove the node
                     auto nodeIt = std::remove_if(currentGraph->nodes.begin(), currentGraph->nodes.end(),
                                                   [nodeId](const BTNode& n) { return n.id == nodeId; });
                     currentGraph->nodes.erase(nodeIt, currentGraph->nodes.end());
@@ -198,7 +192,6 @@ namespace editor::graph
         node.name = nodeTypeToString(type);
         node.position = glm::vec2(position.x, position.y);
 
-        // Set default properties based on type
         switch (type)
         {
         case BTNodeType::Wait:
@@ -243,7 +236,6 @@ namespace editor::graph
 
         currentGraph->nodes.push_back(std::move(node));
 
-        // Set position in editor
         ed::SetNodePosition(toEditorNodeId(currentGraph->nodes.back().id),
                             ImVec2(position.x, position.y));
 

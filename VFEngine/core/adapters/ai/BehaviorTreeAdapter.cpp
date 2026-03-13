@@ -20,11 +20,8 @@ namespace core
     bool BehaviorTreeAdapter::attachTree(services::EntityHandle entity, const std::string& treePath)
     {
         if (!entity.isValid() || treePath.empty())
-        {
             return false;
-        }
 
-        // Detach existing tree if any
         detachTree(entity);
 
         auto dataOpt = BehaviorTreeAsset::load(treePath);
@@ -48,40 +45,35 @@ namespace core
     void BehaviorTreeAdapter::detachTree(services::EntityHandle entity)
     {
         auto it = runtimes.find(entity.id);
-        if (it != runtimes.end())
+        if (it == runtimes.end()) return;
+
+        if (it->second.runtime && scriptingProvider)
         {
-            // Clean up script instances belonging to this entity's tree
-            if (it->second.runtime && scriptingProvider)
+            for (const auto& node : it->second.runtime->getTreeData().graph.nodes)
             {
-                for (const auto& node : it->second.runtime->getTreeData().graph.nodes)
+                if (node.type != BTNodeType::ScriptTask || node.scriptPath.empty())
+                    continue;
+
+                auto sit = scriptInstances.find({entity.id, node.scriptPath});
+                if (sit != scriptInstances.end())
                 {
-                    if (node.type == BTNodeType::ScriptTask && !node.scriptPath.empty())
+                    if (scriptingProvider->isScriptLoaded(sit->second))
                     {
-                        ScriptInstanceKey key{entity.id, node.scriptPath};
-                        auto sit = scriptInstances.find(key);
-                        if (sit != scriptInstances.end())
-                        {
-                            if (scriptingProvider->isScriptLoaded(sit->second))
-                            {
-                                scriptingProvider->callOnDestroy(sit->second);
-                                scriptingProvider->unloadScript(sit->second);
-                            }
-                            scriptInstances.erase(sit);
-                        }
+                        scriptingProvider->callOnDestroy(sit->second);
+                        scriptingProvider->unloadScript(sit->second);
                     }
+                    scriptInstances.erase(sit);
                 }
             }
-            runtimes.erase(it);
         }
+        runtimes.erase(it);
     }
 
     void BehaviorTreeAdapter::setEnabled(services::EntityHandle entity, bool enabled)
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end())
-        {
             it->second.enabled = enabled;
-        }
     }
 
     bool BehaviorTreeAdapter::hasTree(services::EntityHandle entity) const
@@ -92,33 +84,21 @@ namespace core
     std::string BehaviorTreeAdapter::getTreePath(services::EntityHandle entity) const
     {
         auto it = runtimes.find(entity.id);
-        if (it != runtimes.end())
-        {
-            return it->second.treePath;
-        }
-        return "";
+        return it != runtimes.end() ? it->second.treePath : "";
     }
 
     bool BehaviorTreeAdapter::isEnabled(services::EntityHandle entity) const
     {
         auto it = runtimes.find(entity.id);
-        if (it != runtimes.end())
-        {
-            return it->second.enabled;
-        }
-        return false;
+        return it != runtimes.end() && it->second.enabled;
     }
 
-    // Bug 3 fix: snapshot entity IDs before iterating to avoid iterator invalidation
-    // if a script task dispatches events that call detachTree() mid-iteration.
     void BehaviorTreeAdapter::updateAll(float deltaTime)
     {
         std::vector<uint64_t> entityIds;
         entityIds.reserve(runtimes.size());
-        for (const auto& [entityId, instance] : runtimes)
-        {
+        for (const auto& [entityId, _] : runtimes)
             entityIds.push_back(entityId);
-        }
 
         for (uint64_t entityId : entityIds)
         {
@@ -134,12 +114,10 @@ namespace core
 
     void BehaviorTreeAdapter::stopAll()
     {
-        for (auto& [entityId, instance] : runtimes)
+        for (auto& [_, instance] : runtimes)
         {
             if (instance.runtime)
-            {
                 instance.runtime->reset();
-            }
         }
     }
 
@@ -148,9 +126,7 @@ namespace core
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end() && it->second.runtime)
-        {
             it->second.runtime->getBlackboard().set(key, value);
-        }
     }
 
     BlackboardValue BehaviorTreeAdapter::getBlackboardValue(services::EntityHandle entity,
@@ -158,9 +134,7 @@ namespace core
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end() && it->second.runtime)
-        {
             return it->second.runtime->getBlackboard().get(key);
-        }
         return 0.0f;
     }
 
@@ -168,15 +142,10 @@ namespace core
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end() && it->second.runtime)
-        {
             return it->second.runtime->getBlackboard().has(key);
-        }
         return false;
     }
 
-    // === IBTTaskExecutor ===
-
-    // Bug 4 fix: only dispatch SetArrivalDistanceCommand on first tick
     BTNodeStatus BehaviorTreeAdapter::executeMoveTo(services::EntityHandle entity,
                                                      const std::string& targetKey,
                                                      float arrivalDistance,
@@ -190,30 +159,24 @@ namespace core
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-
         glm::vec3 target = blackboard.getVec3(targetKey);
 
         if (isFirstTick)
         {
-            // Set arrival distance on the controller (only once)
             events::controller::SetArrivalDistanceCommand arrivalCmd;
             arrivalCmd.entity = entity;
             arrivalCmd.arrivalDistance = arrivalDistance;
             dispatcher.execute(arrivalCmd);
 
-            // Set navmesh agent destination (only once)
             events::navmesh::SetAgentDestinationCommand navCmd;
             navCmd.entity = entity;
             navCmd.target = target;
             dispatcher.execute(navCmd);
         }
 
-        // Check if we've reached the destination
         events::controller::HasReachedDestinationQuery reachedQuery;
         reachedQuery.entity = entity;
-        bool reached = dispatcher.query(reachedQuery);
-
-        return reached ? BTNodeStatus::Success : BTNodeStatus::Running;
+        return dispatcher.query(reachedQuery) ? BTNodeStatus::Success : BTNodeStatus::Running;
     }
 
     BTNodeStatus BehaviorTreeAdapter::executePlayAnimation(services::EntityHandle entity,
@@ -221,13 +184,10 @@ namespace core
                                                             bool waitForCompletion)
     {
         if (stateName.empty())
-        {
             return BTNodeStatus::Failure;
-        }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Force transition to the target animation state
         services::events::animator::ForceEntityTransitionToCommand transitionCmd;
         transitionCmd.entity = entity;
         transitionCmd.stateName = stateName;
@@ -251,14 +211,9 @@ namespace core
                                                          float deltaTime)
     {
         if (!scriptingProvider || scriptPath.empty() || className.empty())
-        {
             return BTNodeStatus::Failure;
-        }
 
-        // Bug 2 fix: collision-safe key using pair instead of XOR
         ScriptInstanceKey scriptKey{entity.id, scriptPath};
-
-        // Load script instance if not already loaded
         auto it = scriptInstances.find(scriptKey);
         if (it == scriptInstances.end())
         {
@@ -273,11 +228,8 @@ namespace core
             it = scriptInstances.find(scriptKey);
         }
 
-        uint64_t instanceId = it->second;
-
-        // Call tick(deltaTime) and map result string to BTNodeStatus
         std::string result = scriptingProvider->callMethodWithReturn(
-            instanceId, "tick", {std::any(deltaTime)});
+            it->second, "tick", {std::any(deltaTime)});
 
         if (result == "success") return BTNodeStatus::Success;
         if (result == "running") return BTNodeStatus::Running;
@@ -288,17 +240,10 @@ namespace core
     {
         switch (level)
         {
-        case LogLevel::Info:
-            vfLogInfo("[BT] {}", message);
-            break;
-        case LogLevel::Warn:
-            vfLogWarning("[BT] {}", message);
-            break;
-        case LogLevel::Error:
-            vfLogError("[BT] {}", message);
-            break;
+        case LogLevel::Info:    vfLogInfo("[BT] {}", message); break;
+        case LogLevel::Warn:    vfLogWarning("[BT] {}", message); break;
+        case LogLevel::Error:   vfLogError("[BT] {}", message); break;
         }
-
         return BTNodeStatus::Success;
     }
 }

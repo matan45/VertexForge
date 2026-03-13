@@ -7,6 +7,8 @@ namespace behaviortree
 {
     class Blackboard
     {
+    private:
+        std::unordered_map<std::string, BlackboardValue> values;
     public:
         void set(const std::string& key, const BlackboardValue& value);
         BlackboardValue get(const std::string& key) const;
@@ -26,8 +28,5 @@ namespace behaviortree
         services::EntityHandle getEntity(const std::string& key) const;
 
         const std::unordered_map<std::string, BlackboardValue>& getAll() const { return values; }
-
-    private:
-        std::unordered_map<std::string, BlackboardValue> values;
     };
 }

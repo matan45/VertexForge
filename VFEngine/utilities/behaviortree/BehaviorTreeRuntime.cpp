@@ -54,7 +54,6 @@ namespace behaviortree
 
         if (isRootNode(node->type))
         {
-            // Root just ticks its single child
             auto children = treeData.graph.getChildren(nodeId);
             if (children.empty())
             {
@@ -99,7 +98,6 @@ namespace behaviortree
         {
         case BTNodeType::Sequence:
         {
-            // Sequence: run children left-to-right, fail on first failure
             for (int i = state.currentChildIndex; i < static_cast<int>(children.size()); ++i)
             {
                 BTNodeStatus childStatus = tickNode(children[i]->id, dt, executor);
@@ -122,7 +120,6 @@ namespace behaviortree
 
         case BTNodeType::Selector:
         {
-            // Selector: run children left-to-right, succeed on first success
             for (int i = state.currentChildIndex; i < static_cast<int>(children.size()); ++i)
             {
                 BTNodeStatus childStatus = tickNode(children[i]->id, dt, executor);
@@ -145,7 +142,6 @@ namespace behaviortree
 
         case BTNodeType::Parallel:
         {
-            // Parallel: tick all children, use policy to determine result
             ParallelPolicy policy = ParallelPolicy::RequireAll;
             auto policyIt = node.properties.find("policy");
             if (policyIt != node.properties.end() && std::holds_alternative<std::string>(policyIt->second))
@@ -226,12 +222,11 @@ namespace behaviortree
 
             state.repeatCount++;
 
-            // Reset child state for next iteration
             resetSubtreeState(children[0]->id);
 
             if (maxRepeats <= 0 || state.repeatCount < maxRepeats)
             {
-                return BTNodeStatus::Running; // Keep repeating
+                return BTNodeStatus::Running;
             }
 
             state.repeatCount = 0;
@@ -244,9 +239,9 @@ namespace behaviortree
             BTNodeStatus childStatus = tickNode(children[0]->id, dt, executor);
             if (childStatus == BTNodeStatus::Failure)
             {
-                return BTNodeStatus::Success; // Stop repeating, return success
+                return BTNodeStatus::Success;
             }
-            return BTNodeStatus::Running; // Keep repeating
+            return BTNodeStatus::Running;
         }
 
         case BTNodeType::Cooldown:
@@ -265,14 +260,14 @@ namespace behaviortree
                 state.elapsedTime -= dt;
                 if (state.elapsedTime > 0.0f)
                 {
-                    return BTNodeStatus::Failure; // Still on cooldown
+                    return BTNodeStatus::Failure;
                 }
             }
 
             BTNodeStatus childStatus = tickNode(children[0]->id, dt, executor);
             if (childStatus != BTNodeStatus::Running)
             {
-                state.elapsedTime = cooldownTime; // Start cooldown
+                state.elapsedTime = cooldownTime;
             }
             return childStatus;
         }
@@ -297,7 +292,7 @@ namespace behaviortree
             if (state.elapsedTime >= timeLimit)
             {
                 state.elapsedTime = 0.0f;
-                return BTNodeStatus::Failure; // Time exceeded
+                return BTNodeStatus::Failure;
             }
 
             BTNodeStatus childStatus = tickNode(children[0]->id, dt, executor);
@@ -448,7 +443,6 @@ namespace behaviortree
 
             const BlackboardValue& compareVal = compareValIt->second;
 
-            // Compare floats
             if (std::holds_alternative<float>(bbVal) && std::holds_alternative<float>(compareVal))
             {
                 float a = std::get<float>(bbVal);
@@ -465,7 +459,6 @@ namespace behaviortree
                 }
             }
 
-            // Compare ints
             if (std::holds_alternative<int32_t>(bbVal) && std::holds_alternative<int32_t>(compareVal))
             {
                 int32_t a = std::get<int32_t>(bbVal);
@@ -481,7 +474,6 @@ namespace behaviortree
                 }
             }
 
-            // Compare bools (only Equal/NotEqual)
             if (std::holds_alternative<bool>(bbVal) && std::holds_alternative<bool>(compareVal))
             {
                 bool a = std::get<bool>(bbVal);
@@ -490,7 +482,6 @@ namespace behaviortree
                 if (op == CompareOp::NotEqual) return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
             }
 
-            // Compare strings (only Equal/NotEqual)
             if (std::holds_alternative<std::string>(bbVal) && std::holds_alternative<std::string>(compareVal))
             {
                 const auto& a = std::get<std::string>(bbVal);

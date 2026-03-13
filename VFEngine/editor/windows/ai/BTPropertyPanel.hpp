@@ -9,12 +9,13 @@ namespace editor::windows
 
     class BTPropertyPanel
     {
+    private:
+        BTPropertyChangedCallback onPropertyChanged;
     public:
         void draw(behaviortree::BTNode* node, const behaviortree::BTGraph* graph);
         void setOnPropertyChanged(BTPropertyChangedCallback callback) { onPropertyChanged = std::move(callback); }
 
     private:
-        BTPropertyChangedCallback onPropertyChanged;
 
         void drawWaitProperties(behaviortree::BTNode& node);
         void drawLogProperties(behaviortree::BTNode& node);

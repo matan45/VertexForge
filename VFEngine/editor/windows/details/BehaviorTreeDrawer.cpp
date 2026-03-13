@@ -63,41 +63,12 @@ namespace windows::details
                 bt.behaviorTreePath.clear();
             }
 
-            // Enabled toggle
             if (ImGui::Checkbox("Enabled", &bt.enabled))
             {
                 events::ai::SetBehaviorTreeEnabledCommand cmd;
                 cmd.entity = handle;
                 cmd.enabled = bt.enabled;
                 events::EventDispatcher::instance().execute(cmd);
-            }
-
-            // Attach/Detach buttons
-            if (!bt.behaviorTreePath.empty())
-            {
-                if (!bt.isInitialized)
-                {
-                    if (ImGui::Button("Attach"))
-                    {
-                        events::ai::AttachBehaviorTreeCommand cmd;
-                        cmd.entity = handle;
-                        cmd.treePath = bt.behaviorTreePath;
-                        bool result = events::EventDispatcher::instance().execute(cmd);
-                        if (result) bt.isInitialized = true;
-                    }
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Attached");
-                    ImGui::SameLine();
-                    if (ImGui::Button("Detach"))
-                    {
-                        events::ai::DetachBehaviorTreeCommand cmd;
-                        cmd.entity = handle;
-                        events::EventDispatcher::instance().execute(cmd);
-                        bt.isInitialized = false;
-                    }
-                }
             }
 
             ImGui::Unindent();

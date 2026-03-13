@@ -5,7 +5,7 @@ using namespace behaviortree;
 
 namespace editor::graph
 {
-    static void drawPinIcon(bool isInput, bool isConnected, ImU32 color)
+    static void drawPinIcon(bool isConnected, ImU32 color)
     {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -37,49 +37,40 @@ namespace editor::graph
     void BTGraphEditor::drawNode(BTNode& node)
     {
         ImU32 nodeColor = getNodeColor(node.type);
-        ImU32 headerColor = getNodeHeaderColor(node.type);
 
         ed::PushStyleColor(ed::StyleColor_NodeBg, ImGui::ColorConvertU32ToFloat4(nodeColor));
         ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.78f, 0.78f, 0.78f, 0.39f));
 
         ed::BeginNode(toEditorNodeId(node.id));
 
-        // Header
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 255));
-
-        // Category label
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[%s]", getCategoryName(node.type));
-
-        // Node name
         ImGui::Text("%s", node.name.empty() ? nodeTypeToString(node.type) : node.name.c_str());
 
         ImGui::PopStyleColor();
 
         ImGui::Spacing();
 
-        // Input pin (all nodes except Root)
         if (!isRootNode(node.type))
         {
             bool connected = isPinConnected(currentGraph, node.id, true);
             ed::BeginPin(toInputPinId(node.id), ed::PinKind::Input);
-            drawPinIcon(true, connected, IM_COL32(220, 220, 220, 255));
+            drawPinIcon(connected, IM_COL32(220, 220, 220, 255));
             ImGui::SameLine();
             ImGui::Text("In");
             ed::EndPin();
         }
 
-        // Output pin (nodes that can have children)
         if (hasOutputPin(node.type))
         {
             bool connected = isPinConnected(currentGraph, node.id, false);
             ed::BeginPin(toOutputPinId(node.id), ed::PinKind::Output);
             ImGui::Text("Out");
             ImGui::SameLine();
-            drawPinIcon(false, connected, IM_COL32(220, 220, 220, 255));
+            drawPinIcon(connected, IM_COL32(220, 220, 220, 255));
             ed::EndPin();
         }
 
-        // Show key properties inline
         drawNodeInlineProperties(node);
 
         ed::EndNode();
@@ -98,12 +89,6 @@ namespace editor::graph
         }
     }
 
-    void BTGraphEditor::drawZoomControls(ImVec2 /*canvasPos*/, ImVec2 /*canvasSize*/, float /*currentZoom*/)
-    {
-        // Zoom is handled by mouse wheel in imgui-node-editor
-    }
-
-    // Forward declare to avoid circular issues - defined here
     void BTGraphEditor::drawNodeInlineProperties(const BTNode& node)
     {
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(180, 180, 180, 255));

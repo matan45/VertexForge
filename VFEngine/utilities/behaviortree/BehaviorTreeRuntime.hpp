@@ -7,7 +7,6 @@
 
 namespace behaviortree
 {
-    // Per-node runtime state
     struct BTNodeRuntime
     {
         BTNodeStatus lastStatus = BTNodeStatus::Failure;
@@ -17,7 +16,6 @@ namespace behaviortree
         bool isFirstTick = true;
     };
 
-    // Callback interface for task execution (implemented by adapter)
     class IBTTaskExecutor
     {
     public:
@@ -44,6 +42,11 @@ namespace behaviortree
 
     class BehaviorTreeRuntime
     {
+    private:
+        BehaviorTreeData treeData;
+        services::EntityHandle ownerEntity;
+        Blackboard blackboard;
+        std::unordered_map<uint32_t, BTNodeRuntime> nodeStates;
     public:
         void init(BehaviorTreeData data, services::EntityHandle entity);
         BTNodeStatus tick(float deltaTime, IBTTaskExecutor* executor);
@@ -63,10 +66,5 @@ namespace behaviortree
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
         void resetSubtreeState(uint32_t nodeId);
-
-        BehaviorTreeData treeData;
-        services::EntityHandle ownerEntity;
-        Blackboard blackboard;
-        std::unordered_map<uint32_t, BTNodeRuntime> nodeStates;
     };
 }

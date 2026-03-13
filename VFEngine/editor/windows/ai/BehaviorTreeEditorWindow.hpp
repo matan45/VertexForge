@@ -12,15 +12,6 @@ namespace editor::windows
 {
     class BehaviorTreeEditorWindow : public controllers::imguiHandler::ImguiWindow
     {
-    public:
-        explicit BehaviorTreeEditorWindow(const std::string& path);
-        ~BehaviorTreeEditorWindow() override;
-
-        void draw() override;
-        bool shouldClose() const override { return !isOpen; }
-
-        const std::string& getTreePath() const { return treePath; }
-
     private:
         std::string treePath;
         std::string windowTitle;
@@ -32,6 +23,16 @@ namespace editor::windows
         editor::graph::BTGraphEditor graphEditor;
         BTPropertyPanel propertyPanel;
 
+    public:
+        explicit BehaviorTreeEditorWindow(const std::string& path);
+        ~BehaviorTreeEditorWindow() override;
+
+        void draw() override;
+        bool shouldClose() const override { return !isOpen; }
+
+        const std::string& getTreePath() const { return treePath; }
+
+    private:
         void initEditor();
         void loadTree();
         void saveTree();

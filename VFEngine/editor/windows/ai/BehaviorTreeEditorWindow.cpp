@@ -89,21 +89,17 @@ namespace editor::windows
 
         drawToolbar();
 
-        // Main layout: graph (left), panels (right)
         float rightPanelWidth = 300.0f;
         ImVec2 contentRegion = ImGui::GetContentRegionAvail();
 
-        // Graph panel (left side)
         ImGui::BeginChild("BTGraphPanel", ImVec2(contentRegion.x - rightPanelWidth - 4.0f, 0), ImGuiChildFlags_None);
         drawGraphPanel();
         ImGui::EndChild();
 
         ImGui::SameLine();
 
-        // Right side panels
         ImGui::BeginChild("BTRightPanel", ImVec2(rightPanelWidth, 0), ImGuiChildFlags_None);
 
-        // Property panel (top right)
         float halfHeight = ImGui::GetContentRegionAvail().y * 0.5f;
         ImGui::BeginChild("BTPropertyPanel", ImVec2(0, halfHeight), ImGuiChildFlags_Borders);
         ImGui::Text("Properties");
@@ -111,7 +107,6 @@ namespace editor::windows
         drawPropertyPanel();
         ImGui::EndChild();
 
-        // Blackboard panel (bottom right)
         ImGui::BeginChild("BTBlackboardPanel", ImVec2(0, 0), ImGuiChildFlags_Borders);
         ImGui::Text("Blackboard");
         ImGui::Separator();
@@ -152,7 +147,6 @@ namespace editor::windows
             ImGui::EndMenuBar();
         }
 
-        // Keyboard shortcut
         if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             saveTree();
@@ -180,7 +174,6 @@ namespace editor::windows
 
         auto& keys = treeData->graph.blackboardKeys;
 
-        // Add key button
         if (ImGui::Button("+ Add Key"))
         {
             BlackboardKeyDef newKey;
@@ -201,7 +194,6 @@ namespace editor::windows
 
             auto& key = keys[i];
 
-            // Name
             char nameBuf[64];
             strncpy(nameBuf, key.name.c_str(), sizeof(nameBuf) - 1);
             nameBuf[sizeof(nameBuf) - 1] = '\0';
@@ -215,14 +207,12 @@ namespace editor::windows
 
             ImGui::SameLine();
 
-            // Type dropdown
             static const std::array<const char*, 6> typeNames = {"Float", "Int", "Bool", "String", "Vec3", "Entity"};
             int currentType = static_cast<int>(key.type);
             ImGui::SetNextItemWidth(80.0f);
             if (ImGui::Combo("##type", &currentType, typeNames.data(), static_cast<int>(typeNames.size())))
             {
                 key.type = static_cast<BlackboardValueType>(currentType);
-                // Reset default value to match new type
                 switch (key.type)
                 {
                 case BlackboardValueType::Float: key.defaultValue = 0.0f; break;
@@ -237,7 +227,6 @@ namespace editor::windows
 
             ImGui::SameLine();
 
-            // Remove button
             if (ImGui::Button("X##remove"))
             {
                 removeIdx = i;
