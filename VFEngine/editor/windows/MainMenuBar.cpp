@@ -12,6 +12,7 @@
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "config/GIConfigWindow.hpp"
+#include "config/VolumetricFogConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
@@ -236,6 +237,13 @@ namespace windows
                 if (navmeshWindow)
                 {
                     navmeshWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Volumetric Fog"))
+            {
+                if (volumetricFogConfigWindow)
+                {
+                    volumetricFogConfigWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Global Illumination"))

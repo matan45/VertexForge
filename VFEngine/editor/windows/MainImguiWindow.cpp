@@ -25,6 +25,7 @@ namespace windows
         menuBar.setVFXDebugWindow(&vfxDebugWindow);
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
         menuBar.setGIConfigWindow(&giConfigWindow);
+        menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         subscribeToEvents();
     }
@@ -51,6 +52,7 @@ namespace windows
             [this](const events::scene::SceneLoadedNotification&)
             {
                 postProcessConfigWindow.notifySceneLoaded();
+                volumetricFogConfigWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
             });
@@ -102,6 +104,7 @@ namespace windows
             grassDensityPanel.draw();
             meshBrushToolPanel.draw();
             giConfigWindow.draw();
+            volumetricFogConfigWindow.draw();
             lightStreamingDebugWindow.draw();
         }
         ImGui::End();
