@@ -18,7 +18,6 @@ namespace windows
         void drawChromaticAberrationSection();
         void drawFilmGrainSection();
         void drawDepthOfFieldSection();
-        void drawVolumetricFogSection();
         void drawSSAOSection();
         void drawEdgeDetectionSection();
         void loadSettings();

@@ -22,6 +22,7 @@
 #include "vegetation/GrassDensityPanel.hpp"
 #include "meshbrush/MeshBrushToolPanel.hpp"
 #include "config/GIConfigWindow.hpp"
+#include "config/VolumetricFogConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
@@ -61,6 +62,7 @@ namespace windows
         GrassDensityPanel grassDensityPanel;
         MeshBrushToolPanel meshBrushToolPanel;
         GIConfigWindow giConfigWindow;
+        VolumetricFogConfigWindow volumetricFogConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
         MainMenuBar menuBar;
 

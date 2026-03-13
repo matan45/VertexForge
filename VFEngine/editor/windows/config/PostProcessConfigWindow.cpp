@@ -361,7 +361,6 @@ namespace windows
             drawChromaticAberrationSection();
             drawFilmGrainSection();
             drawDepthOfFieldSection();
-            drawVolumetricFogSection();
             drawSSAOSection();
             drawEdgeDetectionSection();
 

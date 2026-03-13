@@ -22,6 +22,7 @@ namespace windows
     class VFXDebugWindow;
     class AnimationDebugWindow;
     class GIConfigWindow;
+    class VolumetricFogConfigWindow;
     class LightStreamingDebugWindow;
     class MainMenuBar
     {
@@ -48,6 +49,7 @@ namespace windows
         VFXDebugWindow* vfxDebugWindow = nullptr;
         AnimationDebugWindow* animationDebugWindow = nullptr;
         GIConfigWindow* giConfigWindow = nullptr;
+        VolumetricFogConfigWindow* volumetricFogConfigWindow = nullptr;
         LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
     public:
         MainMenuBar();
@@ -116,6 +118,11 @@ namespace windows
         void setGIConfigWindow(GIConfigWindow* window)
         {
             giConfigWindow = window;
+        }
+
+        void setVolumetricFogConfigWindow(VolumetricFogConfigWindow* window)
+        {
+            volumetricFogConfigWindow = window;
         }
 
         void setLightStreamingDebugWindow(LightStreamingDebugWindow* window)

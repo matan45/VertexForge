@@ -163,6 +163,7 @@
     <ClInclude Include="windows\config\PostProcessConfigWindow.hpp" />
     <ClInclude Include="windows\config\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\config\RenderConfigWindow.hpp" />
+    <ClInclude Include="windows\config\VolumetricFogConfigWindow.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowserModals.hpp" />
@@ -303,6 +304,7 @@
     <ClCompile Include="windows\config\PostProcessConfigWindowSections.cpp" />
     <ClCompile Include="windows\config\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\config\RenderConfigWindow.cpp" />
+    <ClCompile Include="windows\config\VolumetricFogConfigWindow.cpp" />
     <ClCompile Include="windows\contentbrowser\AssetGridRenderer.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowser.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowserModals.cpp" />
