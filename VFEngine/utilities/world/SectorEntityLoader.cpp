@@ -1,5 +1,4 @@
 #include "SectorEntityLoader.hpp"
-#include "WorldSectorSerialization.hpp"
 #include "../serialization/SceneSerialization.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../scene/Entity.hpp"
@@ -11,25 +10,6 @@
 
 namespace world
 {
-    void SectorEntityLoader::queueSectorLoad(const SectorCoord& coord, const std::string& sectorFilePath)
-    {
-        std::vector<nlohmann::json> entityData;
-        if (!WorldSectorSerialization::loadSector(sectorFilePath, entityData))
-        {
-            vfLogError("Failed to read sector file for loading: {}", sectorFilePath);
-            return;
-        }
-
-        for (const auto& data : entityData)
-        {
-            PendingLoad load;
-            load.coord = coord;
-            load.entityName = data.value("name", "Unnamed");
-            load.rawJson = data.dump();
-            pendingLoads.push_back(std::move(load));
-        }
-    }
-
     void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, const std::vector<std::pair<std::string, std::string>>& entityNamesAndJson)
     {
         for (const auto& [name, json] : entityNamesAndJson)
@@ -65,7 +45,6 @@ namespace world
     {
         int processed = 0;
 
-        // Process unloads first (frees resources for new loads)
         while (!pendingUnloads.empty() && processed < maxEntitiesPerFrame)
         {
             auto pending = pendingUnloads.front();
@@ -82,7 +61,6 @@ namespace world
                 {
                     scene::Entity sceneEntity(entity);
 
-                    // Notify service layer before destroying (for EntityDeletedNotification)
                     if (onEntityPreDestroy)
                     {
                         onEntityPreDestroy(static_cast<uint64_t>(static_cast<uint32_t>(entity)));
@@ -108,7 +86,6 @@ namespace world
             ++processed;
         }
 
-        // Process loads — track UUIDs loaded this frame to prevent intra-frame duplicates
         std::unordered_set<uint64_t> loadedThisFrame;
         while (!pendingLoads.empty() && processed < maxEntitiesPerFrame)
         {
@@ -119,12 +96,10 @@ namespace world
             {
                 nlohmann::json entityJson = nlohmann::json::parse(pending.rawJson);
 
-                // Skip if an entity with this UUID already exists (prevents duplicates)
                 if (entityJson.contains("uuid") && entityJson["uuid"].is_number_unsigned())
                 {
                     uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
 
-                    // Check intra-frame duplicates first (O(1))
                     if (loadedThisFrame.contains(uuidValue))
                     {
                         ++processed;
@@ -175,7 +150,6 @@ namespace world
                 uint64_t uuid = newEntity.getUUID().getValue();
                 loadedThisFrame.insert(uuid);
 
-                // Notify service layer to acquire assets and publish mesh notifications
                 if (onEntityPostLoad)
                 {
                     std::string meshPath;

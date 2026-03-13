@@ -23,8 +23,6 @@ namespace resource {
 				entry.graceTimeRemaining = 0.0f;
 
 				std::erase(pendingReleaseQueue, path);
-
-	
 			}
 
 			if (estimatedMemoryBytes > 0) {
@@ -63,8 +61,6 @@ namespace resource {
 			entry.state = AssetState::PendingRelease;
 			entry.graceTimeRemaining = gracePeriodSeconds;
 			pendingReleaseQueue.push_back(path);
-
-
 		}
 	}
 
@@ -220,30 +216,6 @@ namespace resource {
 		releaseCallback = std::move(callback);
 	}
 
-	void AssetLifecycleManager::setGracePeriod(float seconds)
-	{
-		std::scoped_lock lock(registryMutex);
-		gracePeriodSeconds = seconds;
-	}
-
-	float AssetLifecycleManager::getGracePeriod() const
-	{
-		std::scoped_lock lock(registryMutex);
-		return gracePeriodSeconds;
-	}
-
-	void AssetLifecycleManager::setMaxReleasesPerFrame(uint32_t max)
-	{
-		std::scoped_lock lock(registryMutex);
-		maxReleasesPerFrame = max;
-	}
-
-	uint32_t AssetLifecycleManager::getMaxReleasesPerFrame() const
-	{
-		std::scoped_lock lock(registryMutex);
-		return maxReleasesPerFrame;
-	}
-
 	AssetEntry AssetLifecycleManager::getAssetEntry(const std::string& path) const
 	{
 		std::scoped_lock lock(registryMutex);
@@ -279,17 +251,6 @@ namespace resource {
 			}
 		}
 		return result;
-	}
-
-	uint32_t AssetLifecycleManager::getRefCount(const std::string& path) const
-	{
-		std::scoped_lock lock(registryMutex);
-
-		auto it = registry.find(path);
-		if (it != registry.end()) {
-			return it->second.refCount;
-		}
-		return 0;
 	}
 
 	bool AssetLifecycleManager::isTracked(const std::string& path) const

@@ -34,10 +34,8 @@ namespace render::vegetation
     private:
         core::Device* devicePtr = nullptr;
 
-        // Shader
         std::unique_ptr<core::Shader> shader;
 
-        // Pipeline resources
         vk::Pipeline computePipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
@@ -51,7 +49,6 @@ namespace render::vegetation
         GrassComputePipeline();
         ~GrassComputePipeline();
 
-        // Non-copyable
         GrassComputePipeline(const GrassComputePipeline&) = delete;
         GrassComputePipeline& operator=(const GrassComputePipeline&) = delete;
 
@@ -77,6 +74,5 @@ namespace render::vegetation
         void createComputePipeline();
         void createDescriptorPool();
         void allocateDescriptorSet();
-        void writeDescriptors();
     };
 }

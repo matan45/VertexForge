@@ -4,27 +4,18 @@
 #include "../resource/EndianUtils.hpp"
 #include <fstream>
 #include <filesystem>
-#include <algorithm>
 
 namespace terrain
 {
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
-    // Sanity caps for file-read sizes to guard against corrupt data
     static constexpr uint32_t MAX_PATH_LENGTH = 4096;
     static constexpr uint32_t MAX_TILE_COUNT = 100000;
     static constexpr uint32_t MAX_VERTICES_PER_LOD = 1 << 20;   // ~1M vertices
-    static constexpr uint32_t MAX_HOLE_MASK_VERTICES = 257 * 257; // largest resolution squared
-
     static bool validateResolution(uint8_t res)
     {
         return res <= static_cast<uint8_t>(TileResolution::High);
-    }
-
-    static uint32_t resolutionToVertexCount(uint8_t res)
-    {
-        return TILE_VERTEX_COUNTS[res];
     }
 
     bool TerrainSerializer::parseHeader(std::istream& file, TerrainFileHeader& outHeader)
@@ -264,139 +255,6 @@ namespace terrain
         return true;
     }
 
-    bool TerrainSerializer::loadAll(
-        std::string_view path,
-        TerrainFileHeader& outHeader,
-        std::vector<TileLoadResult>& outTiles)
-    {
-        fs::path filePath(path);
-        if (!fs::exists(filePath))
-        {
-            vfLogError("TerrainSerializer: File not found: {}", path);
-            return false;
-        }
-
-        try
-        {
-            std::ifstream file(filePath, std::ios::binary);
-            if (!file.is_open())
-            {
-                vfLogError("TerrainSerializer: Failed to open file: {}", path);
-                return false;
-            }
-
-            if (!parseHeader(file, outHeader))
-                return false;
-
-            std::vector<TileIndexEntry> index;
-            if (!parseIndexTable(file, outHeader.tileCount, index))
-            {
-                vfLogError("TerrainSerializer: Failed to read index table");
-                return false;
-            }
-
-            uint32_t expectedHeightCount = resolutionToVertexCount(outHeader.resolution);
-            expectedHeightCount *= expectedHeightCount;
-
-            outTiles.resize(outHeader.tileCount);
-            for (uint32_t i = 0; i < outHeader.tileCount; ++i)
-            {
-                auto& result = outTiles[i];
-                const auto& entry = index[i];
-                result.coord = TileCoord(entry.coordX, entry.coordZ);
-
-                file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
-                uint32_t heightCount = readLE<uint32_t>(file);
-                if (heightCount != expectedHeightCount)
-                {
-                    vfLogError("TerrainSerializer: Height count mismatch for tile ({}, {}): got {}, expected {}",
-                               entry.coordX, entry.coordZ, heightCount, expectedHeightCount);
-                    return false;
-                }
-                readVectorLE(file, result.heightData, heightCount);
-
-                if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_WEIGHT_MAPS)
-                    && entry.weightDataOffset != 0)
-                {
-                    file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
-
-                    // Read per-tile palette indices (4 bytes)
-                    for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
-                        result.weightMap.layerIndices[li] = readLE<uint8_t>(file);
-
-                    result.weightMap.resolution = readLE<uint32_t>(file);
-                    if (result.weightMap.resolution == 0 || result.weightMap.resolution > 257)
-                    {
-                        vfLogError("TerrainSerializer: Invalid weight map resolution {} for tile ({}, {})",
-                                   result.weightMap.resolution, entry.coordX, entry.coordZ);
-                        return false;
-                    }
-
-                    size_t texelCount = static_cast<size_t>(result.weightMap.resolution)
-                                        * result.weightMap.resolution;
-                    result.weightMap.layerWeights.resize(WEIGHT_CHANNELS);
-                    for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
-                    {
-                        readVectorLE(file, result.weightMap.layerWeights[ch], texelCount);
-                    }
-                }
-
-                if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_MESHLET_CACHE)
-                    && entry.meshletDataOffset != 0)
-                {
-                    file.seekg(static_cast<std::streamoff>(entry.meshletDataOffset));
-                    if (!parseTileMeshletData(file, result))
-                    {
-                        vfLogWarning("TerrainSerializer: Failed to read meshlet cache for tile ({}, {}), will regenerate",
-                                     entry.coordX, entry.coordZ);
-                        for (auto& lod : result.lodData)
-                            lod.clear();
-                        result.hasLODCache = false;
-                    }
-                }
-
-                if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_HOLE_MASK)
-                    && entry.holeMaskDataOffset != 0)
-                {
-                    file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
-                    uint32_t totalVertices = readLE<uint32_t>(file);
-                    if (totalVertices > MAX_HOLE_MASK_VERTICES)
-                    {
-                        vfLogError("TerrainSerializer: Hole mask vertex count {} exceeds maximum for tile ({}, {})",
-                                   totalVertices, entry.coordX, entry.coordZ);
-                        return false;
-                    }
-                    uint32_t packedSize = (totalVertices + 7) / 8;
-                    std::vector<uint8_t> packed(packedSize);
-                    file.read(reinterpret_cast<char*>(packed.data()),
-                              static_cast<std::streamsize>(packedSize));
-
-                    result.holeMask.resize(totalVertices, 0);
-                    for (uint32_t j = 0; j < totalVertices; ++j)
-                    {
-                        result.holeMask[j] = (packed[j / 8] >> (j % 8)) & 1;
-                    }
-                }
-
-                if (!file.good())
-                {
-                    vfLogError("TerrainSerializer: Read error at tile ({}, {})", entry.coordX, entry.coordZ);
-                    return false;
-                }
-
-                result.success = true;
-            }
-
-            vfLogInfo("TerrainSerializer: Loaded {} tiles from {}", outHeader.tileCount, path);
-            return true;
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("TerrainSerializer: Failed to load {}: {}", path, e.what());
-            return false;
-        }
-    }
-
     bool TerrainSerializer::readHeader(
         std::string_view path,
         TerrainFileHeader& outHeader,
@@ -462,7 +320,6 @@ namespace terrain
 
             file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
 
-            // Read per-tile palette indices (4 bytes)
             for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
                 outWeights.layerIndices[li] = readLE<uint8_t>(file);
 

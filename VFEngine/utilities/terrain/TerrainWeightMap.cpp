@@ -1,8 +1,6 @@
 #include "TerrainWeightMap.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
-#include <numeric>
-#include <cmath>
 
 namespace terrain
 {
@@ -152,7 +150,6 @@ namespace terrain
                      "Evicting palette layer {} (channel {}, weight sum {:.3f}) to assign palette layer {}",
                      layerIndices[minCh], minCh, minSum, paletteLayer);
 
-        // Zero out the channel's weights and renormalize
         if (minCh < layerWeights.size())
         {
             std::fill(layerWeights[minCh].begin(), layerWeights[minCh].end(), 0.0f);

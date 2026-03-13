@@ -27,11 +27,9 @@ namespace services
         ::events::SubscriptionToken modeChangedToken;
         ::events::SubscriptionToken sceneClearedToken;
 
-        // Rate limiting for continuous painting
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
 
-        // Global instance ID counter
         uint64_t nextInstanceId = 1;
 
         // Per-palette-entry + per-sector group entities (hierarchy parents)
@@ -59,7 +57,6 @@ namespace services
         std::unordered_map<GroupKey, EntityHandle, GroupKeyHash> groupEntities;
         EntityHandle ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
 
-        // Per-instance entity handles (instanceId -> entity)
         std::unordered_map<uint64_t, EntityHandle> instanceEntities;
 
         // AABB Y-offset cache (meshPath -> -aabb.min.y)

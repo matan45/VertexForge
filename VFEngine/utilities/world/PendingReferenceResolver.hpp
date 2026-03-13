@@ -22,6 +22,9 @@ namespace world
 
     class PendingReferenceResolver
     {
+    private:
+        std::vector<PendingReference> pendingRefs;
+        std::vector<PendingReference> resolvedRefs;
     public:
         void addPendingReference(uint64_t sourceUUID, uint64_t targetUUID, ReferenceType type);
 
@@ -34,9 +37,7 @@ namespace world
         [[nodiscard]] size_t pendingCount() const { return pendingRefs.size(); }
         [[nodiscard]] size_t resolvedCount() const { return resolvedRefs.size(); }
 
-    private:
-        std::vector<PendingReference> pendingRefs;
-        std::vector<PendingReference> resolvedRefs;
+   
     };
 
 } // namespace world

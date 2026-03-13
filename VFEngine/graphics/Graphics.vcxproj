@@ -302,6 +302,10 @@
     <ClInclude Include="render\volumetric\VolumetricTemporalFilter.hpp" />
     <ClInclude Include="render\volumetric\VolumetricTypes.hpp" />
     <ClInclude Include="render\water\OceanFFT.hpp" />
+    <ClInclude Include="render\water\OceanFFTPipelines.hpp" />
+    <ClInclude Include="render\water\OceanFFTReadback.hpp" />
+    <ClInclude Include="render\water\OceanFFTResources.hpp" />
+    <ClInclude Include="render\water\OceanFFTTypes.hpp" />
     <ClInclude Include="render\water\WaterGPUTypes.hpp" />
     <ClInclude Include="render\water\WaterMeshBuffer.hpp" />
     <ClInclude Include="render\water\WaterPipeline.hpp" />
@@ -524,6 +528,9 @@
     <ClCompile Include="render\volumetric\VolumetricRayMarch.cpp" />
     <ClCompile Include="render\volumetric\VolumetricTemporalFilter.cpp" />
     <ClCompile Include="render\water\OceanFFT.cpp" />
+    <ClCompile Include="render\water\OceanFFTPipelines.cpp" />
+    <ClCompile Include="render\water\OceanFFTReadback.cpp" />
+    <ClCompile Include="render\water\OceanFFTResources.cpp" />
     <ClCompile Include="render\water\WaterMeshBuffer.cpp" />
     <ClCompile Include="render\water\WaterPipeline.cpp" />
   </ItemGroup>

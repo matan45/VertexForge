@@ -31,17 +31,10 @@ namespace resource {
 
 		void setReleaseCallback(ReleaseCallback callback);
 
-		void setGracePeriod(float seconds);
-		float getGracePeriod() const;
-
-		void setMaxReleasesPerFrame(uint32_t max);
-		uint32_t getMaxReleasesPerFrame() const;
-
 		AssetEntry getAssetEntry(const std::string& path) const;
 		std::vector<AssetEntry> getAllAssets() const;
 		std::vector<AssetEntry> getPendingReleases() const;
 
-		uint32_t getRefCount(const std::string& path) const;
 		bool isTracked(const std::string& path) const;
 
 		void clear();

@@ -189,7 +189,6 @@ namespace services
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
                 continue;
 
-            // SetBaseLayer operates per-tile: change the base palette layer and reset weights
             if (brushType == terrain::PaintBrushType::SetBaseLayer)
             {
                 uint8_t newBase = static_cast<uint8_t>(brushParams.activeLayer);
@@ -509,7 +508,6 @@ namespace services
                     continue;
             }
 
-            // Initialize density map if not yet created
             if (!tile->vegetationDensity.isInitialized())
                 tile->vegetationDensity.initializeDefault(tile->config.getVertexCount());
 

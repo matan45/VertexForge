@@ -130,11 +130,6 @@ namespace terrain
             const TerrainPhysicsConfig& physicsConfig = {},
             const TerrainStreamingConfig& streamingConfig = {});
 
-        static bool loadAll(
-            std::string_view path,
-            TerrainFileHeader& outHeader,
-            std::vector<TileLoadResult>& outTiles);
-
         static bool readHeader(
             std::string_view path,
             TerrainFileHeader& outHeader,

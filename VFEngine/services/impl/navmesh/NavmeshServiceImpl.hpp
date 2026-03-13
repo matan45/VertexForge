@@ -4,11 +4,9 @@
 #include "../../providers/navmesh/INavmeshProvider.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/EventTypes.hpp"
-#include "NavmeshStreamer.hpp"
-#include "navigation/NavmeshTileCache.hpp"
+#include "NavmeshTileManager.hpp"
+#include "NavmeshAgentManager.hpp"
 #include <future>
-#include <unordered_map>
-#include <unordered_set>
 #include <memory>
 
 namespace services
@@ -20,38 +18,8 @@ namespace services
         types::NavmeshBakeSettings lastBakeSettings;
         std::future<bool> bakeFuture;
 
-        std::unordered_map<uint64_t, int> entityToAgentIndex;
-
-        // Streaming (VK-777)
-        NavmeshStreamer streamer;
-        std::unique_ptr<navigation::NavmeshTileCache> tileCache;
-        glm::vec3 lastCameraPos{0.0f};
-
-        // Dirty tile tracking (VK-778)
-        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> dirtyTiles;
-        struct PendingTileBake
-        {
-            navigation::NavmeshTileCoord coord;
-            std::future<navigation::NavmeshTileData> future;
-        };
-        std::vector<PendingTileBake> pendingTileBakes;
-        static constexpr int MAX_TILE_BAKES_PER_FRAME = 2;
-
-        // Suspended agents (VK-779)
-        struct SuspendedAgent
-        {
-            uint64_t entityId;
-            glm::vec3 position;
-            glm::vec3 target;
-            bool hasTarget;
-        };
-        std::vector<SuspendedAgent> suspendedAgents;
-
-        // Event tokens
-        ::events::SubscriptionToken brushAppliedToken;
-        ::events::SubscriptionToken holeBrushAppliedToken;
-        ::events::SubscriptionToken tileAddedToken;
-        ::events::SubscriptionToken tileRemovedToken;
+        NavmeshTileManager tileManager;
+        NavmeshAgentManager agentManager;
 
     public:
         explicit NavmeshServiceImpl(INavmeshProvider* navmeshProvider);
@@ -88,13 +56,6 @@ namespace services
 
     private:
         void pollBakeCompletion();
-        void pollTileBakeCompletions();
-        void updateStreaming();
-        void processDirtyTiles();
-        void suspendAgentsOnUnloadedTiles(const std::vector<navigation::NavmeshTileCoord>& unloadedTiles);
-        void resumeAgentsOnLoadedTiles(const std::vector<navigation::NavmeshTileCoord>& loadedTiles);
-        void markTileDirty(int tileX, int tileZ);
-        navigation::NavmeshTileCoord worldToTileCoord(const glm::vec3& worldPos) const;
 
         void collectSceneGeometry(const types::NavmeshBakeSettings& settings,
                                   navigation::NavmeshInputGeometry& outGeometry);

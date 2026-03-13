@@ -115,8 +115,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "NavmeshBakeComplete"; }
     };
 
-    // === Per-Tile Events (VK-739) ===
-
     struct BakeTileCommand : ICommand<bool>
     {
         int tileX = 0;
@@ -142,7 +140,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "LoadNavmeshTiled"; }
     };
 
-    // Streaming config
     struct NavmeshStreamingConfig
     {
         float loadRadius = 512.0f;
@@ -173,7 +170,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "IsNavmeshStreamingEnabled"; }
     };
 
-    // Tile status
     enum class NavmeshTileStatus : uint8_t
     {
         NotBaked = 0,
@@ -194,7 +190,6 @@ namespace events::navmesh
         std::string_view getName() const override { return "GetNavmeshTileStatus"; }
     };
 
-    // Tile load/unload notifications
     struct NavmeshTileLoadedNotification : INotification
     {
         int tileX = 0;

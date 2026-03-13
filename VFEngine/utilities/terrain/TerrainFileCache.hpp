@@ -10,8 +10,16 @@ namespace terrain
 {
     class TerrainFileCache
     {
+    private:
+        std::string filePath;
+        TerrainFileHeader header;
+        std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash> indexMap;
+        std::unordered_set<TileCoord, TileCoordHash> dirtyCoords;
+        uint64_t indexTableOffset = 0;
+        bool tilesAddedOrRemoved = false;
+        size_t currentRAMUsage = 0;
     public:
-        TerrainFileCache(const std::string& filePath,
+        explicit TerrainFileCache(const std::string& filePath,
                          const TerrainFileHeader& header,
                          const std::vector<TileIndexEntry>& index,
                          uint64_t indexTableOffset = 0);
@@ -58,13 +66,6 @@ namespace terrain
         }
 
     private:
-        std::string filePath;
-        TerrainFileHeader header;
-        std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash> indexMap;
-        std::unordered_set<TileCoord, TileCoordHash> dirtyCoords;
-        uint64_t indexTableOffset = 0;
-        bool tilesAddedOrRemoved = false;
-        size_t currentRAMUsage = 0;
 
         [[nodiscard]] const TileIndexEntry* findIndex(const TileCoord& coord) const;
         [[nodiscard]] size_t estimateTileRAMUsage(const TerrainTile& tile) const;

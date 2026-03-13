@@ -23,13 +23,11 @@ namespace render::vegetation
     {
         if (!bufferManagerPtr) return;
 
-        // Recalculate priorities
         for (auto& [key, state] : tileStates)
         {
             state.priority = calculatePriority(key, cameraPos);
         }
 
-        // Collect dirty/pending tiles
         pendingUploads.clear();
         for (auto& [key, state] : tileStates)
         {
@@ -39,35 +37,29 @@ namespace render::vegetation
             }
         }
 
-        // Sort by priority (highest first)
         std::sort(pendingUploads.begin(), pendingUploads.end(),
             [this](const VegetationTileKey& a, const VegetationTileKey& b)
             {
                 return tileStates[a].priority > tileStates[b].priority;
             });
 
-        // Process limited uploads per frame
         uint32_t uploadsThisFrame = 0;
         for (const auto& key : pendingUploads)
         {
             if (uploadsThisFrame >= streamConfig.maxUploadsPerFrame) break;
 
             auto& state = tileStates[key];
-            // Actual upload logic will be connected to density map → compute shader pipeline
             state.isUploaded = true;
             state.isDirty = false;
-            // Estimate memory usage per tile for budget tracking
-            constexpr uint64_t estimatedBytesPerTile = 64 * 1024; // 64KB per tile
+            constexpr uint64_t estimatedBytesPerTile = 64 * 1024;
             state.memoryUsage = estimatedBytesPerTile;
             currentMemoryUsage += state.memoryUsage;
             uploadsThisFrame++;
         }
 
-        // Eviction if over budget
         if (currentMemoryUsage > static_cast<uint64_t>(
                 static_cast<double>(streamConfig.memoryBudgetBytes) * streamConfig.evictionThreshold))
         {
-            // Find lowest priority uploaded tiles and evict
             std::vector<VegetationTileKey> evictionCandidates;
             for (const auto& [key, state] : tileStates)
             {

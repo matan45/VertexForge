@@ -160,9 +160,7 @@ namespace services
             return false;
         }
 
-        bool result = serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
-
-        return result;
+        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);;
     }
 
     void ScenePersistenceService::update()

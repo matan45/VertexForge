@@ -27,14 +27,11 @@ namespace render::vegetation
     private:
         core::Device* devicePtr = nullptr;
 
-        // Shader (task + mesh + fragment combined)
         std::unique_ptr<core::Shader> grassShader;
 
-        // Pipeline resources
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Descriptor set layouts for grass-specific data
         vk::DescriptorSetLayout grassDataLayout;    // Set 0: instance buffer + count
         vk::DescriptorSetLayout cameraLayout;       // Set 1: camera UBO
         vk::DescriptorSetLayout windLayout;          // Set 2: wind UBO
@@ -42,7 +39,6 @@ namespace render::vegetation
         vk::DescriptorPool grassDataPool;
         vk::DescriptorSet grassDataDescriptorSet;
 
-        // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet cameraDescriptorSet;
         vk::DescriptorSet windDescriptorSet;
 
@@ -52,7 +48,6 @@ namespace render::vegetation
         GrassMeshShaderPipeline();
         ~GrassMeshShaderPipeline();
 
-        // Non-copyable
         GrassMeshShaderPipeline(const GrassMeshShaderPipeline&) = delete;
         GrassMeshShaderPipeline& operator=(const GrassMeshShaderPipeline&) = delete;
 

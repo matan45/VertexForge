@@ -116,11 +116,9 @@ namespace render
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
 
-            // Sync vegetation streaming with visible terrain tiles (grass) and all loaded tiles (trees)
             auto allLoadedTiles = terrainRenderProvider->getAllLoadedTiles();
             gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, allLoadedTiles, currentCameraPosition);
 
-            // Push grass render config from provider to renderer and update wind
             if (grassRenderProvider)
             {
                 auto grassConfig = grassRenderProvider->getGrassRenderConfig();
@@ -165,7 +163,6 @@ namespace render
             gpuDrivenRenderer->updateWater(visibleTiles, settings, tileConfig);
         }
 
-        // Sync ocean FFT state from service layer
         if (waterRenderProvider && gpuDrivenRenderer)
         {
             bool wantOcean = waterRenderProvider->isOceanFFTEnabled();
@@ -305,7 +302,6 @@ namespace render
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        // Set dynamic viewport/scissor for mesh shader pipelines
         auto extent = swapChain.getSwapchainExtent();
         vk::Viewport viewport{0.0f, 0.0f,
                                static_cast<float>(extent.width), static_cast<float>(extent.height),

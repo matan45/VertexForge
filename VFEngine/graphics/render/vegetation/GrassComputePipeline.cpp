@@ -85,31 +85,26 @@ namespace render::vegetation
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // Density map buffer info (binding 0)
         vk::DescriptorBufferInfo densityInfo{};
         densityInfo.buffer = densityMapBuffer;
         densityInfo.offset = 0;
         densityInfo.range = VK_WHOLE_SIZE;
 
-        // Height map buffer info (binding 1)
         vk::DescriptorBufferInfo heightInfo{};
         heightInfo.buffer = heightMapBuffer;
         heightInfo.offset = 0;
         heightInfo.range = VK_WHOLE_SIZE;
 
-        // Hole mask buffer info (binding 2)
         vk::DescriptorBufferInfo holeInfo{};
         holeInfo.buffer = holeMaskBuffer;
         holeInfo.offset = 0;
         holeInfo.range = VK_WHOLE_SIZE;
 
-        // Grass instance output buffer info (binding 3)
         vk::DescriptorBufferInfo instanceInfo{};
         instanceInfo.buffer = grassInstanceBuffer;
         instanceInfo.offset = 0;
         instanceInfo.range = VK_WHOLE_SIZE;
 
-        // Atomic counter buffer info (binding 4)
         vk::DescriptorBufferInfo counterInfo{};
         counterInfo.buffer = counterBuffer;
         counterInfo.offset = 0;
@@ -279,9 +274,4 @@ namespace render::vegetation
         vfLogInfo("GrassComputePipeline: Allocated descriptor set");
     }
 
-    void GrassComputePipeline::writeDescriptors()
-    {
-        // Descriptor writes are performed directly in updateDescriptors()
-        // since the header does not expose cached buffer members.
-    }
 }

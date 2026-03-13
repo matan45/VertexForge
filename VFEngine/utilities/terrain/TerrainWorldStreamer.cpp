@@ -30,11 +30,9 @@ namespace terrain
         float loadRadiusSq = config.loadRadius * config.loadRadius;
         float unloadRadiusSq = config.unloadRadius * config.unloadRadius;
 
-        // Reuse persistent buffers (clear without deallocating)
         loadCandidates.clear();
         unloadCandidates.clear();
 
-        // Collect load candidates: available on disk, not in grid, within load radius
         fileCache.forEachSavedCoord([&](const TileCoord& coord)
         {
             if (grid.hasTile(coord))
@@ -47,11 +45,10 @@ namespace terrain
             }
         });
 
-        // Collect unload candidates: in grid, beyond unload radius, not dirty
         grid.forEachTile([&](const TerrainTile& tile)
         {
             if (fileCache.isTileDirty(tile.coord))
-                return; // Never stream out tiles with unsaved modifications
+                return;
 
             float distSq = tileDistanceSq(tile.coord, cameraPos, worldTileSize);
             if (distSq > unloadRadiusSq)
@@ -60,14 +57,12 @@ namespace terrain
             }
         });
 
-        // Sort: load nearest first, unload farthest first
         std::sort(loadCandidates.begin(), loadCandidates.end(),
                   [](const Candidate& a, const Candidate& b) { return a.distSq < b.distSq; });
 
         std::sort(unloadCandidates.begin(), unloadCandidates.end(),
                   [](const Candidate& a, const Candidate& b) { return a.distSq > b.distSq; });
 
-        // Apply budget
         int loadCount = std::min(static_cast<int>(loadCandidates.size()), config.maxLoadsPerFrame);
         int unloadCount = std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame);
 

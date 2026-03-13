@@ -32,7 +32,6 @@ namespace services
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Param commands
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushParamsCommand>(
             [this](const events::meshBrush::SetMeshBrushParamsCommand& cmd)
             {
@@ -42,21 +41,18 @@ namespace services
                 publishParamsChanged();
             });
 
-        // Mode command
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushModeCommand>(
             [this](const events::meshBrush::SetMeshBrushModeCommand& cmd)
             {
                 currentMode = cmd.mode;
             });
 
-        // Selected entry command
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushSelectedEntryCommand>(
             [this](const events::meshBrush::SetMeshBrushSelectedEntryCommand& cmd)
             {
                 selectedPaletteIndex = cmd.selectedIndex;
             });
 
-        // Palette commands
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushPaletteCommand>(
             [this](const events::meshBrush::SetMeshBrushPaletteCommand& cmd)
             {
@@ -72,7 +68,6 @@ namespace services
                 palette = cmd.palette;
             });
 
-        // Apply brush
         dispatcher.registerCommandHandler<events::meshBrush::ApplyMeshBrushCommand>(
             [this](const events::meshBrush::ApplyMeshBrushCommand& cmd)
             {
@@ -82,7 +77,6 @@ namespace services
                 }
             });
 
-        // Queries
         dispatcher.registerQueryHandler<events::meshBrush::GetMeshBrushParamsQuery>(
             [this](const events::meshBrush::GetMeshBrushParamsQuery&)
             {
@@ -101,14 +95,12 @@ namespace services
                 return currentMode;
             });
 
-        // Subscribe to mode changes
         modeChangedToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
             {
                 meshBrushModeActive = n.isActive;
             });
 
-        // Clear on scene clear
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
@@ -211,7 +203,6 @@ namespace services
             candidatePos.x += jitterDist(rng) * currentParams.positionJitter * spacing;
             candidatePos.z += jitterDist(rng) * currentParams.positionJitter * spacing;
 
-            // Sample terrain height at this candidate's XZ position
             events::terrain::GetTerrainHeightAtQuery heightQuery;
             heightQuery.worldX = candidatePos.x;
             heightQuery.worldZ = candidatePos.z;
@@ -223,20 +214,16 @@ namespace services
                 continue;
             }
 
-            // Select palette entry
             uint32_t enabledIdx = paletteDist(rng);
             uint32_t paletteIdx = enabledIndices[enabledIdx];
             const auto& entry = palette[paletteIdx];
 
-            // Check slope
             float slopeAngle = std::acos(std::clamp(glm::dot(surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
             if (glm::degrees(slopeAngle) > entry.maxSlope) continue;
 
-            // Apply AABB + manual Y offset
             candidatePos.y += getAABBYOffset(entry.meshPath);
             candidatePos.y += entry.yOffset;
 
-            // Compute random transform
             std::uniform_real_distribution<float> scaleDist(entry.scaleRange.x, entry.scaleRange.y);
             float scale = scaleDist(rng);
 
@@ -271,24 +258,20 @@ namespace services
                 }
             }
 
-            // Get or create the group entity for this palette entry + sector
             auto groupEntity = ensureGroupEntity(paletteIdx, candidatePos);
 
             uint64_t instanceId = nextInstanceId++;
 
-            // Create individual mesh entity under the group
             events::scene::CreateEntityCommand createCmd;
             createCmd.name = "Brush_" + std::to_string(instanceId);
             auto entity = dispatcher.execute(createCmd);
             if (!entity.isValid()) continue;
 
-            // Parent under group
             events::scene::ReparentEntityCommand reparentCmd;
             reparentCmd.entity = entity;
             reparentCmd.newParent = groupEntity;
             dispatcher.execute(reparentCmd);
 
-            // Set transform (world-space position, parent group has identity transform)
             TransformData transform;
             transform.position = candidatePos;
             transform.rotation = rotation;
@@ -298,7 +281,6 @@ namespace services
             transformCmd.transform = transform;
             dispatcher.execute(transformCmd);
 
-            // Add mesh component
             events::scene::AddMeshComponentCommand meshCmd;
             meshCmd.entity = entity;
             dispatcher.execute(meshCmd);
@@ -310,7 +292,6 @@ namespace services
             meshDataCmd.meshData = meshData;
             dispatcher.execute(meshDataCmd);
 
-            // Apply material if specified
             if (!entry.materialPath.empty())
             {
                 events::material::AddMaterialComponentCommand matCmd;
@@ -323,10 +304,8 @@ namespace services
                 dispatcher.execute(defaultMatCmd);
             }
 
-            // Add collider if enabled
             if (entry.useCollider)
             {
-                // Compute collider size from mesh AABB
                 glm::vec3 colliderSize(0.5f);
                 glm::vec3 colliderOffset(0.0f);
                 events::render::GetMeshBoundingBoxQuery bbQuery;
@@ -386,7 +365,6 @@ namespace services
         {
             spatialGrid.remove(entry.entityId);
 
-            // Delete the individual mesh entity
             auto it = instanceEntities.find(entry.entityId);
             if (it != instanceEntities.end())
             {
@@ -412,7 +390,6 @@ namespace services
             if (registry.valid(entt)) return it->second;
         }
 
-        // Build group entity name from mesh filename + sector
         std::string meshLabel = "Group_" + std::to_string(paletteIdx);
         if (paletteIdx < palette.size() && !palette[paletteIdx].meshPath.empty())
         {

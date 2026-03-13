@@ -184,7 +184,6 @@ namespace render::vegetation
     {
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // Set 0: binding 0 = grass instance buffer, binding 1 = count buffer
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -230,15 +229,13 @@ namespace render::vegetation
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        // Store external layouts for recreate
         this->cameraLayout = cameraLayout;
         this->windLayout = windLayout;
 
-        // Pipeline layout: 3 descriptor sets + push constants
         std::array<vk::DescriptorSetLayout, 3> setLayouts = {
-            grassDataLayout,   // Set 0: instance buffer + count
-            cameraLayout,      // Set 1: camera UBO
-            windLayout         // Set 2: wind UBO
+            grassDataLayout,
+            cameraLayout,
+            windLayout
         };
 
         vk::PushConstantRange pushRange{};
@@ -256,17 +253,16 @@ namespace render::vegetation
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
-        // Create the mesh shader pipeline
         core::MeshShaderPipelineConfig config{};
         config.device = vkDevice;
         config.renderPass = renderPass;
-        config.extent = vk::Extent2D{1, 1}; // Using dynamic viewport/scissor
+        config.extent = vk::Extent2D{1, 1};
         config.shaderStages = grassShader->getShaderStages();
         config.existingPipelineLayout = pipelineLayout;
-        config.cullMode = vk::CullModeFlagBits::eNone; // Grass blades are double-sided
+        config.cullMode = vk::CullModeFlagBits::eNone;
         config.depthTestEnable = true;
         config.depthWriteEnable = true;
-        config.blendEnable = true; // Alpha blending for distance fade
+        config.blendEnable = true;
         config.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
         config.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
         config.srcAlphaBlendFactor = vk::BlendFactor::eOne;

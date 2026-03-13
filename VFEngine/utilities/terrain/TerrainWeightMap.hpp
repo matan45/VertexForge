@@ -7,7 +7,6 @@
 
 namespace terrain
 {
-    // Fixed 4 channels per tile. Each channel maps to a palette layer index via layerIndices.
     static constexpr uint8_t WEIGHT_CHANNELS = 4;
 
     struct TileWeightMapData
@@ -26,14 +25,10 @@ namespace terrain
         [[nodiscard]] float getWeight(uint32_t channel, uint32_t x, uint32_t z) const;
         void setWeight(uint32_t channel, uint32_t x, uint32_t z, float value);
 
-        // Normalize all channel weights at texel (x, z) so they sum to 1.0
         void normalizeAt(uint32_t x, uint32_t z);
         void normalizeAll();
-
-        // Initialize with default weights: channel 0 = 1.0, rest = 0.0
         void initializeDefault(uint32_t vertexResolution);
 
-        // Pack channel weights at texel (x, z) into RGBA (always 1 texture, channels 0-3)
         void packRGBA(uint32_t x, uint32_t z,
                       float& r, float& g, float& b, float& a) const;
 

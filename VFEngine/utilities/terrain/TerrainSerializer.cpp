@@ -11,7 +11,6 @@ namespace terrain
     namespace fs = std::filesystem;
     using namespace resource::endian;
 
-    // Safe wrapper for tellp() — returns false on stream error (tellp() returns -1)
     static bool safeTellp(std::ostream& file, uint64_t& outPos)
     {
         auto pos = file.tellp();
@@ -110,13 +109,11 @@ namespace terrain
             if (!safeTellp(file, outEntry.weightDataOffset))
                 return false;
 
-            // Write per-tile palette indices (4 bytes)
             for (uint8_t i = 0; i < WEIGHT_CHANNELS; ++i)
                 writeLE<uint8_t>(file, tile.weightMap.layerIndices[i]);
 
             writeLE(file, tile.weightMap.resolution);
 
-            // Always write exactly 4 channels
             for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
             {
                 if (ch < tile.weightMap.layerWeights.size())
@@ -144,7 +141,6 @@ namespace terrain
             if (!safeTellp(file, outEntry.holeMaskDataOffset))
                 return false;
 
-            // Bit-pack the hole mask: ceil(totalVertices / 8) bytes
             size_t totalVertices = tile.holeMask.size();
             uint32_t packedSize = static_cast<uint32_t>((totalVertices + 7) / 8);
             writeLE(file, static_cast<uint32_t>(totalVertices));
@@ -408,7 +404,6 @@ namespace terrain
                 return false;
             }
 
-            // Build sorted index from current map
             std::vector<TileIndexEntry> indexEntries;
             indexEntries.reserve(currentIndexMap.size());
             for (const auto& [coord, entry] : currentIndexMap)
@@ -420,7 +415,6 @@ namespace terrain
                     return a.coordZ < b.coordZ;
                 });
 
-            // Seek to end of file for appending dirty tile data
             file.seekp(0, std::ios::end);
 
             for (const auto& coord : dirtyCoords)

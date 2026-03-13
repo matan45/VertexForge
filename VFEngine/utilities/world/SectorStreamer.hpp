@@ -15,6 +15,18 @@ namespace world
 
     class SectorStreamer
     {
+    private:
+        struct Candidate
+        {
+            SectorCoord coord;
+            float distSq;
+        };
+
+        SectorStreamingConfig config;
+        bool enabled = false;
+
+        std::vector<Candidate> loadCandidates;
+        std::vector<Candidate> unloadCandidates;
     public:
         explicit SectorStreamer(const SectorStreamingConfig& config = {});
 
@@ -30,18 +42,6 @@ namespace world
         void setEnabled(bool value) { enabled = value; }
 
     private:
-        struct Candidate
-        {
-            SectorCoord coord;
-            float distSq;
-        };
-
-        SectorStreamingConfig config;
-        bool enabled = false;
-
-        std::vector<Candidate> loadCandidates;
-        std::vector<Candidate> unloadCandidates;
-
         [[nodiscard]] float sectorDistanceSq(const SectorCoord& coord, const glm::vec3& cameraPos,
                                               float sectorWorldSize) const;
     };

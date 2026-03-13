@@ -1,9 +1,7 @@
 #include "SceneSerialization.hpp"
-#include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 #include "../print/Log.hpp"
 
-// Helper to clean null terminators from strings
 static void cleanNullTerminators(std::string& str)
 {
     if (auto pos = str.find('\0'); pos != std::string::npos)

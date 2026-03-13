@@ -26,6 +26,18 @@ namespace water
 
     class WaterWorldStreamer
     {
+    private:
+        struct Candidate
+        {
+            TileCoord coord;
+            float distSq;
+        };
+
+        WaterStreamingConfig config;
+        bool enabled = false;
+
+        std::vector<Candidate> loadCandidates;
+        std::vector<Candidate> unloadCandidates;
     public:
         explicit WaterWorldStreamer(const WaterStreamingConfig& config = {});
 
@@ -43,17 +55,6 @@ namespace water
         void setEnabled(bool value) { enabled = value; }
 
     private:
-        struct Candidate
-        {
-            TileCoord coord;
-            float distSq;
-        };
-
-        WaterStreamingConfig config;
-        bool enabled = false;
-
-        std::vector<Candidate> loadCandidates;
-        std::vector<Candidate> unloadCandidates;
 
         [[nodiscard]] float tileDistanceSq(const TileCoord& coord, const glm::vec3& cameraPos,
                                            float worldTileSize) const;

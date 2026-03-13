@@ -196,8 +196,10 @@
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushServiceImpl.hpp" />
+    <ClInclude Include="impl\navmesh\NavmeshAgentManager.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshServiceImpl.hpp" />
     <ClInclude Include="impl\navmesh\NavmeshStreamer.hpp" />
+    <ClInclude Include="impl\navmesh\NavmeshTileManager.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsAnimationServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsPlayModeHandler.hpp" />
@@ -336,9 +338,11 @@
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushServiceImpl.cpp" />
+    <ClCompile Include="impl\navmesh\NavmeshAgentManager.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshGeometryCollector.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshStreamer.cpp" />
+    <ClCompile Include="impl\navmesh\NavmeshTileManager.cpp" />
     <ClCompile Include="impl\physics\ControllerServiceImpl.cpp" />
     <ClCompile Include="impl\physics\PhysicsAnimationServiceImpl.cpp" />
     <ClCompile Include="impl\physics\PhysicsPlayModeHandler.cpp" />
@@ -361,15 +365,22 @@
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
     <ClCompile Include="impl\scene\TerrainBrushOps.cpp" />
-    <ClCompile Include="impl\scene\TerrainLifecycleOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainColliderOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainCreationOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainDataIOOps.cpp" />
     <ClCompile Include="impl\scene\TerrainPersistenceOps.cpp" />
     <ClCompile Include="impl\scene\TerrainService.cpp" />
     <ClCompile Include="impl\scene\TerrainServiceHandlers.cpp" />
+    <ClCompile Include="impl\scene\TerrainStreamingOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainVisibilityOps.cpp" />
     <ClCompile Include="impl\scene\TransformComponentService.cpp" />
     <ClCompile Include="impl\scene\WaterBuoyancyOps.cpp" />
     <ClCompile Include="impl\scene\WaterLifecycleOps.cpp" />
     <ClCompile Include="impl\scene\WaterPersistenceOps.cpp" />
+    <ClCompile Include="impl\scene\WaterQueryOps.cpp" />
     <ClCompile Include="impl\scene\WaterService.cpp" />
+    <ClCompile Include="impl\scene\WaterStreamingOps.cpp" />
+    <ClCompile Include="impl\scene\WaterVisibilityOps.cpp" />
     <ClCompile Include="impl\scripting\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\BrushServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\HoleBrushServiceImpl.cpp" />
@@ -382,7 +393,9 @@
     <ClCompile Include="impl\vegetation\VegetationBrushServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
+    <ClCompile Include="impl\world\WorldSectorPersistenceOps.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
+    <ClCompile Include="impl\world\WorldSectorStreamingOps.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

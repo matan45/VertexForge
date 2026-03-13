@@ -12,8 +12,25 @@ namespace services
 {
     class NavmeshStreamer
     {
+    private:
+        struct Candidate
+        {
+            navigation::NavmeshTileCoord coord;
+            float distSq;
+        };
+
+        ::events::navmesh::NavmeshStreamingConfig config;
+        types::NavmeshBakeSettings bakeSettings;
+        bool enabled = false;
+
+        navigation::NavmeshTileCache* tileCache = nullptr;
+        INavmeshProvider* navmeshProvider = nullptr;
+
+        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> loadedTiles;
+        std::vector<Candidate> loadCandidates;
+        std::vector<Candidate> unloadCandidates;
     public:
-        NavmeshStreamer();
+        explicit NavmeshStreamer();
 
         void setConfig(const ::events::navmesh::NavmeshStreamingConfig& config);
         [[nodiscard]] const ::events::navmesh::NavmeshStreamingConfig& getConfig() const { return config; }
@@ -37,22 +54,6 @@ namespace services
         void clear();
 
     private:
-        struct Candidate
-        {
-            navigation::NavmeshTileCoord coord;
-            float distSq;
-        };
-
-        ::events::navmesh::NavmeshStreamingConfig config;
-        types::NavmeshBakeSettings bakeSettings;
-        bool enabled = false;
-
-        navigation::NavmeshTileCache* tileCache = nullptr;
-        INavmeshProvider* navmeshProvider = nullptr;
-
-        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> loadedTiles;
-        std::vector<Candidate> loadCandidates;
-        std::vector<Candidate> unloadCandidates;
 
         [[nodiscard]] float tileDistanceSq(const navigation::NavmeshTileCoord& coord,
                                             const glm::vec3& cameraPos) const;

@@ -132,6 +132,8 @@ namespace services
 
         void createTileEntities(EntityHandle parentEntity, water::WaterGrid& grid);
         void createTileEntity(EntityHandle parentHandle, water::WaterTile* tile, float tileSize);
+        bool rebuildFromFile(EntityHandle waterHandle);
+        void rebuildFromComponentData(EntityHandle waterHandle);
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
     };

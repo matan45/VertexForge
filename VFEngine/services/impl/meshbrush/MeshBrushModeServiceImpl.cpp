@@ -51,7 +51,6 @@ namespace services
                 return isActive();
             });
 
-        // Auto-deactivate when editor mode changes to Play
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {
@@ -61,7 +60,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when scene is cleared
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
@@ -71,7 +69,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when sculpt mode activates
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
@@ -81,7 +78,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when paint mode activates
         paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
             [this](const events::paint::PaintModeChangedNotification& n)
             {
@@ -91,7 +87,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when hole mode activates
         holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
             [this](const events::hole::HoleModeChangedNotification& n)
             {
@@ -101,7 +96,6 @@ namespace services
                 }
             });
 
-        // Auto-deactivate when vegetation mode activates
         vegetationModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
             [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
             {
@@ -121,7 +115,6 @@ namespace services
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Deactivate sculpt mode if active
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
         if (sculptActive)
         {
@@ -130,7 +123,6 @@ namespace services
             dispatcher.execute(cmd);
         }
 
-        // Deactivate paint mode if active
         bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
         if (paintActive)
         {
@@ -139,7 +131,6 @@ namespace services
             dispatcher.execute(cmd);
         }
 
-        // Deactivate hole mode if active
         bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
         if (holeActive)
         {
@@ -148,7 +139,6 @@ namespace services
             dispatcher.execute(cmd);
         }
 
-        // Deactivate vegetation mode if active
         bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
         if (vegActive)
         {
