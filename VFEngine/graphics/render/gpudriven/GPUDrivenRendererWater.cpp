@@ -5,6 +5,7 @@
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 #include <cstring>
+#include <chrono>
 
 namespace render::gpudriven
 {
@@ -43,6 +44,7 @@ namespace render::gpudriven
                                           const ::water::WaterGlobalSettings& settings,
                                           const ::water::WaterTileConfig& tileConfig)
     {
+        auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
@@ -83,10 +85,14 @@ namespace render::gpudriven
         water.cachedPushConstants.dudvTiling = settings.dudvTiling;
         water.cachedPushConstants.dudvStrength = settings.dudvStrength;
         water.cachedPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
+
+        auto updateEnd = std::chrono::high_resolution_clock::now();
+        water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
     }
 
     void GPUDrivenRenderer::renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
+        auto renderStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline || water.tileData.empty())
             return;
 
@@ -118,6 +124,9 @@ namespace render::gpudriven
                 ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{}
         };
         water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
+
+        auto renderEnd = std::chrono::high_resolution_clock::now();
+        water.renderUs = std::chrono::duration<float, std::micro>(renderEnd - renderStart).count();
     }
 
     void GPUDrivenRenderer::clearWaterData()
@@ -206,8 +215,11 @@ namespace render::gpudriven
             return;
         }
 
+        auto dispatchStart = std::chrono::high_resolution_clock::now();
         water.oceanFFT->dispatch(cmd, time);
         water.oceanFFT->insertBarrier(cmd);
+        auto dispatchEnd = std::chrono::high_resolution_clock::now();
+        water.dispatchUs = std::chrono::duration<float, std::micro>(dispatchEnd - dispatchStart).count();
     }
 
     void GPUDrivenRenderer::readbackOceanDisplacement()
@@ -215,7 +227,10 @@ namespace render::gpudriven
         if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
             return;
 
+        auto readbackStart = std::chrono::high_resolution_clock::now();
         water.oceanFFT->readbackDisplacementData();
+        auto readbackEnd = std::chrono::high_resolution_clock::now();
+        water.readbackUs = std::chrono::duration<float, std::micro>(readbackEnd - readbackStart).count();
     }
 
     float GPUDrivenRenderer::getOceanHeightAt(const glm::vec2& worldXZ) const

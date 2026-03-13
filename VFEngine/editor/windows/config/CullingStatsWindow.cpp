@@ -286,6 +286,24 @@ namespace windows
             }
             ImGui::Separator();
 
+            if (ImGui::CollapsingHeader("Water/Ocean Performance", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent();
+                const auto& w = stats.water;
+
+                float totalUs = w.readbackUs + w.dispatchUs + w.updateUs + w.renderUs;
+                ImGui::Text("CPU Frame Timings:");
+                ImGui::Text("  Readback (half->float): %.1f us (%.2f ms)", w.readbackUs, w.readbackUs / 1000.0f);
+                ImGui::Text("  FFT Dispatch (cmd rec): %.1f us (%.2f ms)", w.dispatchUs, w.dispatchUs / 1000.0f);
+                ImGui::Text("  Update (tile data):     %.1f us (%.2f ms)", w.updateUs, w.updateUs / 1000.0f);
+                ImGui::Text("  Render (draw cmd):      %.1f us (%.2f ms)", w.renderUs, w.renderUs / 1000.0f);
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                                   "  Total CPU:              %.1f us (%.2f ms)", totalUs, totalUs / 1000.0f);
+
+                ImGui::Unindent();
+            }
+            ImGui::Separator();
+
             if (ImGui::CollapsingHeader("BVH Statistics (CPU)", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();

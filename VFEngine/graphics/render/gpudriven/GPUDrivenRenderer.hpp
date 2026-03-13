@@ -139,6 +139,12 @@ namespace render::gpudriven
             // Ocean FFT
             std::unique_ptr<render::water::OceanFFT> oceanFFT;
             bool oceanEnabled = false;
+
+            // Timing (microseconds)
+            float readbackUs = 0.0f;
+            float dispatchUs = 0.0f;
+            float updateUs = 0.0f;
+            float renderUs = 0.0f;
         };
 
         struct VegetationState
@@ -528,6 +534,11 @@ namespace render::gpudriven
         float getTerrainStreamingUs() const { return terrain.streamingUs; }
         float getTerrainBuildTileDataUs() const { return terrain.buildTileDataUs; }
         float getTerrainUploadTileDataUs() const { return terrain.uploadTileDataUs; }
+
+        float getWaterReadbackUs() const { return water.readbackUs; }
+        float getWaterDispatchUs() const { return water.dispatchUs; }
+        float getWaterUpdateUs() const { return water.updateUs; }
+        float getWaterRenderUs() const { return water.renderUs; }
         const TerrainStreamingStats* getTerrainStreamingStats() const;
         TerrainCullingStats getTerrainCullingStats();
 

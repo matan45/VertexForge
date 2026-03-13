@@ -101,6 +101,13 @@ namespace services {
         size_t bytesUploadedThisFrame = 0;
     };
 
+    struct WaterDebugStats {
+        float readbackUs = 0.0f;
+        float dispatchUs = 0.0f;
+        float updateUs = 0.0f;
+        float renderUs = 0.0f;
+    };
+
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
@@ -117,6 +124,7 @@ namespace services {
 
         GPUDrivenDebugStats gpuDriven;
         TerrainDebugStats terrain;
+        WaterDebugStats water;
     };
 
     struct ShadowStats {

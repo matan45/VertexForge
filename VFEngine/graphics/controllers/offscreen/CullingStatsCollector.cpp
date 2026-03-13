@@ -125,6 +125,11 @@ namespace controllers::offscreen
                 stats.terrain.bytesUploadedThisFrame = streamStats->bytesUploadedThisFrame;
             }
 
+            stats.water.readbackUs = gpuDrivenRenderer->getWaterReadbackUs();
+            stats.water.dispatchUs = gpuDrivenRenderer->getWaterDispatchUs();
+            stats.water.updateUs = gpuDrivenRenderer->getWaterUpdateUs();
+            stats.water.renderUs = gpuDrivenRenderer->getWaterRenderUs();
+
             stats.gpuDriven.bvhLightCullingEnabled = gpuDrivenRenderer->isBVHLightCullingEnabled();
             stats.gpuDriven.hiZLightOcclusionEnabled = gpuDrivenRenderer->isLightOcclusionCullingEnabled();
             stats.gpuDriven.totalLights = gpuDrivenRenderer->getTotalSceneLights();
