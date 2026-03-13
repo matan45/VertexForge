@@ -28,6 +28,123 @@ namespace terrain
         return (it != tiles.end()) ? it->second.get() : nullptr;
     }
 
+    TerrainTile* TerrainGrid::addTile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it != tiles.end())
+        {
+            return it->second.get();
+        }
+
+        auto tile = generator->generateTile(coord);
+        TerrainTile* tilePtr = tile.get();
+        tiles.emplace(coord, std::move(tile));
+
+        updateNeighborReferences(*tilePtr);
+
+        // Mark new tile and its existing neighbors dirty so boundary normals regenerate
+        tilePtr->edgeSyncDirty = true;
+        tilePtr->setAllLODsDirty();
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tilePtr->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tilePtr->neighbors[i].coord);
+                if (neighbor)
+                {
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        return tilePtr;
+    }
+
+    TerrainTile* TerrainGrid::addTileFromFile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it != tiles.end())
+        {
+            return it->second.get();
+        }
+
+        auto tile = std::make_unique<TerrainTile>(coord, config);
+        tile->initializeMetadataOnly();
+        TerrainTile* tilePtr = tile.get();
+        tiles.emplace(coord, std::move(tile));
+
+        updateNeighborReferences(*tilePtr);
+
+        tilePtr->edgeSyncDirty = true;
+        tilePtr->setAllLODsDirty();
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tilePtr->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tilePtr->neighbors[i].coord);
+                if (neighbor)
+                {
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        return tilePtr;
+    }
+
+    bool TerrainGrid::removeTile(const TileCoord& coord)
+    {
+        auto it = tiles.find(coord);
+        if (it == tiles.end())
+        {
+            return false;
+        }
+
+        TerrainTile* tile = it->second.get();
+
+        // Clear neighbor references on adjacent tiles and mark them dirty
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            if (tile->neighbors[i].exists)
+            {
+                TerrainTile* neighbor = getTile(tile->neighbors[i].coord);
+                if (neighbor)
+                {
+                    TileEdge oppositeEdge = TileCoord::getOppositeEdge(static_cast<TileEdge>(i));
+                    neighbor->clearNeighbor(oppositeEdge);
+                    neighbor->edgeSyncDirty = true;
+                    neighbor->setAllLODsDirty();
+                }
+            }
+        }
+
+        tiles.erase(it);
+        return true;
+    }
+
+    void TerrainGrid::computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const
+    {
+        if (tiles.empty())
+        {
+            minX = minZ = maxX = maxZ = 0;
+            return;
+        }
+
+        auto it = tiles.begin();
+        minX = maxX = it->first.x;
+        minZ = maxZ = it->first.z;
+
+        for (++it; it != tiles.end(); ++it)
+        {
+            minX = std::min(minX, it->first.x);
+            maxX = std::max(maxX, it->first.x);
+            minZ = std::min(minZ, it->first.z);
+            maxZ = std::max(maxZ, it->first.z);
+        }
+    }
+
     TerrainTile* TerrainGrid::getOrCreateTile(const TileCoord& coord)
     {
         auto it = tiles.find(coord);
@@ -160,8 +277,8 @@ namespace terrain
             TerrainTile* neighbor = getTile(neighborCoord);
             if (neighbor)
             {
-                tile.setNeighbor(edge, neighborCoord, neighbor->currentLOD);
-                neighbor->setNeighbor(TileCoord::getOppositeEdge(edge), tile.coord, tile.currentLOD);
+                tile.setNeighbor(edge, neighborCoord);
+                neighbor->setNeighbor(TileCoord::getOppositeEdge(edge), tile.coord);
             }
             else
             {
@@ -176,43 +293,6 @@ namespace terrain
         {
             updateNeighborReferences(*tile);
         }
-    }
-
-    std::vector<TileCoord> TerrainGrid::updateLODs(const glm::vec3& cameraPosition)
-    {
-        std::vector<TileCoord> changedTiles;
-        changedTiles.reserve(tiles.size() / 4);
-
-        for (auto& [coord, tile] : tiles)
-        {
-            uint32_t newLOD = generator->calculateLOD(cameraPosition, *tile);
-            if (newLOD != tile->currentLOD)
-            {
-                tile->currentLOD = static_cast<uint8_t>(newLOD);
-                changedTiles.push_back(coord);
-            }
-        }
-
-        updateAllNeighborReferences();
-
-        for (auto& [coord, tile] : tiles)
-        {
-            generator->updateEdgeStitching(*tile);
-
-            if (tile->stitchingChanged())
-            {
-                tile->setAllLODsDirty();
-                tile->edgeSyncDirty = true;
-                tile->saveStitchState();
-
-                if (std::find(changedTiles.begin(), changedTiles.end(), coord) == changedTiles.end())
-                {
-                    changedTiles.push_back(coord);
-                }
-            }
-        }
-
-        return changedTiles;
     }
 
     std::vector<TerrainTile*> TerrainGrid::getAllTiles()
@@ -388,30 +468,13 @@ namespace terrain
         return !tiles.empty();
     }
 
-    void TerrainGrid::initializeWeightMaps(uint8_t layerCount)
+    void TerrainGrid::initializeWeightMaps()
     {
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->hasWeightMap())
             {
-                tile->initializeWeightMap(layerCount);
-            }
-        }
-    }
-
-    void TerrainGrid::updateWeightMapLayerCount(uint8_t newLayerCount)
-    {
-        for (auto& [coord, tile] : tiles)
-        {
-            if (tile->hasWeightMap())
-            {
-                tile->weightMap.setLayerCount(newLayerCount);
-                tile->weightMapDirty = true;
-                tile->weightMapGPUDirty = true;
-            }
-            else
-            {
-                tile->initializeWeightMap(newLayerCount);
+                tile->initializeWeightMap();
             }
         }
     }

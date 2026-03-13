@@ -326,10 +326,18 @@ namespace render::shadow
         if (!shadowsEnabled)
             return;
 
+        ++frameCounter;
+
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
+
+        // Sync static flags from ECS (handles checkbox toggles in editor)
+        updateStaticFlags();
+
+        // Reset per-frame cache stats
+        lastCacheStats = {};
 
         // Pre-collect entity data on main thread (EnTT registry is not thread-safe),
         // then dispatch pure computation in parallel.
@@ -351,6 +359,23 @@ namespace render::shadow
             auto entity = static_cast<entt::entity>(entityId);
             if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
                 continue;
+
+            // Track static light stats
+            if (data.isStatic)
+                ++lastCacheStats.totalStaticLights;
+
+            // Skip matrix computation for cached static point/spot lights
+            // (Directional CSM always needs update because cascades depend on camera position)
+            if (data.isStatic && data.shadowCached && data.type != ShadowMapType::DirectionalCSM)
+            {
+                // Mark all views as cached so the recorder skips them
+                for (auto& view : data.views)
+                    view.cached = true;
+
+                ++lastCacheStats.cachedShadowMaps;
+                ++lastCacheStats.skippedThisFrame;
+                continue;
+            }
 
             const auto& worldMatrix = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
 
@@ -376,6 +401,11 @@ namespace render::shadow
             {
                 directionalLights.push_back({&data, worldMatrix});
             }
+
+            // Mark views as not cached (will be rendered this frame)
+            for (auto& view : data.views)
+                view.cached = false;
+            ++lastCacheStats.renderedThisFrame;
         }
 
         auto f1 = threading::JobSystem::instance().submit(
@@ -400,6 +430,24 @@ namespace render::shadow
         f1.get();
         f2.get();
         f3.get();
+
+        // Mark static point/spot lights as cached after matrices are computed
+        // Require at least 2 rendered frames before caching, so the shadow map
+        // is fully rendered (first frame may have incomplete state)
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.isStatic && !data.shadowCached &&
+                data.settings.enabled && data.settings.castShadows &&
+                data.type != ShadowMapType::DirectionalCSM)
+            {
+                ++data.renderedFrameCount;
+                if (data.renderedFrameCount >= 2)
+                {
+                    data.shadowCached = true;
+                    data.lastRenderedFrame = frameCounter;
+                }
+            }
+        }
 
         collectShadowViewsForGPU(visibleLightIds);
     }
@@ -442,7 +490,8 @@ namespace render::shadow
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, terrainParams, atlasManager.get(), resourcePool.get(),
+        passRecorder->recordShadowPass(cmd, params, terrainParams,
+            atlasManager.get(), resourcePool.get(),
             shadowPassPipeline.get(), terrainShadowPipeline.get(),
             directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
     }
@@ -619,5 +668,92 @@ namespace render::shadow
 
         globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
         globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
+
+        // Apply shadow LOD settings
+        shadowLODConfig.enabled = settings.shadowLOD.enabled;
+        shadowLODConfig.tier0Distance = settings.shadowLOD.tier0Distance;
+        shadowLODConfig.tier1Distance = settings.shadowLOD.tier1Distance;
+        shadowLODConfig.tier2Distance = settings.shadowLOD.tier2Distance;
+        shadowLODConfig.tier0Resolution = settings.shadowLOD.tier0Resolution;
+        shadowLODConfig.tier1Resolution = settings.shadowLOD.tier1Resolution;
+        shadowLODConfig.tier2Resolution = settings.shadowLOD.tier2Resolution;
+        shadowLODConfig.staticTier0Distance = settings.shadowLOD.staticTier0Distance;
+        shadowLODConfig.staticTier1Distance = settings.shadowLOD.staticTier1Distance;
+        shadowLODConfig.staticTier2Distance = settings.shadowLOD.staticTier2Distance;
+    }
+
+    void ShadowSystem::applyShadowLODSettings(const ShadowLODConfig& config)
+    {
+        shadowLODConfig = config;
+    }
+
+    void ShadowSystem::updateShadowLOD(const glm::vec3& cameraPosition)
+    {
+        if (!initialized || !shadowLODConfig.enabled)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type == ShadowMapType::DirectionalCSM)
+            {
+                continue; // Directional lights always keep their resolution
+            }
+
+            auto entity = static_cast<entt::entity>(entityId);
+            if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
+            {
+                continue;
+            }
+
+            const auto& transform = registry.get<components::WorldTransformComponent>(entity);
+            glm::vec3 lightPos = glm::vec3(transform.worldMatrix[3]);
+            float distance = glm::distance(cameraPosition, lightPos);
+
+            uint32_t desiredResolution = data.isStatic
+                ? shadowLODConfig.getResolutionForStaticLight(distance)
+                : shadowLODConfig.getResolutionForDistance(distance);
+            bool shouldHaveShadow = data.isStatic
+                ? shadowLODConfig.shouldStaticHaveShadow(distance)
+                : shadowLODConfig.shouldHaveShadow(distance);
+
+            auto currentResIt = currentShadowResolutions.find(entityId);
+            uint32_t currentRes = (currentResIt != currentShadowResolutions.end())
+                ? currentResIt->second : data.settings.resolution;
+
+            // Track initial resolution so first LOD pass can trigger a change
+            if (currentResIt == currentShadowResolutions.end() && data.resourceHandle.isValid())
+            {
+                currentShadowResolutions[entityId] = currentRes;
+            }
+
+            if (!shouldHaveShadow && data.resourceHandle.isValid())
+            {
+                // Light too far, remove shadow
+                freeShadowMaps(data);
+                currentShadowResolutions.erase(entityId);
+                needsUpdate = true;
+            }
+            else if (shouldHaveShadow && desiredResolution != currentRes)
+            {
+                // Resolution change needed
+                if (data.resourceHandle.isValid())
+                {
+                    freeShadowMaps(data);
+                }
+
+                data.settings.resolution = desiredResolution;
+                if (allocateShadowMaps(data))
+                {
+                    currentShadowResolutions[entityId] = desiredResolution;
+                    data.settingsDirty = true;
+                    data.invalidateCache(); // Force re-render at new resolution
+                    needsUpdate = true;
+                }
+            }
+        }
     }
 }

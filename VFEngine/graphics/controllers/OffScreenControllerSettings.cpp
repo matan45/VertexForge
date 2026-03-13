@@ -6,6 +6,8 @@
 #include "../render/shadow/ShadowSystem.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
+#include "../render/gi/RadianceCascadeManager.hpp"
+#include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
@@ -50,11 +52,14 @@ namespace controllers
 
         gpuDriven->setGlobalLodBias(settings.culling.globalLodBias);
         gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
-        gpuDriven->setCategoryDistance(0, settings.distanceCulling.staticMeshDistance);
-        gpuDriven->setCategoryDistance(1, settings.distanceCulling.terrainDistance);
-        gpuDriven->setCategoryDistance(2, settings.distanceCulling.foliageDistance);
-        gpuDriven->setCategoryDistance(3, settings.distanceCulling.vfxDistance);
-        gpuDriven->setCategoryDistance(4, settings.distanceCulling.decalDistance);
+        using namespace render::gpudriven::ObjectCategory;
+        gpuDriven->setCategoryDistance(StaticMesh, settings.distanceCulling.staticMeshDistance);
+        gpuDriven->setCategoryDistance(Terrain, settings.distanceCulling.terrainDistance);
+        gpuDriven->setCategoryDistance(Foliage, settings.distanceCulling.foliageDistance);
+        gpuDriven->setCategoryDistance(VFX, settings.distanceCulling.vfxDistance);
+        gpuDriven->setCategoryDistance(Decals, settings.distanceCulling.decalDistance);
+        gpuDriven->setCategoryDistance(Billboard, settings.distanceCulling.billboardDistance);
+        gpuDriven->setCategoryDistance(Water, settings.distanceCulling.waterDistance);
         gpuDriven->setShadowDistanceMultiplier(settings.distanceCulling.shadowDistanceMultiplier);
 
         renderHandler->setVFXDistanceCullingEnabled(settings.distanceCulling.enabled);
@@ -109,6 +114,13 @@ namespace controllers
         auto quality = static_cast<types::ShadowQuality>(shadowSystem->getGlobalQuality());
         auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
         stats.pointResolution = atlasConfig.pointResolution;
+
+        // Shadow cache stats
+        auto cacheStats = shadowSystem->getShadowCacheStats();
+        stats.totalStaticLights = cacheStats.totalStaticLights;
+        stats.cachedShadowMaps = cacheStats.cachedShadowMaps;
+        stats.renderedThisFrame = cacheStats.renderedThisFrame;
+        stats.skippedThisFrame = cacheStats.skippedThisFrame;
 
         return stats;
     }
@@ -339,6 +351,15 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setBillboardRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setBillboardRenderingEnabled(enabled);
+        }
+    }
+
     void OffScreenController::setTerrainLODBias(float bias)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -399,6 +420,24 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setWaterRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setGrassRenderProvider(provider);
+        }
+    }
+
+    void OffScreenController::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setVegetationRenderProvider(provider);
         }
     }
 
@@ -464,4 +503,145 @@ namespace controllers
             handler->clearAdditionalWaterFrustums();
         }
     }
+
+    // ── GI Settings ──────────────────────────────────────────
+
+    void OffScreenController::applyGISettings(const render::gi::GISettings& settings)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            gpu->applyGISettings(settings);
+        }
+    }
+
+    render::gi::GISettings OffScreenController::getGISettings() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            return gpu->getGISettings();
+        }
+        return {};
+    }
+
+    render::gi::GIDebugStats OffScreenController::getGIDebugStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGICascadeManager())
+        {
+            return gpu->getGICascadeManager()->getDebugStats();
+        }
+        return {};
+    }
+
+    void OffScreenController::setGIShowProbes(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowProbes(show);
+        }
+    }
+
+    void OffScreenController::setGIShowCascadeBounds(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowCascadeBounds(show);
+        }
+    }
+
+    void OffScreenController::setGIShowProbeValidity(bool show)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getGIDebugRenderer())
+        {
+            gpu->getGIDebugRenderer()->setShowProbeValidity(show);
+        }
+    }
+
+    // ── Light Streaming Settings ──────────────────────────────
+
+    void OffScreenController::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->setConfig(config);
+        }
+    }
+
+    render::lighting::LightStreamingConfig OffScreenController::getLightStreamingConfig() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            return gpu->getLightStreamManager()->getConfig();
+        }
+        return {};
+    }
+
+    render::lighting::LightStreamingStats OffScreenController::getLightStreamingStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            return gpu->getLightStreamManager()->getStats();
+        }
+        return {};
+    }
+
+    void OffScreenController::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->registerSectorLights(sectorId, lightEntityIds);
+        }
+    }
+
+    void OffScreenController::unregisterSectorLights(uint32_t sectorId)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getLightStreamManager())
+        {
+            gpu->getLightStreamManager()->unregisterSectorLights(sectorId);
+        }
+    }
+
 }

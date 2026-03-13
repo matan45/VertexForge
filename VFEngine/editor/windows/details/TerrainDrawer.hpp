@@ -1,6 +1,8 @@
 #pragma once
 #include "data/EntityHandle.hpp"
+#include "data/TerrainData.hpp"
 #include "nfd/FileDialog.hpp"
+#include "threading/JobSystem.hpp"
 #include <future>
 #include <string>
 
@@ -11,6 +13,12 @@ namespace windows::details {
         bool draw(services::EntityHandle handle);
 
     private:
+        void drawInfo(const services::TerrainData& terrain);
+        void drawSaveLoad(services::EntityHandle handle, const services::TerrainData& terrain);
+        void drawGridExpansion(services::EntityHandle handle);
+        void drawStreaming(services::EntityHandle handle);
+        void drawPhysics(services::EntityHandle handle, const services::TerrainData& terrain);
+
         void startSave(services::EntityHandle handle, const std::string& path);
         void startSaveAs(services::EntityHandle handle);
         void startLoad();
@@ -21,6 +29,9 @@ namespace windows::details {
         std::string saveStatusMessage;
         int statusFrameCounter = 0;
         nfd::FileDialog fileDialog;
+
+        int pendingTileX = 0;
+        int pendingTileZ = 0;
     };
 
 }

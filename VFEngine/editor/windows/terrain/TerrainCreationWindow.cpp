@@ -17,8 +17,8 @@ namespace windows
             ImGui::Separator();
 
             ImGui::Text("Grid Size (Tiles):");
-            ImGui::SliderInt("Tiles X", &tilesX, 1, 16);
-            ImGui::SliderInt("Tiles Z", &tilesZ, 1, 16);
+            ImGui::SliderInt("Tiles X", &tilesX, 1, 100);
+            ImGui::SliderInt("Tiles Z", &tilesZ, 1, 100);
 
             int totalTiles = tilesX * tilesZ;
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Total tiles: %d", totalTiles);
@@ -44,17 +44,6 @@ namespace windows
             if (minHeight >= maxHeight)
             {
                 minHeight = maxHeight - 1.0f;
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::TreeNode("LOD Distances"))
-            {
-                ImGui::DragFloat("LOD 0 Distance", &lodDistances[0], 10.0f, 10.0f, 1000.0f, "%.0f");
-                ImGui::DragFloat("LOD 1 Distance", &lodDistances[1], 10.0f, 50.0f, 2000.0f, "%.0f");
-                ImGui::DragFloat("LOD 2 Distance", &lodDistances[2], 10.0f, 100.0f, 3000.0f, "%.0f");
-                ImGui::DragFloat("LOD 3 Distance", &lodDistances[3], 10.0f, 200.0f, 5000.0f, "%.0f");
-                ImGui::TreePop();
             }
 
             ImGui::Separator();
@@ -129,7 +118,6 @@ namespace windows
         maxHeight = 100.0f;
         minHeight = -10.0f;
         heightmapPath.clear();
-        lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
     }
 
     void TerrainCreationWindow::createTerrain()
@@ -142,11 +130,6 @@ namespace windows
         config.maxHeight = maxHeight;
         config.minHeight = minHeight;
         config.heightmapPath = heightmapPath;
-
-        for (int i = 0; i < 4; ++i)
-        {
-            config.lodDistances[i] = lodDistances[i];
-        }
 
         events::terrain::CreateTerrainCommand cmd;
         cmd.config = config;

@@ -286,6 +286,24 @@ namespace windows
             }
             ImGui::Separator();
 
+            if (ImGui::CollapsingHeader("Water/Ocean Performance", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent();
+                const auto& w = stats.water;
+
+                float totalUs = w.readbackUs + w.dispatchUs + w.updateUs + w.renderUs;
+                ImGui::Text("CPU Frame Timings:");
+                ImGui::Text("  Readback (half->float): %.1f us (%.2f ms)", w.readbackUs, w.readbackUs / 1000.0f);
+                ImGui::Text("  FFT Dispatch (cmd rec): %.1f us (%.2f ms)", w.dispatchUs, w.dispatchUs / 1000.0f);
+                ImGui::Text("  Update (tile data):     %.1f us (%.2f ms)", w.updateUs, w.updateUs / 1000.0f);
+                ImGui::Text("  Render (draw cmd):      %.1f us (%.2f ms)", w.renderUs, w.renderUs / 1000.0f);
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                                   "  Total CPU:              %.1f us (%.2f ms)", totalUs, totalUs / 1000.0f);
+
+                ImGui::Unindent();
+            }
+            ImGui::Separator();
+
             if (ImGui::CollapsingHeader("BVH Statistics (CPU)", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();
@@ -341,45 +359,9 @@ namespace windows
                         ImGui::TextColored(cam.bvhBuilt ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0.5f, 0, 1),
                                            cam.bvhBuilt ? "| BVH Built" : "| BVH Not Built");
 
-                        ImGui::Text("Occlusion:");
-                        ImGui::SameLine();
-                        if (!cam.occlusionEnabled)
-                        {
-                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "Disabled");
-                        }
-                        else if (!cam.occlusionInitialized)
-                        {
-                            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Not Initialized");
-                        }
-                        else
-                        {
-                            ImGui::TextColored(ImVec4(0, 1, 0, 1), "Active");
-                        }
-
                         ImGui::Separator();
 
                         ImGui::Text("Total Mesh Entities: %u", cam.totalMeshEntities);
-
-                        if (cam.occlusionInitialized && cam.occlusionEnabled)
-                        {
-                            ImGui::Text("After Frustum Cull:  %u", cam.visibleAfterFrustumCull);
-                            ImGui::Text("After Occlusion:     %u", cam.visibleAfterOcclusionCull);
-                            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "Occluded: %u", cam.occludedCount);
-
-                            if (cam.totalMeshEntities > 0)
-                            {
-                                float occlusionRate = static_cast<float>(cam.occludedCount) /
-                                                      static_cast<float>(cam.totalMeshEntities);
-                                ImGui::Text("Occlusion Rate:");
-                                ImGui::SameLine();
-                                ImGui::ProgressBar(occlusionRate, ImVec2(-1, 0),
-                                                   (std::to_string(static_cast<int>(occlusionRate * 100)) + "%").c_str());
-                            }
-                        }
-                        else
-                        {
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Occlusion stats not available");
-                        }
 
                         ImGui::Unindent();
                     }

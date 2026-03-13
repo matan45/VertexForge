@@ -154,6 +154,18 @@ namespace core
 			sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
 			destinationStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 		}
+		else if (oldLayout == eTransferSrcOptimal && newLayout == eShaderReadOnlyOptimal) {
+			barrier.srcAccessMask = eTransferRead;
+			barrier.dstAccessMask = eShaderRead;
+			sourceStage = vk::PipelineStageFlagBits::eTransfer;
+			destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+		}
+		else if (oldLayout == eUndefined && newLayout == eGeneral) {
+			barrier.srcAccessMask = eNone;
+			barrier.dstAccessMask = eShaderWrite | eShaderRead;
+			sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+			destinationStage = vk::PipelineStageFlagBits::eComputeShader;
+		}
 
 		commandBuffer.pipelineBarrier(
 			sourceStage, destinationStage,

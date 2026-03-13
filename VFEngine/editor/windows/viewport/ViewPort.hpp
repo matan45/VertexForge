@@ -31,6 +31,8 @@ namespace windows
 
         bool sculptDragging = false;
         bool paintDragging = false;
+        bool vegetationDragging = false;
+        bool meshBrushDragging = false;
 
     public:
         explicit ViewPort();
@@ -46,11 +48,16 @@ namespace windows
         void updateRendererCameras(const CameraState& camera);
         void handlePrefabDrop();
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void updateBrushCursors(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleSculptBrush();
         void updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handlePaintBrush();
         void updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleHoleBrush();
+        void updateVegetationCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleVegetationBrush();
+        void updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleMeshBrush();
     };
 }

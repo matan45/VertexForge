@@ -7,6 +7,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/billboard/BillboardPipeline.hpp"
+
 #include "../../render/text/TextTypes.hpp"
 #include "../../render/text/TextPipeline.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -17,6 +18,8 @@
 #include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
+#include "threading/JobSystem.hpp"
+
 
 namespace controllers::offscreen
 {
@@ -90,6 +93,15 @@ namespace controllers::offscreen
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
             if (ctx.playModeActive)
             {
+                // Pass frustum culling context to skip bone evaluation for off-screen entities
+                const auto& frustum = ctx.cameraController->getCurrentFrustum();
+                if (frustum.isInitialized())
+                {
+                    glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
+                    glm::vec3 cameraPos = glm::vec3(invView[3]);
+                    animatorSystem.setCullingContext(frustum, cameraPos);
+                }
+
                 animatorSystem.syncWithRegistry();
                 animatorSystem.updateAll(ctx.deltaTime);
             }
@@ -166,13 +178,6 @@ namespace controllers::offscreen
                                              : false;
             renderData.maxDrawDistance = meshComp.maxDrawDistance;
 
-            if (registry.all_of<components::LightmapComponent>(entity))
-            {
-                const auto& lmComp = registry.get<components::LightmapComponent>(entity);
-                renderData.lightmapPath = lmComp.lightmapPath;
-                renderData.lightmapScaleOffset = lmComp.atlasScaleOffset;
-            }
-
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
@@ -199,6 +204,85 @@ namespace controllers::offscreen
             return renderData;
         };
 
+        // Check if an entity can be instanced-batched with others sharing the same mesh+material.
+        // Entities with per-instance unique data (bounding box debug, animations) cannot be batched.
+        auto canBatch = [&](entt::entity entity, const render::mesh::MeshRenderData& rd) -> bool
+        {
+            if (rd.showBoundingBox) return false;
+            if (registry.all_of<components::AnimatorComponent>(entity)) return false;
+            return true;
+        };
+
+        // Batch key: meshPath + defaultMaterialPath + submesh material fingerprint + maxDrawDistance.
+        // maxDrawDistance is included because per-object distance override is stored in aabbMin.w of
+        // GPUObjectData, which is shared across all instances in the batch.
+        struct BatchKey
+        {
+            std::string meshPath;
+            std::string materialPath;
+            size_t submeshMaterialHash;
+            float maxDrawDistance;
+            bool operator==(const BatchKey& o) const
+            {
+                return meshPath == o.meshPath && materialPath == o.materialPath
+                    && submeshMaterialHash == o.submeshMaterialHash
+                    && maxDrawDistance == o.maxDrawDistance;
+            }
+        };
+        struct BatchKeyHash
+        {
+            size_t operator()(const BatchKey& k) const
+            {
+                size_t h = std::hash<std::string>{}(k.meshPath);
+                h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<float>{}(k.maxDrawDistance) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+
+        auto hashSubmeshMaterials = [](const std::unordered_map<std::string, render::mesh::SubMeshMaterialInfo>& mats) -> size_t
+        {
+            if (mats.empty()) return 0;
+            size_t h = 0;
+            for (const auto& [name, info] : mats)
+            {
+                size_t entry = std::hash<std::string>{}(name);
+                entry ^= std::hash<std::string>{}(info.materialPath) + 0x9e3779b9 + (entry << 6) + (entry >> 2);
+                h ^= entry;
+            }
+            return h;
+        };
+
+        std::unordered_map<BatchKey, size_t, BatchKeyHash> batchMap;
+
+        auto collectEntity = [&](entt::entity entity, const components::MeshComponent& meshComp,
+                                  const components::WorldTransformComponent& worldTransform)
+        {
+            auto renderData = buildRenderData(entity, meshComp, worldTransform);
+
+            if (canBatch(entity, renderData))
+            {
+                BatchKey key{renderData.meshPath, renderData.defaultMaterialPath,
+                             hashSubmeshMaterials(renderData.submeshMaterials),
+                             renderData.maxDrawDistance};
+                auto it = batchMap.find(key);
+                if (it != batchMap.end())
+                {
+                    meshDrawList[it->second].instanceTransforms.push_back(worldTransform.worldMatrix);
+                    return;
+                }
+
+                size_t idx = meshDrawList.size();
+                renderData.instanceTransforms.push_back(worldTransform.worldMatrix);
+                meshDrawList.push_back(std::move(renderData));
+                batchMap[key] = idx;
+                return;
+            }
+
+            meshDrawList.push_back(std::move(renderData));
+        };
+
         if (useGPUDrivenCulling)
         {
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
@@ -222,7 +306,7 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
         else if (ctx.bvhManager->isBuilt() && frustumReady)
@@ -256,7 +340,7 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
         else
@@ -291,7 +375,7 @@ namespace controllers::offscreen
                     }
                 }
 
-                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+                collectEntity(entity, meshComp, worldTransform);
             }
         }
 
@@ -310,23 +394,12 @@ namespace controllers::offscreen
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
-        ctx.bvhManager->updateOcclusionCullingData(renderHandler);
     }
 
-    void FramePreparationSystem::prepareBillboards(const FrameContext& ctx)
+    std::vector<render::billboard::BillboardRenderData> FramePreparationSystem::gatherBillboardData(
+        const FrameContext& ctx)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initBillboardPipeline();
-
-        if (!renderHandler->isBillboardPipelineInitialized())
-        {
-            renderHandler->setBillboardDrawList({});
-            return;
-        }
-
         bool showEditorIcons = !ctx.playModeActive && ctx.showBillboardIcons;
-
         std::vector<render::billboard::BillboardRenderData> billboardDrawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -346,13 +419,11 @@ namespace controllers::offscreen
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Editor-only billboards (debug icons) only show in editor mode
             if (billboard.editorOnly && !showEditorIcons)
             {
                 continue;
             }
 
-            // Non-editor billboards (custom textured) always render
             render::billboard::BillboardRenderData renderData;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
@@ -361,7 +432,7 @@ namespace controllers::offscreen
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
             renderData.texturePath = billboard.texturePath;
-            
+
             if (billboard.renderTextureSource != entt::null
                 && registry.valid(billboard.renderTextureSource)
                 && registry.all_of<components::RenderTextureComponent>(billboard.renderTextureSource))
@@ -376,21 +447,11 @@ namespace controllers::offscreen
             billboardDrawList.push_back(renderData);
         }
 
-        renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+        return billboardDrawList;
     }
 
-    void FramePreparationSystem::prepareText(const FrameContext& ctx)
+    std::vector<render::text::TextRenderData> FramePreparationSystem::gatherTextData(const FrameContext& ctx)
     {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initTextPipeline();
-
-        if (!renderHandler->isTextPipelineInitialized())
-        {
-            renderHandler->setTextDrawList({});
-            return;
-        }
-
         std::vector<render::text::TextRenderData> textDrawList;
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -430,6 +491,65 @@ namespace controllers::offscreen
             textDrawList.push_back(std::move(renderData));
         }
 
-        renderHandler->setTextDrawList(std::move(textDrawList));
+        return textDrawList;
+    }
+
+    void FramePreparationSystem::prepareBillboards(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initBillboardPipeline();
+
+        if (!renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->setBillboardDrawList({});
+            return;
+        }
+
+        renderHandler->setBillboardDrawList(gatherBillboardData(ctx));
+    }
+
+    void FramePreparationSystem::prepareText(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        renderHandler->initTextPipeline();
+
+        if (!renderHandler->isTextPipelineInitialized())
+        {
+            renderHandler->setTextDrawList({});
+            return;
+        }
+
+        renderHandler->setTextDrawList(gatherTextData(ctx));
+    }
+
+    void FramePreparationSystem::prepareSceneData(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        // Mesh preparation first - mutates ECS (animator, BVH), initializes mesh pipeline
+        prepareMeshes(ctx);
+
+        // Pipeline init must happen on the main thread (Vulkan state)
+        renderHandler->initBillboardPipeline();
+        renderHandler->initTextPipeline();
+
+        bool billboardReady = renderHandler->isBillboardPipelineInitialized();
+        bool textReady = renderHandler->isTextPipelineInitialized();
+
+        // Gather billboard and text data in parallel (read-only ECS queries)
+        auto& jobs = threading::JobSystem::instance();
+
+        auto billboardFuture = jobs.submit([&]() -> std::vector<render::billboard::BillboardRenderData> {
+            return billboardReady ? gatherBillboardData(ctx) : std::vector<render::billboard::BillboardRenderData>{};
+        }, threading::JobPriority::HIGH);
+
+        auto textFuture = jobs.submit([&]() -> std::vector<render::text::TextRenderData> {
+            return textReady ? gatherTextData(ctx) : std::vector<render::text::TextRenderData>{};
+        }, threading::JobPriority::HIGH);
+
+        renderHandler->setBillboardDrawList(billboardFuture.get());
+        renderHandler->setTextDrawList(textFuture.get());
     }
 }

@@ -8,6 +8,7 @@
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/VFXRibbonGPUPipeline.hpp"
+#include "../render/vfx/VFXEmitterPool.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
@@ -125,6 +126,8 @@ namespace controllers
         instance.worldTransform = params.worldTransform;
         instance.loop = params.loop;
         instance.entityId = params.entityId;
+        instance.priority = params.priority;
+        instance.cameraRelative = params.cameraRelative;
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())
@@ -138,23 +141,60 @@ namespace controllers
 
         if (gpuDrivenEnabled && gpuBufferManager)
         {
-            auto allocation = gpuBufferManager->allocateEmitter(
-                render::vfx::GPUVFXConstants::DEFAULT_PARTICLES_PER_EMITTER);
+            bool allocated = false;
 
-            if (allocation.emitterIndex != UINT32_MAX)
+            // Try pool first for fast allocation
+            if (emitterPool)
             {
-                instance.gpuDriven = true;
-                instance.gpuEmitterIndex = allocation.emitterIndex;
-                instance.gpuParticleOffset = allocation.particleOffset;
-                instance.gpuParticleCount = allocation.particleCount;
-                instance.active = false;
+                auto poolResult = emitterPool->acquire();
+                if (poolResult.valid())
+                {
+                    instance.gpuDriven = true;
+                    instance.gpuEmitterIndex = poolResult.emitterIndex;
+                    instance.gpuParticleOffset = poolResult.particleOffset;
+                    instance.gpuParticleCount = poolResult.particleCount;
+                    instance.active = false;
+                    allocated = true;
+                }
+            }
 
+            // Fallback to direct allocation
+            if (!allocated)
+            {
+                auto allocation = gpuBufferManager->allocateEmitter(
+                    render::vfx::GPUVFXConstants::DEFAULT_PARTICLES_PER_EMITTER);
+
+                if (allocation.emitterIndex == UINT32_MAX)
+                {
+                    // Try priority eviction: find lowest-priority emitter below this one's priority
+                    VFXInstanceId evictId = findLowestPriorityInstance(params.priority);
+                    if (evictId != 0)
+                    {
+                        vfLogInfo("Evicting lower-priority VFX instance {} to make room for new instance {}", evictId, id);
+                        destroyInstance(evictId);
+                        allocation = gpuBufferManager->allocateEmitter(
+                            render::vfx::GPUVFXConstants::DEFAULT_PARTICLES_PER_EMITTER);
+                    }
+                }
+
+                if (allocation.emitterIndex != UINT32_MAX)
+                {
+                    instance.gpuDriven = true;
+                    instance.gpuEmitterIndex = allocation.emitterIndex;
+                    instance.gpuParticleOffset = allocation.particleOffset;
+                    instance.gpuParticleCount = allocation.particleCount;
+                    instance.active = false;
+                }
+                else
+                {
+                    vfLogWarning("GPU allocation failed for VFX instance {}, using CPU fallback", id);
+                }
+            }
+
+            if (instance.gpuDriven)
+            {
                 vfLogInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
-            }
-            else
-            {
-                vfLogWarning("GPU allocation failed for VFX instance {}, using CPU fallback", id);
             }
         }
 
@@ -235,19 +275,26 @@ namespace controllers
         {
             if (it->second.gpuDriven)
             {
-                emitterIndexToInstanceId.erase(it->second.gpuEmitterIndex);
+                uint32_t emitterIdx = it->second.gpuEmitterIndex;
+                emitterIndexToInstanceId.erase(emitterIdx);
 
-                if (gpuBufferManager)
-                    pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
+                if (emitterPool)
+                {
+                    pendingEmitterFrees.emplace_back(emitterIdx, frameNumber);
+                }
+                else if (gpuBufferManager)
+                {
+                    pendingEmitterFrees.emplace_back(emitterIdx, frameNumber);
+                }
+
                 if (gpuMeshPipeline)
-                    gpuMeshPipeline->removeEmitter(it->second.gpuEmitterIndex);
+                    gpuMeshPipeline->removeEmitter(emitterIdx);
                 if (gpuRibbonPipeline)
-                    gpuRibbonPipeline->removeEmitter(it->second.gpuEmitterIndex);
+                    gpuRibbonPipeline->removeEmitter(emitterIdx);
             }
 
             instances.erase(it);
 
-            // Destroy any sub-emitters owned by this instance
             std::vector<VFXInstanceId> subToDestroy;
             for (auto& sub : activeSubEmitters)
             {
@@ -271,10 +318,18 @@ namespace controllers
             {
                 activeSubEmitters.clear();
                 pendingEmitterFrees.clear();
+                if (emitterPool)
+                {
+                    emitterPool->reset();
+                }
                 if (gpuBufferManager)
                 {
                     gpuBufferManager->resetParticleBufferClearedFlag();
                     gpuBufferManager->resetAllocator();
+                }
+                if (emitterPool && gpuBufferManager)
+                {
+                    emitterPool->warmUp();
                 }
             }
         }
@@ -289,12 +344,21 @@ namespace controllers
         instances.clear();
         emitterIndexToInstanceId.clear();
 
+        if (emitterPool)
+        {
+            emitterPool->reset();
+        }
+
         if (gpuBufferManager)
         {
             gpuBufferManager->resetParticleBufferClearedFlag();
             gpuBufferManager->resetAllocator();
         }
 
+        if (emitterPool && gpuBufferManager)
+        {
+            emitterPool->warmUp();
+        }
     }
 
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)
@@ -424,7 +488,14 @@ namespace controllers
             uint32_t framesPassed = frameNumber - destroyedFrame;
             if (framesPassed >= FRAMES_BEFORE_FREE)
             {
-                gpuBufferManager->freeEmitter(emitterIndex);
+                if (emitterPool)
+                {
+                    emitterPool->release(emitterIndex);
+                }
+                else
+                {
+                    gpuBufferManager->freeEmitter(emitterIndex);
+                }
                 it = pendingEmitterFrees.erase(it);
             }
             else
@@ -465,6 +536,8 @@ namespace controllers
         currentProjection = camera.projection;
         currentCameraPos = camera.cameraPos;
         currentTime = camera.time;
+
+        extractFrustumPlanes(currentProjection * currentView);
 
         if (cpuPipeline && cpuPipeline->isInitialized())
         {
@@ -567,6 +640,50 @@ namespace controllers
 
             collectedInstances.insert(collectedInstances.end(), particleData.begin(), particleData.end());
         }
+    }
+
+    VFXSceneRenderer::VFXBudgetStats VFXSceneRenderer::getBudgetStats() const
+    {
+        VFXBudgetStats stats{};
+
+        if (gpuBufferManager)
+        {
+            stats.activeEmitters = gpuBufferManager->getActiveEmitterCount();
+            stats.maxEmitters = gpuBufferManager->getMaxEmitters();
+            stats.allocatedParticles = gpuBufferManager->getAllocatedParticleCount();
+            stats.maxParticles = gpuBufferManager->getMaxParticles();
+            stats.fragmentationPercent = gpuBufferManager->getFragmentationPercent();
+        }
+
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.gpuDriven && instance.active && instance.currentLOD < 4)
+            {
+                stats.lodCounts[instance.currentLOD]++;
+            }
+        }
+
+        if (emitterPool)
+        {
+            stats.poolWarmSlots = emitterPool->getWarmSlotCount();
+            stats.poolUsedSlots = emitterPool->getUsedSlotCount();
+            stats.poolTotalSlots = emitterPool->getTotalSlotCount();
+        }
+
+        return stats;
+    }
+
+    VFXSceneRenderer::VFXLODConfig VFXSceneRenderer::getLODConfig() const
+    {
+        return {LOD0_DIST, LOD1_DIST, LOD2_DIST, LOD_TRANSITION_ZONE};
+    }
+
+    void VFXSceneRenderer::setLODConfig(const VFXLODConfig& config)
+    {
+        LOD0_DIST = config.lod0Distance;
+        LOD1_DIST = config.lod1Distance;
+        LOD2_DIST = config.lod2Distance;
+        LOD_TRANSITION_ZONE = config.transitionZone;
     }
 
     size_t VFXSceneRenderer::getTotalParticleCount() const

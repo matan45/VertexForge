@@ -1,19 +1,7 @@
 #include "PhysicsWorld.hpp"
-#include "PhysicsShapeFactory.hpp"
+#include "JoltConversions.hpp"
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Body/BodyLock.h>
-#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
-#include <Jolt/Physics/Collision/RayCast.h>
-#include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
-#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include "print/Log.hpp"
 
 #include <thread>
@@ -40,80 +28,6 @@ namespace core::physics
     }
 #endif
 
-    namespace
-    {
-        void removeAndDestroyBody(JPH::BodyInterface& bi, JPH::BodyID bodyId)
-        {
-            if (bi.IsAdded(bodyId)) bi.RemoveBody(bodyId);
-            bi.DestroyBody(bodyId);
-        }
-
-        template<typename Func>
-        float getMotionProp(const JPH::PhysicsSystem* ps, JPH::BodyID bodyId,
-                            Func&& getter, float defaultVal)
-        {
-            if (!ps || bodyId.IsInvalid()) return defaultVal;
-            JPH::BodyLockRead lock(ps->GetBodyLockInterface(), bodyId);
-            if (lock.Succeeded())
-            {
-                const auto* mp = lock.GetBody().GetMotionProperties();
-                if (mp) return getter(mp);
-            }
-            return defaultVal;
-        }
-
-        JPH::BodyCreationSettings buildRigidBodySettings(
-            const JPH::Ref<JPH::Shape>& shape, const RigidBodyCreateInfo& bodyInfo,
-            const ColliderCreateInfo& colliderInfo, uint64_t entityId)
-        {
-            uint8_t clampedLayer;
-            if (colliderInfo.collisionLayer < MAX_COLLISION_LAYERS)
-            {
-                clampedLayer = colliderInfo.collisionLayer;
-            }
-            else
-            {
-                clampedLayer = static_cast<uint8_t>(Layers::DYNAMIC);
-                vfLogWarning("Entity {}: Invalid collision layer {} (max: {}), defaulting to DYNAMIC ({})",
-                              entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
-            }
-
-            JPH::BodyCreationSettings settings(
-                shape,
-                toJoltR(bodyInfo.position),
-                toJolt(bodyInfo.rotation),
-                PhysicsShapeFactory::getMotionType(bodyInfo.type),
-                static_cast<JPH::ObjectLayer>(clampedLayer)
-            );
-
-            settings.mLinearVelocity = toJolt(bodyInfo.linearVelocity);
-            settings.mAngularVelocity = toJolt(bodyInfo.angularVelocity);
-            settings.mFriction = bodyInfo.friction;
-            settings.mRestitution = bodyInfo.restitution;
-            settings.mLinearDamping = bodyInfo.linearDamping;
-            settings.mAngularDamping = bodyInfo.angularDamping;
-            settings.mGravityFactor = 1.0f;
-            settings.mIsSensor = colliderInfo.isTrigger;
-            settings.mUserData = entityId;
-
-            if (bodyInfo.type == BodyType::Dynamic)
-            {
-                if (bodyInfo.mass > 0.0f)
-                {
-                    settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-                    settings.mMassPropertiesOverride.mMass = bodyInfo.mass;
-                }
-                else
-                {
-                    vfLogWarning("Entity {}: Invalid mass {} for dynamic body, using shape-calculated mass",
-                                  entityId, bodyInfo.mass);
-                }
-            }
-
-            return settings;
-        }
-    }
-
     PhysicsWorld::PhysicsWorld() = default;
 
     PhysicsWorld::~PhysicsWorld()
@@ -132,8 +46,6 @@ namespace core::physics
         JPH::AssertFailed = JoltAssertFailedImpl;
 #endif
 
-        // NOTE: Raw new/delete is required here because JPH::Factory::sInstance is a global
-        // static raw pointer that Jolt's type registration system depends on.
         JPH::Factory::sInstance = new JPH::Factory();
         JPH::RegisterTypes();
 
@@ -155,6 +67,18 @@ namespace core::physics
         physicsSystem->SetContactListener(contactListener.get());
         physicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
+        // Populate shared context
+        context.physicsSystem = physicsSystem.get();
+        context.tempAllocator = tempAllocator.get();
+        context.broadPhaseFilter = objectVsBroadPhaseFilter.get();
+        context.objectLayerFilter = objectLayerPairFilter.get();
+
+        // Initialize managers
+        rigidBodyManager.init(&context, &bodyRegistry);
+        terrainManager.init(&context);
+        ragdollManager.init(&context, &bodyRegistry);
+        characterManager.init(&context);
+
         initialized = true;
         vfLogInfo("Physics system initialized with {} threads", numThreads);
         return true;
@@ -164,39 +88,16 @@ namespace core::physics
     {
         if (!initialized) return;
 
+        ragdollManager.cleanUp();
+        characterManager.cleanUp();
+        terrainManager.cleanUp();
+
+        // Clean up remaining rigid bodies
         auto& bodyInterface = physicsSystem->GetBodyInterface();
-
-        for (auto& [entityId, ragdollData] : entityRagdolls)
-        {
-            if (ragdollData.ragdoll)
-            {
-                ragdollData.ragdoll->RemoveFromPhysicsSystem();
-            }
-        }
-        entityRagdolls.clear();
-
-        for (auto& [entityId, boneBodies] : entityBoneBodies)
-        {
-            for (auto& bodyId : boneBodies)
-            {
-                removeAndDestroyBody(bodyInterface, bodyId);
-            }
-        }
-        entityBoneBodies.clear();
-        bodyToBoneIndex.clear();
-
-        entityCharacters.clear();
-        entityCharacterLayers.clear();
-
-        for (auto& [entityId, bodyId] : entityToBody)
+        for (auto& [entityId, bodyId] : bodyRegistry.getAllEntityBodies())
             removeAndDestroyBody(bodyInterface, bodyId);
-        entityToBody.clear();
-
-        for (auto& [entityId, tileMap] : terrainBodies)
-            for (auto& [tileKey, bodyId] : tileMap)
-                removeAndDestroyBody(bodyInterface, bodyId);
-        terrainBodies.clear();
-        bodyToEntity.clear();
+        bodyRegistry.clear();
+        bodyRegistry.clearBoneIndices();
 
         contactListener.reset();
         physicsSystem.reset();
@@ -205,6 +106,8 @@ namespace core::physics
         broadPhaseLayerInterface.reset();
         jobSystem.reset();
         tempAllocator.reset();
+
+        context = PhysicsContext{};
 
         JPH::UnregisterTypes();
         delete JPH::Factory::sInstance;
@@ -235,297 +138,10 @@ namespace core::physics
         return glm::vec3(0.0f, -9.81f, 0.0f);
     }
 
-    JPH::BodyID PhysicsWorld::addRigidBody(uint64_t entityId, const RigidBodyCreateInfo& bodyInfo,
-                                           const ColliderCreateInfo& colliderInfo)
-    {
-        if (!initialized || !physicsSystem) return JPH::BodyID();
-
-        JPH::Ref<JPH::Shape> shape = PhysicsShapeFactory::createShape(colliderInfo);
-        if (!shape) return JPH::BodyID();
-
-        if (colliderInfo.offset.x != 0.0f || colliderInfo.offset.y != 0.0f || colliderInfo.offset.z != 0.0f)
-        {
-            shape = new JPH::RotatedTranslatedShape(
-                toJolt(colliderInfo.offset), JPH::Quat::sIdentity(), shape);
-        }
-
-        auto settings = buildRigidBodySettings(shape, bodyInfo, colliderInfo, entityId);
-
-        auto& bodyInterface = physicsSystem->GetBodyInterface();
-        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(settings, JPH::EActivation::Activate);
-
-        if (!bodyId.IsInvalid())
-        {
-            entityToBody[entityId] = bodyId;
-            bodyToEntity[bodyId.GetIndex()] = entityId;
-        }
-
-        return bodyId;
-    }
-
-    void PhysicsWorld::removeRigidBody(JPH::BodyID bodyId)
-    {
-        if (!initialized || !physicsSystem || bodyId.IsInvalid()) return;
-
-        auto& bodyInterface = physicsSystem->GetBodyInterface();
-
-        auto it = bodyToEntity.find(bodyId.GetIndex());
-        if (it != bodyToEntity.end())
-        {
-            entityToBody.erase(it->second);
-            bodyToEntity.erase(it);
-        }
-
-        removeAndDestroyBody(bodyInterface, bodyId);
-    }
-
-    void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
-    {
-        destroyKinematicBoneBodies(entityId);
-        destroyRagdoll(entityId);
-
-        auto it = entityToBody.find(entityId);
-        if (it != entityToBody.end()) removeRigidBody(it->second);
-    }
-
-    bool PhysicsWorld::hasEntityBody(uint64_t entityId) const
-    {
-        return entityToBody.find(entityId) != entityToBody.end();
-    }
-
-    glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return glm::vec3(0.0f);
-        return toGlmR(physicsSystem->GetBodyInterface().GetPosition(bodyId));
-    }
-
-    glm::quat PhysicsWorld::getRotation(JPH::BodyID bodyId) const
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        return toGlm(physicsSystem->GetBodyInterface().GetRotation(bodyId));
-    }
-
-    void PhysicsWorld::setPosition(JPH::BodyID bodyId, const glm::vec3& position)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().SetPosition(bodyId, toJoltR(position), JPH::EActivation::Activate);
-    }
-
-    void PhysicsWorld::setRotation(JPH::BodyID bodyId, const glm::quat& rotation)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().SetRotation(bodyId, toJolt(rotation), JPH::EActivation::Activate);
-    }
-
-    void PhysicsWorld::setLinearVelocity(JPH::BodyID bodyId, const glm::vec3& velocity)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().SetLinearVelocity(bodyId, toJolt(velocity));
-    }
-
-    glm::vec3 PhysicsWorld::getLinearVelocity(JPH::BodyID bodyId) const
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return glm::vec3(0.0f);
-        return toGlm(physicsSystem->GetBodyInterface().GetLinearVelocity(bodyId));
-    }
-
-    void PhysicsWorld::setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().SetAngularVelocity(bodyId, toJolt(velocity));
-    }
-
-    glm::vec3 PhysicsWorld::getAngularVelocity(JPH::BodyID bodyId) const
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return glm::vec3(0.0f);
-        return toGlm(physicsSystem->GetBodyInterface().GetAngularVelocity(bodyId));
-    }
-
-    BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return BodyType::Static;
-        auto motionType = physicsSystem->GetBodyInterface().GetMotionType(bodyId);
-        switch (motionType)
-        {
-        case JPH::EMotionType::Static: return BodyType::Static;
-        case JPH::EMotionType::Kinematic: return BodyType::Kinematic;
-        case JPH::EMotionType::Dynamic:
-        default: return BodyType::Dynamic;
-        }
-    }
-
-    float PhysicsWorld::getMass(JPH::BodyID bodyId) const
-    {
-        return getMotionProp(physicsSystem.get(), bodyId, [](const JPH::MotionProperties* mp) {
-            float inv = mp->GetInverseMass();
-            return inv > 0.0f ? 1.0f / inv : 0.0f;
-        }, 0.0f);
-    }
-
-    float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const
-    {
-        return getMotionProp(physicsSystem.get(), bodyId,
-            [](const auto* mp) { return mp->GetLinearDamping(); }, 0.05f);
-    }
-
-    float PhysicsWorld::getAngularDamping(JPH::BodyID bodyId) const
-    {
-        return getMotionProp(physicsSystem.get(), bodyId,
-            [](const auto* mp) { return mp->GetAngularDamping(); }, 0.05f);
-    }
-
     void PhysicsWorld::setCollisionMatrix(
         const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix)
     {
         if (objectLayerPairFilter) objectLayerPairFilter->setCollisionMatrix(matrix);
-    }
-
-    void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().AddForce(bodyId, toJolt(force));
-    }
-
-    void PhysicsWorld::applyForceAtPosition(JPH::BodyID bodyId, const glm::vec3& force,
-                                            const glm::vec3& position)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().AddForce(bodyId, toJolt(force), toJoltR(position));
-    }
-
-    void PhysicsWorld::applyImpulse(JPH::BodyID bodyId, const glm::vec3& impulse)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().AddImpulse(bodyId, toJolt(impulse));
-    }
-
-    void PhysicsWorld::applyTorque(JPH::BodyID bodyId, const glm::vec3& torque)
-    {
-        if (!physicsSystem || bodyId.IsInvalid()) return;
-        physicsSystem->GetBodyInterface().AddTorque(bodyId, toJolt(torque));
-    }
-
-    namespace
-    {
-        class LayerMaskFilter final : public JPH::ObjectLayerFilter
-        {
-        public:
-            explicit LayerMaskFilter(uint16_t mask) : mMask(mask) {}
-
-            bool ShouldCollide(JPH::ObjectLayer inLayer) const override
-            {
-                if (inLayer >= 16) return false;
-                return (mMask & (1u << inLayer)) != 0;
-            }
-
-        private:
-            uint16_t mMask;
-        };
-    }
-
-    RaycastResult PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                        float maxDistance, uint16_t layerMask) const
-    {
-        RaycastResult result;
-        if (!physicsSystem) return result;
-
-        glm::vec3 normalizedDir = glm::normalize(direction);
-        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
-        JPH::RayCastResult hit;
-
-        LayerMaskFilter layerFilter(layerMask);
-
-        if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit, {}, layerFilter))
-        {
-            result.hit = true;
-            result.distance = hit.mFraction * maxDistance;
-            result.point = origin + normalizedDir * result.distance;
-
-            auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
-            if (it != bodyToEntity.end())
-                result.entityId = it->second;
-
-            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
-            if (lock.Succeeded())
-            {
-                result.normal = toGlm(lock.GetBody().GetWorldSpaceSurfaceNormal(
-                    hit.mSubShapeID2, ray.GetPointOnRay(hit.mFraction)));
-            }
-            else
-            {
-                result.normal = -normalizedDir;
-            }
-        }
-
-        return result;
-    }
-
-    std::vector<RaycastResult> PhysicsWorld::raycastAll(const glm::vec3& origin, const glm::vec3& direction,
-                                                       float maxDistance, uint16_t layerMask) const
-    {
-        std::vector<RaycastResult> results;
-        if (!physicsSystem) return results;
-
-        glm::vec3 normalizedDir = glm::normalize(direction);
-        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
-
-        JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
-        JPH::RayCastSettings settings;
-        LayerMaskFilter layerFilter(layerMask);
-
-        physicsSystem->GetNarrowPhaseQuery().CastRay(ray, settings, collector, {}, layerFilter);
-
-        if (!collector.HadHit())
-            return results;
-
-        collector.Sort();
-
-        results.reserve(collector.mHits.size());
-        for (const auto& hit : collector.mHits)
-        {
-            RaycastResult result;
-            result.hit = true;
-            result.distance = hit.mFraction * maxDistance;
-            result.point = origin + normalizedDir * result.distance;
-
-            auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
-            if (it != bodyToEntity.end())
-                result.entityId = it->second;
-
-            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
-            if (lock.Succeeded())
-            {
-                result.normal = toGlm(lock.GetBody().GetWorldSpaceSurfaceNormal(
-                    hit.mSubShapeID2, ray.GetPointOnRay(hit.mFraction)));
-            }
-            else
-            {
-                result.normal = -normalizedDir;
-            }
-
-            results.push_back(result);
-        }
-
-        return results;
-    }
-
-    bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const
-    {
-        if (!physicsSystem || bodyA.IsInvalid() || bodyB.IsInvalid()) return false;
-        return physicsSystem->WereBodiesInContact(bodyA, bodyB);
-    }
-
-    JPH::BodyID PhysicsWorld::getBodyForEntity(uint64_t entityId) const
-    {
-        auto it = entityToBody.find(entityId);
-        return it != entityToBody.end() ? it->second : JPH::BodyID();
-    }
-
-    uint64_t PhysicsWorld::getEntityForBody(JPH::BodyID bodyId) const
-    {
-        if (bodyId.IsInvalid()) return 0;
-        auto it = bodyToEntity.find(bodyId.GetIndex());
-        return it != bodyToEntity.end() ? it->second : 0;
     }
 
     void PhysicsWorld::setContactAddedCallback(ContactCallback callback)
@@ -538,228 +154,148 @@ namespace core::physics
         if (contactListener) contactListener->setOnContactRemoved(std::move(callback));
     }
 
-    PhysicsWorld::TileCoordKey PhysicsWorld::makeTileKey(int32_t x, int32_t z)
+    // Entity-body mapping
+    JPH::BodyID PhysicsWorld::getBodyForEntity(uint64_t entityId) const
     {
-        return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32)
-             | static_cast<uint64_t>(static_cast<uint32_t>(z));
+        return bodyRegistry.getBodyForEntity(entityId);
     }
 
+    uint64_t PhysicsWorld::getEntityForBody(JPH::BodyID bodyId) const
+    {
+        return bodyRegistry.getEntityForBody(bodyId);
+    }
+
+    bool PhysicsWorld::hasEntityBody(uint64_t entityId) const
+    {
+        return bodyRegistry.hasEntity(entityId);
+    }
+
+    // Rigid body forwarding
+    JPH::BodyID PhysicsWorld::addRigidBody(uint64_t entityId, const RigidBodyCreateInfo& bodyInfo,
+                                           const ColliderCreateInfo& colliderInfo)
+    {
+        return rigidBodyManager.addRigidBody(entityId, bodyInfo, colliderInfo);
+    }
+
+    void PhysicsWorld::removeRigidBody(JPH::BodyID bodyId)
+    {
+        rigidBodyManager.removeRigidBody(bodyId);
+    }
+
+    void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
+    {
+        ragdollManager.destroyKinematicBoneBodies(entityId);
+        ragdollManager.destroyRagdoll(entityId);
+
+        auto bodyId = bodyRegistry.getBodyForEntity(entityId);
+        if (!bodyId.IsInvalid()) rigidBodyManager.removeRigidBody(bodyId);
+    }
+
+    glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const { return rigidBodyManager.getPosition(bodyId); }
+    glm::quat PhysicsWorld::getRotation(JPH::BodyID bodyId) const { return rigidBodyManager.getRotation(bodyId); }
+    void PhysicsWorld::setPosition(JPH::BodyID bodyId, const glm::vec3& position) { rigidBodyManager.setPosition(bodyId, position); }
+    void PhysicsWorld::setRotation(JPH::BodyID bodyId, const glm::quat& rotation) { rigidBodyManager.setRotation(bodyId, rotation); }
+
+    void PhysicsWorld::setLinearVelocity(JPH::BodyID bodyId, const glm::vec3& velocity) { rigidBodyManager.setLinearVelocity(bodyId, velocity); }
+    glm::vec3 PhysicsWorld::getLinearVelocity(JPH::BodyID bodyId) const { return rigidBodyManager.getLinearVelocity(bodyId); }
+    void PhysicsWorld::setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity) { rigidBodyManager.setAngularVelocity(bodyId, velocity); }
+    glm::vec3 PhysicsWorld::getAngularVelocity(JPH::BodyID bodyId) const { return rigidBodyManager.getAngularVelocity(bodyId); }
+
+    BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const { return rigidBodyManager.getBodyType(bodyId); }
+    float PhysicsWorld::getMass(JPH::BodyID bodyId) const { return rigidBodyManager.getMass(bodyId); }
+    float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const { return rigidBodyManager.getLinearDamping(bodyId); }
+    float PhysicsWorld::getAngularDamping(JPH::BodyID bodyId) const { return rigidBodyManager.getAngularDamping(bodyId); }
+
+    void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force) { rigidBodyManager.applyForce(bodyId, force); }
+    void PhysicsWorld::applyForceAtPosition(JPH::BodyID bodyId, const glm::vec3& force, const glm::vec3& position) { rigidBodyManager.applyForceAtPosition(bodyId, force, position); }
+    void PhysicsWorld::applyImpulse(JPH::BodyID bodyId, const glm::vec3& impulse) { rigidBodyManager.applyImpulse(bodyId, impulse); }
+    void PhysicsWorld::applyTorque(JPH::BodyID bodyId, const glm::vec3& torque) { rigidBodyManager.applyTorque(bodyId, torque); }
+
+    RaycastResult PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction,
+                                        float maxDistance, uint16_t layerMask) const
+    {
+        return rigidBodyManager.raycast(origin, direction, maxDistance, layerMask);
+    }
+
+    std::vector<RaycastResult> PhysicsWorld::raycastAll(const glm::vec3& origin, const glm::vec3& direction,
+                                                         float maxDistance, uint16_t layerMask) const
+    {
+        return rigidBodyManager.raycastAll(origin, direction, maxDistance, layerMask);
+    }
+
+    bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const
+    {
+        return rigidBodyManager.areBodiesInContact(bodyA, bodyB);
+    }
+
+    // Terrain forwarding
     JPH::BodyID PhysicsWorld::addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
                                                   const TerrainHeightFieldCreateInfo& info)
     {
-        if (!initialized || !physicsSystem || !info.heightSamples || info.sampleCount == 0)
-            return JPH::BodyID();
-
-        JPH::HeightFieldShapeSettings shapeSettings(
-            info.heightSamples,
-            JPH::Vec3(info.offset.x, info.offset.y, info.offset.z),
-            JPH::Vec3(info.scale.x, info.scale.y, info.scale.z),
-            info.sampleCount);
-
-        auto shapeResult = shapeSettings.Create();
-        if (!shapeResult.IsValid())
-        {
-            vfLogError("Failed to create HeightFieldShape for terrain tile ({}, {}): {}",
-                        tileX, tileZ, shapeResult.GetError().c_str());
-            return JPH::BodyID();
-        }
-
-        JPH::BodyCreationSettings bodySettings(
-            shapeResult.Get(), JPH::RVec3::sZero(), JPH::Quat::sIdentity(),
-            JPH::EMotionType::Static, static_cast<JPH::ObjectLayer>(info.collisionLayer));
-
-        bodySettings.mFriction = info.friction;
-        bodySettings.mRestitution = info.restitution;
-        bodySettings.mUserData = entityId;
-
-        auto& bodyInterface = physicsSystem->GetBodyInterface();
-        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
-
-        if (!bodyId.IsInvalid())
-        {
-            terrainBodies[entityId][makeTileKey(tileX, tileZ)] = bodyId;
-            bodyToEntity[bodyId.GetIndex()] = entityId;
-        }
-
-        return bodyId;
+        return terrainManager.addTerrainTileBody(entityId, tileX, tileZ, info);
     }
 
     void PhysicsWorld::removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ)
     {
-        if (!initialized || !physicsSystem) return;
-
-        auto entityIt = terrainBodies.find(entityId);
-        if (entityIt == terrainBodies.end()) return;
-
-        auto tileIt = entityIt->second.find(makeTileKey(tileX, tileZ));
-        if (tileIt == entityIt->second.end()) return;
-
-        JPH::BodyID bodyId = tileIt->second;
-        bodyToEntity.erase(bodyId.GetIndex());
-        removeAndDestroyBody(physicsSystem->GetBodyInterface(), bodyId);
-
-        entityIt->second.erase(tileIt);
-        if (entityIt->second.empty()) terrainBodies.erase(entityIt);
+        terrainManager.removeTerrainTileBody(entityId, tileX, tileZ);
     }
 
-    void PhysicsWorld::removeAllTerrainBodies(uint64_t entityId)
+    void PhysicsWorld::removeAllTerrainBodies(uint64_t entityId) { terrainManager.removeAllTerrainBodies(entityId); }
+    bool PhysicsWorld::hasTerrainBodies(uint64_t entityId) const { return terrainManager.hasTerrainBodies(entityId); }
+
+    JPH::BodyID PhysicsWorld::addStaticCapsule(const glm::vec3& position, float yRotation, float scale,
+                                                float radius, float height, uint8_t collisionLayer)
     {
-        if (!initialized || !physicsSystem) return;
-
-        auto entityIt = terrainBodies.find(entityId);
-        if (entityIt == terrainBodies.end()) return;
-
-        auto& bodyInterface = physicsSystem->GetBodyInterface();
-        for (auto& [tileKey, bodyId] : entityIt->second)
-        {
-            bodyToEntity.erase(bodyId.GetIndex());
-            removeAndDestroyBody(bodyInterface, bodyId);
-        }
-
-        terrainBodies.erase(entityIt);
+        return terrainManager.addStaticCapsule(position, yRotation, scale, radius, height, collisionLayer);
     }
 
-    bool PhysicsWorld::hasTerrainBodies(uint64_t entityId) const
+    void PhysicsWorld::addVegetationTileColliders(int32_t tileX, int32_t tileZ, const std::vector<JPH::BodyID>& bodyIds)
     {
-        auto it = terrainBodies.find(entityId);
-        return it != terrainBodies.end() && !it->second.empty();
+        terrainManager.addVegetationTileColliders(tileX, tileZ, bodyIds);
     }
 
-    bool PhysicsWorld::addCharacter(uint64_t entityId, const CharacterCreateInfo& info)
+    void PhysicsWorld::removeVegetationTileColliders(int32_t tileX, int32_t tileZ) { terrainManager.removeVegetationTileColliders(tileX, tileZ); }
+    void PhysicsWorld::removeAllVegetationColliders() { terrainManager.removeAllVegetationColliders(); }
+
+    // Ragdoll forwarding
+    bool PhysicsWorld::createRagdoll(uint64_t entityId, const RagdollBuildResult& buildResult) { return ragdollManager.createRagdoll(entityId, buildResult); }
+    void PhysicsWorld::destroyRagdoll(uint64_t entityId) { ragdollManager.destroyRagdoll(entityId); }
+    bool PhysicsWorld::hasRagdoll(uint64_t entityId) const { return ragdollManager.hasRagdoll(entityId); }
+    void PhysicsWorld::activateRagdoll(uint64_t entityId) { ragdollManager.activateRagdoll(entityId); }
+    void PhysicsWorld::deactivateRagdoll(uint64_t entityId) { ragdollManager.deactivateRagdoll(entityId); }
+    bool PhysicsWorld::getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const { return ragdollManager.getRagdollPose(entityId, outPose); }
+    void PhysicsWorld::applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse) { ragdollManager.applyRagdollImpulse(entityId, impulse); }
+    void PhysicsWorld::applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse) { ragdollManager.applyRagdollBoneImpulse(entityId, physicsBoneIndex, impulse); }
+
+    bool PhysicsWorld::createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult, const glm::vec3& entityPosition)
     {
-        if (!initialized || !physicsSystem) return false;
-        if (entityCharacters.count(entityId)) return false;
-
-        JPH::RefConst<JPH::Shape> characterShape;
-        switch (info.shape)
-        {
-        case types::ColliderShape::Sphere:
-            characterShape = new JPH::SphereShape(info.size.x);
-            break;
-        case types::ColliderShape::Box:
-            characterShape = new JPH::BoxShape(JPH::Vec3(info.size.x, info.size.y, info.size.z));
-            break;
-        case types::ColliderShape::Capsule:
-        default:
-        {
-            float radius = info.size.x;
-            float totalHeight = info.size.y;
-            float cylinderHalfHeight = (totalHeight * 0.5f) - radius;
-            if (cylinderHalfHeight < 0.01f) cylinderHalfHeight = 0.01f;
-            characterShape = new JPH::CapsuleShape(cylinderHalfHeight, radius);
-            break;
-        }
-        }
-
-        JPH::CharacterVirtualSettings settings;
-        settings.mShape = characterShape;
-        settings.mMaxSlopeAngle = JPH::DegreesToRadians(info.maxSlopeAngle);
-        settings.mMaxStrength = 100.0f;
-        settings.mMass = 70.0f;
-        settings.mPredictiveContactDistance = 0.1f;
-        settings.mPenetrationRecoverySpeed = 1.0f;
-        settings.mEnhancedInternalEdgeRemoval = true;
-
-        auto character = new JPH::CharacterVirtual(
-            &settings,
-            toJoltR(info.position),
-            toJolt(info.rotation),
-            entityId,
-            physicsSystem.get()
-        );
-
-        entityCharacters[entityId] = character;
-        entityCharacterLayers[entityId] = info.collisionLayer;
-
-        vfLogInfo("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
-                   entityId, info.position.x, info.position.y, info.position.z);
-        return true;
+        return ragdollManager.createKinematicBoneBodies(entityId, buildResult, entityPosition);
     }
 
-    void PhysicsWorld::removeCharacter(uint64_t entityId)
+    void PhysicsWorld::destroyKinematicBoneBodies(uint64_t entityId) { ragdollManager.destroyKinematicBoneBodies(entityId); }
+
+    void PhysicsWorld::updateKinematicBonePoses(uint64_t entityId, const std::vector<glm::mat4>& boneWorldTransforms,
+                                                 const std::vector<int>& physicsToAnimBoneIndex, float deltaTime)
     {
-        entityCharacters.erase(entityId);
-        entityCharacterLayers.erase(entityId);
+        ragdollManager.updateKinematicBonePoses(entityId, boneWorldTransforms, physicsToAnimBoneIndex, deltaTime);
     }
 
-    bool PhysicsWorld::hasCharacter(uint64_t entityId) const
+    void PhysicsWorld::transitionToRagdoll(uint64_t entityId, const JPH::SkeletonPose& currentPose) { ragdollManager.transitionToRagdoll(entityId, currentPose); }
+    void PhysicsWorld::transitionToKinematic(uint64_t entityId, const RagdollBuildResult& buildResult, const glm::vec3& entityPosition) { ragdollManager.transitionToKinematic(entityId, buildResult, entityPosition); }
+
+    // Character forwarding
+    bool PhysicsWorld::addCharacter(uint64_t entityId, const CharacterCreateInfo& info) { return characterManager.addCharacter(entityId, info); }
+    void PhysicsWorld::removeCharacter(uint64_t entityId) { characterManager.removeCharacter(entityId); }
+    bool PhysicsWorld::hasCharacter(uint64_t entityId) const { return characterManager.hasCharacter(entityId); }
+
+    CharacterUpdateResult PhysicsWorld::updateCharacter(uint64_t entityId, const glm::vec3& desiredVelocity,
+                                                         float deltaTime, const glm::vec3& gravity)
     {
-        return entityCharacters.count(entityId) > 0;
+        return characterManager.updateCharacter(entityId, desiredVelocity, deltaTime, gravity);
     }
 
-    CharacterUpdateResult PhysicsWorld::updateCharacter(uint64_t entityId,
-                                                         const glm::vec3& desiredVelocity,
-                                                         float deltaTime,
-                                                         const glm::vec3& gravity)
-    {
-        CharacterUpdateResult result;
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end() || !physicsSystem) return result;
-
-        auto* character = it->second.GetPtr();
-
-        character->SetLinearVelocity(toJolt(desiredVelocity));
-
-        JPH::CharacterVirtual::ExtendedUpdateSettings updateSettings;
-        updateSettings.mStickToFloorStepDown = JPH::Vec3(0.0f, -0.5f, 0.0f);
-        updateSettings.mWalkStairsStepUp = JPH::Vec3(0.0f, 0.4f, 0.0f);
-
-        auto layerIt = entityCharacterLayers.find(entityId);
-        JPH::ObjectLayer charLayer = static_cast<JPH::ObjectLayer>(
-            layerIt != entityCharacterLayers.end() ? layerIt->second : Layers::DYNAMIC);
-        JPH::DefaultBroadPhaseLayerFilter broadPhaseFilter(*objectVsBroadPhaseFilter, charLayer);
-        JPH::DefaultObjectLayerFilter objectLayerFilter(*objectLayerPairFilter, charLayer);
-        JPH::BodyFilter bodyFilter;
-        JPH::ShapeFilter shapeFilter;
-
-        character->ExtendedUpdate(
-            deltaTime,
-            toJolt(gravity),
-            updateSettings,
-            broadPhaseFilter,
-            objectLayerFilter,
-            bodyFilter,
-            shapeFilter,
-            *tempAllocator
-        );
-
-        result.position = toGlmR(character->GetPosition());
-        result.linearVelocity = toGlm(character->GetLinearVelocity());
-        result.groundNormal = toGlm(character->GetGroundNormal());
-        result.groundVelocity = toGlm(character->GetGroundVelocity());
-
-        auto groundState = character->GetGroundState();
-        result.isGrounded = (groundState == JPH::CharacterBase::EGroundState::OnGround);
-
-        return result;
-    }
-
-    bool PhysicsWorld::isCharacterGrounded(uint64_t entityId) const
-    {
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end()) return false;
-        return it->second->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
-    }
-
-    glm::vec3 PhysicsWorld::getCharacterPosition(uint64_t entityId) const
-    {
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end()) return glm::vec3(0.0f);
-        return toGlmR(it->second->GetPosition());
-    }
-
-    glm::vec3 PhysicsWorld::getCharacterLinearVelocity(uint64_t entityId) const
-    {
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end()) return glm::vec3(0.0f);
-        return toGlm(it->second->GetLinearVelocity());
-    }
-
-    void PhysicsWorld::setCharacterPosition(uint64_t entityId, const glm::vec3& position)
-    {
-        auto it = entityCharacters.find(entityId);
-        if (it == entityCharacters.end()) return;
-        it->second->SetPosition(toJoltR(position));
-    }
-
+    bool PhysicsWorld::isCharacterGrounded(uint64_t entityId) const { return characterManager.isCharacterGrounded(entityId); }
+    glm::vec3 PhysicsWorld::getCharacterPosition(uint64_t entityId) const { return characterManager.getCharacterPosition(entityId); }
+    glm::vec3 PhysicsWorld::getCharacterLinearVelocity(uint64_t entityId) const { return characterManager.getCharacterLinearVelocity(entityId); }
+    void PhysicsWorld::setCharacterPosition(uint64_t entityId, const glm::vec3& position) { characterManager.setCharacterPosition(entityId, position); }
 }

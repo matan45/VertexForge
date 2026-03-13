@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../services/providers/physics/IPhysicsProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 #include "../../physics/PhysicsWorld.hpp"
 #include "../../physics/FixedTimestep.hpp"
 #include "../../physics/RagdollSettingsBuilder.hpp"
@@ -76,6 +77,16 @@ namespace core
                                          const services::TerrainTileColliderInfo& tile) override;
         bool hasTerrainCollider(services::EntityHandle entity) const override;
 
+        void addTerrainTileCollider(services::EntityHandle entity,
+                                     const services::TerrainTileColliderInfo& tile) override;
+        void removeTerrainTileCollider(services::EntityHandle entity,
+                                        int32_t tileX, int32_t tileZ) override;
+
+        void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                         const std::vector<VegetationColliderInstance>& instances) override;
+        void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) override;
+        void removeAllVegetationColliders() override;
+
         void addWaterSensorBody(services::EntityHandle entity, const glm::vec3& position,
                                 const glm::vec3& halfExtents) override;
         void removeWaterSensorBody(services::EntityHandle entity) override;
@@ -124,6 +135,7 @@ namespace core
         void setCharacterPosition(services::EntityHandle entity, const glm::vec3& position) override;
 
     private:
+        events::SubscriptionToken assetReleaseToken;
         std::unordered_set<uint64_t> waterSensorEntities;
 
         struct PhysicsAnimationState

@@ -1,6 +1,6 @@
 #include "MeshStreamManager.hpp"
-#include "../gpudriven/MergedMeshBuffer.hpp"
-#include "../gpudriven/MeshletBuffer.hpp"
+#include "../gpudriven/scene/MergedMeshBuffer.hpp"
+#include "../gpudriven/scene/MeshletBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "resource/MeshletTypes.hpp"
@@ -44,6 +44,30 @@ namespace render::mesh
         state.referenceCount = 1;
         state.headerParsed = false;
         meshStates[meshPath] = std::move(state);
+    }
+
+    void MeshStreamManager::unrequestMesh(const std::string& meshPath)
+    {
+        std::lock_guard<std::mutex> lock(meshStatesMutex);
+
+        auto it = meshStates.find(meshPath);
+        if (it == meshStates.end())
+        {
+            return;
+        }
+
+        // Force-release: requestMesh is called per-frame so ref count is not a
+        // traditional acquire/release counter. Free GPU resources immediately.
+        if (meshletBuffer)
+        {
+            meshletBuffer->freeAllMeshlets(meshPath);
+        }
+        mergedBuffer.freeMesh(meshPath);
+
+        it->second.handle.reset();
+        meshStates.erase(it);
+
+        vfLogInfo("MeshStreamManager::unrequestMesh: Released '{}'", meshPath);
     }
 
     void MeshStreamManager::openMeshStream(const std::string& meshPath)

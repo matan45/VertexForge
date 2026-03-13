@@ -37,6 +37,15 @@ namespace core
                            const types::NavmeshBakeSettings& settings) override;
         types::NavmeshBakeProgress getBuildProgress() const override;
 
+        // === Tiled Navmesh ===
+        bool initTiledNavmesh(const types::NavmeshBakeSettings& settings,
+                               const glm::vec3& boundsMin, const glm::vec3& boundsMax) override;
+        navigation::NavmeshTileData buildSingleTile(int tx, int tz,
+                                                      const navigation::NavmeshInputGeometry& geometry,
+                                                      const types::NavmeshBakeSettings& settings) override;
+        bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
+        bool removeNavmeshTile(int tx, int tz) override;
+
         // === Serialization ===
         std::vector<navigation::NavmeshTileData> serializeNavmesh() const override;
         bool deserializeNavmesh(const navigation::NavmeshFileHeader& header,

@@ -21,6 +21,8 @@
 #include "../details/SpotLightDrawer.hpp"
 #include "../details/TerrainDrawer.hpp"
 #include "../details/TerrainTileDrawer.hpp"
+#include "../details/WaterDrawer.hpp"
+#include "../details/WaterTileDrawer.hpp"
 #include "../details/UICanvasDrawer.hpp"
 #include "../details/UIRectDrawer.hpp"
 #include "../details/UIImageDrawer.hpp"
@@ -39,8 +41,8 @@
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
-#include "../details/LightmapRootDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
+#include "../details/WorldSectorDrawer.hpp"
 #include "../details/AddComponentPopup.hpp"
 
 namespace windows
@@ -69,6 +71,8 @@ namespace windows
         details::SpotLightDrawer spotLightDrawer;
         details::TerrainDrawer terrainDrawer;
         details::TerrainTileDrawer terrainTileDrawer;
+        details::WaterDrawer waterDrawer;
+        details::WaterTileDrawer waterTileDrawer;
         details::UICanvasDrawer uiCanvasDrawer;
         details::UIRectDrawer uiRectDrawer;
         details::UIImageDrawer uiImageDrawer;
@@ -87,8 +91,8 @@ namespace windows
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;
-        details::LightmapRootDrawer lightmapRootDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
+        details::WorldSectorDrawer worldSectorDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

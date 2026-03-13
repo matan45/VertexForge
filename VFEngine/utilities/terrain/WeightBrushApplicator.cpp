@@ -1,4 +1,5 @@
 #include "WeightBrushApplicator.hpp"
+#include "TerrainMaterialTypes.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -11,7 +12,20 @@ namespace terrain
             return false;
         }
 
-        if (params.activeLayer >= weightMap.layerWeights.size())
+        // Resolve palette layer to channel via per-tile indirection
+        if (params.activeLayer >= MAX_TERRAIN_LAYERS)
+        {
+            return false;
+        }
+        uint8_t paletteLayer = static_cast<uint8_t>(params.activeLayer);
+        uint8_t channel = weightMap.findChannel(paletteLayer);
+        if (channel == 0xFF)
+        {
+            // Not yet assigned to this tile — assign it
+            channel = weightMap.assignChannel(paletteLayer);
+        }
+
+        if (channel >= weightMap.layerWeights.size())
         {
             return false;
         }
@@ -58,16 +72,16 @@ namespace terrain
                 switch (effectiveType)
                 {
                     case PaintBrushType::PaintLayer:
-                        paintLayer(weightMap, x, z, params.activeLayer, influence, params.overlayMask);
+                        paintLayer(weightMap, x, z, channel, influence);
                         break;
                     case PaintBrushType::EraseLayer:
-                        eraseLayer(weightMap, x, z, params.activeLayer, influence, params.overlayMask);
+                        eraseLayer(weightMap, x, z, channel, influence);
                         break;
                     case PaintBrushType::SmoothWeights:
-                        smoothWeights(weightMap, x, z, influence, params.overlayMask);
+                        smoothWeights(weightMap, x, z, influence);
                         break;
                     case PaintBrushType::FillLayer:
-                        fillLayer(weightMap, x, z, params.activeLayer, influence, params.overlayMask);
+                        fillLayer(weightMap, x, z, channel, influence);
                         break;
                 }
 
@@ -111,9 +125,9 @@ namespace terrain
 
     void WeightBrushApplicator::paintLayer(
         TileWeightMapData& wm, uint32_t x, uint32_t z,
-        uint32_t layer, float influence, uint16_t overlayMask)
+        uint32_t channel, float influence)
     {
-        float currentWeight = wm.getWeight(layer, x, z);
+        float currentWeight = wm.getWeight(channel, x, z);
         float newWeight = std::min(currentWeight + influence, 1.0f);
         float delta = newWeight - currentWeight;
 
@@ -122,46 +136,40 @@ namespace terrain
             return;
         }
 
-        wm.setWeight(layer, x, z, newWeight);
+        wm.setWeight(channel, x, z, newWeight);
 
-        // Overlay layers are independent - don't reduce other layers
-        if (isOverlay(overlayMask, layer))
+        // Decrease other channels proportionally to maintain sum = 1.0
+        float otherSum = 0.0f;
+        uint32_t channelCount = static_cast<uint32_t>(wm.layerWeights.size());
+        for (uint32_t i = 0; i < channelCount; ++i)
         {
-            return;
-        }
-
-        // Decrease only other BASE layers proportionally to maintain base sum = 1.0
-        float otherBaseSum = 0.0f;
-        uint32_t layerCount = static_cast<uint32_t>(wm.layerWeights.size());
-        for (uint32_t i = 0; i < layerCount; ++i)
-        {
-            if (i != layer && !isOverlay(overlayMask, i))
+            if (i != channel)
             {
-                otherBaseSum += wm.getWeight(i, x, z);
+                otherSum += wm.getWeight(i, x, z);
             }
         }
 
-        if (otherBaseSum > 0.001f)
+        if (otherSum > 0.001f)
         {
-            float scale = (otherBaseSum - delta) / otherBaseSum;
+            float scale = (otherSum - delta) / otherSum;
             scale = std::max(scale, 0.0f);
-            for (uint32_t i = 0; i < layerCount; ++i)
+            for (uint32_t i = 0; i < channelCount; ++i)
             {
-                if (i != layer && !isOverlay(overlayMask, i))
+                if (i != channel)
                 {
                     wm.setWeight(i, x, z, wm.getWeight(i, x, z) * scale);
                 }
             }
         }
 
-        wm.normalizeAt(x, z, overlayMask);
+        wm.normalizeAt(x, z);
     }
 
     void WeightBrushApplicator::eraseLayer(
         TileWeightMapData& wm, uint32_t x, uint32_t z,
-        uint32_t layer, float influence, uint16_t overlayMask)
+        uint32_t channel, float influence)
     {
-        float currentWeight = wm.getWeight(layer, x, z);
+        float currentWeight = wm.getWeight(channel, x, z);
         float newWeight = std::max(currentWeight - influence, 0.0f);
         float delta = currentWeight - newWeight;
 
@@ -170,36 +178,25 @@ namespace terrain
             return;
         }
 
-        wm.setWeight(layer, x, z, newWeight);
+        wm.setWeight(channel, x, z, newWeight);
 
-        // Overlay layers are independent - just reduce, no redistribution
-        if (isOverlay(overlayMask, layer))
+        // Redistribute removed weight to channel 0 (or 1 if erasing channel 0)
+        uint32_t fallbackChannel = (channel == 0) ? 1 : 0;
+        if (fallbackChannel < wm.layerWeights.size() && fallbackChannel != channel)
         {
-            return;
+            float fallbackWeight = wm.getWeight(fallbackChannel, x, z);
+            wm.setWeight(fallbackChannel, x, z, fallbackWeight + delta);
         }
 
-        // Redistribute removed weight to a base layer
-        uint32_t fallbackLayer = (layer == 0) ? 1 : 0;
-        // Ensure fallback is a base layer
-        if (isOverlay(overlayMask, fallbackLayer))
-        {
-            fallbackLayer = 0;
-        }
-        if (fallbackLayer < wm.layerWeights.size() && fallbackLayer != layer)
-        {
-            float fallbackWeight = wm.getWeight(fallbackLayer, x, z);
-            wm.setWeight(fallbackLayer, x, z, fallbackWeight + delta);
-        }
-
-        wm.normalizeAt(x, z, overlayMask);
+        wm.normalizeAt(x, z);
     }
 
     void WeightBrushApplicator::smoothWeights(
         TileWeightMapData& wm, uint32_t x, uint32_t z,
-        float influence, uint16_t overlayMask)
+        float influence)
     {
-        uint32_t layerCount = static_cast<uint32_t>(wm.layerWeights.size());
-        std::vector<float> avgWeights(layerCount, 0.0f);
+        uint32_t channelCount = static_cast<uint32_t>(wm.layerWeights.size());
+        std::vector<float> avgWeights(channelCount, 0.0f);
         float count = 0.0f;
 
         for (int dz = -1; dz <= 1; ++dz)
@@ -212,7 +209,7 @@ namespace terrain
                 if (nx >= 0 && nx < static_cast<int>(wm.resolution) &&
                     nz >= 0 && nz < static_cast<int>(wm.resolution))
                 {
-                    for (uint32_t i = 0; i < layerCount; ++i)
+                    for (uint32_t i = 0; i < channelCount; ++i)
                     {
                         avgWeights[i] += wm.getWeight(i, static_cast<uint32_t>(nx),
                                                        static_cast<uint32_t>(nz));
@@ -227,36 +224,31 @@ namespace terrain
             float invCount = 1.0f / count;
             float blendFactor = std::clamp(influence, 0.0f, 1.0f);
 
-            for (uint32_t i = 0; i < layerCount; ++i)
+            for (uint32_t i = 0; i < channelCount; ++i)
             {
                 float current = wm.getWeight(i, x, z);
                 float avg = avgWeights[i] * invCount;
                 wm.setWeight(i, x, z, current + (avg - current) * blendFactor);
             }
 
-            wm.normalizeAt(x, z, overlayMask);
+            wm.normalizeAt(x, z);
         }
     }
 
     void WeightBrushApplicator::fillLayer(
         TileWeightMapData& wm, uint32_t x, uint32_t z,
-        uint32_t layer, float influence, uint16_t overlayMask)
+        uint32_t channel, float influence)
     {
         float blendFactor = std::clamp(influence, 0.0f, 1.0f);
-        uint32_t layerCount = static_cast<uint32_t>(wm.layerWeights.size());
-        bool activeIsOverlay = isOverlay(overlayMask, layer);
+        uint32_t channelCount = static_cast<uint32_t>(wm.layerWeights.size());
 
-        for (uint32_t i = 0; i < layerCount; ++i)
+        for (uint32_t i = 0; i < channelCount; ++i)
         {
-            // Only fill among layers of the same type (base<->base, overlay<->overlay)
-            if (isOverlay(overlayMask, i) != activeIsOverlay)
-                continue;
-
             float current = wm.getWeight(i, x, z);
-            float target = (i == layer) ? 1.0f : 0.0f;
+            float target = (i == channel) ? 1.0f : 0.0f;
             wm.setWeight(i, x, z, current + (target - current) * blendFactor);
         }
 
-        wm.normalizeAt(x, z, overlayMask);
+        wm.normalizeAt(x, z);
     }
 }

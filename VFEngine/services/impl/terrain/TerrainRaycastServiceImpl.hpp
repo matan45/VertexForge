@@ -13,13 +13,18 @@ namespace services
         bool sculptModeActive = false;
         bool paintModeActive = false;
         bool holeModeActive = false;
-
+        bool vegBrushModeActive = false;
+        bool meshBrushModeActive = false;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
         ::events::SubscriptionToken holeModeToken;
         ::events::SubscriptionToken brushParamsToken;
         ::events::SubscriptionToken paintBrushParamsToken;
         ::events::SubscriptionToken holeBrushParamsToken;
+        ::events::SubscriptionToken vegBrushModeToken;
+        ::events::SubscriptionToken vegBrushParamsToken;
+        ::events::SubscriptionToken meshBrushModeToken;
+        ::events::SubscriptionToken meshBrushParamsToken;
 
     public:
         explicit TerrainRaycastServiceImpl(ITerrainRaycastProvider* provider);

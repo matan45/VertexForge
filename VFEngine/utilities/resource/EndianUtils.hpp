@@ -80,24 +80,25 @@ namespace resource::endian
     }
 
     // Endian-safe file I/O functions
+    // Uses std::ostream/std::istream so both ofstream and fstream work.
     template<typename T>
-    inline void writeLE(std::ofstream& file, T value)
+    inline void writeLE(std::ostream& file, T value)
     {
         T leValue = toLittleEndian(value);
         file.write(reinterpret_cast<const char*>(&leValue), sizeof(T));
     }
 
-    template<typename T> 
-    inline T readLE(std::ifstream& file)
+    template<typename T>
+    inline T readLE(std::istream& file)
     {
-        T value;
+        T value{};
         file.read(reinterpret_cast<char*>(&value), sizeof(T));
         return fromLittleEndian(value);
     }
 
     // Vector writing/reading for bulk data
     template<typename T>
-    inline void writeVectorLE(std::ofstream& file, const std::vector<T>& vec)
+    inline void writeVectorLE(std::ostream& file, const std::vector<T>& vec)
     {
         if constexpr (std::endian::native == std::endian::little)
         {
@@ -115,10 +116,10 @@ namespace resource::endian
     }
 
     template<typename T>
-    inline void readVectorLE(std::ifstream& file, std::vector<T>& vec, size_t count)
+    inline void readVectorLE(std::istream& file, std::vector<T>& vec, size_t count)
     {
         vec.resize(count);
-        
+
         if constexpr (std::endian::native == std::endian::little)
         {
             // Fast path: direct read on little-endian systems
@@ -126,7 +127,7 @@ namespace resource::endian
         }
         else
         {
-            // Slow path: convert each element on big-endian systems  
+            // Slow path: convert each element on big-endian systems
             for (size_t i = 0; i < count; ++i)
             {
                 vec[i] = readLE<T>(file);

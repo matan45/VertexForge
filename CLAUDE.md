@@ -180,7 +180,7 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 
 ## Custom Asset Formats
 
-`.vfImage`, `.vfHdr`, `.vfMesh`, `.vfAudio`, `.vfAnim` - Binary formats for engine-processed assets.
+`.vfImage`, `.vfHdr`, `.vfMesh`, `.vfAudio`, `.vfAnim`, `.vfImposter` - Binary formats for engine-processed assets.
 
 ## Adding New Features
 

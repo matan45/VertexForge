@@ -206,6 +206,11 @@ namespace render
             gpuRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet, width, height);
         }
 
+        if (gpuRenderer->isGrassRenderingEnabled())
+        {
+            gpuRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet, width, height);
+        }
+
         if (gpuRenderer->isWaterRenderingEnabled())
         {
             gpuRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
@@ -300,6 +305,13 @@ namespace render
     {
         if (lastRenderedImageIndex < offscreenResources.colorImages.size())
             return offscreenResources.colorImages[lastRenderedImageIndex].colorImageView;
+        return {};
+    }
+
+    vk::Image RenderTextureViewPort::getLastRenderedImage() const
+    {
+        if (lastRenderedImageIndex < offscreenResources.colorImages.size())
+            return offscreenResources.colorImages[lastRenderedImageIndex].colorImage;
         return {};
     }
 
@@ -462,7 +474,8 @@ namespace render
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
         imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment
                              | vk::ImageUsageFlagBits::eSampled
-                             | vk::ImageUsageFlagBits::eTransferDst;
+                             | vk::ImageUsageFlagBits::eTransferDst
+                             | vk::ImageUsageFlagBits::eTransferSrc;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());

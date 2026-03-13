@@ -12,7 +12,7 @@
 #include "ui/UITextPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "transparency/WBOITPipeline.hpp"
@@ -21,6 +21,8 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
+#include "../../services/providers/vegetation/IVegetationRenderProvider.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "material/MaterialTypes.hpp"
 
@@ -49,6 +51,12 @@ namespace render
         if (materialChangeCallbackId)
         {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+
+        if (oceanFFTInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanupOceanFFT();
+            oceanFFTInitialized = false;
         }
     }
 
@@ -316,6 +324,41 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+    {
+        grassRenderProvider = provider;
+        if (provider && gpuDrivenRenderer)
+        {
+            auto* renderer = gpuDrivenRenderer.get();
+            provider->setAddTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->addVegetationTile(x, z);
+            });
+            provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->removeVegetationTile(x, z);
+            });
+            provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) {
+                renderer->markVegetationTileDirty(x, z);
+            });
+        }
+    }
+
+    void RenderPassHandler::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+    {
+        if (provider && gpuDrivenRenderer)
+        {
+            auto* renderer = gpuDrivenRenderer.get();
+            provider->setAddTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->addVegetationTile(x, z);
+            });
+            provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) {
+                renderer->removeVegetationTile(x, z);
+            });
+            provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) {
+                renderer->markVegetationTileDirty(x, z);
+            });
+        }
+    }
+
     void RenderPassHandler::setWaterRenderProvider(services::IWaterRenderProvider* provider)
     {
         waterRenderProvider = provider;
@@ -326,6 +369,30 @@ namespace render
         if (gpuDrivenRenderer)
         {
             gpuDrivenRenderer->clearTerrainData();
+        }
+    }
+
+    void RenderPassHandler::evictTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->evictTerrainTile(coordX, coordZ);
+        }
+    }
+
+    void RenderPassHandler::setSelectedTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setSelectedTerrainTile(coordX, coordZ);
+        }
+    }
+
+    void RenderPassHandler::clearSelectedTerrainTile()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearSelectedTerrainTile();
         }
     }
 
@@ -344,6 +411,22 @@ namespace render
         if (gpuDrivenRenderer)
         {
             gpuDrivenRenderer->clearWaterData();
+        }
+    }
+
+    void RenderPassHandler::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setSelectedWaterTile(coordX, coordZ);
+        }
+    }
+
+    void RenderPassHandler::clearSelectedWaterTile()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearSelectedWaterTile();
         }
     }
 

@@ -17,6 +17,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace core
@@ -53,11 +55,6 @@ namespace render
     class ClearColor;
     class IBL;
     class DebugRenderer;
-
-    namespace occlusion
-    {
-        struct GPUObjectData;
-    }
 
     namespace mesh
     {
@@ -147,6 +144,10 @@ namespace render
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IWaterRenderProvider* waterRenderProvider = nullptr;
+        services::IGrassRenderProvider* grassRenderProvider = nullptr;
+
+        mutable uint32_t lastOceanConfigVersion = 0;
+        mutable bool oceanFFTInitialized = false;
 
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
@@ -267,12 +268,20 @@ namespace render
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();
+        void evictTerrainTile(int32_t coordX, int32_t coordZ);
+        void setSelectedTerrainTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedTerrainTile();
 
         void addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();
 
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
+
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
         void clearWaterData();
+        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedWaterTile();
 
         void addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
@@ -297,6 +306,8 @@ namespace render
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
 
+        void setBillboardRenderingEnabled(bool enabled);
+
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);
         void setActiveCamera(occlusion::CameraId id);
@@ -304,9 +315,6 @@ namespace render
 
         void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView,
                      vk::Format depthFormat);
-
-        void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
-        void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
 

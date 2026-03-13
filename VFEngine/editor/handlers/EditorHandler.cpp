@@ -30,14 +30,25 @@
 #include "impl/terrain/TerrainRaycastServiceImpl.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
-#include "impl/lightbake/LightBakeServiceImpl.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/render/BillboardRenderServiceImpl.hpp"
+#include "impl/render/LightStreamingServiceImpl.hpp"
+#include "impl/render/GIServiceImpl.hpp"
+#include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/world/WorldSectorServiceImpl.hpp"
+#include "impl/vegetation/GrassServiceImpl.hpp"
+#include "impl/vegetation/VegetationBrushServiceImpl.hpp"
+#include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
+#include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
+#include "impl/meshbrush/MeshBrushServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/vegetation/GrassEvents.hpp"
+#include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "time/Timer.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -155,6 +166,19 @@ namespace handlers
                 }
             }
 
+            // Update world sector streaming (distance-based entity load/unload)
+            if (worldSectorService)
+            {
+                worldSectorService->update();
+            }
+
+            // Update asset lifecycle manager (deferred releases)
+            if (assetLifecycleService)
+            {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                assetLifecycleService->update(deltaTime);
+            }
+
             // Update plugins every frame (regardless of play/edit mode)
             if (pluginManager)
             {
@@ -199,12 +223,20 @@ namespace handlers
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
-        lightBakeService.reset();
         controllerService.reset();
         ikComponentService.reset();
         renderHookService.reset();
         debugDrawService.reset();
         audioSceneUpdater.reset();
+        worldSectorService.reset();
+        assetLifecycleService.reset();
+        grassService.reset();
+        vegetationBrushService.reset();
+        vegetationBrushModeService.reset();
+        meshBrushService.reset();
+        meshBrushModeService.reset();
+        lightStreamingService.reset();
+        giService.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
@@ -246,6 +278,8 @@ namespace handlers
         createVFXServices();
         createTerrainServices();
         createWaterServices();
+        createVegetationServices();
+        createMeshBrushServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
@@ -284,16 +318,30 @@ namespace handlers
             renderTexturePlayModeHandler->subscribeToEvents();
         }
 
-        lightBakeService = std::make_shared<services::LightBakeServiceImpl>(
-            bootstrap->getLightBakeProvider()
-        );
-
         renderHookService = std::make_shared<services::RenderHookServiceImpl>(
             bootstrap->getRenderHookProvider()
         );
 
         debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(
             bootstrap->getDebugDrawProvider()
+        );
+
+        billboardRenderService = std::make_shared<services::BillboardRenderServiceImpl>(
+            bootstrap->getBillboardRenderProvider()
+        );
+
+        assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+
+        lightStreamingService = std::make_shared<services::LightStreamingServiceImpl>(
+            bootstrap->getLightStreamingProvider()
+        );
+
+        giService = std::make_shared<services::GIServiceImpl>(
+            bootstrap->getGIProvider()
+        );
+
+        worldSectorService = std::make_shared<services::WorldSectorServiceImpl>(
+            bootstrap->getSceneGraphSystem()
         );
     }
 
@@ -387,6 +435,28 @@ namespace handlers
         }
     }
 
+    void EditorHandler::createVegetationServices()
+    {
+        grassService = std::make_shared<services::GrassServiceImpl>();
+        vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
+        vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
+        // Wire grass config callback so the adapter doesn't access EntityRegistry directly
+        auto* grassProvider = bootstrap->getGrassRenderProvider();
+        if (grassProvider)
+        {
+            grassProvider->setGetConfigCallback([]() {
+                return events::EventDispatcher::instance().query(
+                    events::vegetation::GetGlobalGrassConfigQuery{});
+            });
+        }
+    }
+
+    void EditorHandler::createMeshBrushServices()
+    {
+        meshBrushService = std::make_shared<services::MeshBrushServiceImpl>();
+        meshBrushModeService = std::make_shared<services::MeshBrushModeServiceImpl>();
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -419,7 +489,6 @@ namespace handlers
         holeBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
-        lightBakeService->registerEventHandlers();
         controllerService->registerEventHandlers();
         if (ikComponentService)
         {
@@ -428,6 +497,16 @@ namespace handlers
         exportHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
+        assetLifecycleService->registerEventHandlers();
+        worldSectorService->registerEventHandlers();
+        grassService->registerEventHandlers();
+        vegetationBrushService->registerEventHandlers();
+        vegetationBrushModeService->registerEventHandlers();
+        meshBrushService->registerEventHandlers();
+        meshBrushModeService->registerEventHandlers();
+        billboardRenderService->registerEventHandlers();
+        lightStreamingService->registerEventHandlers();
+        giService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

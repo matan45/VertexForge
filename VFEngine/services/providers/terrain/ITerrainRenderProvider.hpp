@@ -16,14 +16,6 @@ namespace terrain
 
 namespace services
 {
-    struct TerrainTileLightmapInfo
-    {
-        int32_t coordX = 0;
-        int32_t coordZ = 0;
-        glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
-        std::string lightmapPath;
-    };
-
     class ITerrainRenderProvider
     {
     public:
@@ -40,6 +32,10 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) = 0;
 
+        /// Returns all tiles currently loaded in memory (not just frustum-visible).
+        /// Used for vegetation tree instance building where GPU cull handles visibility.
+        virtual std::vector<terrain::TerrainTile*> getAllLoadedTiles() = 0;
+
         virtual bool hasActiveTerrain() const = 0;
 
         virtual std::string getTerrainMaterialPath() const = 0;
@@ -49,9 +45,6 @@ namespace services
 
         virtual bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) = 0;
         virtual void releaseTileRAMData(terrain::TerrainTile& tile) = 0;
-
-        virtual std::vector<TerrainTileLightmapInfo> getTerrainLightmapData() const = 0;
-        virtual bool consumeTerrainLightmapDirty() = 0;
 
         virtual void markTerrainMaterialDirty() = 0;
         virtual bool consumeTerrainMaterialDirty() = 0;

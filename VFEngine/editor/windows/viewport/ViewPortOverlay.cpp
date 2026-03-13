@@ -5,6 +5,8 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
+#include "events/vegetation/VegetationBrushEvents.hpp"
+#include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
@@ -42,9 +44,6 @@ namespace windows
         ImVec2 overlayPos = ImVec2(windowPos.x + contentMin.x + 8.0f,
                                    windowPos.y + contentMin.y + 8.0f);
 
-        ImGui::SetNextWindowPos(overlayPos);
-        ImGui::SetNextWindowBgAlpha(0.0f);
-
         ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration
             | ImGuiWindowFlags_AlwaysAutoResize
             | ImGuiWindowFlags_NoSavedSettings
@@ -54,6 +53,19 @@ namespace windows
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        drawToolbar(gizmo, overlayFlags, overlayPos);
+        drawViewModeDropdown(overlayFlags, windowPos, contentMin);
+
+        ImGui::PopStyleVar(2);
+    }
+
+    void ViewPortOverlay::drawToolbar(ViewPortGizmo& gizmo, ImGuiWindowFlags overlayFlags, const ImVec2& overlayPos)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::SetNextWindowPos(overlayPos);
+        ImGui::SetNextWindowBgAlpha(0.0f);
 
         if (ImGui::Begin("##ViewportOverlay", nullptr, overlayFlags))
         {
@@ -80,8 +92,9 @@ namespace windows
                 bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
                 bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode);
+                bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
+                bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode || isMeshBrushMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -104,27 +117,9 @@ namespace windows
 
                 ImGui::EndDisabled();
 
-                // Sculpt mode toggle - enabled when terrain is selected or already sculpting
-                bool canSculpt = isSculptMode;
-                if (!canSculpt)
-                {
-                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-                    if (selectedEntity.has_value())
-                    {
-                        events::terrain::HasTerrainComponentQuery terrainQuery;
-                        terrainQuery.entity = *selectedEntity;
-                        canSculpt = dispatcher.query(terrainQuery);
+                bool canUseTerrain = isTerrainSelected();
 
-                        if (!canSculpt)
-                        {
-                            events::terrain::HasTerrainTileComponentQuery tileQuery;
-                            tileQuery.entity = *selectedEntity;
-                            canSculpt = dispatcher.query(tileQuery);
-                        }
-                    }
-                }
-
-                ImGui::BeginDisabled(!canSculpt);
+                ImGui::BeginDisabled(!isSculptMode && !canUseTerrain);
                 if (iconButton(ViewportIcon::Sculpt, isSculptMode, isSculptMode ? "Exit Sculpt Mode" : "Enter Sculpt Mode"))
                 {
                     events::sculpt::SetSculptModeActiveCommand cmd;
@@ -135,27 +130,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                // Paint mode toggle - enabled when terrain is selected or already painting
-                bool canPaint = isPaintMode;
-                if (!canPaint)
-                {
-                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-                    if (selectedEntity.has_value())
-                    {
-                        events::terrain::HasTerrainComponentQuery terrainQuery2;
-                        terrainQuery2.entity = *selectedEntity;
-                        canPaint = dispatcher.query(terrainQuery2);
-
-                        if (!canPaint)
-                        {
-                            events::terrain::HasTerrainTileComponentQuery tileQuery2;
-                            tileQuery2.entity = *selectedEntity;
-                            canPaint = dispatcher.query(tileQuery2);
-                        }
-                    }
-                }
-
-                ImGui::BeginDisabled(!canPaint);
+                ImGui::BeginDisabled(!isPaintMode && !canUseTerrain);
                 if (iconButton(ViewportIcon::Paint, isPaintMode, isPaintMode ? "Exit Paint Mode" : "Enter Paint Mode"))
                 {
                     events::paint::SetPaintModeActiveCommand cmd;
@@ -166,27 +141,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                // Hole mode toggle - enabled when terrain is selected or already in hole mode
-                bool canHole = isHoleMode;
-                if (!canHole)
-                {
-                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-                    if (selectedEntity.has_value())
-                    {
-                        events::terrain::HasTerrainComponentQuery terrainQuery3;
-                        terrainQuery3.entity = *selectedEntity;
-                        canHole = dispatcher.query(terrainQuery3);
-
-                        if (!canHole)
-                        {
-                            events::terrain::HasTerrainTileComponentQuery tileQuery3;
-                            tileQuery3.entity = *selectedEntity;
-                            canHole = dispatcher.query(tileQuery3);
-                        }
-                    }
-                }
-
-                ImGui::BeginDisabled(!canHole);
+                ImGui::BeginDisabled(!isHoleMode && !canUseTerrain);
                 if (iconButton(ViewportIcon::Hole, isHoleMode, isHoleMode ? "Exit Hole Mode" : "Enter Hole Mode"))
                 {
                     events::hole::SetHoleModeActiveCommand cmd;
@@ -194,9 +149,37 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(!isVegBrushMode && !canUseTerrain);
+                if (iconButton(ViewportIcon::Vegetation, isVegBrushMode, isVegBrushMode ? "Exit Vegetation Brush" : "Enter Vegetation Brush"))
+                {
+                    events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
+                    cmd.active = !isVegBrushMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(!isMeshBrushMode && !canUseTerrain);
+                if (iconButton(ViewportIcon::MeshBrush, isMeshBrushMode, isMeshBrushMode ? "Exit Mesh Brush" : "Enter Mesh Brush"))
+                {
+                    events::meshBrush::SetMeshBrushModeActiveCommand cmd;
+                    cmd.active = !isMeshBrushMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
             }
         }
         ImGui::End();
+    }
+
+    void ViewPortOverlay::drawViewModeDropdown(ImGuiWindowFlags overlayFlags, const ImVec2& windowPos,
+                                               const ImVec2& contentMin)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
         float dropdownWidth = 95.0f;
@@ -213,18 +196,19 @@ namespace windows
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
             const char* viewModeLabels[] = {
-                "Color",        // 0: Normal rendering
-                "Meshlet",      // 1: Meshlet visualization
-                "LOD",          // 2: LOD level colors
-                "Mipmap",       // 3: Texture mip level
-                "Cluster",      // 4: Light cluster visualization
-                "Depth",        // 5: Depth visualization
-                "Shadow",       // 6: Shadow visualization
-                "Terrain Tile", // 7: Terrain tile visualization (color per tile)
-                "Terrain UV"    // 8: Terrain world UV visualization
+                "Color",
+                "Meshlet",
+                "LOD",
+                "Mipmap",
+                "Cluster",
+                "Depth",
+                "Shadow",
+                "Terrain Tile",
+                "Terrain UV",
+                "Weight Map"
             };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 9))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);
@@ -237,8 +221,23 @@ namespace windows
             }
         }
         ImGui::End();
+    }
 
-        ImGui::PopStyleVar(2);
+    bool ViewPortOverlay::isTerrainSelected() const
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+        if (!selectedEntity.has_value())
+            return false;
+
+        events::terrain::HasTerrainComponentQuery terrainQuery;
+        terrainQuery.entity = *selectedEntity;
+        if (dispatcher.query(terrainQuery))
+            return true;
+
+        events::terrain::HasTerrainTileComponentQuery tileQuery;
+        tileQuery.entity = *selectedEntity;
+        return dispatcher.query(tileQuery);
     }
 
     void ViewPortOverlay::loadIconAtlas()

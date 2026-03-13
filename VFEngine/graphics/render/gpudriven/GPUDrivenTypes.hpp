@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <string>
 #include "MeshletBufferTypes.hpp"
+#include "../../../services/data/CullingCategories.hpp"
 
 namespace render::gpudriven
 {
@@ -22,15 +23,23 @@ namespace render::gpudriven
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
     constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
     constexpr uint32_t MAX_BATCH_COUNT = 8;
-    constexpr uint32_t MAX_BINDLESS_TEXTURES = 4096;
+    constexpr uint32_t MAX_BINDLESS_TEXTURES = 8192;
     constexpr uint32_t MAX_SHADER_GROUPS = 16;
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
     constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
-    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
+    constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
+
+    constexpr uint32_t MAX_GPU_INSTANCES = 131072;  // Max instance transforms in SSBO
+
+    struct alignas(16) GPUInstanceTransform
+    {
+        glm::mat4 modelMatrix;
+    };
+    static_assert(sizeof(GPUInstanceTransform) == 64);
 
     constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)
     constexpr uint32_t SHADER_GROUP_BLEND = 4;        // Additive / Multiply objects
@@ -51,7 +60,9 @@ namespace render::gpudriven
     {
         glm::mat4 modelMatrix;
         glm::vec4 aabbMin;  // .w = maxDrawDistanceSquared (0 = use category default)
-        glm::vec4 aabbMax;  // .w unused (padding)
+        // IMPORTANT: aabbMax.w is overloaded to store instanceCount as a uint32_t via memcpy
+        // (not float cast). GPU reads it with floatBitsToUint(). Do NOT use aabbMax.w as a float.
+        glm::vec4 aabbMax;  // .w = instanceCount (uint via memcpy/floatBitsToUint, 0 or 1 = non-instanced)
         glm::uvec4 lod0Data;
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;
@@ -70,7 +81,7 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
     };
     static_assert(sizeof(GPUObjectData) == 352);
 
@@ -84,17 +95,14 @@ namespace render::gpudriven
         constexpr uint32_t AdditiveBlend = 1 << 10;
         constexpr uint32_t MultiplyBlend = 1 << 11;
         constexpr uint32_t TerrainTile = 1 << 12;
+        constexpr uint32_t Selected = 1 << 13;
+        constexpr uint32_t Billboard = 1 << 14;
+        constexpr uint32_t Instanced = 1 << 15;
     }
 
     namespace ObjectCategory
     {
-        constexpr uint32_t StaticMesh = 0;
-        constexpr uint32_t Terrain = 1;
-        constexpr uint32_t Foliage = 2;
-        constexpr uint32_t VFX = 3;
-        constexpr uint32_t Decals = 4;
-        constexpr uint32_t Billboard = 5;
-        constexpr uint32_t Water = 6;
+        using namespace services::CullingCategory;
         constexpr uint32_t CategoryShift = 13;
         constexpr uint32_t CategoryMask = 0xFu << CategoryShift; // bits 13-16
     }
@@ -104,7 +112,7 @@ namespace render::gpudriven
         glm::mat4 modelMatrix;
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
         glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
-        glm::vec4 aabbMax;              // xyz = world AABB max, w = activeLayerCount (1-16)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[4] (uintBitsToFloat)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
         glm::uvec4 lod1MeshletData;
         glm::uvec4 lod2MeshletData;
@@ -114,7 +122,7 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex, .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+        glm::uvec4 reserved{0, 0, 0, 0}; // Reserved for future use
     };
     static_assert(sizeof(TerrainTileGPUData) == 224);
 
@@ -164,9 +172,9 @@ namespace render::gpudriven
         uint32_t meshletCount;
         uint32_t baseVertexOffset;
         uint32_t boneMatrixOffset;
-        uint32_t boneCount;
+        uint32_t instanceCount;     // Number of instances (1 = non-instanced)
         uint32_t blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
-        glm::uvec4 lightmapData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .x=textureIndex (INVALID=none), .y=packHalf2x16(scale), .z=packHalf2x16(offset), .w=0
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
     };
     static_assert(sizeof(PerDrawData) == 256);
 

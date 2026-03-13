@@ -59,6 +59,21 @@ namespace controllers {
 		offScreenController->meshUnload(meshId);
 	}
 
+	void OffScreen::meshRelease(const std::string& meshPath)
+	{
+		offScreenController->meshRelease(meshPath);
+	}
+
+	void OffScreen::textureRelease(const std::string& texturePath)
+	{
+		offScreenController->textureRelease(texturePath);
+	}
+
+	void OffScreen::materialRelease(const std::string& materialPath)
+	{
+		offScreenController->materialRelease(materialPath);
+	}
+
 	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
 	                                 const glm::vec3& cameraPos, float time)
 	{
@@ -118,6 +133,11 @@ namespace controllers {
 	void OffScreen::prepareFrameText()
 	{
 		offScreenController->prepareFrameText();
+	}
+
+	void OffScreen::prepareSceneData()
+	{
+		offScreenController->prepareSceneData();
 	}
 
 	void OffScreen::setShowBillboardIcons(bool show)
@@ -336,6 +356,11 @@ namespace controllers {
 		offScreenController->setTerrainRenderingEnabled(enabled);
 	}
 
+	void OffScreen::setBillboardRenderingEnabled(bool enabled)
+	{
+		offScreenController->setBillboardRenderingEnabled(enabled);
+	}
+
 	void OffScreen::setTerrainLODBias(float bias)
 	{
 		offScreenController->setTerrainLODBias(bias);
@@ -394,6 +419,16 @@ namespace controllers {
 	void OffScreen::setWaterRenderProvider(services::IWaterRenderProvider* provider)
 	{
 		offScreenController->setWaterRenderProvider(provider);
+	}
+
+	void OffScreen::setGrassRenderProvider(services::IGrassRenderProvider* provider)
+	{
+		offScreenController->setGrassRenderProvider(provider);
+	}
+
+	void OffScreen::setVegetationRenderProvider(services::IVegetationRenderProvider* provider)
+	{
+		offScreenController->setVegetationRenderProvider(provider);
 	}
 
 	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
@@ -475,4 +510,64 @@ namespace controllers {
 			offScreenController->clearAdditionalWaterFrustums();
 		}
 	}
+
+	// ── GI Settings ──────────────────────────────────────────
+
+	void OffScreen::applyGISettings(const render::gi::GISettings& settings)
+	{
+		offScreenController->applyGISettings(settings);
+	}
+
+	render::gi::GISettings OffScreen::getGISettings() const
+	{
+		return offScreenController->getGISettings();
+	}
+
+	render::gi::GIDebugStats OffScreen::getGIDebugStats() const
+	{
+		return offScreenController->getGIDebugStats();
+	}
+
+	void OffScreen::setGIShowProbes(bool show)
+	{
+		offScreenController->setGIShowProbes(show);
+	}
+
+	void OffScreen::setGIShowCascadeBounds(bool show)
+	{
+		offScreenController->setGIShowCascadeBounds(show);
+	}
+
+	void OffScreen::setGIShowProbeValidity(bool show)
+	{
+		offScreenController->setGIShowProbeValidity(show);
+	}
+
+	// ── Light Streaming Settings ──────────────────────────────
+
+	void OffScreen::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
+	{
+		offScreenController->setLightStreamingConfig(config);
+	}
+
+	render::lighting::LightStreamingConfig OffScreen::getLightStreamingConfig() const
+	{
+		return offScreenController->getLightStreamingConfig();
+	}
+
+	render::lighting::LightStreamingStats OffScreen::getLightStreamingStats() const
+	{
+		return offScreenController->getLightStreamingStats();
+	}
+
+	void OffScreen::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+	{
+		offScreenController->registerSectorLights(sectorId, lightEntityIds);
+	}
+
+	void OffScreen::unregisterSectorLights(uint32_t sectorId)
+	{
+		offScreenController->unregisterSectorLights(sectorId);
+	}
+
 }

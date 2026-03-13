@@ -68,8 +68,8 @@ namespace windows
         transformDrawer.draw(handle);
         bool hasCamera = cameraDrawer.draw(handle);
         iblDrawer.draw(handle);
-        lightmapRootDrawer.draw(handle);
         navmeshRootDrawer.draw(handle);
+        worldSectorDrawer.draw(handle);
         bool hasMesh = meshDrawer.draw(handle);
 
         if (hasMesh)
@@ -99,6 +99,10 @@ namespace windows
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
+
+        // Water components
+        waterDrawer.draw(handle);
+        waterTileDrawer.draw(handle);
 
         // UI components
         bool hasUICanvas = uiCanvasDrawer.draw(handle);

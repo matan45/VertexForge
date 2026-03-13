@@ -584,9 +584,9 @@ namespace serialization
 
         j["shadows"] = {
             {"enabled", settings.shadows.enabled},
-            {"quality", shadowQualityToString(settings.shadows.quality)},
+            {"quality", shadowQualityToStr(settings.shadows.quality)},
             {"cascadeCount", settings.shadows.cascadeCount},
-            {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
+            {"cascadeSplitMode", cascadeSplitModeToStr(settings.shadows.cascadeSplitMode)},
             {"shadowBias", settings.shadows.shadowBias},
             {"slopeBias", settings.shadows.slopeBias},
             {"normalBias", settings.shadows.normalBias},
@@ -622,6 +622,19 @@ namespace serialization
             {"wboitEnabled", settings.transparency.wboitEnabled}
         };
 
+        j["shadowLOD"] = {
+            {"enabled", settings.shadowLOD.enabled},
+            {"tier0Distance", settings.shadowLOD.tier0Distance},
+            {"tier1Distance", settings.shadowLOD.tier1Distance},
+            {"tier2Distance", settings.shadowLOD.tier2Distance},
+            {"tier0Resolution", settings.shadowLOD.tier0Resolution},
+            {"tier1Resolution", settings.shadowLOD.tier1Resolution},
+            {"tier2Resolution", settings.shadowLOD.tier2Resolution},
+            {"staticTier0Distance", settings.shadowLOD.staticTier0Distance},
+            {"staticTier1Distance", settings.shadowLOD.staticTier1Distance},
+            {"staticTier2Distance", settings.shadowLOD.staticTier2Distance}
+        };
+
         j["terrain"] = {
             {"enabled", settings.terrain.enabled},
             {"lodBias", settings.terrain.lodBias},
@@ -632,12 +645,56 @@ namespace serialization
 
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
 
+        j["vfxLOD"] = {
+            {"lod0Distance", settings.vfxLOD.lod0Distance},
+            {"lod1Distance", settings.vfxLOD.lod1Distance},
+            {"lod2Distance", settings.vfxLOD.lod2Distance},
+            {"transitionZone", settings.vfxLOD.transitionZone}
+        };
+
+        j["animationLOD"] = {
+            {"lod0Distance", settings.animationLOD.lod0Distance},
+            {"lod1Distance", settings.animationLOD.lod1Distance},
+            {"lod2Distance", settings.animationLOD.lod2Distance},
+            {"lod3Distance", settings.animationLOD.lod3Distance},
+            {"lod0Interval", settings.animationLOD.lod0Interval},
+            {"lod1Interval", settings.animationLOD.lod1Interval},
+            {"lod2Interval", settings.animationLOD.lod2Interval},
+            {"maxStreamingInitPerFrame", settings.animationLOD.maxStreamingInitPerFrame}
+        };
+
         return j;
     }
 
     void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
     {
         deserializeShadowSettings(j, settings.shadows);
+
+        if (j.contains("shadowLOD") && j["shadowLOD"].is_object())
+        {
+            const auto& sl = j["shadowLOD"];
+            if (sl.contains("enabled") && sl["enabled"].is_boolean())
+                settings.shadowLOD.enabled = sl["enabled"].get<bool>();
+            if (sl.contains("tier0Distance") && sl["tier0Distance"].is_number())
+                settings.shadowLOD.tier0Distance = sl["tier0Distance"].get<float>();
+            if (sl.contains("tier1Distance") && sl["tier1Distance"].is_number())
+                settings.shadowLOD.tier1Distance = sl["tier1Distance"].get<float>();
+            if (sl.contains("tier2Distance") && sl["tier2Distance"].is_number())
+                settings.shadowLOD.tier2Distance = sl["tier2Distance"].get<float>();
+            if (sl.contains("tier0Resolution") && sl["tier0Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier0Resolution = sl["tier0Resolution"].get<uint32_t>();
+            if (sl.contains("tier1Resolution") && sl["tier1Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier1Resolution = sl["tier1Resolution"].get<uint32_t>();
+            if (sl.contains("tier2Resolution") && sl["tier2Resolution"].is_number_unsigned())
+                settings.shadowLOD.tier2Resolution = sl["tier2Resolution"].get<uint32_t>();
+            if (sl.contains("staticTier0Distance") && sl["staticTier0Distance"].is_number())
+                settings.shadowLOD.staticTier0Distance = sl["staticTier0Distance"].get<float>();
+            if (sl.contains("staticTier1Distance") && sl["staticTier1Distance"].is_number())
+                settings.shadowLOD.staticTier1Distance = sl["staticTier1Distance"].get<float>();
+            if (sl.contains("staticTier2Distance") && sl["staticTier2Distance"].is_number())
+                settings.shadowLOD.staticTier2Distance = sl["staticTier2Distance"].get<float>();
+        }
+
         deserializeCullingSettings(j, settings.culling);
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
@@ -650,6 +707,40 @@ namespace serialization
         else
         {
             settings.postProcess = postprocess::PostProcessSettings::createDefault();
+        }
+
+        if (j.contains("vfxLOD") && j["vfxLOD"].is_object())
+        {
+            const auto& vl = j["vfxLOD"];
+            if (vl.contains("lod0Distance") && vl["lod0Distance"].is_number())
+                settings.vfxLOD.lod0Distance = vl["lod0Distance"].get<float>();
+            if (vl.contains("lod1Distance") && vl["lod1Distance"].is_number())
+                settings.vfxLOD.lod1Distance = vl["lod1Distance"].get<float>();
+            if (vl.contains("lod2Distance") && vl["lod2Distance"].is_number())
+                settings.vfxLOD.lod2Distance = vl["lod2Distance"].get<float>();
+            if (vl.contains("transitionZone") && vl["transitionZone"].is_number())
+                settings.vfxLOD.transitionZone = vl["transitionZone"].get<float>();
+        }
+
+        if (j.contains("animationLOD") && j["animationLOD"].is_object())
+        {
+            const auto& al = j["animationLOD"];
+            if (al.contains("lod0Distance") && al["lod0Distance"].is_number())
+                settings.animationLOD.lod0Distance = al["lod0Distance"].get<float>();
+            if (al.contains("lod1Distance") && al["lod1Distance"].is_number())
+                settings.animationLOD.lod1Distance = al["lod1Distance"].get<float>();
+            if (al.contains("lod2Distance") && al["lod2Distance"].is_number())
+                settings.animationLOD.lod2Distance = al["lod2Distance"].get<float>();
+            if (al.contains("lod3Distance") && al["lod3Distance"].is_number())
+                settings.animationLOD.lod3Distance = al["lod3Distance"].get<float>();
+            if (al.contains("lod0Interval") && al["lod0Interval"].is_number_unsigned())
+                settings.animationLOD.lod0Interval = al["lod0Interval"].get<uint32_t>();
+            if (al.contains("lod1Interval") && al["lod1Interval"].is_number_unsigned())
+                settings.animationLOD.lod1Interval = al["lod1Interval"].get<uint32_t>();
+            if (al.contains("lod2Interval") && al["lod2Interval"].is_number_unsigned())
+                settings.animationLOD.lod2Interval = al["lod2Interval"].get<uint32_t>();
+            if (al.contains("maxStreamingInitPerFrame") && al["maxStreamingInitPerFrame"].is_number_unsigned())
+                settings.animationLOD.maxStreamingInitPerFrame = al["maxStreamingInitPerFrame"].get<uint32_t>();
         }
     }
 

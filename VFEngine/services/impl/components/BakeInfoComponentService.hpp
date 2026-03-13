@@ -13,9 +13,6 @@ namespace services {
     public:
         void registerEventHandlers(events::EventDispatcher& dispatcher);
 
-        bool hasLightmapRoot(EntityHandle entity) const;
-        std::optional<LightmapRootData> getLightmapRootData(EntityHandle entity) const;
-
         bool hasNavmeshRoot(EntityHandle entity) const;
         std::optional<NavmeshRootData> getNavmeshRootData(EntityHandle entity) const;
     };

@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 
 namespace services {
 
@@ -40,9 +41,20 @@ namespace services {
             return false;
         }
 
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
+
+            // Release old assets
+            if (!comp.meshPath.empty() && comp.meshPath != mesh.meshPath) {
+                lifecycle.release(comp.meshPath);
+            }
+            if (!comp.animatorPath.empty() && comp.animatorPath != mesh.animatorPath) {
+                lifecycle.release(comp.animatorPath);
+            }
+
             comp.meshPath = mesh.meshPath;
             comp.animatorPath = mesh.animatorPath;
             comp.showBoundingBox = mesh.showBoundingBox;
@@ -62,6 +74,14 @@ namespace services {
         if (sceneEntity.hasComponent<components::AnimatorComponent>()) {
             auto& animComp = sceneEntity.getComponent<components::AnimatorComponent>();
             animComp.applyRootMotion = mesh.applyRootMotion;
+        }
+
+        // Acquire new assets
+        if (!mesh.meshPath.empty()) {
+            lifecycle.acquire(mesh.meshPath, resource::AssetType::Mesh);
+        }
+        if (!mesh.animatorPath.empty()) {
+            lifecycle.acquire(mesh.animatorPath, resource::AssetType::Animator);
         }
 
         // Publish notification to allow preloading of mesh assets and animator cleanup
@@ -97,6 +117,15 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::MeshComponent>();
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (!comp.meshPath.empty()) {
+                lifecycle.release(comp.meshPath);
+            }
+            if (!comp.animatorPath.empty()) {
+                lifecycle.release(comp.animatorPath);
+            }
+
             sceneEntity.removeComponent<components::MeshComponent>();
 
             events::scene::MeshDataChangedNotification notification;

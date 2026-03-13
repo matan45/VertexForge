@@ -62,7 +62,7 @@ namespace events::navmesh
     {
         glm::vec3 start;
         glm::vec3 end;
-        float agentRadius = 0.3f;
+        float agentRadius = 0.25f;
         float agentHeight = 2.0f;
         std::string_view getName() const override { return "FindPath"; }
     };
@@ -113,5 +113,101 @@ namespace events::navmesh
         bool success = false;
         std::string message;
         std::string_view getName() const override { return "NavmeshBakeComplete"; }
+    };
+
+    struct BakeTileCommand : ICommand<bool>
+    {
+        int tileX = 0;
+        int tileZ = 0;
+        std::string_view getName() const override { return "BakeTile"; }
+    };
+
+    struct BakeAllTilesCommand : ICommand<>
+    {
+        types::NavmeshBakeSettings settings;
+        std::string_view getName() const override { return "BakeAllTiles"; }
+    };
+
+    struct SaveNavmeshTiledCommand : ICommand<bool>
+    {
+        std::string directory;
+        std::string_view getName() const override { return "SaveNavmeshTiled"; }
+    };
+
+    struct LoadNavmeshTiledCommand : ICommand<bool>
+    {
+        std::string directory;
+        std::string_view getName() const override { return "LoadNavmeshTiled"; }
+    };
+
+    struct NavmeshStreamingConfig
+    {
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int maxLoadsPerFrame = 2;
+        int maxUnloadsPerFrame = 2;
+    };
+
+    struct SetNavmeshStreamingConfigCommand : ICommand<>
+    {
+        NavmeshStreamingConfig config;
+        std::string_view getName() const override { return "SetNavmeshStreamingConfig"; }
+    };
+
+    struct SetNavmeshStreamingEnabledCommand : ICommand<>
+    {
+        bool enabled = false;
+        std::string_view getName() const override { return "SetNavmeshStreamingEnabled"; }
+    };
+
+    struct GetNavmeshStreamingConfigQuery : IQuery<NavmeshStreamingConfig>
+    {
+        std::string_view getName() const override { return "GetNavmeshStreamingConfig"; }
+    };
+
+    struct IsNavmeshStreamingEnabledQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "IsNavmeshStreamingEnabled"; }
+    };
+
+    enum class NavmeshTileStatus : uint8_t
+    {
+        NotBaked = 0,
+        Baked,
+        Loaded,
+        Dirty,
+        Baking
+    };
+
+    struct NavmeshTileStatusInfo
+    {
+        navigation::NavmeshTileCoord coord;
+        NavmeshTileStatus status = NavmeshTileStatus::NotBaked;
+    };
+
+    struct GetNavmeshTileStatusQuery : IQuery<std::vector<NavmeshTileStatusInfo>>
+    {
+        std::string_view getName() const override { return "GetNavmeshTileStatus"; }
+    };
+
+    struct NavmeshTileLoadedNotification : INotification
+    {
+        int tileX = 0;
+        int tileZ = 0;
+        std::string_view getName() const override { return "NavmeshTileLoaded"; }
+    };
+
+    struct NavmeshTileUnloadedNotification : INotification
+    {
+        int tileX = 0;
+        int tileZ = 0;
+        std::string_view getName() const override { return "NavmeshTileUnloaded"; }
+    };
+
+    struct NavmeshTileUpdatedNotification : INotification
+    {
+        int tileX = 0;
+        int tileZ = 0;
+        std::string_view getName() const override { return "NavmeshTileUpdated"; }
     };
 }

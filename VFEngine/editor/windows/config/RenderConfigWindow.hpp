@@ -17,13 +17,18 @@ namespace windows
         void drawShadowCSMSettings();
         void drawShadowBiasSettings();
         void drawShadowFilterSettings();
+        void drawShadowLODSection();
         void drawShadowDebugSection();
         void drawShadowStatistics();
         void drawTerrainSection();
+        void drawVFXLODSection();
+        void drawAnimationLODSection();
         void loadFromScene();
         void saveToScene();
         void resetToDefaults();
         void applySettings();
+        void applyVFXLODSettings();
+        void applyAnimationLODSettings();
 
     public:
         void draw();

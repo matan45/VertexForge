@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include "resource/Types.hpp"
+#include "BoneLOD.hpp"
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -28,6 +29,10 @@ namespace animation
         mutable std::vector<EvaluatedBone> evaluatedBones;
         std::vector<glm::mat4> computedLocalBindPoses;
 
+        mutable std::vector<size_t> positionKeyHints;
+        mutable std::vector<size_t> rotationKeyHints;
+        mutable std::vector<size_t> scalingKeyHints;
+
     public:
         AnimationEvaluator() = default;
         ~AnimationEvaluator() = default;
@@ -37,6 +42,7 @@ namespace animation
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
         std::vector<glm::mat4> evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const;
+        std::vector<glm::mat4> evaluatePoseLOD(float timeInTicks, const BoneLODSet& activeBones) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
 
@@ -45,9 +51,12 @@ namespace animation
         float secondsToTicks(float seconds) const;
 
     private:
-        glm::vec3 interpolatePosition(const resource::BoneAnimation& channel, float time) const;
-        glm::quat interpolateRotation(const resource::BoneAnimation& channel, float time) const;
-        glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time) const;
+        glm::vec3 interpolatePosition(const resource::BoneAnimation& channel, float time, size_t channelIndex) const;
+        glm::quat interpolateRotation(const resource::BoneAnimation& channel, float time, size_t channelIndex) const;
+        glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time, size_t channelIndex) const;
+
+        template <typename KeyType>
+        size_t findKeyframeIndex(const std::vector<KeyType>& keys, float time, size_t& hint) const;
 
         void buildBoneToChannelMap();
     };

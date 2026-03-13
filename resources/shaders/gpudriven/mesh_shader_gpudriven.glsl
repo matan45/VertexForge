@@ -17,6 +17,7 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
+layout(location = 5) flat out uint fragLodLevel[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -52,6 +53,9 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+    mat4 instanceModelMatrix;
+    mat4 instanceNormalMatrix;
+    uint instanceLodLevel;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -91,8 +95,9 @@ void main() {
     unpackMeshletCounts(meshlet.vertexPrimCount, vertexCount, primitiveCount);
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
-    mat4 modelMatrix = drawData.modelMatrix;
-    mat3 normalMatrix = mat3(drawData.normalMatrix);
+    // Use instance-specific matrices from task shader payload
+    mat4 modelMatrix = payload.instanceModelMatrix;
+    mat3 normalMatrix = mat3(payload.instanceNormalMatrix);
     mat4 viewProjection = camera.projection * camera.view;
 
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
@@ -166,6 +171,7 @@ void main() {
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
+            fragLodLevel[localVertexIndex] = payload.instanceLodLevel;
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
         }
     }
@@ -188,12 +194,14 @@ void main() {
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/gi_sampling.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
+layout(location = 5) in flat uint fragLodLevel;
 
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
@@ -788,16 +796,6 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    vec3 lightmapContribution = vec3(0.0);
-    if (drawData.lightmapData.x != INVALID_TEXTURE_INDEX) {
-        vec2 lmScale = unpackHalf2x16(drawData.lightmapData.y);
-        vec2 lmOffset = unpackHalf2x16(drawData.lightmapData.z);
-        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
-        uint lmIdx = drawData.lightmapData.x;
-        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
-        lightmapContribution = lightmapIrradiance * albedo;
-    }
-
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -853,7 +851,18 @@ void main() {
         emissive = albedo * emissionMultiplier;
     }
 
-    vec3 color = ambient + directLighting + lightmapContribution + emissive;
+    vec3 giContribution = vec3(0.0);
+#ifdef GI_ENABLED
+    float cameraDist = length(camera.cameraPos - fragWorldPos);
+    vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
+    giContribution = giIrradiance * albedo * kD;
+    // Reduce ambient proportionally to GI strength to avoid double-counting
+    // When GI is zero (probes not converged), ambient stays full
+    float giStrength = min(length(giIrradiance), 1.0);
+    ambient *= mix(1.0, 0.3, giStrength);
+#endif
+
+    vec3 color = ambient + directLighting + giContribution + emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
@@ -881,7 +890,7 @@ void main() {
             vec3(1.0, 0.5, 0.0),
             vec3(1.0, 0.0, 0.0)
         );
-        uint lod = min(drawData.lodLevel, 3u);
+        uint lod = min(fragLodLevel, 3u);
         color = mix(color, lodColors[lod], 0.5);
     }
 
@@ -905,7 +914,6 @@ void main() {
     }
 
     if (viewModeValue == 4u) {
-        float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
         uint h = clusterIdx;
@@ -923,7 +931,6 @@ void main() {
     }
 
     if (viewModeValue == 5u) {
-        float linearZ = linearizeDepth(gl_FragCoord.z);
         float near = clusterParams.depthParams.x;
         float far = clusterParams.depthParams.y;
         float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
@@ -979,19 +986,6 @@ void main() {
 
         vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
         color = shadowColor;
-    }
-
-    if (viewModeValue == 7u) {
-        // Lightmap debug view: show baked irradiance only
-        if (drawData.lightmapData.x != INVALID_TEXTURE_INDEX) {
-            vec2 lmScale = unpackHalf2x16(drawData.lightmapData.y);
-            vec2 lmOffset = unpackHalf2x16(drawData.lightmapData.z);
-            vec2 lmUV = fragTexCoord * lmScale + lmOffset;
-            uint lmIdx = drawData.lightmapData.x;
-            color = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
-        } else {
-            color = vec3(0.0);
-        }
     }
 
 #ifdef WBOIT_ENABLED

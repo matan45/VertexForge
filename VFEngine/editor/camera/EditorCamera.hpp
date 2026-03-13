@@ -13,7 +13,7 @@ namespace editor {
         
         float fieldOfView = 60.0f;
         float nearPlane = 0.1f;
-        float farPlane = 1000.0f;
+        float farPlane = 2000.0f;
         float aspectRatio = 1.778f;  // 16:9 default
         
         float moveSpeed = 5.0f;

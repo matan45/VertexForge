@@ -110,22 +110,13 @@ namespace controllers::offscreen
         cameraData->viewProj = projection * view;
         cameraData->nearPlane = currentNearPlane;
 
-        // Update occlusion camera data
+        // Update camera data
         cameraManager->updateCamera(cameraId, projection * view, currentNearPlane);
-
-        // Initialize occlusion culling for this camera if not already done
-        if (cameraData->useOcclusionCulling && !cameraData->occlusionInitialized)
-        {
-            if (cameraManager->isHiZInitialized(cameraId))
-            {
-                cameraManager->initCameraOcclusionCulling(cameraId);
-            }
-        }
 
         // Keep backward compatibility for main camera ready flag
         if (cameraId == types::MAIN_CAMERA_ID)
         {
-            occlusionCullingReady = cameraData->occlusionInitialized;
+            occlusionCullingReady = cameraData->hiZInitialized;
             currentViewProj = projection * view;
             currentFrustum = cameraData->frustum;
         }

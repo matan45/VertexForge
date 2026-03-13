@@ -4,6 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "material/MaterialTypes.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "print/Log.hpp"
 
 namespace render::mesh
@@ -151,7 +152,21 @@ namespace render::mesh
                 loadTexture(path);
             }
         }
-        
+
+        // Register texture dependencies so textures stay alive while material is tracked
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (lifecycle.isTracked(materialPath))
+        {
+            for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
+            {
+                const std::string& path = textures.getPath(i);
+                if (!path.empty())
+                {
+                    lifecycle.addDependency(materialPath, path, resource::AssetType::Texture);
+                }
+            }
+        }
+
         vk::DescriptorSet set = allocateDescriptorSet();
         if (!set)
         {
@@ -368,6 +383,17 @@ namespace render::mesh
         defaultTextureCreated = true;
     }
     
+    void MaterialTextureCache::unloadTexture(const std::string& path)
+    {
+        if (path.empty()) return;
+
+        auto it = textureCache.find(path);
+        if (it == textureCache.end()) return;
+
+        textureCache.erase(it);
+        vfLogInfo("MaterialTextureCache: Unloaded texture '{}'", path);
+    }
+
     bool MaterialTextureCache::loadTexture(const std::string& path)
     {
         if (path.empty()) return false;

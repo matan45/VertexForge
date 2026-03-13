@@ -2,6 +2,7 @@
 
 #include "data/WaterData.hpp"
 #include "data/EntityHandle.hpp"
+#include "nfd/FileDialog.hpp"
 
 namespace windows
 {
@@ -10,7 +11,6 @@ namespace windows
     private:
         bool visible = false;
 
-        // Creation params
         int tilesX = 4;
         int tilesZ = 4;
         float worldTileSize = 32.0f;
@@ -20,11 +20,15 @@ namespace windows
         float shallowColor[4] = {0.0f, 0.5f, 0.7f, 0.6f};
         float deepColor[4] = {0.0f, 0.1f, 0.3f, 0.9f};
 
-        // Settings (when water exists)
         bool hasWater = false;
         services::EntityHandle waterEntity;
         services::WaterGlobalSettingsData globalSettings;
         bool settingsDirty = false;
+
+        services::OceanFFTConfigData oceanConfig;
+        bool oceanConfigDirty = false;
+
+        nfd::FileDialog fileDialog;
 
     public:
         void draw();
@@ -33,11 +37,16 @@ namespace windows
     private:
         void drawCreationSection();
         void drawSettingsSection();
+        void drawOceanFFTSection();
         void drawInfoSection();
         void createWater();
+        void createOcean();
         void deleteWater();
         void applySettings();
+        void applyOceanConfig();
         void resetCreationDefaults();
         void refreshWaterState();
+        void saveWater();
+        void loadWater();
     };
 }

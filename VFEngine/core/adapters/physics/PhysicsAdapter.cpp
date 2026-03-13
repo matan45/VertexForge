@@ -1,7 +1,11 @@
 #include "PhysicsAdapter.hpp"
 #include "PhysicsConversions.hpp"
+#include "../../physics/PhysicsShapeFactory.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
+#include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
+#include "resource/AssetTypes.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -45,10 +49,25 @@ namespace core
           , fixedTimestep(std::make_unique<physics::FixedTimestep>())
           , currentSettings(types::PhysicsSettings::createDefault())
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+        assetReleaseToken = dispatcher.subscribe<events::lifecycle::AssetReleaseReadyNotification>(
+            [](const events::lifecycle::AssetReleaseReadyNotification& notification)
+            {
+                if (notification.type == resource::AssetType::PhysicsShape ||
+                    notification.type == resource::AssetType::Mesh)
+                {
+                    physics::PhysicsShapeFactory::evictFromCache(notification.path);
+                    vfLogInfo("PhysicsAdapter: Evicted cached physics shapes for '{}'", notification.path);
+                }
+            });
     }
 
     PhysicsAdapter::~PhysicsAdapter()
     {
+        if (assetReleaseToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(assetReleaseToken);
+        }
         cleanUp();
     }
 
@@ -119,6 +138,7 @@ namespace core
             physicsWorld->cleanUp();
         fixedTimestep->reset();
         waterSensorEntities.clear();
+        physics::PhysicsShapeFactory::clearCache();
     }
 
     bool PhysicsAdapter::isInitialized() const
@@ -419,6 +439,67 @@ namespace core
         return physicsWorld && physicsWorld->hasTerrainBodies(entity.id);
     }
 
+    void PhysicsAdapter::addTerrainTileCollider(services::EntityHandle entity,
+                                                 const services::TerrainTileColliderInfo& tile)
+    {
+        if (!physicsWorld) return;
+        auto info = toTerrainCreateInfo(tile);
+        physicsWorld->addTerrainTileBody(entity.id, tile.tileX, tile.tileZ, info);
+    }
+
+    void PhysicsAdapter::removeTerrainTileCollider(services::EntityHandle entity,
+                                                    int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
+    }
+
+    void PhysicsAdapter::addVegetationTileColliders(int32_t tileX, int32_t tileZ,
+                                                     const std::vector<VegetationColliderInstance>& instances)
+    {
+        if (!physicsWorld || instances.empty()) return;
+
+        std::vector<JPH::BodyID> bodyIds;
+        bodyIds.reserve(instances.size());
+
+        for (const auto& inst : instances)
+        {
+            if (inst.scale <= 0.0f || inst.height * inst.scale < 0.01f)
+                continue;
+
+            JPH::BodyID bodyId = physicsWorld->addStaticCapsule(
+                inst.position, inst.rotation, inst.scale,
+                inst.radius, inst.height, 0); // layer 0 = STATIC
+
+            if (!bodyId.IsInvalid())
+            {
+                bodyIds.push_back(bodyId);
+            }
+            else
+            {
+                vfLogWarning("PhysicsAdapter: Failed to create vegetation collider at ({}, {}, {}) scale={} for tile ({}, {})",
+                    inst.position.x, inst.position.y, inst.position.z, inst.scale, tileX, tileZ);
+            }
+        }
+
+        if (!bodyIds.empty())
+        {
+            physicsWorld->addVegetationTileColliders(tileX, tileZ, bodyIds);
+        }
+    }
+
+    void PhysicsAdapter::removeVegetationTileColliders(int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeVegetationTileColliders(tileX, tileZ);
+    }
+
+    void PhysicsAdapter::removeAllVegetationColliders()
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeAllVegetationColliders();
+    }
+
     void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
                                             const glm::vec3& position,
                                             const glm::vec3& halfExtents)
@@ -446,10 +527,6 @@ namespace core
     {
         return waterSensorEntities.contains(entity.id);
     }
-
-    // ============================================
-    // Character Controller
-    // ============================================
 
     bool PhysicsAdapter::addCharacterController(services::EntityHandle entity,
                                                  const CharacterControllerInfo& info,

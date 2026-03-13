@@ -43,6 +43,7 @@ namespace core
         pickPhysicalDevice();
         createLogicalDevice();
         queryMeshShaderCapabilities();
+        queryRayQueryCapabilities();
         createStagingCommandPool();
     }
 
@@ -230,7 +231,7 @@ namespace core
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};
         vulkan11Features.shaderDrawParameters = VK_TRUE;
 
-        // Vulkan 1.2 features (required for drawIndirectCount and descriptor indexing)
+        // Vulkan 1.2 features (required for drawIndirectCount, descriptor indexing, buffer device address)
         vk::PhysicalDeviceVulkan12Features vulkan12Features{};
         vulkan12Features.drawIndirectCount = VK_TRUE;
         vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -238,6 +239,7 @@ namespace core
         vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
         vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        vulkan12Features.bufferDeviceAddress = VK_TRUE; // Required for acceleration structures
         vulkan12Features.pNext = &vulkan11Features;
 
         vk::PhysicalDeviceVulkan13Features vulkan13Features{};
@@ -245,11 +247,21 @@ namespace core
         vulkan13Features.maintenance4 = VK_TRUE; // Required for mesh shader LocalSizeId
         vulkan13Features.pNext = &vulkan12Features;
 
+        // Ray query features (VK_KHR_ray_query)
+        vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
+        rayQueryFeatures.rayQuery = VK_TRUE;
+        rayQueryFeatures.pNext = &vulkan13Features;
+
+        // Acceleration structure features (VK_KHR_acceleration_structure)
+        vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{};
+        accelStructFeatures.accelerationStructure = VK_TRUE;
+        accelStructFeatures.pNext = &rayQueryFeatures;
+
         // Mesh shader features (VK_EXT_mesh_shader)
         vk::PhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
         meshShaderFeatures.taskShader = VK_TRUE;
         meshShaderFeatures.meshShader = VK_TRUE;
-        meshShaderFeatures.pNext = &vulkan13Features;
+        meshShaderFeatures.pNext = &accelStructFeatures;
 
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;
@@ -419,6 +431,58 @@ namespace core
 
         meshShaderCapabilities.maxPreferredMeshWorkGroupInvocations = meshProps.maxPreferredMeshWorkGroupInvocations;
         meshShaderCapabilities.maxPreferredTaskWorkGroupInvocations = meshProps.maxPreferredTaskWorkGroupInvocations;
+    }
+
+    void Device::queryRayQueryCapabilities()
+    {
+        // Check ray query extension
+        bool rayQueryFound = false;
+        bool accelStructFound = false;
+        for (const auto& ext : physicalDevice.enumerateDeviceExtensionProperties())
+        {
+            if (strcmp(ext.extensionName.data(), VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0)
+                rayQueryFound = true;
+            if (strcmp(ext.extensionName.data(), VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0)
+                accelStructFound = true;
+        }
+
+        if (!rayQueryFound || !accelStructFound)
+        {
+            vfLogWarning("VK_KHR_ray_query or VK_KHR_acceleration_structure not available");
+            return;
+        }
+
+        // Query features
+        vk::PhysicalDeviceRayQueryFeaturesKHR rqFeatures{};
+        vk::PhysicalDeviceAccelerationStructureFeaturesKHR asFeatures{};
+        asFeatures.pNext = &rqFeatures;
+        vk::PhysicalDeviceFeatures2 features2{};
+        features2.pNext = &asFeatures;
+        physicalDevice.getFeatures2(&features2);
+
+        rayQueryCapabilities.rayQuerySupported = rqFeatures.rayQuery;
+        rayQueryCapabilities.accelerationStructureSupported = asFeatures.accelerationStructure;
+
+        // Query properties
+        vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
+        vk::PhysicalDeviceProperties2 props2{};
+        props2.pNext = &asProps;
+        physicalDevice.getProperties2(&props2);
+
+        rayQueryCapabilities.maxGeometryCount = asProps.maxGeometryCount;
+        rayQueryCapabilities.maxInstanceCount = asProps.maxInstanceCount;
+        rayQueryCapabilities.maxPrimitiveCount = asProps.maxPrimitiveCount;
+
+        if (debug)
+        {
+            vfLogInfo("Ray Query supported: {}, Acceleration Structure supported: {}",
+                      rayQueryCapabilities.rayQuerySupported,
+                      rayQueryCapabilities.accelerationStructureSupported);
+            vfLogInfo("AS limits: maxGeometry={}, maxInstance={}, maxPrimitive={}",
+                      rayQueryCapabilities.maxGeometryCount,
+                      rayQueryCapabilities.maxInstanceCount,
+                      rayQueryCapabilities.maxPrimitiveCount);
+        }
     }
 
     DeviceMemoryInfo Device::getDeviceMemoryInfo() const

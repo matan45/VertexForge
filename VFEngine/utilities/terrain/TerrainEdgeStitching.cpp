@@ -4,89 +4,6 @@
 
 namespace terrain
 {
-    void TerrainTileGenerator::extractEdgeVertices(TerrainTile& tile, uint32_t lodLevel) const
-    {
-        if (lodLevel >= TERRAIN_LOD_COUNT)
-            return;
-
-        const TileLODData& lodData = tile.getLODData(lodLevel);
-        if (lodData.isEmpty())
-            return;
-
-        uint32_t vertCount = getLODVertexCount(lodLevel);
-
-        for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
-        {
-            TileEdge edge = static_cast<TileEdge>(edgeIdx);
-            EdgeVertices& edgeVerts = tile.edgeVertices[lodLevel][edgeIdx];
-            edgeVerts.clear();
-            edgeVerts.indices.reserve(vertCount);
-            edgeVerts.positions.reserve(vertCount);
-
-            for (uint32_t i = 0; i < vertCount; ++i)
-            {
-                uint32_t idx = 0;
-                switch (edge)
-                {
-                case TileEdge::North:
-                    idx = (vertCount - 1) * vertCount + i;
-                    break;
-                case TileEdge::South:
-                    idx = i;
-                    break;
-                case TileEdge::East:
-                    idx = i * vertCount + (vertCount - 1);
-                    break;
-                case TileEdge::West:
-                    idx = i * vertCount;
-                    break;
-                }
-
-                edgeVerts.indices.push_back(idx);
-
-                // Store world-space position for neighbor comparison
-                glm::vec3 worldPos = tile.worldOrigin + lodData.vertices[idx].position;
-                edgeVerts.positions.push_back(worldPos);
-            }
-        }
-    }
-
-    void TerrainTileGenerator::computeEdgeStitching(
-        TerrainTile& tile, TileEdge edge, uint8_t neighborLOD) const
-    {
-        uint8_t currentLOD = tile.currentLOD;
-        uint8_t edgeIndex = static_cast<uint8_t>(edge);
-        EdgeStitchInfo& info = tile.edgeStitchInfo[edgeIndex];
-
-        // Only stitch if neighbor has coarser (higher numbered) LOD
-        if (neighborLOD <= currentLOD)
-        {
-            info.clear();
-            return;
-        }
-
-        // Store metadata only - actual snapped heights are computed inline
-        // in getStitchedHeight() from tile.heightData for per-LOD correctness
-        info.needsSnapping = true;
-        info.neighborLOD = neighborLOD;
-    }
-
-    void TerrainTileGenerator::updateEdgeStitching(TerrainTile& tile) const
-    {
-        for (uint8_t i = 0; i < 4; ++i)
-        {
-            const NeighborInfo& neighbor = tile.neighbors[i];
-            if (neighbor.exists)
-            {
-                computeEdgeStitching(tile, static_cast<TileEdge>(i), neighbor.lodLevel);
-            }
-            else
-            {
-                tile.edgeStitchInfo[i].clear();
-            }
-        }
-    }
-
     bool TerrainTileGenerator::isEdgeVertex(uint32_t x, uint32_t z, uint32_t vertCount) const
     {
         return x == 0 || x == vertCount - 1 || z == 0 || z == vertCount - 1;
@@ -137,27 +54,38 @@ namespace terrain
             return originalHeight;
         }
 
+        // For each LOD L, snap edge vertices to match the next coarser LOD (L+1) grid.
+        // This prevents cracks when GPU selects different LODs for adjacent tiles.
+        // The coarsest LOD has no snapping needed.
+        if (lodLevel >= TERRAIN_LOD_COUNT - 1)
+        {
+            return originalHeight;
+        }
+
+        uint32_t snapToLOD = lodLevel + 1;
         uint32_t baseVertCount = config.getVertexCount();
 
-        // Compute snapped height for one edge by sampling this tile's own heightData
-        // at the neighbor's coarser LOD grid positions along the shared boundary.
+        // Compute snapped height by sampling this tile's own heightData
+        // at the next coarser LOD's grid positions along the shared boundary.
         auto snapForEdge = [&](TileEdge edge, uint32_t edgeIdx) -> std::pair<bool, float>
         {
             const NeighborInfo& ni = tile.neighbors[static_cast<uint8_t>(edge)];
             if (!ni.exists)
                 return {false, 0.0f};
 
-            // Per-LOD check: only snap if neighbor is coarser than the LOD being generated
-            if (ni.lodLevel <= lodLevel)
-                return {false, 0.0f};
-
-            uint32_t neighborSkip = getLODSkipFactor(ni.lodLevel);
-            uint32_t neighborVertCount = getLODVertexCount(ni.lodLevel);
+            uint32_t neighborSkip = getLODSkipFactor(snapToLOD);
+            uint32_t neighborVertCount = getLODVertexCount(snapToLOD);
 
             if (neighborVertCount < 2)
                 return {false, 0.0f};
 
-            // Map this LOD's edge vertex to the neighbor's coarser grid
+            // Check if this vertex already lies on the coarser grid (no snap needed)
+            uint32_t fineSkip = getLODSkipFactor(lodLevel);
+            uint32_t finePos = edgeIdx * fineSkip;
+            if (finePos % neighborSkip == 0)
+                return {false, 0.0f};
+
+            // Map this LOD's edge vertex to the coarser grid
             float ratio = static_cast<float>(neighborVertCount - 1)
                         / static_cast<float>(vertCount - 1);
             float nIdx = static_cast<float>(edgeIdx) * ratio;

@@ -21,9 +21,12 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
-#include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/vegetation/GrassRenderAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/GIAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -60,11 +63,19 @@ namespace core
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
-        lightBakeAdapter = std::make_unique<LightBakeAdapter>();
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
+        grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
+        billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
+        lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
+        giAdapter = std::make_unique<adapters::GIAdapter>();
 
         offScreen->init();
+
+        // Wire adapters to offscreen controller
+        billboardRenderAdapter->setOffScreenController(offScreen.get());
+        lightStreamingAdapter->setOffScreenController(offScreen.get());
+        giAdapter->setOffScreenController(offScreen.get());
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
@@ -81,6 +92,8 @@ namespace core
         // WaterService will be connected later via setWaterService() in EditorHandler
         offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());
 
+        // Wire vegetation render providers to offscreen renderer
+        offScreenAdapter->setGrassRenderProvider(grassRenderAdapter.get());
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
         physicsAdapter->applySettings(types::PhysicsSettings::createDefault());

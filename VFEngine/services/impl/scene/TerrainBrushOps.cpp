@@ -7,13 +7,13 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
-#include "terrain/TerrainMaterialTypes.hpp"
-#include "resource/ResourceManager.hpp"
+#include "vegetation/VegetationDensityBrushApplicator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
@@ -71,7 +71,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (fileCache && fileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (!brushComputeProvider)
                 continue;
@@ -149,8 +157,6 @@ namespace services
             worldTileSize = allTiles[0]->config.worldTileSize;
         }
 
-        uint16_t overlayMask = getOverlayMask();
-
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
@@ -162,7 +168,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (paintFileCache && paintFileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (paintFileCache && !tile->hasHeightData())
                 paintFileCache->ensureHeightsLoaded(*tile);
@@ -175,10 +189,17 @@ namespace services
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
                 continue;
 
-            if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
+            if (brushType == terrain::PaintBrushType::SetBaseLayer)
             {
-                tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
-                tile->weightMapGPUDirty = true;
+                uint8_t newBase = static_cast<uint8_t>(brushParams.activeLayer);
+                if (tile->weightMap.layerIndices[0] != newBase)
+                {
+                    tile->weightMap.initializeDefault(tile->weightMap.resolution);
+                    tile->weightMap.layerIndices[0] = newBase;
+                    tile->weightMapDirty = true;
+                    tile->weightMapGPUDirty = true;
+                }
+                continue;
             }
 
             terrain::WeightBrushApplicator::ApplyParams applyParams;
@@ -197,7 +218,6 @@ namespace services
             applyParams.activeLayer = brushParams.activeLayer;
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
-            applyParams.overlayMask = overlayMask;
 
             if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
             {
@@ -259,7 +279,15 @@ namespace services
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile)
-                continue;
+            {
+                if (fileCache && fileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
 
             if (fileCache && !tile->hasHeightData())
             {
@@ -432,24 +460,98 @@ namespace services
         }
     }
 
-    uint16_t TerrainService::getOverlayMask() const
+    void TerrainService::applyVegetationDensityBrush(
+        const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
-        uint16_t overlayMask = 0;
-        std::string materialPath = getTerrainMaterialPath();
-        if (!materialPath.empty())
+        if (saveInProgress.load(std::memory_order_acquire))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationBrushTargetEntityQuery{});
+        if (!targetEntity.has_value())
+            return;
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        auto brushParams = dispatcher.query(events::vegetationBrush::GetDensityBrushParamsQuery{});
+        auto brushType = dispatcher.query(events::vegetationBrush::GetDensityBrushTypeQuery{});
+
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+            worldTileSize = allTiles[0]->config.worldTileSize;
+
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        bool anyModified = false;
+        for (const auto& coord : affectedTiles)
         {
-            auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
-            if (materialData)
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
             {
-                for (uint8_t i = 0; i < materialData->activeLayerCount && i < 16; ++i)
+                if (fileCache && fileCache->hasCoord(coord))
                 {
-                    if (materialData->layers[i].blendMode == terrain::TerrainLayerBlendMode::Overlay)
-                    {
-                        overlayMask |= (1u << i);
-                    }
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
                 }
+                if (!tile)
+                    continue;
+            }
+
+            if (!tile->vegetationDensity.isInitialized())
+                tile->vegetationDensity.initializeDefault(tile->config.getVertexCount());
+
+            if (fileCache)
+                fileCache->markDirty(coord);
+
+            vegetation::VegetationDensityBrushApplicator::ApplyParams applyParams;
+            applyParams.brushCenter = brushCenter;
+            applyParams.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            applyParams.brushRadius = brushParams.radius;
+            applyParams.brushStrength = brushParams.strength;
+            applyParams.brushOpacity = brushParams.opacity;
+            applyParams.vertexSpacing = tile->config.getVertexSpacing();
+            applyParams.verticesPerSide = tile->config.getVertexCount();
+            applyParams.falloff = brushParams.falloff;
+            applyParams.shape = brushParams.shape;
+            applyParams.brushType = brushType;
+            applyParams.deltaTime = deltaTime;
+            applyParams.invert = invert;
+
+            if (vegetation::VegetationDensityBrushApplicator::apply(tile->vegetationDensity, applyParams))
+            {
+                tile->vegetationDensityDirty = true;
+                tile->vegetationDensityGPUDirty = true;
+                anyModified = true;
             }
         }
-        return overlayMask;
+
+        if (anyModified)
+        {
+            events::vegetationBrush::VegetationDensityBrushAppliedNotification notification;
+            notification.position = worldPosition;
+            notification.type = brushType;
+            dispatcher.publish(notification);
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(*targetEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
     }
+
 }

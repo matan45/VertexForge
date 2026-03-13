@@ -24,9 +24,12 @@ namespace services
     class IPostProcessProvider;
     class IWaterRenderProvider;
     class IRenderTextureProvider;
-    class ILightBakeProvider;
     class IRenderHookProvider;
     class IDebugDrawProvider;
+    class IGrassRenderProvider;
+    class IBillboardRenderProvider;
+    class ILightStreamingProvider;
+    class IGIProvider;
 }
 
 namespace window
@@ -67,9 +70,16 @@ namespace core
     class PostProcessAdapter;
     class WaterRenderAdapter;
     class RenderTextureAdapter;
-    class LightBakeAdapter;
     class RenderHookAdapter;
     class DebugDrawAdapter;
+
+    namespace adapters
+    {
+        class GrassRenderAdapter;
+        class BillboardRenderAdapter;
+        class LightStreamingAdapter;
+        class GIAdapter;
+    }
 
     class EditorBootstrap
     {
@@ -97,9 +107,13 @@ namespace core
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
         std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
-        std::unique_ptr<LightBakeAdapter> lightBakeAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
+        std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
+        std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
+        std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
+        std::unique_ptr<adapters::GIAdapter> giAdapter;
+
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -154,14 +168,20 @@ namespace core
 
         services::IRenderTextureProvider* getRenderTextureProvider();
 
-        services::ILightBakeProvider* getLightBakeProvider();
-
         services::IRenderHookProvider* getRenderHookProvider();
 
         services::IDebugDrawProvider* getDebugDrawProvider();
 
         // For late binding - allows EditorHandler to connect WaterService
         WaterRenderAdapter* getWaterRenderAdapterInternal();
+
+        services::IGrassRenderProvider* getGrassRenderProvider();
+
+        services::IBillboardRenderProvider* getBillboardRenderProvider();
+
+        services::ILightStreamingProvider* getLightStreamingProvider();
+
+        services::IGIProvider* getGIProvider();
 
         // === Other Accessors ===
 

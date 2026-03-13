@@ -1,5 +1,5 @@
 #include "GPUDrivenCameraBuffer.hpp"
-#include "IndirectBatchManager.hpp"
+#include "scene/IndirectBatchManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
@@ -86,7 +86,7 @@ namespace render::gpudriven
 
         const float* d = params.categoryDistances;
         data.categoryDistSq0 = glm::vec4(d[0] * d[0], d[1] * d[1], d[2] * d[2], d[3] * d[3]);
-        data.categoryDistSq1 = glm::vec4(d[4] * d[4], 0.0f, 0.0f, params.shadowDistanceMultiplier);
+        data.categoryDistSq1 = glm::vec4(d[4] * d[4], d[5] * d[5], d[6] * d[6], params.shadowDistanceMultiplier);
 
         std::memcpy(mapped, &data, sizeof(GPUCameraData));
     }

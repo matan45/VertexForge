@@ -17,8 +17,12 @@ namespace windows
     class PostProcessConfigWindow;
     class WaterEditorWindow;
     class NavmeshWindow;
-    class LightBakeWindow;
-
+    class AssetLifecycleWindow;
+    class WorldSectorWindow;
+    class VFXDebugWindow;
+    class AnimationDebugWindow;
+    class GIConfigWindow;
+    class LightStreamingDebugWindow;
     class MainMenuBar
     {
     private:
@@ -39,8 +43,12 @@ namespace windows
         WaterEditorWindow* waterEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
-        LightBakeWindow* lightBakeWindow = nullptr;
-
+        AssetLifecycleWindow* assetLifecycleWindow = nullptr;
+        WorldSectorWindow* worldSectorWindow = nullptr;
+        VFXDebugWindow* vfxDebugWindow = nullptr;
+        AnimationDebugWindow* animationDebugWindow = nullptr;
+        GIConfigWindow* giConfigWindow = nullptr;
+        LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -85,9 +93,34 @@ namespace windows
             navmeshWindow = window;
         }
 
-        void setLightBakeWindow(LightBakeWindow* window)
+        void setAssetLifecycleWindow(AssetLifecycleWindow* window)
         {
-            lightBakeWindow = window;
+            assetLifecycleWindow = window;
+        }
+
+        void setWorldSectorWindow(WorldSectorWindow* window)
+        {
+            worldSectorWindow = window;
+        }
+
+        void setVFXDebugWindow(VFXDebugWindow* window)
+        {
+            vfxDebugWindow = window;
+        }
+
+        void setAnimationDebugWindow(AnimationDebugWindow* window)
+        {
+            animationDebugWindow = window;
+        }
+
+        void setGIConfigWindow(GIConfigWindow* window)
+        {
+            giConfigWindow = window;
+        }
+
+        void setLightStreamingDebugWindow(LightStreamingDebugWindow* window)
+        {
+            lightStreamingDebugWindow = window;
         }
 
     private:

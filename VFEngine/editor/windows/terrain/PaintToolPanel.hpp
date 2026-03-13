@@ -38,5 +38,9 @@ namespace windows
     private:
         void subscribe();
         void loadMaterialFromTarget();
+        void drawBrushType();
+        void drawTerrainMaterial();
+        void drawLayerSelection();
+        void drawBrushParams();
     };
 }

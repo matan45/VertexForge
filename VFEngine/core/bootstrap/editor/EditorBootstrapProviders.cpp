@@ -17,9 +17,12 @@
 #include "../../adapters/terrain/TerrainBrushComputeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
-#include "../../adapters/lightbake/LightBakeAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/vegetation/GrassRenderAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/GIAdapter.hpp"
 
 namespace core
 {
@@ -113,11 +116,6 @@ namespace core
         return renderTextureAdapter.get();
     }
 
-    services::ILightBakeProvider* EditorBootstrap::getLightBakeProvider()
-    {
-        return lightBakeAdapter.get();
-    }
-
     services::IRenderHookProvider* EditorBootstrap::getRenderHookProvider()
     {
         return renderHookAdapter.get();
@@ -136,5 +134,25 @@ namespace core
     services::IPostProcessProvider* EditorBootstrap::getPostProcessProvider()
     {
         return postProcessAdapter.get();
+    }
+
+    services::IGrassRenderProvider* EditorBootstrap::getGrassRenderProvider()
+    {
+        return grassRenderAdapter.get();
+    }
+
+    services::IBillboardRenderProvider* EditorBootstrap::getBillboardRenderProvider()
+    {
+        return billboardRenderAdapter.get();
+    }
+
+    services::ILightStreamingProvider* EditorBootstrap::getLightStreamingProvider()
+    {
+        return lightStreamingAdapter.get();
+    }
+
+    services::IGIProvider* EditorBootstrap::getGIProvider()
+    {
+        return giAdapter.get();
     }
 }

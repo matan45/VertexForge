@@ -19,6 +19,13 @@ namespace serialization
             componentsJson["ibl"] = serializeIBL(entity.getComponent<components::IBLComponent>());
         }
 
+        if (entity.hasComponent<components::WorldSectorComponent>())
+        {
+            json wsJson;
+            wsJson["worldFilePath"] = entity.getComponent<components::WorldSectorComponent>().worldFilePath;
+            componentsJson["worldSector"] = wsJson;
+        }
+
         if (entity.hasComponent<components::MeshComponent>())
         {
             componentsJson["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
@@ -95,12 +102,6 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
-        if (entity.hasComponent<components::LightmapComponent>())
-        {
-            componentsJson["lightmap"] = serializeLightmap(
-                entity.getComponent<components::LightmapComponent>());
-        }
-
         if (entity.hasComponent<components::TerrainComponent>())
         {
             componentsJson["terrain"] = serializeTerrain(
@@ -111,6 +112,12 @@ namespace serialization
         {
             componentsJson["terrainTile"] = serializeTerrainTile(
                 entity.getComponent<components::TerrainTileComponent>());
+        }
+
+        if (entity.hasComponent<components::GrassComponent>())
+        {
+            componentsJson["grass"] = serializeGrass(
+                entity.getComponent<components::GrassComponent>());
         }
 
         if (entity.hasComponent<components::WaterComponent>())
@@ -270,6 +277,16 @@ namespace serialization
             }
         }
 
+        if (componentsJson.contains("worldSector"))
+        {
+            const auto& wsJson = componentsJson["worldSector"];
+            if (wsJson.contains("worldFilePath") && wsJson["worldFilePath"].is_string())
+            {
+                entity.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+                    wsJson["worldFilePath"].get<std::string>();
+            }
+        }
+
         if (componentsJson.contains("mesh"))
         {
             auto& meshComp = entity.addOrReplaceComponent<components::MeshComponent>();
@@ -384,12 +401,6 @@ namespace serialization
             }
         }
 
-        if (componentsJson.contains("lightmap"))
-        {
-            auto& lmComp = entity.addOrReplaceComponent<components::LightmapComponent>();
-            deserializeLightmap(componentsJson["lightmap"], lmComp);
-        }
-
         if (componentsJson.contains("terrain"))
         {
             auto& terrainComp = entity.addOrReplaceComponent<components::TerrainComponent>();
@@ -400,6 +411,12 @@ namespace serialization
         {
             auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
             deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
+        }
+
+        if (componentsJson.contains("grass"))
+        {
+            auto& grassComp = entity.addOrReplaceComponent<components::GrassComponent>();
+            deserializeGrass(componentsJson["grass"], grassComp);
         }
 
         if (componentsJson.contains("water"))
@@ -569,5 +586,6 @@ namespace serialization
         {
             sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
         }
+
     }
 }

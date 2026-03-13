@@ -20,8 +20,12 @@ namespace windows
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
         menuBar.setWaterEditorWindow(&waterEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
-        menuBar.setLightBakeWindow(&lightBakeWindow);
-
+        menuBar.setAssetLifecycleWindow(&assetLifecycleWindow);
+        menuBar.setWorldSectorWindow(&worldSectorWindow);
+        menuBar.setVFXDebugWindow(&vfxDebugWindow);
+        menuBar.setAnimationDebugWindow(&animationDebugWindow);
+        menuBar.setGIConfigWindow(&giConfigWindow);
+        menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         subscribeToEvents();
     }
 
@@ -47,6 +51,8 @@ namespace windows
             [this](const events::scene::SceneLoadedNotification&)
             {
                 postProcessConfigWindow.notifySceneLoaded();
+                giConfigWindow.notifySceneLoaded();
+                lightStreamingDebugWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
@@ -86,10 +92,17 @@ namespace windows
             terrainCreationWindow.draw();
             waterEditorWindow.draw();
             navmeshWindow.draw();
-            lightBakeWindow.draw();
+            assetLifecycleWindow.draw();
+            worldSectorWindow.draw();
+            vfxDebugWindow.draw();
+            animationDebugWindow.draw();
             sculptToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();
+            grassDensityPanel.draw();
+            meshBrushToolPanel.draw();
+            giConfigWindow.draw();
+            lightStreamingDebugWindow.draw();
         }
         ImGui::End();
     }

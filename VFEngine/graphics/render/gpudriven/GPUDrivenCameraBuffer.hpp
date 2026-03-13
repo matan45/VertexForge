@@ -28,7 +28,7 @@ namespace render::gpudriven
         bool occlusionCullingEnabled;
         bool lodSelectionEnabled;
         bool distanceCullingEnabled;
-        float categoryDistances[5]; // StaticMesh, Terrain, Foliage, VFX, Decals
+        float categoryDistances[services::CullingCategory::Count];
         float shadowDistanceMultiplier;
         float globalLodBias;
         const IndirectBatchManager* batchManager;

@@ -16,5 +16,10 @@ namespace scene
         static std::shared_ptr<Level> getInstance();
         static void setInstance(const std::shared_ptr<Level>& newLevel);
         static void update();
+
+        static bool isWorldMode()
+        {
+            return level && level->isWorldLevel();
+        }
     };
 }

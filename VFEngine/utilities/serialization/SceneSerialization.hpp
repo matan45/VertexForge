@@ -34,14 +34,15 @@ namespace serialization
         static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
                                         SceneLoadProgressCallback progressCallback = nullptr);
 
-    private:
-        static json serializeRootEntity(scene::Entity& root);
         static json serializeEntity(scene::Entity& entity);
-        static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
                                       scene::SceneGraphSystem& sceneGraph, bool isRoot,
                                       SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
                                       size_t totalEntities);
+
+    private:
+        static json serializeRootEntity(scene::Entity& root);
+        static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
         static void deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph);
 
@@ -106,9 +107,6 @@ namespace serialization
         static json serializeSpotLight(const components::SpotLightComponent& light);
         static void deserializeSpotLight(const json& j, components::SpotLightComponent& light);
 
-        static json serializeLightmap(const components::LightmapComponent& lm);
-        static void deserializeLightmap(const json& j, components::LightmapComponent& lm);
-
         static json serializePhysicsSettings(const types::PhysicsSettings& settings);
         static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
 
@@ -153,6 +151,9 @@ namespace serialization
 
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);
+
+        static json serializeGrass(const components::GrassComponent& grass);
+        static void deserializeGrass(const json& j, components::GrassComponent& grass);
 
         static json serializeWater(const components::WaterComponent& water);
         static void deserializeWater(const json& j, components::WaterComponent& water);

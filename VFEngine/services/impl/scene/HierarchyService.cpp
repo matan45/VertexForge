@@ -134,11 +134,21 @@ namespace services
             }
         }
 
-        sceneGraph->removeEntity(sceneEntity);
+        // Publish before removeEntity so subscribers can still read components.
+        // Publish for every entity in the subtree (not just the root) so that
+        // asset lifecycle and other listeners can release per-entity resources.
+        for (const auto& handle : entitiesToDelete)
+        {
+            auto enttEntity = internal::fromHandle(handle);
+            if (registry.valid(enttEntity))
+            {
+                events::scene::EntityDeletedNotification notification;
+                notification.entity = handle;
+                dispatcher.publish(notification);
+            }
+        }
 
-        events::scene::EntityDeletedNotification notification;
-        notification.entity = entity;
-        dispatcher.publish(notification);
+        sceneGraph->removeEntity(sceneEntity);
 
         return true;
     }

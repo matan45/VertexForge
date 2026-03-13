@@ -3,12 +3,11 @@
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
-#include "lightbake/LightmapAtlas.hpp"
 #include "print/Log.hpp"
-#include <glm/gtc/packing.hpp>
 #include <chrono>
 
 namespace render::gpudriven
@@ -123,6 +122,18 @@ namespace render::gpudriven
             gpuLayer.emissionStrength = layer.emissionStrength;
         }
 
+        {
+            std::vector<std::string> texPaths;
+            for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+            {
+                const auto& layer = materialData->layers[i];
+                texPaths.push_back(layer.albedoTexturePath);
+                texPaths.push_back(layer.normalTexturePath);
+                texPaths.push_back(layer.ormTexturePath);
+            }
+            registerTextureDependencies(materialPath, texPaths);
+        }
+
         if (terrain.pipeline)
         {
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
@@ -225,79 +236,6 @@ namespace render::gpudriven
         terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 
-    void GPUDrivenRenderer::setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data)
-    {
-        if (!terrain.adapter)
-        {
-            return;
-        }
-
-        terrain.adapter->clearTileLightmapData();
-
-        for (const auto& entry : data)
-        {
-            // Register lightmap texture in bindless if not already done
-            if (!entry.lightmapPath.empty() &&
-                materials.registeredLightmapPaths.find(entry.lightmapPath) == materials.registeredLightmapPaths.end())
-            {
-                // The lightmap texture should already be loaded by registerSceneLightmapTextures
-                // for mesh objects. If not, we need to load it here too.
-                if (materials.lightmapTextureCache.find(entry.lightmapPath) == materials.lightmapTextureCache.end())
-                {
-                    auto lmData = lightbake::LightmapAtlas::load(entry.lightmapPath);
-                    if (lmData.width > 0 && lmData.height > 0 && !lmData.texels.empty())
-                    {
-                        resource::HDRData hdrData;
-                        hdrData.width = lmData.width;
-                        hdrData.height = lmData.height;
-                        hdrData.numbersOfChannels = 4;
-                        hdrData.pixels.resize(lmData.width * lmData.height * 4);
-
-                        const uint32_t channels = lmData.channels;
-                        for (uint32_t i = 0; i < lmData.width * lmData.height; ++i)
-                        {
-                            hdrData.pixels[i * 4 + 0] = (channels > 0) ? lmData.texels[i * channels + 0] : 0.0f;
-                            hdrData.pixels[i * 4 + 1] = (channels > 1) ? lmData.texels[i * channels + 1] : 0.0f;
-                            hdrData.pixels[i * 4 + 2] = (channels > 2) ? lmData.texels[i * channels + 2] : 0.0f;
-                            hdrData.pixels[i * 4 + 3] = 1.0f;
-                        }
-
-                        auto texture = std::make_unique<core::Texture>(device);
-                        texture->loadHDRFromData(hdrData, false);
-
-                        vk::ImageView view = texture->getImageView();
-                        vk::Sampler sampler = texture->getSampler();
-                        if (view && sampler && bindlessTextures)
-                        {
-                            bindlessTextures->registerTexture(
-                                entry.lightmapPath, view, sampler);
-                            materials.registeredLightmapPaths.insert(entry.lightmapPath);
-                        }
-                        materials.lightmapTextureCache[entry.lightmapPath] = std::move(texture);
-                    }
-                }
-            }
-
-            // Resolve bindless texture index for this lightmap
-            uint32_t textureIndex = INVALID_TEXTURE_INDEX;
-            if (bindlessTextures && !entry.lightmapPath.empty())
-            {
-                textureIndex = bindlessTextures->getTextureIndex(entry.lightmapPath);
-            }
-
-            if (textureIndex != INVALID_TEXTURE_INDEX)
-            {
-                glm::uvec4 lmData(
-                    textureIndex,
-                    glm::packHalf2x16(glm::vec2(entry.scaleOffset.x, entry.scaleOffset.y)),
-                    glm::packHalf2x16(glm::vec2(entry.scaleOffset.z, entry.scaleOffset.w)),
-                    0
-                );
-                terrain.adapter->setTileLightmapData(entry.coordX, entry.coordZ, lmData);
-            }
-        }
-    }
-
     void GPUDrivenRenderer::clearTerrainData()
     {
         if (terrain.streamManager)
@@ -322,6 +260,38 @@ namespace render::gpudriven
         {
             terrain.meshBuffer->clear();
         }
+
+        clearVegetationData();
+    }
+
+    void GPUDrivenRenderer::evictTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (terrain.streamManager)
+        {
+            terrain.streamManager->evictTile(coordX, coordZ);
+        }
+        else if (terrain.adapter)
+        {
+            render::gpudriven::TerrainTileKey key{coordX, coordZ};
+            for (uint32_t lod = 0; lod < 4; ++lod)
+            {
+                terrain.adapter->removeTileLOD(key, lod);
+            }
+        }
+        if (terrain.adapter)
+            terrain.adapter->markGPUTileDataDirty();
+    }
+
+    void GPUDrivenRenderer::setSelectedTerrainTile(int32_t coordX, int32_t coordZ)
+    {
+        if (terrain.adapter)
+            terrain.adapter->setSelectedTile(coordX, coordZ);
+    }
+
+    void GPUDrivenRenderer::clearSelectedTerrainTile()
+    {
+        if (terrain.adapter)
+            terrain.adapter->clearSelectedTile();
     }
 
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
@@ -367,6 +337,7 @@ namespace render::gpudriven
             terrainDistSq = d * d;
         }
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
+        terrain.pipeline->setShadowLOD(terrain.shadowLOD);
 
         uint32_t viewMode = culling.currentViewMode;
         if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;

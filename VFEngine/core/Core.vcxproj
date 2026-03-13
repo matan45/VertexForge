@@ -131,14 +131,16 @@
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="adapters\api\WaterAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
-    <ClInclude Include="adapters\lightbake\LightBakeAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\physics\IKAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\physics\SocketAdapter.hpp" />
+    <ClInclude Include="adapters\render\BillboardRenderAdapter.hpp" />
     <ClInclude Include="adapters\render\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\render\EditorTextureAdapter.hpp" />
+    <ClInclude Include="adapters\render\GIAdapter.hpp" />
+    <ClInclude Include="adapters\render\LightStreamingAdapter.hpp" />
     <ClInclude Include="adapters\render\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\render\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\render\OffScreenAdapter.hpp" />
@@ -156,6 +158,7 @@
     <ClInclude Include="adapters\terrain\TerrainRaycastAdapter.hpp" />
     <ClInclude Include="adapters\terrain\TerrainRenderAdapter.hpp" />
     <ClInclude Include="adapters\terrain\WaterRenderAdapter.hpp" />
+    <ClInclude Include="adapters\vegetation\GrassRenderAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
@@ -178,11 +181,17 @@
     <ClInclude Include="core\MainLoop.hpp" />
     <ClInclude Include="physics\FixedTimestep.hpp" />
     <ClInclude Include="physics\JoltConversions.hpp" />
+    <ClInclude Include="physics\PhysicsBodyRegistry.hpp" />
+    <ClInclude Include="physics\PhysicsCharacterManager.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
+    <ClInclude Include="physics\PhysicsContext.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
+    <ClInclude Include="physics\PhysicsRagdollManager.hpp" />
+    <ClInclude Include="physics\PhysicsRigidBodyManager.hpp" />
     <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
     <ClInclude Include="physics\PhysicsSkeletonConverter.hpp" />
+    <ClInclude Include="physics\PhysicsTerrainManager.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
     <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
   </ItemGroup>
@@ -218,15 +227,17 @@
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="adapters\api\WaterAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
-    <ClCompile Include="adapters\lightbake\LightBakeAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
     <ClCompile Include="adapters\physics\IKAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\physics\SocketAdapter.cpp" />
+    <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\render\GIAdapter.cpp" />
+    <ClCompile Include="adapters\render\LightStreamingAdapter.cpp" />
     <ClCompile Include="adapters\render\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\OffScreenAdapter.cpp" />
@@ -244,6 +255,7 @@
     <ClCompile Include="adapters\terrain\TerrainRaycastAdapter.cpp" />
     <ClCompile Include="adapters\terrain\TerrainRenderAdapter.cpp" />
     <ClCompile Include="adapters\terrain\WaterRenderAdapter.cpp" />
+    <ClCompile Include="adapters\vegetation\GrassRenderAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
@@ -272,12 +284,16 @@
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
     <ClCompile Include="physics\FixedTimestep.cpp" />
+    <ClCompile Include="physics\PhysicsBodyRegistry.cpp" />
+    <ClCompile Include="physics\PhysicsCharacterManager.cpp" />
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
     <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
+    <ClCompile Include="physics\PhysicsRagdollManager.cpp" />
+    <ClCompile Include="physics\PhysicsRigidBodyManager.cpp" />
     <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
+    <ClCompile Include="physics\PhysicsTerrainManager.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
-    <ClCompile Include="physics\PhysicsWorldRagdollOps.cpp" />
     <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
   </ItemGroup>
   <ItemGroup>

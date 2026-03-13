@@ -10,6 +10,7 @@ namespace render::shadow
     ShadowSystem::ShadowSystem(core::Device& device)
         : device(device)
     {
+        lastCacheStats = {};
     }
 
     ShadowSystem::~ShadowSystem()
@@ -211,6 +212,14 @@ namespace render::shadow
         data.matricesDirty = true;
         data.settingsDirty = true;
 
+        // Check if light entity is static
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entity = static_cast<entt::entity>(entityId);
+        if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
+        {
+            data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+        }
+
         uint32_t viewCount = 1;
         switch (type)
         {
@@ -262,6 +271,57 @@ namespace render::shadow
         {
             resourcePool->setDeletionQueue(queue);
         }
+    }
+
+    void ShadowSystem::invalidateStaticShadow(uint32_t entityId)
+    {
+        auto it = lightShadowData.find(entityId);
+        if (it != lightShadowData.end())
+        {
+            it->second.invalidateCache();
+            needsUpdate = true;
+        }
+    }
+
+    void ShadowSystem::invalidateAllStaticShadows()
+    {
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.isStatic)
+            {
+                data.invalidateCache();
+            }
+        }
+        needsUpdate = true;
+    }
+
+    void ShadowSystem::updateStaticFlags()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            auto entity = static_cast<entt::entity>(entityId);
+            bool wasStatic = data.isStatic;
+            if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
+            {
+                data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+            }
+            else
+            {
+                data.isStatic = false;
+            }
+
+            // If static status changed, invalidate cache
+            if (wasStatic != data.isStatic)
+            {
+                data.invalidateCache();
+            }
+        }
+    }
+
+    ShadowSystem::ShadowCacheStats ShadowSystem::getShadowCacheStats() const
+    {
+        return lastCacheStats;
     }
 
     int32_t ShadowSystem::getShadowViewIndex(uint32_t entityId) const

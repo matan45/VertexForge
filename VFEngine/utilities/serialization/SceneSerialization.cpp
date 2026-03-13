@@ -264,7 +264,6 @@ namespace serialization
             sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
             sceneJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
-
             std::string filePath{filename};
             std::ofstream file{filePath};
             if (!file.is_open())
@@ -296,7 +295,6 @@ namespace serialization
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
             snapshot["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
-
             return snapshot;
         }
         catch (const std::exception& e)

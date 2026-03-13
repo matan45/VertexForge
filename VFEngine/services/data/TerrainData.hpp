@@ -16,8 +16,6 @@ namespace services
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
 
-        std::array<float, 4> lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
-
         std::string heightmapPath;
         std::string terrainMaterialPath;
         std::string weightMapPath;
@@ -56,7 +54,6 @@ namespace services
     {
         int32_t tileX = 0;
         int32_t tileZ = 0;
-        uint8_t currentLOD = 0;
         bool isVisible = true;
         bool isDirty = false;
         bool isGPUResident = false;

@@ -18,7 +18,6 @@ namespace windows
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
         std::string heightmapPath;
-        std::array<float, 4> lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
 
     public:
         void draw();

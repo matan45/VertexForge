@@ -14,15 +14,19 @@
 #include "ui/UITextPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
+#include "../../services/data/WaterData.hpp"
 #include "water/WaterTypes.hpp"
 #include "water/WaterTile.hpp"
+#include "water/OceanFFT.hpp"
+#include "vegetation/WindConfig.hpp"
 
 namespace
 {
@@ -85,25 +89,6 @@ namespace render
 
         if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
         {
-            // Apply terrain lightmap data if changed (must happen before updateTerrain
-            // which calls buildGPUTileData that reads the lightmap data)
-            if (terrainRenderProvider->consumeTerrainLightmapDirty())
-            {
-                auto lmEntries = terrainRenderProvider->getTerrainLightmapData();
-                std::vector<render::gpudriven::GPUDrivenRenderer::TerrainTileLightmapData> lmData;
-                lmData.reserve(lmEntries.size());
-                for (const auto& entry : lmEntries)
-                {
-                    render::gpudriven::GPUDrivenRenderer::TerrainTileLightmapData d;
-                    d.coordX = entry.coordX;
-                    d.coordZ = entry.coordZ;
-                    d.scaleOffset = entry.scaleOffset;
-                    d.lightmapPath = entry.lightmapPath;
-                    lmData.push_back(std::move(d));
-                }
-                gpuDrivenRenderer->setTerrainLightmapData(lmData);
-            }
-
             if (terrainRenderProvider->consumeTerrainMaterialDirty())
             {
                 gpuDrivenRenderer->invalidateTerrainLayerData();
@@ -130,6 +115,27 @@ namespace render
 
             auto matPath = terrainRenderProvider->getTerrainMaterialPath();
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition, matPath);
+
+            auto allLoadedTiles = terrainRenderProvider->getAllLoadedTiles();
+            gpuDrivenRenderer->updateVegetationStreaming(visibleTiles, allLoadedTiles, currentCameraPosition);
+
+            if (grassRenderProvider)
+            {
+                auto grassConfig = grassRenderProvider->getGrassRenderConfig();
+                gpuDrivenRenderer->setGrassRenderConfig(grassConfig);
+
+                ::vegetation::WindConfig windConfig;
+                windConfig.direction = grassConfig.windDirection;
+                windConfig.speed = grassConfig.windSpeed * grassConfig.windStrength;
+                windConfig.gustStrength = grassConfig.gustStrength;
+                windConfig.gustFrequency = grassConfig.gustFrequency;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
+            else
+            {
+                ::vegetation::WindConfig windConfig;
+                gpuDrivenRenderer->updateWind(0.016f, windConfig);
+            }
         }
 
         if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
@@ -155,6 +161,57 @@ namespace render
             auto settings = waterRenderProvider->getWaterGlobalSettings();
             auto tileConfig = waterRenderProvider->getWaterTileConfig();
             gpuDrivenRenderer->updateWater(visibleTiles, settings, tileConfig);
+        }
+
+        if (waterRenderProvider && gpuDrivenRenderer)
+        {
+            bool wantOcean = waterRenderProvider->isOceanFFTEnabled();
+            uint32_t version = waterRenderProvider->getOceanFFTConfigVersion();
+
+            if (wantOcean && !oceanFFTInitialized)
+            {
+                auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                render::water::OceanFFTConfig cfg;
+                cfg.resolution = cfgData.resolution;
+                cfg.patchSize = cfgData.patchSize;
+                cfg.windSpeed = cfgData.windSpeed;
+                cfg.windDirection = cfgData.windDirection;
+                cfg.amplitude = cfgData.amplitude;
+                cfg.choppiness = cfgData.choppiness;
+                cfg.gravity = waterRenderProvider->getPhysicsGravity();
+                cfg.foamThreshold = cfgData.foamThreshold;
+                cfg.displacementScale = cfgData.displacementScale;
+                gpuDrivenRenderer->initOceanFFT(cfg);
+                oceanFFTInitialized = true;
+                lastOceanConfigVersion = version;
+
+                // Wire CPU-side ocean height sampling for physics
+                auto* renderer = gpuDrivenRenderer.get();
+                waterRenderProvider->setOceanHeightSampler(
+                    [renderer](const glm::vec2& pos) { return renderer->getOceanHeightAt(pos); });
+            }
+            else if (!wantOcean && oceanFFTInitialized)
+            {
+                gpuDrivenRenderer->cleanupOceanFFT();
+                oceanFFTInitialized = false;
+                waterRenderProvider->setOceanHeightSampler(nullptr);
+            }
+            else if (wantOcean && oceanFFTInitialized && version != lastOceanConfigVersion)
+            {
+                auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                render::water::OceanFFTConfig cfg;
+                cfg.resolution = cfgData.resolution;
+                cfg.patchSize = cfgData.patchSize;
+                cfg.windSpeed = cfgData.windSpeed;
+                cfg.windDirection = cfgData.windDirection;
+                cfg.amplitude = cfgData.amplitude;
+                cfg.choppiness = cfgData.choppiness;
+                cfg.gravity = waterRenderProvider->getPhysicsGravity();
+                cfg.foamThreshold = cfgData.foamThreshold;
+                cfg.displacementScale = cfgData.displacementScale;
+                gpuDrivenRenderer->updateOceanConfig(cfg);
+                lastOceanConfigVersion = version;
+            }
         }
 
         // Consume and discard RTT frustums so they don't persist across frames.
@@ -235,10 +292,16 @@ namespace render
         updateGPUDrivenHiZ();
         gpuDrivenRenderer->dispatchCompute(commandBuffer);
 
+        if (oceanFFTInitialized)
+        {
+            // Read previous frame's displacement data for CPU-side physics
+            gpuDrivenRenderer->readbackOceanDisplacement();
+            gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
+        }
+
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        // Set dynamic viewport/scissor for mesh shader pipelines
         auto extent = swapChain.getSwapchainExtent();
         vk::Viewport viewport{0.0f, 0.0f,
                                static_cast<float>(extent.width), static_cast<float>(extent.height),
@@ -264,14 +327,29 @@ namespace render
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
         }
 
+        if (gpuDrivenRenderer->isGrassRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
+        }
+
         if (gpuDrivenRenderer->isWaterRenderingEnabled())
         {
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
         }
 
+        if (gpuDrivenRenderer->isBillboardRenderingEnabled())
+        {
+            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+        }
+
         if (hasCustomShaderMeshes)
         {
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+        }
+
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
         }
 
         if (debugRendererPtr)
@@ -324,11 +402,6 @@ namespace render
         }
 
         cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
-
-        if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
-        {
-            cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
-        }
 
         if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
         {

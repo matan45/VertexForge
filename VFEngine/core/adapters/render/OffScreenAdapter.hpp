@@ -1,5 +1,6 @@
 #pragma once
 #include "../../services/providers/render/IOffScreenProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 
 namespace controllers
 {
@@ -11,6 +12,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace core
@@ -19,14 +22,17 @@ namespace core
     {
     private:
         controllers::OffScreen* offScreen;
+        events::SubscriptionToken assetReleaseToken;
 
     public:
         explicit OffScreenAdapter(controllers::OffScreen* offScreen);
-        ~OffScreenAdapter() override = default;
+        ~OffScreenAdapter() override;
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void* render() override;
 
@@ -51,6 +57,7 @@ namespace core
 
         void prepareFrameBillboards() override;
         void prepareFrameText() override;
+        void prepareSceneData() override;
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;
         bool loadBillboardAtlas(const std::string& atlasPath) override;

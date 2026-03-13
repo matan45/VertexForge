@@ -61,8 +61,23 @@ namespace render
             uint8_t globalCascadeCount = 4;
             types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
 
+            ShadowLODConfig shadowLODConfig;
+            std::unordered_map<uint32_t, uint32_t> currentShadowResolutions; // entityId -> current resolution
+
             bool initialized = false;
             bool needsUpdate = true;
+            uint32_t frameCounter = 0;
+
+            struct ShadowCacheStats
+            {
+                uint32_t totalStaticLights = 0;
+                uint32_t cachedShadowMaps = 0;
+                uint32_t renderedThisFrame = 0;
+                uint32_t skippedThisFrame = 0;
+            };
+
+            // Shadow cache stats for current frame
+            mutable ShadowCacheStats lastCacheStats{};
 
             lighting::GPULightBufferManager* lightBufferManager = nullptr;
 
@@ -119,6 +134,15 @@ namespace render
             [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
 
             void applyRenderSettings(const types::RenderSettings& settings);
+            void applyShadowLODSettings(const ShadowLODConfig& config);
+            void updateShadowLOD(const glm::vec3& cameraPosition);
+
+            // Shadow caching for static lights
+            void invalidateStaticShadow(uint32_t entityId);
+            void invalidateAllStaticShadows();
+            void updateStaticFlags();
+
+            [[nodiscard]] ShadowCacheStats getShadowCacheStats() const;
 
             [[nodiscard]] uint32_t getActiveShadowCasterCount() const;
             [[nodiscard]] uint32_t getActiveShadowViewCount() const;

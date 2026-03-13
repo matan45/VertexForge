@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <cstdint>
 #include <array>
 
@@ -14,7 +16,7 @@ namespace terrain
     class TerrainGrid;
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 1;
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 0;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
@@ -26,6 +28,7 @@ namespace terrain
         HAS_PHYSICS_DATA  = 1 << 1,
         HAS_MESHLET_CACHE = 1 << 2,
         HAS_HOLE_MASK     = 1 << 3,
+        HAS_STREAMING_CONFIG = 1 << 4,
     };
 
     inline TerrainFormatFlags operator|(TerrainFormatFlags a, TerrainFormatFlags b)
@@ -45,6 +48,15 @@ namespace terrain
         uint8_t collisionLayer = 0;
         float friction = 0.5f;
         float restitution = 0.0f;
+    };
+
+    struct TerrainStreamingConfig
+    {
+        bool enabled = false;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int32_t maxLoadsPerFrame = 4;
+        int32_t maxUnloadsPerFrame = 4;
     };
 
     struct TerrainFileHeader
@@ -71,6 +83,7 @@ namespace terrain
         std::string materialPath;
 
         TerrainPhysicsConfig physicsConfig;
+        TerrainStreamingConfig streamingConfig;
     };
 
     struct TileIndexEntry
@@ -83,6 +96,14 @@ namespace terrain
         uint64_t meshletDataOffset = 0;
         uint64_t holeMaskDataOffset = 0;
     };
+
+    // On-disk serialized size of TileIndexEntry (sum of field sizes, no padding)
+    inline constexpr size_t TILE_INDEX_ENTRY_SIZE =
+        sizeof(int32_t) + sizeof(int32_t) +     // coordX, coordZ
+        sizeof(uint64_t) + sizeof(uint32_t) +    // heightDataOffset, heightDataSize
+        sizeof(uint64_t) + sizeof(uint64_t) +    // weightDataOffset, meshletDataOffset
+        sizeof(uint64_t);                         // holeMaskDataOffset
+    static_assert(TILE_INDEX_ENTRY_SIZE == 44, "TileIndexEntry on-disk size changed — update serialization code");
 
     struct TileLoadResult
     {
@@ -106,17 +127,24 @@ namespace terrain
             int32_t gridMinX, int32_t gridMinZ,
             int32_t gridMaxX, int32_t gridMaxZ,
             const std::string& materialPath,
-            const TerrainPhysicsConfig& physicsConfig = {});
-
-        static bool loadAll(
-            std::string_view path,
-            TerrainFileHeader& outHeader,
-            std::vector<TileLoadResult>& outTiles);
+            const TerrainPhysicsConfig& physicsConfig = {},
+            const TerrainStreamingConfig& streamingConfig = {});
 
         static bool readHeader(
             std::string_view path,
             TerrainFileHeader& outHeader,
-            std::vector<TileIndexEntry>& outIndex);
+            std::vector<TileIndexEntry>& outIndex,
+            uint64_t* outIndexTableOffset = nullptr);
+
+        static bool saveIncremental(
+            std::string_view path,
+            const TerrainGrid& grid,
+            const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
+            const TerrainFileHeader& currentHeader,
+            uint64_t indexTableOffset,
+            const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& currentIndexMap,
+            const TerrainPhysicsConfig& physicsConfig = {},
+            const TerrainStreamingConfig& streamingConfig = {});
 
         static bool readTileHeights(
             std::string_view path,
@@ -139,20 +167,24 @@ namespace terrain
             std::vector<uint8_t>& outHoleMask);
 
     private:
-        static bool writeHeader(std::ofstream& file, const TerrainFileHeader& header);
-        static bool writeIndexTable(std::ofstream& file, const std::vector<TileIndexEntry>& index);
+        static bool writeHeader(std::ostream& file, const TerrainFileHeader& header);
+        static bool writeIndexTable(std::ostream& file, const std::vector<TileIndexEntry>& index);
         static bool writeTileData(
-            std::ofstream& file,
+            std::ostream& file,
             const TerrainTile& tile,
             TerrainFormatFlags flags,
             TileIndexEntry& outEntry);
 
-        static bool writeTileMeshletData(std::ofstream& file, const TerrainTile& tile,
+        static bool writeTileMeshletData(std::ostream& file, const TerrainTile& tile,
                                          TileIndexEntry& outEntry);
 
-        static bool parseHeader(std::ifstream& file, TerrainFileHeader& outHeader);
-        static bool parseIndexTable(std::ifstream& file, uint32_t tileCount,
+        static TerrainFormatFlags computeFlags(const TerrainGrid& grid,
+                                                const TerrainPhysicsConfig& physicsConfig,
+                                                const TerrainStreamingConfig& streamingConfig);
+
+        static bool parseHeader(std::istream& file, TerrainFileHeader& outHeader);
+        static bool parseIndexTable(std::istream& file, uint32_t tileCount,
                                     std::vector<TileIndexEntry>& outIndex);
-        static bool parseTileMeshletData(std::ifstream& file, TileLoadResult& result);
+        static bool parseTileMeshletData(std::istream& file, TileLoadResult& result);
     };
 }

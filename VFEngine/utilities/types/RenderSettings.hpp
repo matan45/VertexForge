@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "../postprocess/PostProcessTypes.hpp"
+#include "../../graphics/render/gi/GITypes.hpp"
 
 namespace types
 {
@@ -138,14 +139,68 @@ namespace types
         uint32_t shadowLOD = 2; // LOD level for terrain shadows (0=highest, 3=lowest)
     };
 
+    struct VFXLODSettings
+    {
+        float lod0Distance = 50.0f;
+        float lod1Distance = 100.0f;
+        float lod2Distance = 200.0f;
+        float transitionZone = 10.0f;
+    };
+
+    struct AnimationLODSettings
+    {
+        float lod0Distance = 25.0f;
+        float lod1Distance = 75.0f;
+        float lod2Distance = 150.0f;
+        float lod3Distance = 300.0f;
+        uint32_t lod0Interval = 1;
+        uint32_t lod1Interval = 2;
+        uint32_t lod2Interval = 6;
+        uint32_t maxStreamingInitPerFrame = 4;
+    };
+
+    struct ShadowLODSettings
+    {
+        bool enabled = true;
+        float tier0Distance = 30.0f;   // < 30m  -> 2048
+        float tier1Distance = 80.0f;   // < 80m  -> 1024
+        float tier2Distance = 150.0f;  // < 150m -> 512
+        // > 150m -> no shadow
+
+        uint32_t tier0Resolution = 2048;
+        uint32_t tier1Resolution = 1024;
+        uint32_t tier2Resolution = 512;
+
+        // Tighter tiers for static lights (cached shadows)
+        float staticTier0Distance = 20.0f;
+        float staticTier1Distance = 50.0f;
+        float staticTier2Distance = 100.0f;
+    };
+
+    struct LightStreamingSettings
+    {
+        uint32_t maxPointLights = 1024;
+        uint32_t maxSpotLights = 512;
+        float distanceWeight = 1.0f;
+        float intensityWeight = 0.5f;
+        float radiusWeight = 0.3f;
+        float shadowWeight = 2.0f;
+        float hysteresisMargin = 0.05f;
+    };
+
     struct RenderSettings
     {
         ShadowSettings shadows;
+        ShadowLODSettings shadowLOD;
+        LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
         TerrainSettings terrain;
         postprocess::PostProcessSettings postProcess;
+        VFXLODSettings vfxLOD;
+        AnimationLODSettings animationLOD;
+        render::gi::GISettings gi;
 
         static RenderSettings createDefault()
         {

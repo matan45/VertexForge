@@ -53,6 +53,7 @@ namespace windows::details
             changed |= drawSizeInput(data);
             ImGui::Spacing();
             changed |= drawColorTint(data);
+            ImGui::Spacing();
 
             if (changed)
             {
@@ -182,4 +183,5 @@ namespace windows::details
 
         return changed;
     }
+
 }

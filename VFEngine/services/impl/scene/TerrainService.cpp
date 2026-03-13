@@ -11,6 +11,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -40,10 +41,25 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::AddTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RemoveTerrainTileCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::PrepareTerrainSaveCommand>();
+        dispatcher.unregisterCommandHandler<events::holeBrush::ApplyHoleBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
+        dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainTileDataQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightfieldQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightAtQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
+        dispatcher.unregisterQueryHandler<events::physics::HasTerrainColliderQuery>();
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())
         {
@@ -86,8 +102,11 @@ namespace services
         data.heightmapPath = comp.heightmapPath;
         data.terrainMaterialPath = comp.terrainMaterialPath;
         data.weightMapPath = comp.weightMapPath;
-        data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
-                                                (comp.gridMaxZ - comp.gridMinZ + 1));
+        auto gridIt = terrainGrids.find(entity.id);
+        data.tileCount = (gridIt != terrainGrids.end())
+            ? static_cast<uint32_t>(gridIt->second->getTileCount())
+            : static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
+                                     (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;
         data.isDirty = comp.isDirty;
         data.activeTileCount = comp.activeTileCount;
@@ -168,7 +187,6 @@ namespace services
         TerrainTileData data;
         data.tileX = comp.tileX;
         data.tileZ = comp.tileZ;
-        data.currentLOD = comp.currentLOD;
         data.isVisible = comp.isVisible;
         data.isDirty = comp.isDirty;
         data.isGPUResident = comp.isGPUResident;
@@ -233,6 +251,8 @@ namespace services
 
         terrainGrids.clear();
         fileCaches.clear();
+        worldStreamers.clear();
+        pendingPhysicsTiles.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }
@@ -244,26 +264,16 @@ namespace services
             return;
         }
 
-        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
-        if (!materialData)
-        {
-            return;
-        }
-
-        uint8_t layerCount = materialData->activeLayerCount;
-        if (layerCount == 0)
-        {
-            layerCount = 1;
-        }
-
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
         {
             return;
         }
 
+        // With per-tile palette, weight maps are always 4 channels.
+        // Just ensure all tiles have weight maps initialized.
         terrain::TerrainGrid* grid = gridIt->second.get();
-        grid->updateWeightMapLayerCount(layerCount);
+        grid->initializeWeightMaps();
     }
 
     events::terrain::TerrainGeometryResult TerrainService::getTerrainGeometryForNavmesh()
@@ -473,6 +483,86 @@ namespace services
                         copyCount * sizeof(float));
         }
 
+        result.valid = true;
+        return result;
+    }
+
+    events::terrain::TerrainHeightAtResult TerrainService::getTerrainHeightAt(float worldX, float worldZ)
+    {
+        events::terrain::TerrainHeightAtResult result;
+
+        if (terrainGrids.empty())
+            return result;
+
+        auto& [entityId, grid] = *terrainGrids.begin();
+        auto allTiles = grid->getAllTiles();
+        if (allTiles.empty())
+            return result;
+
+        const auto& config = allTiles[0]->config;
+        float tileSize = config.worldTileSize;
+        uint32_t quadCount = config.getQuadCount();
+        float vertexSpacing = config.getVertexSpacing();
+
+        // Determine which tile this world position falls in
+        int32_t tileX = static_cast<int32_t>(std::floor(worldX / tileSize));
+        int32_t tileZ = static_cast<int32_t>(std::floor(worldZ / tileSize));
+
+        // Find the tile
+        terrain::TerrainTile* tile = nullptr;
+        for (auto* t : allTiles)
+        {
+            if (t && t->coord.x == tileX && t->coord.z == tileZ)
+            {
+                tile = t;
+                break;
+            }
+        }
+
+        if (!tile || !tile->hasHeightData())
+            return result;
+
+        // Local position within the tile (0..tileSize)
+        float localX = worldX - static_cast<float>(tileX) * tileSize;
+        float localZ = worldZ - static_cast<float>(tileZ) * tileSize;
+
+        // Convert to grid coordinates (fractional)
+        float gx = localX / vertexSpacing;
+        float gz = localZ / vertexSpacing;
+
+        // Clamp to valid range
+        float maxCoord = static_cast<float>(quadCount);
+        gx = std::clamp(gx, 0.0f, maxCoord);
+        gz = std::clamp(gz, 0.0f, maxCoord);
+
+        // Integer grid indices
+        uint32_t ix = static_cast<uint32_t>(gx);
+        uint32_t iz = static_cast<uint32_t>(gz);
+        ix = std::min(ix, quadCount - 1);
+        iz = std::min(iz, quadCount - 1);
+
+        // Fractional part for bilinear interpolation
+        float fx = gx - static_cast<float>(ix);
+        float fz = gz - static_cast<float>(iz);
+
+        uint32_t vpt = quadCount + 1;
+        auto getHeight = [&](uint32_t x, uint32_t z) -> float
+        {
+            return tile->heightData[z * vpt + x];
+        };
+
+        // Bilinear interpolation of the four surrounding vertices
+        float h00 = getHeight(ix, iz);
+        float h10 = getHeight(ix + 1, iz);
+        float h01 = getHeight(ix, iz + 1);
+        float h11 = getHeight(ix + 1, iz + 1);
+
+        float h = h00 * (1.0f - fx) * (1.0f - fz)
+                + h10 * fx * (1.0f - fz)
+                + h01 * (1.0f - fx) * fz
+                + h11 * fx * fz;
+
+        result.height = h;
         result.valid = true;
         return result;
     }

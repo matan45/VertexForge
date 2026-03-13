@@ -71,6 +71,9 @@ namespace core::audio {
         void applySettings(const types::AudioSettings& settings);
         types::AudioSettings getCurrentSettings() const;
 
+        // === Buffer Management ===
+        void unloadAudioBuffer(const std::string& path);
+
     private:
         AudioHandle playSound(const std::string& path, const PlaySoundParams& params);
         void stopAll();

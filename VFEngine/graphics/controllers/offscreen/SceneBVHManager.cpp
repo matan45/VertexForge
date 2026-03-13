@@ -1,8 +1,6 @@
 #include "SceneBVHManager.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
-#include "../../render/occlusion/CameraOcclusionManager.hpp"
-#include "../../render/occlusion/OcclusionCullingManager.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/project/SceneEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -168,73 +166,4 @@ namespace controllers::offscreen
         sceneBVH.markDirty();
     }
 
-    void SceneBVHManager::updateOcclusionCullingData(render::RenderPassHandler* renderHandler)
-    {
-        auto* cameraManager = renderHandler->getCameraOcclusionManager();
-        auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
-
-        if (!activeCamera || !activeCamera->useOcclusionCulling || !activeCamera->occlusionInitialized)
-        {
-            return;
-        }
-
-        auto* meshPipeline = renderHandler->getMeshPipeline();
-        if (!meshPipeline)
-        {
-            return;
-        }
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
-
-        std::vector<render::occlusion::GPUObjectData> objectData;
-        objectData.reserve(view.size_hint());
-
-        for (auto entity : view)
-        {
-            const auto& meshComp = view.get<components::MeshComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            if (meshComp.meshPath.empty())
-            {
-                continue;
-            }
-
-            const math::AABB* localAABB = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
-            if (!localAABB || !localAABB->isValid())
-            {
-                continue;
-            }
-
-            uint32_t flags = render::occlusion::OcclusionFlags::None;
-
-            if (registry.all_of<components::MaterialComponent>(entity))
-            {
-                const auto& matComp = registry.get<components::MaterialComponent>(entity);
-                std::string materialToCheck = matComp.defaultMaterial;
-                if (!materialToCheck.empty())
-                {
-                    material::BlendMode blendMode = meshPipeline->getMaterialBlendMode(materialToCheck);
-                    if (blendMode != material::BlendMode::Opaque)
-                    {
-                        flags |= render::occlusion::OcclusionFlags::Transparent;
-                    }
-                }
-            }
-
-            render::occlusion::GPUObjectData obj;
-            obj.aabbMin = glm::vec4(localAABB->min, static_cast<float>(entity));
-            obj.aabbMax = glm::vec4(localAABB->max, glm::uintBitsToFloat(flags));
-            obj.modelMatrix = worldTransform.worldMatrix;
-
-            objectData.push_back(obj);
-        }
-
-        if (!objectData.empty())
-        {
-            render::occlusion::CameraId activeCameraId = cameraManager->getActiveCameraId();
-            renderHandler->updateOcclusionObjects(activeCameraId, objectData);
-            renderHandler->updateOcclusionCamera(activeCameraId, activeCamera->viewProj, activeCamera->nearPlane);
-        }
-    }
 }

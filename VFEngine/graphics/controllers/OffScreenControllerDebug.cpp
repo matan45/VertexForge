@@ -2,7 +2,7 @@
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/DebugRenderer.hpp"
-#include "../render/gpudriven/BrushComputePipeline.hpp"
+#include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 
 namespace controllers
 {

@@ -30,6 +30,8 @@ namespace water
         [[nodiscard]] std::vector<WaterTile*> getAllTiles();
         [[nodiscard]] std::vector<const WaterTile*> getAllTiles() const;
         [[nodiscard]] size_t getTileCount() const;
+        [[nodiscard]] bool hasTile(const TileCoord& coord) const;
+        void computeBounds(int32_t& minX, int32_t& minZ, int32_t& maxX, int32_t& maxZ) const;
 
         [[nodiscard]] float getWaterHeightAt(const glm::vec2& worldXZ) const;
         [[nodiscard]] bool isPositionInWater(const glm::vec3& worldPos) const;

@@ -1,5 +1,6 @@
 #pragma once
 #include "../../services/providers/audio/IAudioProvider.hpp"
+#include "../../services/events/EventTypes.hpp"
 #include <memory>
 
 namespace core::audio
@@ -13,6 +14,7 @@ namespace core
     {
     private:
         std::unique_ptr<audio::AudioController> audioController;
+        events::SubscriptionToken assetReleaseToken;
     public:
         explicit AudioAdapter();
         ~AudioAdapter() override;

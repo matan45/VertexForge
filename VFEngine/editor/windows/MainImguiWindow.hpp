@@ -12,10 +12,17 @@
 #include "terrain/TerrainCreationWindow.hpp"
 #include "WaterEditorWindow.hpp"
 #include "config/NavmeshWindow.hpp"
-#include "lighting/LightBakeWindow.hpp"
+#include "AssetLifecycleWindow.hpp"
+#include "WorldSectorWindow.hpp"
+#include "VFXDebugWindow.hpp"
+#include "AnimationDebugWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
+#include "vegetation/GrassDensityPanel.hpp"
+#include "meshbrush/MeshBrushToolPanel.hpp"
+#include "config/GIConfigWindow.hpp"
+#include "config/LightStreamingDebugWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -44,10 +51,17 @@ namespace windows
         TerrainCreationWindow terrainCreationWindow;
         WaterEditorWindow waterEditorWindow;
         NavmeshWindow navmeshWindow;
-        LightBakeWindow lightBakeWindow;
+        AssetLifecycleWindow assetLifecycleWindow;
+        WorldSectorWindow worldSectorWindow;
+        VFXDebugWindow vfxDebugWindow;
+        AnimationDebugWindow animationDebugWindow;
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;
+        GrassDensityPanel grassDensityPanel;
+        MeshBrushToolPanel meshBrushToolPanel;
+        GIConfigWindow giConfigWindow;
+        LightStreamingDebugWindow lightStreamingDebugWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

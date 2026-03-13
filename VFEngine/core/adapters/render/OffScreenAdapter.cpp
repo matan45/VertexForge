@@ -1,10 +1,49 @@
 #include "OffScreenAdapter.hpp"
 #include "../../controllers/OffScreen.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
+#include "resource/AssetTypes.hpp"
+#include "print/Log.hpp"
 
 namespace core {
 
     OffScreenAdapter::OffScreenAdapter(controllers::OffScreen* offScreen)
-        : offScreen(offScreen) {}
+        : offScreen(offScreen)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        assetReleaseToken = dispatcher.subscribe<events::lifecycle::AssetReleaseReadyNotification>(
+            [this](const events::lifecycle::AssetReleaseReadyNotification& notification)
+            {
+                if (!this->offScreen) return;
+
+                switch (notification.type)
+                {
+                case resource::AssetType::Mesh:
+                    this->offScreen->meshRelease(notification.path);
+                    vfLogInfo("OffScreenAdapter: Released mesh GPU resources for '{}'", notification.path);
+                    break;
+                case resource::AssetType::Texture:
+                case resource::AssetType::HDR:
+                    this->offScreen->textureRelease(notification.path);
+                    vfLogInfo("OffScreenAdapter: Released texture GPU resources for '{}'", notification.path);
+                    break;
+                case resource::AssetType::Material:
+                    this->offScreen->materialRelease(notification.path);
+                    vfLogInfo("OffScreenAdapter: Released material GPU resources for '{}'", notification.path);
+                    break;
+                default:
+                    break;
+                }
+            });
+    }
+
+    OffScreenAdapter::~OffScreenAdapter()
+    {
+        if (assetReleaseToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(assetReleaseToken);
+        }
+    }
 
     void* OffScreenAdapter::render() {
         return offScreen ? offScreen->render() : nullptr;
@@ -96,6 +135,12 @@ namespace core {
     void OffScreenAdapter::prepareFrameText() {
         if (offScreen) {
             offScreen->prepareFrameText();
+        }
+    }
+
+    void OffScreenAdapter::prepareSceneData() {
+        if (offScreen) {
+            offScreen->prepareSceneData();
         }
     }
 
@@ -381,6 +426,18 @@ namespace core {
     void OffScreenAdapter::setWaterRenderProvider(services::IWaterRenderProvider* provider) {
         if (offScreen) {
             offScreen->setWaterRenderProvider(provider);
+        }
+    }
+
+    void OffScreenAdapter::setGrassRenderProvider(services::IGrassRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setGrassRenderProvider(provider);
+        }
+    }
+
+    void OffScreenAdapter::setVegetationRenderProvider(services::IVegetationRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setVegetationRenderProvider(provider);
         }
     }
 

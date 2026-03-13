@@ -4,12 +4,14 @@
 #include "components/Components.hpp"
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 
@@ -21,6 +23,7 @@ namespace services
 
         registerTerrainCoreHandlers(dispatcher);
         registerBrushHandlers(dispatcher);
+        registerVegetationBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
 
@@ -100,6 +103,79 @@ namespace services
             {
                 return getTerrainHeightfield();
             });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainHeightAtQuery>(
+            [this](const events::terrain::GetTerrainHeightAtQuery& q)
+            {
+                return getTerrainHeightAt(q.worldX, q.worldZ);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::AddTerrainTileCommand>(
+            [this](const events::terrain::AddTerrainTileCommand& cmd)
+            {
+                return addTile(cmd.terrainEntity, cmd.tileX, cmd.tileZ);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::RemoveTerrainTileCommand>(
+            [this](const events::terrain::RemoveTerrainTileCommand& cmd)
+            {
+                return removeTile(cmd.terrainEntity, cmd.tileX, cmd.tileZ);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>(
+            [this](const events::terrain::SetTerrainStreamingEnabledCommand& cmd)
+            {
+                auto it = worldStreamers.find(cmd.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                    it->second->setEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>(
+            [this](const events::terrain::SetTerrainStreamingConfigCommand& cmd)
+            {
+                auto it = worldStreamers.find(cmd.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                {
+                    terrain::StreamingConfig config;
+                    config.loadRadius = cmd.loadRadius;
+                    config.unloadRadius = cmd.unloadRadius;
+                    config.maxLoadsPerFrame = cmd.maxLoadsPerFrame;
+                    config.maxUnloadsPerFrame = cmd.maxUnloadsPerFrame;
+                    it->second->setConfig(config);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>(
+            [this](const events::terrain::GetTerrainStreamingConfigQuery& query)
+            {
+                auto it = worldStreamers.find(query.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                {
+                    const auto& cfg = it->second->getConfig();
+                    events::terrain::StreamingConfigData data;
+                    data.loadRadius = cfg.loadRadius;
+                    data.unloadRadius = cfg.unloadRadius;
+                    data.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+                    data.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+                    return data;
+                }
+                return events::terrain::StreamingConfigData{};
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>(
+            [this](const events::terrain::IsTerrainStreamingEnabledQuery& query)
+            {
+                auto it = worldStreamers.find(query.terrainEntity.id);
+                if (it != worldStreamers.end() && it->second)
+                    return it->second->isEnabled();
+                return false;
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadAllTilesCommand>(
+            [this](const events::terrain::LoadAllTilesCommand& cmd)
+            {
+                loadAllTiles(cmd.terrainEntity);
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)
@@ -123,6 +199,15 @@ namespace services
             });
     }
 
+    void TerrainService::registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationDensityBrushCommand>(
+            [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
+            {
+                applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+    }
+
     void TerrainService::registerTerrainDataHandlers(::events::EventDispatcher& dispatcher)
     {
         dispatcher.registerCommandHandler<events::terrain::SetTerrainMaterialPathCommand>(
@@ -132,7 +217,23 @@ namespace services
                 entt::entity ent = internal::fromHandle(cmd.terrainEntity);
                 if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
                 {
-                    registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
+                    auto& comp = registry.get<components::TerrainComponent>(ent);
+                    auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+                    // Release old terrain material
+                    if (!comp.terrainMaterialPath.empty() && comp.terrainMaterialPath != cmd.materialPath)
+                    {
+                        lifecycle.release(comp.terrainMaterialPath);
+                    }
+
+                    comp.terrainMaterialPath = cmd.materialPath;
+
+                    // Acquire new terrain material
+                    if (!cmd.materialPath.empty())
+                    {
+                        lifecycle.acquire(cmd.materialPath, resource::AssetType::Material);
+                    }
+
                     syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
                 }
             });
@@ -149,9 +250,19 @@ namespace services
                 return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
             });
 
+        dispatcher.registerCommandHandler<events::terrain::PrepareTerrainSaveCommand>(
+            [this](const events::terrain::PrepareTerrainSaveCommand& cmd)
+            {
+                if (cmd.incremental)
+                    return prepareSaveIncremental(cmd.terrainEntity.id);
+                return prepareSave(cmd.terrainEntity.id);
+            });
+
         dispatcher.registerCommandHandler<events::terrain::SaveTerrainCommand>(
             [this](const events::terrain::SaveTerrainCommand& cmd)
             {
+                if (cmd.incremental)
+                    return saveTerrainIncremental(cmd.terrainEntity.id, cmd.path);
                 return saveTerrain(cmd.terrainEntity.id, cmd.path);
             });
 
@@ -215,15 +326,16 @@ namespace services
 
                 terrain::TerrainFileHeader header;
                 std::vector<terrain::TileIndexEntry> index;
+                uint64_t indexTableOffset = 0;
 
-                if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index))
+                if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index, &indexTableOffset))
                 {
                     vfLogError("TerrainService: Failed to read terrain header from {}", cmd.path);
                     saveInProgress.store(false, std::memory_order_release);
                     return false;
                 }
 
-                EntityHandle result = finishLoadTerrain(header, index, cmd.path);
+                EntityHandle result = finishLoadTerrain(header, index, cmd.path, indexTableOffset);
                 saveInProgress.store(false, std::memory_order_release);
 
                 if (result.id != 0)

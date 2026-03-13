@@ -54,6 +54,11 @@ namespace components
         std::string fileName;
     };
 
+    struct WorldSectorComponent
+    {
+        std::string worldFilePath;
+    };
+
     struct TransformComponent
     {
         glm::vec3 position{0.0f};
@@ -84,7 +89,7 @@ namespace components
         float fieldOfView = 90.0f;
         float orthoSize = 10.0f;
         float nearPlane = 0.1f;
-        float farPlane = 1000.0f;
+        float farPlane = 2000.0f;
         float aspectRatio = 1.778f;
 
         uint32_t cameraId = 0;

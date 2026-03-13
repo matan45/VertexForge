@@ -106,37 +106,6 @@ namespace serialization
         }
     }
 
-    json SceneSerialization::serializeLightmap(const components::LightmapComponent& lm)
-    {
-        json j;
-        j["lightmapPath"] = lm.lightmapPath;
-        j["texelsPerUnit"] = lm.texelsPerUnit;
-        j["atlasScaleOffset"] = json::array({
-            lm.atlasScaleOffset.x, lm.atlasScaleOffset.y,
-            lm.atlasScaleOffset.z, lm.atlasScaleOffset.w
-        });
-        return j;
-    }
-
-    void SceneSerialization::deserializeLightmap(const json& j, components::LightmapComponent& lm)
-    {
-        if (auto it = j.find("lightmapPath"); it != j.end() && it->is_string())
-        {
-            lm.lightmapPath = it->get<std::string>();
-        }
-        if (auto it = j.find("texelsPerUnit"); it != j.end() && it->is_number())
-        {
-            lm.texelsPerUnit = it->get<float>();
-        }
-        if (auto it = j.find("atlasScaleOffset"); it != j.end() && it->is_array() && it->size() >= 4)
-        {
-            lm.atlasScaleOffset = glm::vec4(
-                (*it)[0].get<float>(), (*it)[1].get<float>(),
-                (*it)[2].get<float>(), (*it)[3].get<float>()
-            );
-        }
-    }
-
     json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain)
     {
         json j;
@@ -148,10 +117,6 @@ namespace serialization
         j["gridMinZ"] = terrain.gridMinZ;
         j["gridMaxX"] = terrain.gridMaxX;
         j["gridMaxZ"] = terrain.gridMaxZ;
-        j["lodDistances"] = json::array({
-            terrain.lodDistances[0], terrain.lodDistances[1],
-            terrain.lodDistances[2], terrain.lodDistances[3]
-        });
         std::string cleanPath = terrain.heightmapPath;
         cleanNullTerminators(cleanPath);
         j["heightmapPath"] = cleanPath;
@@ -196,13 +161,7 @@ namespace serialization
             terrain.gridMaxX = it->get<int32_t>();
         if (auto it = j.find("gridMaxZ"); it != j.end() && it->is_number_integer())
             terrain.gridMaxZ = it->get<int32_t>();
-        if (auto it = j.find("lodDistances"); it != j.end() && it->is_array() && it->size() >= 4)
-        {
-            terrain.lodDistances[0] = (*it)[0].get<float>();
-            terrain.lodDistances[1] = (*it)[1].get<float>();
-            terrain.lodDistances[2] = (*it)[2].get<float>();
-            terrain.lodDistances[3] = (*it)[3].get<float>();
-        }
+        // lodDistances ignored (GPU-only LOD selection)
         if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
             terrain.heightmapPath = it->get<std::string>();
         if (auto it = j.find("terrainMaterialPath"); it != j.end() && it->is_string())
@@ -221,7 +180,6 @@ namespace serialization
         json j;
         j["tileX"] = tile.tileX;
         j["tileZ"] = tile.tileZ;
-        j["currentLOD"] = tile.currentLOD;
         j["isVisible"] = tile.isVisible;
         // State flags
         j["isDirty"] = tile.isDirty;
@@ -238,8 +196,7 @@ namespace serialization
             tile.tileX = it->get<int32_t>();
         if (auto it = j.find("tileZ"); it != j.end() && it->is_number_integer())
             tile.tileZ = it->get<int32_t>();
-        if (auto it = j.find("currentLOD"); it != j.end() && it->is_number_unsigned())
-            tile.currentLOD = it->get<uint8_t>();
+        // currentLOD ignored (GPU-only LOD selection)
         if (auto it = j.find("isVisible"); it != j.end() && it->is_boolean())
             tile.isVisible = it->get<bool>();
         // State flags (with backward-compatible defaults)

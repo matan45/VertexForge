@@ -31,30 +31,9 @@ namespace controllers::offscreen
             services::CameraCullingStats camStats;
             camStats.cameraId = cameraId;
             camStats.isActive = (cameraId == stats.activeCameraId);
-            camStats.occlusionEnabled = cameraData->useOcclusionCulling;
-            camStats.occlusionInitialized = cameraData->occlusionInitialized;
             camStats.frustumReady = cameraData->frustum.isInitialized();
             camStats.bvhBuilt = bvhManager->isBuilt();
             camStats.totalMeshEntities = totalMeshEntities;
-
-            if (camStats.occlusionInitialized && cameraData->occlusionManager)
-            {
-                auto visibilityResults = cameraManager->getVisibilityResults(cameraId);
-                if (!visibilityResults.empty())
-                {
-                    uint32_t visibleCount = 0;
-                    for (uint32_t v : visibilityResults)
-                    {
-                        if (v != 0) ++visibleCount;
-                    }
-                    camStats.visibleAfterOcclusionCull = visibleCount;
-                    camStats.occludedCount = static_cast<uint32_t>(visibilityResults.size()) - visibleCount;
-                }
-            }
-
-            camStats.visibleAfterFrustumCull = camStats.visibleAfterOcclusionCull > 0
-                                                   ? camStats.visibleAfterOcclusionCull + camStats.occludedCount
-                                                   : totalMeshEntities;
 
             stats.cameraStats.push_back(camStats);
         }
@@ -145,6 +124,11 @@ namespace controllers::offscreen
                 stats.terrain.memoryBudgetBytes = streamStats->memoryBudgetBytes;
                 stats.terrain.bytesUploadedThisFrame = streamStats->bytesUploadedThisFrame;
             }
+
+            stats.water.readbackUs = gpuDrivenRenderer->getWaterReadbackUs();
+            stats.water.dispatchUs = gpuDrivenRenderer->getWaterDispatchUs();
+            stats.water.updateUs = gpuDrivenRenderer->getWaterUpdateUs();
+            stats.water.renderUs = gpuDrivenRenderer->getWaterRenderUs();
 
             stats.gpuDriven.bvhLightCullingEnabled = gpuDrivenRenderer->isBVHLightCullingEnabled();
             stats.gpuDriven.hiZLightOcclusionEnabled = gpuDrivenRenderer->isLightOcclusionCullingEnabled();

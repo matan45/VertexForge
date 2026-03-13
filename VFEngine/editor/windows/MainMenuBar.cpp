@@ -11,7 +11,12 @@
 #include "WaterEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
-#include "lighting/LightBakeWindow.hpp"
+#include "config/GIConfigWindow.hpp"
+#include "config/LightStreamingDebugWindow.hpp"
+#include "AssetLifecycleWindow.hpp"
+#include "WorldSectorWindow.hpp"
+#include "VFXDebugWindow.hpp"
+#include "AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -132,6 +137,16 @@ namespace windows
 
             ImGui::Separator();
 
+            if (ImGui::MenuItem("World Sectors"))
+            {
+                if (worldSectorWindow)
+                {
+                    worldSectorWindow->show();
+                }
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Exit"))
             {
                 events::application::CloseCommand cmd;
@@ -223,11 +238,11 @@ namespace windows
                     navmeshWindow->show();
                 }
             }
-            else if (ImGui::MenuItem("Light Bake"))
+            else if (ImGui::MenuItem("Global Illumination"))
             {
-                if (lightBakeWindow)
+                if (giConfigWindow)
                 {
-                    lightBakeWindow->show();
+                    giConfigWindow->show();
                 }
             }
             ImGui::EndMenu();
@@ -332,6 +347,38 @@ namespace windows
                 if (cullingStatsWindow)
                 {
                     cullingStatsWindow->toggle();
+                }
+            }
+
+            if (ImGui::MenuItem("Asset Lifecycle"))
+            {
+                if (assetLifecycleWindow)
+                {
+                    assetLifecycleWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("VFX Stats"))
+            {
+                if (vfxDebugWindow)
+                {
+                    vfxDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Animation Stats"))
+            {
+                if (animationDebugWindow)
+                {
+                    animationDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Light Streaming"))
+            {
+                if (lightStreamingDebugWindow)
+                {
+                    lightStreamingDebugWindow->show();
                 }
             }
 

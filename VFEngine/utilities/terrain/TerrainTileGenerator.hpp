@@ -34,12 +34,6 @@ namespace terrain
         void regenerateLOD(TerrainTile& tile, uint32_t lodLevel,
                            const TileLookup& getTile = nullptr) const;
 
-        [[nodiscard]] uint32_t calculateLOD(
-            const glm::vec3& cameraPosition,
-            const TerrainTile& tile
-        ) const;
-
-        void updateEdgeStitching(TerrainTile& tile) const;
 
     private:
         void generateLODGeometry(TerrainTile& tile, uint32_t lodLevel,
@@ -62,11 +56,8 @@ namespace terrain
             uint32_t baseVertexCount
         ) const;
 
-        void extractEdgeVertices(TerrainTile& tile, uint32_t lodLevel) const;
-
         [[nodiscard]] float computeGeometricError(const TerrainTile& tile, uint32_t lodLevel) const;
         void computeAllLODErrors(TerrainTile& tile) const;
-        void computeEdgeStitching(TerrainTile& tile, TileEdge edge, uint8_t neighborLOD) const;
 
         [[nodiscard]] uint32_t getLODVertexCount(uint32_t lodLevel) const;
         [[nodiscard]] uint32_t getLODSkipFactor(uint32_t lodLevel) const;

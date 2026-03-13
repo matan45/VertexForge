@@ -15,6 +15,7 @@ namespace services
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
+        ::events::SubscriptionToken vegetationBrushModeToken;
 
     public:
         HoleModeServiceImpl() = default;

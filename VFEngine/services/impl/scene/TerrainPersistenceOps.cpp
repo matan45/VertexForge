@@ -6,425 +6,222 @@
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainTypes.hpp"
-#include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/TerrainSerializer.hpp"
-#include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
-#include <cfloat>
 
 namespace services
 {
-    bool TerrainService::isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz)
-    {
-        if (!tile.hasHoleMask()) return false;
-        uint32_t qc = tile.config.getVertexCount() - 1;
-        for (int dz = -1; dz <= 0; ++dz)
-        {
-            for (int dx = -1; dx <= 0; ++dx)
-            {
-                int qx = static_cast<int>(vx) + dx;
-                int qz = static_cast<int>(vz) + dz;
-                if (qx >= 0 && qx < static_cast<int>(qc) &&
-                    qz >= 0 && qz < static_cast<int>(qc))
-                {
-                    if (tile.holeMask[static_cast<size_t>(qz) * qc + qx])
-                        return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    void TerrainService::generateTileColliderWireframe(
-        const terrain::TerrainTile& tile,
-        components::TerrainColliderDebugData& out)
-    {
-        if (!tile.hasHeightData())
-            return;
-
-        uint32_t vertexCount = tile.config.getVertexCount();
-        float spacing = tile.config.getVertexSpacing();
-        float originX = tile.worldOrigin.x;
-        float originZ = tile.worldOrigin.z;
-
-        out.vertices.resize(vertexCount * vertexCount);
-        for (uint32_t z = 0; z < vertexCount; ++z)
-        {
-            for (uint32_t x = 0; x < vertexCount; ++x)
-            {
-                float height = tile.heightData[z * vertexCount + x];
-                out.vertices[z * vertexCount + x] = glm::vec3(
-                    originX + x * spacing,
-                    height,
-                    originZ + z * spacing
-                );
-            }
-        }
-
-        out.lineIndices.clear();
-
-        for (uint32_t z = 0; z < vertexCount; ++z)
-        {
-            for (uint32_t x = 0; x < vertexCount - 1; ++x)
-            {
-                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x + 1, z))
-                    continue;
-                out.lineIndices.push_back(z * vertexCount + x);
-                out.lineIndices.push_back(z * vertexCount + x + 1);
-            }
-        }
-
-        for (uint32_t x = 0; x < vertexCount; ++x)
-        {
-            for (uint32_t z = 0; z < vertexCount - 1; ++z)
-            {
-                if (isVertexAdjacentToHole(tile, x, z) && isVertexAdjacentToHole(tile, x, z + 1))
-                    continue;
-                out.lineIndices.push_back(z * vertexCount + x);
-                out.lineIndices.push_back((z + 1) * vertexCount + x);
-            }
-        }
-
-        out.version++;
-    }
-
-    bool TerrainService::applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights)
-    {
-        if (!tile.hasHoleMask()) return false;
-
-        bool hasAnyHole = false;
-        for (uint8_t h : tile.holeMask)
-        {
-            if (h) { hasAnyHole = true; break; }
-        }
-        if (!hasAnyHole) return false;
-
-        uint32_t vc = tile.config.getVertexCount();
-        physicsHeights = tile.heightData;
-
-        for (uint32_t vz = 0; vz < vc; ++vz)
-        {
-            for (uint32_t vx = 0; vx < vc; ++vx)
-            {
-                if (isVertexAdjacentToHole(tile, vx, vz))
-                    physicsHeights[static_cast<size_t>(vz) * vc + vx] = FLT_MAX;
-            }
-        }
-        return true;
-    }
-
-    bool TerrainService::addTerrainCollider(EntityHandle terrainEntity)
-    {
-        if (!physicsProvider || !terrainEntity.isValid())
-            return false;
-
-        auto gridIt = terrainGrids.find(terrainEntity.id);
-        if (gridIt == terrainGrids.end())
-            return false;
-
-        auto* grid = gridIt->second.get();
-        const auto& allTiles = grid->getAllTiles();
-
-        auto cacheIt = fileCaches.find(terrainEntity.id);
-        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(terrainEntity);
-        float friction = 0.5f;
-        float restitution = 0.0f;
-        uint8_t collisionLayer = 0;
-        if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
-        {
-            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
-            friction = cc.friction;
-            restitution = cc.restitution;
-            collisionLayer = cc.collisionLayer;
-        }
-
-        std::vector<TerrainTileColliderInfo> tileInfos;
-        tileInfos.reserve(allTiles.size());
-
-        // Temp storage for hole-adjusted height arrays (must outlive addTerrainCollider call)
-        std::vector<std::vector<float>> holeAdjustedHeights;
-
-        for (auto* tile : allTiles)
-        {
-            if (!tile)
-                continue;
-
-            if (fileCache && !tile->hasHeightData())
-            {
-                if (!fileCache->ensureHeightsLoaded(*tile))
-                    continue;
-            }
-
-            if (!tile->hasHeightData())
-                continue;
-
-            const float* heightSamples = tile->heightData.data();
-
-            // Apply FLT_MAX for hole vertices so Jolt excludes hole triangles
-            {
-                holeAdjustedHeights.emplace_back();
-                auto& physicsHeights = holeAdjustedHeights.back();
-                if (applyHoleMaskToHeights(*tile, physicsHeights))
-                    heightSamples = physicsHeights.data();
-            }
-
-            TerrainTileColliderInfo info;
-            info.tileX = tile->coord.x;
-            info.tileZ = tile->coord.z;
-            info.heightSamples = heightSamples;
-            info.sampleCount = tile->config.getVertexCount();
-            info.worldOrigin = tile->worldOrigin;
-            info.vertexSpacing = tile->config.getVertexSpacing();
-            info.friction = friction;
-            info.restitution = restitution;
-            info.collisionLayer = collisionLayer;
-
-            tileInfos.push_back(info);
-        }
-
-        if (tileInfos.empty())
-            return false;
-
-        physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
-
-        if (registry.valid(ent))
-        {
-            if (!registry.all_of<components::TerrainColliderComponent>(ent))
-            {
-                registry.emplace<components::TerrainColliderComponent>(ent);
-            }
-            registry.get<components::TerrainColliderComponent>(ent).hasCollider = true;
-        }
-
-        generateDebugWireframes(terrainEntity, grid);
-
-        vfLogInfo("TerrainService: Added terrain collider with {} tiles", tileInfos.size());
-        return true;
-    }
-
-    void TerrainService::removeTerrainCollider(EntityHandle terrainEntity)
-    {
-        if (!physicsProvider || !terrainEntity.isValid())
-            return;
-
-        physicsProvider->removeTerrainCollider(terrainEntity);
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(terrainEntity);
-        if (registry.valid(ent))
-        {
-            if (registry.all_of<components::TerrainColliderComponent>(ent))
-                registry.remove<components::TerrainColliderComponent>(ent);
-
-            if (registry.all_of<components::ChildrenComponent>(ent))
-            {
-                const auto& children = registry.get<components::ChildrenComponent>(ent).children;
-                for (auto childEnt : children)
-                {
-                    if (registry.valid(childEnt) &&
-                        registry.all_of<components::TerrainTileColliderDebugComponent>(childEnt))
-                    {
-                        registry.remove<components::TerrainTileColliderDebugComponent>(childEnt);
-                    }
-                }
-            }
-        }
-
-        vfLogInfo("TerrainService: Removed terrain collider");
-    }
-
-    bool TerrainService::hasTerrainCollider(EntityHandle terrainEntity) const
-    {
-        if (!physicsProvider || !terrainEntity.isValid())
-            return false;
-
-        return physicsProvider->hasTerrainCollider(terrainEntity);
-    }
-
-    void TerrainService::generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(terrainEntity);
-
-        if (!registry.valid(ent) || !registry.all_of<components::ChildrenComponent>(ent))
-            return;
-
-        const auto& children = registry.get<components::ChildrenComponent>(ent).children;
-        for (auto childEnt : children)
-        {
-            if (!registry.valid(childEnt) ||
-                !registry.all_of<components::TerrainTileComponent>(childEnt))
-                continue;
-
-            const auto& tileComp = registry.get<components::TerrainTileComponent>(childEnt);
-            terrain::TileCoord coord{tileComp.tileX, tileComp.tileZ};
-            auto* tile = grid->getTile(coord);
-            if (!tile || !tile->hasHeightData())
-                continue;
-
-            auto& debugComp = registry.emplace_or_replace<components::TerrainTileColliderDebugComponent>(childEnt);
-            debugComp.tileX = tileComp.tileX;
-            debugComp.tileZ = tileComp.tileZ;
-            generateTileColliderWireframe(*tile, debugComp.debugData);
-        }
-    }
-
-    void TerrainService::rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
-                                                   const std::vector<terrain::TileCoord>& modifiedTiles)
-    {
-        if (modifiedTiles.empty())
-            return;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(targetEntity);
-        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
-        {
-            registry.get<components::TerrainComponent>(ent).saveDirty = true;
-        }
-
-        if (!physicsProvider || !physicsProvider->hasTerrainCollider(targetEntity))
-            return;
-
-        entt::entity terrainEnt = internal::fromHandle(targetEntity);
-
-        for (const auto& coord : modifiedTiles)
-        {
-            auto* tile = grid->getTile(coord);
-            if (tile && tile->hasHeightData())
-            {
-                std::vector<float> physicsHeights;
-                const float* heightSamples = tile->heightData.data();
-
-                if (applyHoleMaskToHeights(*tile, physicsHeights))
-                    heightSamples = physicsHeights.data();
-
-                TerrainTileColliderInfo info;
-                info.tileX = coord.x;
-                info.tileZ = coord.z;
-                info.heightSamples = heightSamples;
-                info.sampleCount = tile->config.getVertexCount();
-                info.worldOrigin = tile->worldOrigin;
-                info.vertexSpacing = tile->config.getVertexSpacing();
-                physicsProvider->rebuildTerrainTileCollider(targetEntity, info);
-
-                if (registry.valid(terrainEnt) &&
-                    registry.all_of<components::ChildrenComponent>(terrainEnt))
-                {
-                    const auto& children = registry.get<components::ChildrenComponent>(terrainEnt).children;
-                    for (auto childEnt : children)
-                    {
-                        if (!registry.valid(childEnt) ||
-                            !registry.all_of<components::TerrainTileColliderDebugComponent>(childEnt))
-                            continue;
-
-                        auto& debugComp = registry.get<components::TerrainTileColliderDebugComponent>(childEnt);
-                        if (debugComp.tileX == coord.x && debugComp.tileZ == coord.z)
-                        {
-                            generateTileColliderWireframe(*tile, debugComp.debugData);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    bool TerrainService::saveWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    bool TerrainService::prepareSave(uint64_t terrainEntityId)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
-        {
-            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
             return false;
-        }
 
-        auto allTiles = gridIt->second->getAllTiles();
-        if (allTiles.empty())
-        {
-            vfLogWarning("TerrainService: No tiles to save weight maps for");
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
             return true;
-        }
 
-        uint32_t resolution = allTiles[0]->config.getVertexCount();
+        auto& grid = *gridIt->second;
+        auto& generator = grid.getGenerator();
+        auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+            return grid.getTile(coord);
+        };
 
-        std::string materialPath;
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
-        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        // Stream in all previously-saved tiles from file cache that aren't in the grid
+        // so they are included in the save (streaming may have unloaded them).
+        // Uses getSavedCoords() to skip entries with no file data (newly added, never saved).
+        // This MUST run on the main thread to avoid racing with the render thread.
+        auto availableCoords = cacheIt->second->getSavedCoords();
+        for (const auto& coord : availableCoords)
         {
-            materialPath = registry.get<components::TerrainComponent>(ent).terrainMaterialPath;
-        }
-
-        std::unordered_map<terrain::TileCoord, terrain::TileWeightMapData, terrain::TileCoordHash> tileWeights;
-        for (const auto* tile : allTiles)
-        {
-            if (tile->hasWeightMap())
+            if (!grid.getTile(coord))
             {
-                tileWeights.emplace(tile->coord, tile->weightMap);
+                grid.addTileFromFile(coord);
             }
         }
 
-        return terrain::TerrainWeightMapAsset::save(path, tileWeights, resolution, materialPath);
+        for (auto* tile : grid.getAllTiles())
+        {
+            if (tile && !tile->hasHeightData())
+                cacheIt->second->ensureHeightsLoaded(*tile);
+            if (tile && !tile->hasAnyLODData())
+                cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
+        }
+
+        return true;
     }
 
-    bool TerrainService::loadWeightMaps(uint64_t terrainEntityId, const std::string& path)
+    bool TerrainService::prepareSaveIncremental(uint64_t terrainEntityId)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
-        {
-            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
             return false;
-        }
 
-        std::string materialPath;
-        auto loadedWeights = terrain::TerrainWeightMapAsset::load(path, &materialPath);
-        if (loadedWeights.empty())
-        {
-            return false;
-        }
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+            return prepareSave(terrainEntityId);
 
-        if (!materialPath.empty())
+        auto& grid = *gridIt->second;
+        auto& cache = *cacheIt->second;
+
+        // Detect conditions that force a full save BEFORE the background thread starts,
+        // because prepareSave() adds tiles to the grid (not thread-safe).
+        bool needsFullSave = cache.hasNewOrRemovedTiles();
+
+        // Check if header size would change (physics/streaming flags toggled).
+        // NOTE: TerrainSerializer::saveIncremental() has a matching guard as a safety net.
+        // Both must agree — if updating one, update the other.
+        if (!needsFullSave)
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
-            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
-            {
-                registry.get<components::TerrainComponent>(ent).terrainMaterialPath = materialPath;
-                syncWeightMapLayerCount(terrainEntityId, materialPath);
-            }
+            const auto& savedHeader = cache.getHeader();
+
+            bool hadPhysics = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_PHYSICS_DATA);
+            bool hasPhysicsNow = false;
+            if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
+                hasPhysicsNow = registry.get<components::TerrainColliderComponent>(ent).hasCollider;
+
+            bool hadStreaming = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_STREAMING_CONFIG);
+            bool hasStreamingNow = false;
+            auto streamerIt = worldStreamers.find(terrainEntityId);
+            if (streamerIt != worldStreamers.end() && streamerIt->second)
+                hasStreamingNow = streamerIt->second->isEnabled();
+
+            if (hadPhysics != hasPhysicsNow || hadStreaming != hasStreamingNow)
+                needsFullSave = true;
         }
 
-        auto allTiles = gridIt->second->getAllTiles();
-        uint32_t loadedCount = 0;
-
-        for (auto* tile : allTiles)
+        if (needsFullSave)
         {
-            auto it = loadedWeights.find(tile->coord);
-            if (it != loadedWeights.end())
-            {
-                if (it->second.resolution == tile->config.getVertexCount())
-                {
-                    tile->weightMap = std::move(it->second);
-                    tile->weightMapDirty = true;
-                    tile->weightMapGPUDirty = true;
-                    loadedCount++;
-                }
-                else
-                {
-                    vfLogWarning("TerrainService: Weight map resolution mismatch for tile ({}, {}): "
-                                 "expected {}, got {}",
-                                 tile->coord.x, tile->coord.z,
-                                 tile->config.getVertexCount(), it->second.resolution);
-                }
-            }
+            vfLogInfo("TerrainService: Incremental save not possible, preparing full save");
+            return prepareSave(terrainEntityId);
         }
 
-        vfLogInfo("TerrainService: Loaded weight maps for {} of {} tiles", loadedCount, allTiles.size());
+        auto& generator = grid.getGenerator();
+        auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
+            return grid.getTile(coord);
+        };
+
+        // Only ensure dirty tiles have heights + LODs loaded
+        for (const auto& coord : cache.getDirtyCoords())
+        {
+            auto* tile = grid.getTile(coord);
+            if (!tile) continue;
+
+            if (!tile->hasHeightData())
+                cache.ensureHeightsLoaded(*tile);
+            if (!tile->hasAnyLODData())
+                cache.ensureLODsLoaded(*tile, generator, getTile);
+        }
+
+        return true;
+    }
+
+    bool TerrainService::saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
+            return false;
+        }
+
+        auto cacheIt = fileCaches.find(terrainEntityId);
+        if (cacheIt == fileCaches.end() || !cacheIt->second)
+        {
+            vfLogInfo("TerrainService: No file cache, falling back to full save");
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        auto& cache = *cacheIt->second;
+
+        // If tiles were added/removed, tile count changed → fall back to full save
+        // Note: prepareSaveIncremental() on the main thread should have already detected this
+        // and called prepareSave(). We only call saveTerrain() here (no prepareSave — unsafe on bg thread).
+        if (cache.hasNewOrRemovedTiles())
+        {
+            vfLogInfo("TerrainService: Tiles added/removed, falling back to full save");
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        if (cache.getDirtyCount() == 0)
+        {
+            // No dirty tiles — but prepareSaveIncremental() may have detected a header change
+            // (e.g. streaming/physics toggled) and called prepareSave() for a full save.
+            // Fall back to full save to persist those config changes.
+            vfLogInfo("TerrainService: No dirty tiles, falling back to full save for config changes");
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        // Gather physics and streaming config from components
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
+
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+        {
+            vfLogError("TerrainService: Entity {} has no TerrainComponent", terrainEntityId);
+            return false;
+        }
+
+        terrain::TerrainPhysicsConfig physicsConfig;
+        if (registry.all_of<components::TerrainColliderComponent>(ent))
+        {
+            const auto& cc = registry.get<components::TerrainColliderComponent>(ent);
+            physicsConfig.hasCollider = cc.hasCollider;
+            physicsConfig.collisionLayer = cc.collisionLayer;
+            physicsConfig.friction = cc.friction;
+            physicsConfig.restitution = cc.restitution;
+        }
+
+        terrain::TerrainStreamingConfig streamingConfig;
+        auto streamerIt = worldStreamers.find(terrainEntityId);
+        if (streamerIt != worldStreamers.end() && streamerIt->second)
+        {
+            streamingConfig.enabled = streamerIt->second->isEnabled();
+            const auto& cfg = streamerIt->second->getConfig();
+            streamingConfig.loadRadius = cfg.loadRadius;
+            streamingConfig.unloadRadius = cfg.unloadRadius;
+            streamingConfig.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+            streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+        }
+
+        bool result = terrain::TerrainSerializer::saveIncremental(
+            path,
+            *gridIt->second,
+            cache.getDirtyCoords(),
+            cache.getHeader(),
+            cache.getIndexTableOffset(),
+            cache.getIndexMap(),
+            physicsConfig,
+            streamingConfig);
+
+        if (!result)
+        {
+            // Fall back to full save (no prepareSave — unsafe on background thread)
+            // saveTerrain() will save whatever tiles are currently in the grid
+            vfLogWarning("TerrainService: Incremental save failed, falling back to full save");
+            return saveTerrain(terrainEntityId, path);
+        }
+
+        // Post-save bookkeeping
+        size_t savedCount = cache.getDirtyCount();
+
+        saveVegetation(terrainEntityId, path);
+
+        auto& comp = registry.get<components::TerrainComponent>(ent);
+        comp.saveDirty = false;
+
+        cache.refreshIndex(path);
+
+        events::terrain::TerrainSavedNotification savedNotification;
+        savedNotification.terrainEntity = EntityHandle{terrainEntityId};
+        savedNotification.path = path;
+        events::EventDispatcher::instance().publish(savedNotification);
+
+        vfLogInfo("TerrainService: Incremental save completed ({} tiles updated)", savedCount);
         return true;
     }
 
@@ -459,26 +256,6 @@ namespace services
         tileConfig.worldTileSize = comp.worldTileSize;
         tileConfig.maxHeight = comp.maxHeight;
         tileConfig.minHeight = comp.minHeight;
-        for (int i = 0; i < 4; ++i)
-            tileConfig.lodDistances[i] = comp.lodDistances[i];
-
-        auto cacheIt = fileCaches.find(terrainEntityId);
-        if (cacheIt != fileCaches.end() && cacheIt->second)
-        {
-            auto& grid = *gridIt->second;
-            auto& generator = grid.getGenerator();
-            auto getTile = [&grid](const terrain::TileCoord& coord) -> const terrain::TerrainTile* {
-                return grid.getTile(coord);
-            };
-
-            for (auto* tile : grid.getAllTiles())
-            {
-                if (tile && !tile->hasHeightData())
-                    cacheIt->second->ensureHeightsLoaded(*tile);
-                if (tile && !tile->hasAnyLODData())
-                    cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
-            }
-        }
 
         terrain::TerrainPhysicsConfig physicsConfig;
         if (registry.all_of<components::TerrainColliderComponent>(ent))
@@ -490,16 +267,39 @@ namespace services
             physicsConfig.restitution = cc.restitution;
         }
 
+        terrain::TerrainStreamingConfig streamingConfig;
+        auto streamerIt = worldStreamers.find(terrainEntityId);
+        if (streamerIt != worldStreamers.end() && streamerIt->second)
+        {
+            streamingConfig.enabled = streamerIt->second->isEnabled();
+            const auto& cfg = streamerIt->second->getConfig();
+            streamingConfig.loadRadius = cfg.loadRadius;
+            streamingConfig.unloadRadius = cfg.unloadRadius;
+            streamingConfig.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+            streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+        }
+
+        // Compute actual bounds from grid tiles (supports sparse/dynamic grids)
+        int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
+        gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
+
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
-            comp.gridMinX, comp.gridMinZ, comp.gridMaxX, comp.gridMaxZ,
-            comp.terrainMaterialPath, physicsConfig);
+            boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
+            comp.terrainMaterialPath, physicsConfig, streamingConfig);
 
         if (result)
         {
+            saveVegetation(terrainEntityId, path);
+
             auto& mutableComp = registry.get<components::TerrainComponent>(ent);
             mutableComp.savePath = path;
             mutableComp.saveDirty = false;
+            mutableComp.gridMinX = boundsMinX;
+            mutableComp.gridMinZ = boundsMinZ;
+            mutableComp.gridMaxX = boundsMaxX;
+            mutableComp.gridMaxZ = boundsMaxZ;
+            mutableComp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
 
             auto cacheIt = fileCaches.find(terrainEntityId);
             if (cacheIt != fileCaches.end() && cacheIt->second)
@@ -510,9 +310,10 @@ namespace services
             {
                 terrain::TerrainFileHeader newHeader;
                 std::vector<terrain::TileIndexEntry> newIndex;
-                if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex))
+                uint64_t newIndexOffset = 0;
+                if (terrain::TerrainSerializer::readHeader(path, newHeader, newIndex, &newIndexOffset))
                 {
-                    auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex);
+                    auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex, newIndexOffset);
                     fileCaches[terrainEntityId] = cache;
                     gridIt->second->setFileCache(cache);
                 }
@@ -533,33 +334,34 @@ namespace services
     {
         terrain::TerrainFileHeader header;
         std::vector<terrain::TileIndexEntry> index;
+        uint64_t indexTableOffset = 0;
 
-        if (!terrain::TerrainSerializer::readHeader(path, header, index))
+        if (!terrain::TerrainSerializer::readHeader(path, header, index, &indexTableOffset))
         {
             vfLogError("TerrainService: Failed to read terrain header from {}", path);
             return {};
         }
 
-        return finishLoadTerrain(header, index, path);
+        return finishLoadTerrain(header, index, path, indexTableOffset);
     }
 
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
-        const std::string& path)
+        const std::string& path,
+        uint64_t indexTableOffset)
     {
         terrain::TerrainTileConfig tileConfig;
         tileConfig.resolution = static_cast<terrain::TileResolution>(header.resolution);
         tileConfig.worldTileSize = header.worldTileSize;
         tileConfig.maxHeight = header.maxHeight;
         tileConfig.minHeight = header.minHeight;
-        tileConfig.lodDistances = header.lodDistances;
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
         grid->loadMetadataOnly(header, index);
 
-        auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index);
+        auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
 
         scene::Entity parentEntity("Terrain");
@@ -574,7 +376,6 @@ namespace services
         terrainComp.gridMinZ = header.gridMinZ;
         terrainComp.gridMaxX = header.gridMaxX;
         terrainComp.gridMaxZ = header.gridMaxZ;
-        terrainComp.lodDistances = header.lodDistances;
         terrainComp.terrainMaterialPath = header.materialPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
@@ -589,6 +390,16 @@ namespace services
 
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
+        {
+            terrain::StreamingConfig stCfg;
+            stCfg.loadRadius = header.streamingConfig.loadRadius;
+            stCfg.unloadRadius = header.streamingConfig.unloadRadius;
+            stCfg.maxLoadsPerFrame = header.streamingConfig.maxLoadsPerFrame;
+            stCfg.maxUnloadsPerFrame = header.streamingConfig.maxUnloadsPerFrame;
+            auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
+            streamer->setEnabled(header.streamingConfig.enabled);
+            worldStreamers[parentHandle.id] = std::move(streamer);
+        }
 
         if (!header.materialPath.empty())
         {
@@ -604,8 +415,6 @@ namespace services
         notification.config.terrainMaterialPath = header.materialPath;
         notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
         notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
-        for (int i = 0; i < 4; ++i)
-            notification.config.lodDistances[i] = header.lodDistances[i];
         events::EventDispatcher::instance().publish(notification);
 
         if (header.physicsConfig.hasCollider && physicsProvider)
@@ -618,6 +427,9 @@ namespace services
         }
 
         vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
+
+        // Load vegetation data (density + placement) for each tile
+        loadVegetation(parentHandle.id, path);
 
         return parentHandle;
     }

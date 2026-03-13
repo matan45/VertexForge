@@ -70,7 +70,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -181,6 +182,7 @@ void main() {
 #include "../common/lighting_functions.glsl"
 #include "../common/shadow_sampling.glsl"
 #include "../common/cluster_culling.glsl"
+#include "../common/gi_sampling.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -215,15 +217,13 @@ float readWeightByte(uint byteOffset) {
     return float((word >> (byteIndex * 8u)) & 0xFFu) / 255.0;
 }
 
-float sampleWeightTexel(uint tileOffset, uint res, uint layer, uint x, uint z) {
-    uint texIdx = layer / 4u;
-    uint channel = layer % 4u;
-    uint texSize = res * res * 4u; // 4 bytes per texel (RGBA)
-    return readWeightByte(tileOffset + texIdx * texSize + (z * res + x) * 4u + channel);
+float sampleWeightTexel(uint tileOffset, uint res, uint channel, uint x, uint z) {
+    // Single RGBA texture, channel is 0-3 directly
+    return readWeightByte(tileOffset + (z * res + x) * 4u + channel);
 }
 
-float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
-    if (res == 0u) return (layer == 0u) ? 1.0 : 0.0;
+float sampleTileWeight(uint tileOffset, uint res, uint channel, vec2 uv) {
+    if (res == 0u) return (channel == 0u) ? 1.0 : 0.0;
     uv = clamp(uv, 0.0, 1.0);
     float fx = uv.x * float(res - 1u);
     float fz = uv.y * float(res - 1u);
@@ -233,10 +233,10 @@ float sampleTileWeight(uint tileOffset, uint res, uint layer, vec2 uv) {
     uint z1 = min(z0 + 1u, res - 1u);
     float sx = fract(fx);
     float sz = fract(fz);
-    float w00 = sampleWeightTexel(tileOffset, res, layer, x0, z0);
-    float w10 = sampleWeightTexel(tileOffset, res, layer, x1, z0);
-    float w01 = sampleWeightTexel(tileOffset, res, layer, x0, z1);
-    float w11 = sampleWeightTexel(tileOffset, res, layer, x1, z1);
+    float w00 = sampleWeightTexel(tileOffset, res, channel, x0, z0);
+    float w10 = sampleWeightTexel(tileOffset, res, channel, x1, z0);
+    float w01 = sampleWeightTexel(tileOffset, res, channel, x0, z1);
+    float w11 = sampleWeightTexel(tileOffset, res, channel, x1, z1);
     return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
 }
 
@@ -261,7 +261,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
+    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -304,12 +305,22 @@ layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
 
+// Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
+// Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
+// pc.shadowLOD is uniform — GPU evaluates this once per wavefront, not per fragment
+float getTerrainNormalBiasScale() {
+    if (pc.shadowLOD < 0.5) return 3.0;
+    if (pc.shadowLOD < 1.5) return 8.0;
+    if (pc.shadowLOD < 2.5) return 12.0;
+    return 3.0;
+}
+
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
@@ -349,7 +360,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     if (lightSpacePos.w <= 0.0) return 1.0;
@@ -438,7 +449,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 
     if (linearDepth >= far) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
     lightToFrag = biasedPos - lightPos;
     linearDepth = length(lightToFrag);
     vec3 sampleDir = normalize(lightToFrag);
@@ -509,17 +520,6 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    vec3 lightmapContribution = vec3(0.0);
-    TerrainTileGPUData currentTile = tiles[fragTileIndex];
-    if (currentTile.lightmapData.x != 0xFFFFFFFFu) {
-        vec2 lmScale = unpackHalf2x16(currentTile.lightmapData.y);
-        vec2 lmOffset = unpackHalf2x16(currentTile.lightmapData.z);
-        vec2 lmUV = fragTexCoord * lmScale + lmOffset;
-        uint lmIdx = currentTile.lightmapData.x;
-        vec3 lightmapIrradiance = texture(bindlessTextures[nonuniformEXT(lmIdx)], lmUV).rgb;
-        lightmapContribution = lightmapIrradiance * albedo;
-    }
-
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -585,7 +585,17 @@ void main() {
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
-    vec3 color = ambient + directLighting + lightmapContribution + mat_emission;
+    vec3 giContribution = vec3(0.0);
+#ifdef GI_ENABLED
+    float cameraDist = length(camera.cameraPosition.xyz - fragWorldPos);
+    vec3 giIrradiance = sampleProbeGI(fragWorldPos, N, cameraDist);
+    giContribution = giIrradiance * albedo * kD;
+    // Reduce ambient proportionally to GI strength to avoid double-counting
+    float giStrength = min(length(giIrradiance), 1.0);
+    ambient *= mix(1.0, 0.3, giStrength);
+#endif
+
+    vec3 color = ambient + directLighting + giContribution + mat_emission;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
@@ -689,7 +699,7 @@ void main() {
     }
 
     if (viewModeValue == 9u) {
-        vec3 layerColors[8] = vec3[8](
+        vec3 layerColors[32] = vec3[32](
             vec3(0.20, 0.55, 0.20),  // Layer 0: green (grass)
             vec3(0.55, 0.40, 0.20),  // Layer 1: brown (dirt)
             vec3(0.50, 0.50, 0.50),  // Layer 2: gray (rock)
@@ -697,16 +707,50 @@ void main() {
             vec3(0.70, 0.15, 0.15),  // Layer 4: red
             vec3(0.15, 0.30, 0.70),  // Layer 5: blue
             vec3(0.80, 0.75, 0.20),  // Layer 6: yellow
-            vec3(0.55, 0.20, 0.60)   // Layer 7: purple
+            vec3(0.55, 0.20, 0.60),  // Layer 7: purple
+            vec3(0.90, 0.45, 0.10),  // Layer 8: orange
+            vec3(0.10, 0.70, 0.70),  // Layer 9: teal
+            vec3(0.75, 0.75, 0.75),  // Layer 10: light gray
+            vec3(0.30, 0.15, 0.05),  // Layer 11: dark brown
+            vec3(0.90, 0.20, 0.50),  // Layer 12: pink
+            vec3(0.15, 0.55, 0.15),  // Layer 13: dark green
+            vec3(0.40, 0.40, 0.80),  // Layer 14: lavender
+            vec3(0.60, 0.60, 0.30),  // Layer 15: olive
+            vec3(0.95, 0.90, 0.80),  // Layer 16: cream
+            vec3(0.10, 0.10, 0.35),  // Layer 17: navy
+            vec3(0.75, 0.35, 0.35),  // Layer 18: salmon
+            vec3(0.35, 0.65, 0.45),  // Layer 19: sea green
+            vec3(0.65, 0.50, 0.70),  // Layer 20: mauve
+            vec3(0.85, 0.65, 0.30),  // Layer 21: gold
+            vec3(0.25, 0.45, 0.25),  // Layer 22: forest
+            vec3(0.70, 0.70, 0.90),  // Layer 23: periwinkle
+            vec3(0.45, 0.25, 0.10),  // Layer 24: sienna
+            vec3(0.20, 0.60, 0.80),  // Layer 25: sky blue
+            vec3(0.80, 0.40, 0.60),  // Layer 26: rose
+            vec3(0.40, 0.70, 0.30),  // Layer 27: lime
+            vec3(0.60, 0.30, 0.10),  // Layer 28: rust
+            vec3(0.30, 0.30, 0.30),  // Layer 29: charcoal
+            vec3(0.90, 0.85, 0.40),  // Layer 30: khaki
+            vec3(0.50, 0.10, 0.40)   // Layer 31: plum
         );
         uint wmOff = tiles[fragTileIndex].weightMapOffset;
         uint wmRes = uint(tiles[fragTileIndex].aabbMin.w);
-        uint layerCount = uint(tiles[fragTileIndex].aabbMax.w);
+        uint packedLI_vis = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
         vec3 c = vec3(0.0);
-        for (uint i = 0u; i < min(layerCount, 8u); ++i) {
-            c += layerColors[i] * sampleTileWeight(wmOff, wmRes, i, fragTexCoord);
+        // Must match WEIGHT_CHANNELS (terrain/TerrainWeightMap.hpp) — 4 channels, 8 bits each packed into aabbMax.w
+        for (uint ch = 0u; ch < 4u; ++ch) {
+            uint paletteIdx = (packedLI_vis >> (ch * 8u)) & 0xFFu;
+            float w = sampleTileWeight(wmOff, wmRes, ch, fragTexCoord);
+            c += layerColors[min(paletteIdx, 31u)] * w;
         }
         color = c;
+    }
+
+    // Tile selection highlight
+    const uint FLAG_SELECTED = 1u << 13;
+    if ((tiles[fragTileIndex].flags & FLAG_SELECTED) != 0u) {
+        vec3 highlightColor = vec3(1.0, 1.0, 0.0);
+        color = mix(color, highlightColor, 0.25);
     }
 
     if (pc.brushWorldRadius > 0.0) {

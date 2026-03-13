@@ -8,6 +8,7 @@
 #include "../../adapters/animation/AnimatorAdapter.hpp"
 #include "../../adapters/physics/IKAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
+#include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -83,5 +84,10 @@ namespace core
     WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()
     {
         return waterRenderAdapter.get();
+    }
+
+    services::IBillboardRenderProvider* RuntimeBootstrap::getBillboardRenderProvider()
+    {
+        return billboardRenderAdapter.get();
     }
 }

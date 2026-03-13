@@ -6,6 +6,8 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../render/gi/GITypes.hpp"
+#include "../render/lighting/LightStreamManager.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include <memory>
 #include <string_view>
@@ -40,6 +42,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -72,7 +76,9 @@ namespace controllers
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
         std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> tileRemovedSubscription;
         std::unique_ptr<events::SubscriptionToken> waterDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entitySelectedSubscription;
 
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
@@ -101,6 +107,9 @@ namespace controllers
 
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
+        void meshRelease(const std::string& meshPath);
+        void textureRelease(const std::string& texturePath);
+        void materialRelease(const std::string& materialPath);
         void meshUpdateCamera(render::occlusion::CameraId cameraId, const glm::mat4& view,
                               const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
@@ -111,6 +120,7 @@ namespace controllers
         void prepareFrameMeshes();
         void prepareFrameBillboards();
         void prepareFrameText();
+        void prepareSceneData();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
         void prepareFrameLightGizmos();
@@ -118,6 +128,7 @@ namespace controllers
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
+        void setBillboardRenderingEnabled(bool enabled);
 
         void setOcclusionCullingEnabled(bool enabled);
 
@@ -200,6 +211,8 @@ namespace controllers
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();
@@ -222,6 +235,21 @@ namespace controllers
 
         void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalWaterFrustums();
+
+            // GI settings
+        void applyGISettings(const render::gi::GISettings& settings);
+        render::gi::GISettings getGISettings() const;
+        render::gi::GIDebugStats getGIDebugStats() const;
+        void setGIShowProbes(bool show);
+        void setGIShowCascadeBounds(bool show);
+        void setGIShowProbeValidity(bool show);
+
+        // Light streaming settings
+        void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
+        render::lighting::LightStreamingConfig getLightStreamingConfig() const;
+        render::lighting::LightStreamingStats getLightStreamingStats() const;
+        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
+        void unregisterSectorLights(uint32_t sectorId);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

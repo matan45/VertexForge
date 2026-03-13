@@ -1,9 +1,37 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../gi/GIDebugRenderer.hpp"
+#include "../gi/RadianceCascadeManager.hpp"
+#include "../gi/ProbeStorageBuffer.hpp"
 #include <array>
+#include <vector>
 
 namespace render::gpudriven
 {
+    static std::vector<vk::DescriptorSet> buildDescriptorSets(
+        vk::DescriptorSet iblSet, MeshShaderPipeline& pipeline,
+        BindlessTextureManager& bindless, BoneMatrixManager& bones)
+    {
+        std::vector<vk::DescriptorSet> sets = {
+            iblSet,
+            pipeline.getPerDrawDataDescriptorSet(),
+            bindless.getDescriptorSet(),
+            pipeline.getMeshletDataDescriptorSet(),
+            pipeline.getVertexDataDescriptorSet(),
+            bones.getDescriptorSet(),
+            pipeline.getLightDataDescriptorSet(),
+            pipeline.getClusterGridDescriptorSet(),
+            pipeline.getCullingOutputDescriptorSet(),
+            pipeline.getShadowDataDescriptorSet(),
+            pipeline.getShadowTextureDescriptorSet()
+        };
+        if (pipeline.getGIProbeDataDescriptorSet())
+        {
+            sets.push_back(pipeline.getGIProbeDataDescriptorSet());
+        }
+        return sets;
+    }
+
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                        uint32_t screenWidth, uint32_t screenHeight)
     {
@@ -20,19 +48,8 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 11> descriptorSets = {
-            iblDescriptorSet,
-            meshShaderPipeline->getPerDrawDataDescriptorSet(),
-            bindlessTextures->getDescriptorSet(),
-            meshShaderPipeline->getMeshletDataDescriptorSet(),
-            meshShaderPipeline->getVertexDataDescriptorSet(),
-            boneMatrixManager->getDescriptorSet(),
-            meshShaderPipeline->getLightDataDescriptorSet(),
-            meshShaderPipeline->getClusterGridDescriptorSet(),
-            meshShaderPipeline->getCullingOutputDescriptorSet(),
-            meshShaderPipeline->getShadowDataDescriptorSet(),
-            meshShaderPipeline->getShadowTextureDescriptorSet()
-        };
+        auto descriptorSets = buildDescriptorSets(
+            iblDescriptorSet, *meshShaderPipeline, *bindlessTextures, *boneMatrixManager);
 
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -111,19 +128,8 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 11> descriptorSets = {
-            iblDescriptorSet,
-            transparentMeshShaderPipeline->getPerDrawDataDescriptorSet(),
-            bindlessTextures->getDescriptorSet(),
-            transparentMeshShaderPipeline->getMeshletDataDescriptorSet(),
-            transparentMeshShaderPipeline->getVertexDataDescriptorSet(),
-            boneMatrixManager->getDescriptorSet(),
-            transparentMeshShaderPipeline->getLightDataDescriptorSet(),
-            transparentMeshShaderPipeline->getClusterGridDescriptorSet(),
-            transparentMeshShaderPipeline->getCullingOutputDescriptorSet(),
-            transparentMeshShaderPipeline->getShadowDataDescriptorSet(),
-            transparentMeshShaderPipeline->getShadowTextureDescriptorSet()
-        };
+        auto descriptorSets = buildDescriptorSets(
+            iblDescriptorSet, *transparentMeshShaderPipeline, *bindlessTextures, *boneMatrixManager);
 
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -199,19 +205,8 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 11> descriptorSets = {
-            iblDescriptorSet,
-            wboitMeshShaderPipeline->getPerDrawDataDescriptorSet(),
-            bindlessTextures->getDescriptorSet(),
-            wboitMeshShaderPipeline->getMeshletDataDescriptorSet(),
-            wboitMeshShaderPipeline->getVertexDataDescriptorSet(),
-            boneMatrixManager->getDescriptorSet(),
-            wboitMeshShaderPipeline->getLightDataDescriptorSet(),
-            wboitMeshShaderPipeline->getClusterGridDescriptorSet(),
-            wboitMeshShaderPipeline->getCullingOutputDescriptorSet(),
-            wboitMeshShaderPipeline->getShadowDataDescriptorSet(),
-            wboitMeshShaderPipeline->getShadowTextureDescriptorSet()
-        };
+        auto descriptorSets = buildDescriptorSets(
+            iblDescriptorSet, *wboitMeshShaderPipeline, *bindlessTextures, *boneMatrixManager);
 
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -287,19 +282,8 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 11> descriptorSets = {
-            iblDescriptorSet,
-            transparentMeshShaderPipeline->getPerDrawDataDescriptorSet(),
-            bindlessTextures->getDescriptorSet(),
-            transparentMeshShaderPipeline->getMeshletDataDescriptorSet(),
-            transparentMeshShaderPipeline->getVertexDataDescriptorSet(),
-            boneMatrixManager->getDescriptorSet(),
-            transparentMeshShaderPipeline->getLightDataDescriptorSet(),
-            transparentMeshShaderPipeline->getClusterGridDescriptorSet(),
-            transparentMeshShaderPipeline->getCullingOutputDescriptorSet(),
-            transparentMeshShaderPipeline->getShadowDataDescriptorSet(),
-            transparentMeshShaderPipeline->getShadowTextureDescriptorSet()
-        };
+        auto descriptorSets = buildDescriptorSets(
+            iblDescriptorSet, *transparentMeshShaderPipeline, *bindlessTextures, *boneMatrixManager);
 
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -352,5 +336,25 @@ namespace render::gpudriven
                 commandsPerSection,
                 sizeof(MeshTasksIndirectCommand));
         }
+    }
+
+    void GPUDrivenRenderer::renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection)
+    {
+        if (!giDebugRenderer || !giCascadeManager || !giCascadeManager->isInitialized())
+        {
+            return;
+        }
+
+        auto* storage = giCascadeManager->getProbeStorage();
+        if (!storage || !storage->isInitialized())
+        {
+            return;
+        }
+
+        giDebugRenderer->render(cmd,
+                                 storage->getProbeDataDescSet(),
+                                 giCascadeManager->getCascadeInfoDescSet(),
+                                 viewProjection,
+                                 giCascadeManager->getTotalProbeCount());
     }
 }

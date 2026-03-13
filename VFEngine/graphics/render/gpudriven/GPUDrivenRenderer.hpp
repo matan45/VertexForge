@@ -1,27 +1,43 @@
 #pragma once
 
 #include "GPUDrivenTypes.hpp"
-#include "MergedMeshBuffer.hpp"
-#include "IndirectBatchManager.hpp"
-#include "BindlessTextureManager.hpp"
-#include "GPUCullLODPipeline.hpp"
+#include "scene/MergedMeshBuffer.hpp"
+#include "scene/IndirectBatchManager.hpp"
+#include "scene/BindlessTextureManager.hpp"
+#include "scene/GPUCullLODPipeline.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
-#include "MeshShaderPipeline.hpp"
-#include "TerrainMeshShaderPipeline.hpp"
-#include "TerrainMeshBuffer.hpp"
-#include "TerrainGPUAdapter.hpp"
-#include "TerrainStreamManager.hpp"
+#include "scene/MeshShaderPipeline.hpp"
+#include "terrain/TerrainMeshShaderPipeline.hpp"
+#include "terrain/TerrainMeshBuffer.hpp"
+#include "terrain/TerrainGPUAdapter.hpp"
+#include "terrain/TerrainStreamManager.hpp"
 #include "../water/WaterPipeline.hpp"
 #include "../water/WaterMeshBuffer.hpp"
 #include "../water/WaterGPUTypes.hpp"
-#include "MeshletBuffer.hpp"
-#include "BoneMatrixManager.hpp"
+#include "../water/OceanFFT.hpp"
+#include "scene/MeshletBuffer.hpp"
+#include "scene/BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "billboard/BillboardBufferManager.hpp"
+#include "billboard/BillboardMeshShaderPipeline.hpp"
+#include "billboard/BillboardGPUTypes.hpp"
+#include "billboard/BillboardStreamManager.hpp"
+#include "vegetation/GrassConfig.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
+#include "../lighting/LightStreamManager.hpp"
+#include "../gi/GITypes.hpp"
+#include "../gi/RadianceCascadeManager.hpp"
+#include "../gi/ProbeTracePipeline.hpp"
+#include "../gi/ProbeUpdatePipeline.hpp"
+#include "../gi/GIDebugRenderer.hpp"
+#include "../gi/AccelerationStructureManager.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "material/MaterialManager.hpp"
@@ -29,6 +45,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
 
@@ -68,6 +85,18 @@ namespace water
     struct WaterTileConfig;
 }
 
+namespace vegetation
+{
+    struct WindConfig;
+}
+
+namespace render::vegetation
+{
+    class GrassComputePipeline;
+    class GrassMeshShaderPipeline;
+    class WindSystem;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -103,6 +132,83 @@ namespace render::gpudriven
             std::vector<render::water::WaterTileGPUData> tileData;
             render::water::WaterPushConstants cachedPushConstants{};
             bool renderingEnabled = true;
+            int32_t selectedCoordX = 0;
+            int32_t selectedCoordZ = 0;
+            bool hasSelectedTile = false;
+
+            // Ocean FFT
+            std::unique_ptr<render::water::OceanFFT> oceanFFT;
+            bool oceanEnabled = false;
+
+            // Timing (microseconds)
+            float readbackUs = 0.0f;
+            float dispatchUs = 0.0f;
+            float updateUs = 0.0f;
+            float renderUs = 0.0f;
+        };
+
+        struct VegetationState
+        {
+            std::unique_ptr<render::vegetation::GrassComputePipeline> grassComputePipeline;
+            std::unique_ptr<render::vegetation::GrassMeshShaderPipeline> grassMeshPipeline;
+            std::unique_ptr<render::vegetation::WindSystem> windSystem;
+
+            // Buffer manager for vegetation tile allocations
+            std::unique_ptr<render::vegetation::VegetationBufferManager> bufferManager;
+
+            // Stream managers
+            std::unique_ptr<render::vegetation::GrassStreamManager> grassStreamManager;
+
+            // Grass instance buffer (GPU-side output from compute pipeline)
+            vk::Buffer grassInstanceBuffer;
+            vk::DeviceMemory grassInstanceBufferMemory;
+            vk::Buffer grassCounterBuffer;
+            vk::DeviceMemory grassCounterBufferMemory;
+            uint32_t grassInstanceCapacity = 0;
+            uint32_t currentGrassInstanceCount = 0;
+
+            bool grassRenderingEnabled = true;
+            bool grassInitialized = false;
+
+            ::vegetation::GrassRenderConfig grassConfig;
+
+            vk::DescriptorSetLayout cachedIBLLayout;
+            vk::RenderPass cachedRenderPass;
+
+            // Staging buffer (host-visible, transfer src) — holds ALL tiles' data at offsets
+            vk::Buffer tileStagingBuffer;
+            vk::DeviceMemory tileStagingBufferMemory;
+            void* tileStagingMapped = nullptr;
+
+            // Device-local compute input buffers (storage + transfer dst) — single tile at a time
+            vk::Buffer tileComputeDensity;
+            vk::DeviceMemory tileComputeDensityMemory;
+            vk::Buffer tileComputeHeight;
+            vk::DeviceMemory tileComputeHeightMemory;
+            vk::Buffer tileComputeHole;
+            vk::DeviceMemory tileComputeHoleMemory;
+
+            uint32_t tileComputeCapacity = 0;   // per-tile texel capacity for compute buffers
+            uint32_t tileStagingTileSlots = 0;   // number of tile slots in staging buffer
+            uint32_t tileStagingTexelsPerSlot = 0; // texels per slot
+
+            // Track which terrain tiles have vegetation registered
+            std::unordered_set<uint64_t> registeredTileKeys;
+
+            // Cached visible tiles for compute dispatch (set during updateVegetationStreaming)
+            std::vector<terrain::TerrainTile*> cachedVisibleTiles;
+
+        };
+
+        struct BillboardState
+        {
+            std::unique_ptr<BillboardBufferManager> bufferManager;
+            std::unique_ptr<BillboardMeshShaderPipeline> meshShaderPipeline;
+            std::unique_ptr<BillboardStreamManager> streamManager;
+            std::vector<BillboardInstanceGPU> instanceList;
+            BillboardRenderStats stats;
+            bool renderingEnabled = true;
+            bool initialized = false;
         };
 
         struct LightCullingState
@@ -124,8 +230,6 @@ namespace render::gpudriven
             std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loaded;
             std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
             material::CallbackId changeCallbackId{};
-            std::unordered_map<std::string, std::unique_ptr<core::Texture>> lightmapTextureCache;
-            std::unordered_set<std::string> registeredLightmapPaths;
         };
 
         struct CullingConfig
@@ -134,7 +238,7 @@ namespace render::gpudriven
             bool lodSelectionEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
-            float categoryDistances[5] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f};
+            float categoryDistances[services::CullingCategory::Count] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
             float shadowDistanceMultiplier = 0.5f;
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
@@ -173,6 +277,19 @@ namespace render::gpudriven
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
+        // Light streaming
+        std::unique_ptr<lighting::LightStreamManager> lightStreamManager;
+
+        // Global Illumination
+        std::unique_ptr<gi::RadianceCascadeManager> giCascadeManager;
+        std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
+        std::unique_ptr<gi::ProbeUpdatePipeline> giUpdatePipeline;
+        std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
+        std::unique_ptr<gi::AccelerationStructureManager> accelStructManager;
+        gi::GISettings cachedGISettings;
+        bool blasNeedsRebuild = true;
+        bool giProbeBuffersNeedInit = true;
+
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
 
@@ -188,6 +305,8 @@ namespace render::gpudriven
 
         TerrainState terrain;
         WaterState water;
+        VegetationState vegetation;
+        BillboardState billboard;
         LightCullingState lightCulling;
         MaterialState materials;
         CullingConfig culling;
@@ -235,6 +354,8 @@ namespace render::gpudriven
         void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                              uint32_t screenWidth = 0, uint32_t screenHeight = 0);
 
+        void renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection);
+
         void initWBOITPipeline(vk::RenderPass wboitRenderPass);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
         bool hasTransparentObjects() const { return mergedBuffer && mergedBuffer->getTransparentObjectCount() > 0; }
@@ -258,7 +379,7 @@ namespace render::gpudriven
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
-        void setCategoryDistance(uint32_t category, float distance) { if (category < 5) culling.categoryDistances[category] = distance; }
+        void setCategoryDistance(uint32_t category, float distance) { if (category < services::CullingCategory::Count) culling.categoryDistances[category] = distance; }
         void setShadowDistanceMultiplier(float mult) { culling.shadowDistanceMultiplier = mult; }
         void setGlobalLodBias(float bias) { culling.globalLodBias = bias; }
         float getGlobalLodBias() const { return culling.globalLodBias; }
@@ -302,6 +423,18 @@ namespace render::gpudriven
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
+        // Light streaming
+        lighting::LightStreamManager* getLightStreamManager() const { return lightStreamManager.get(); }
+        void initLightStreaming(const lighting::LightStreamingConfig& config = {});
+
+        // Global Illumination
+        void initGI(const gi::GISettings& settings);
+        void cleanupGI();
+        void applyGISettings(const gi::GISettings& settings);
+        gi::RadianceCascadeManager* getGICascadeManager() const { return giCascadeManager.get(); }
+        gi::GIDebugRenderer* getGIDebugRenderer() const { return giDebugRenderer.get(); }
+        const gi::GISettings& getGISettings() const { return cachedGISettings; }
+
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
         bool isBVHLightCullingEnabled() const { return lightCulling.useBVH; }
@@ -327,15 +460,10 @@ namespace render::gpudriven
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();
+        void evictTerrainTile(int32_t coordX, int32_t coordZ);
+        void setSelectedTerrainTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedTerrainTile();
 
-        struct TerrainTileLightmapData
-        {
-            int32_t coordX = 0;
-            int32_t coordZ = 0;
-            glm::vec4 scaleOffset{1.0f, 1.0f, 0.0f, 0.0f};
-            std::string lightmapPath;
-        };
-        void setTerrainLightmapData(const std::vector<TerrainTileLightmapData>& data);
         void invalidateTerrainLayerData() { terrain.layerDataDirty = true; }
 
         void setTerrainRenderingEnabled(bool enabled) { terrain.renderingEnabled = enabled; }
@@ -350,40 +478,95 @@ namespace render::gpudriven
                          const ::water::WaterTileConfig& tileConfig);
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
+        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
+        void clearSelectedWaterTile();
 
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }
 
+        void initOceanFFT(const render::water::OceanFFTConfig& config);
+        void cleanupOceanFFT();
+        void setOceanEnabled(bool enabled);
+        bool isOceanEnabled() const { return water.oceanEnabled; }
+        void updateOceanConfig(const render::water::OceanFFTConfig& config);
+        void dispatchOceanFFT(vk::CommandBuffer cmd, float time);
+        void readbackOceanDisplacement();
+        float getOceanHeightAt(const glm::vec2& worldXZ) const;
+
+        // Vegetation rendering
+        void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void renderGrassDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
+        void updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                       const std::vector<terrain::TerrainTile*>& allLoadedTiles,
+                                       const glm::vec3& cameraPosition);
+        void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
+        bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
+        void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
+        void addVegetationTile(int32_t coordX, int32_t coordZ);
+        void removeVegetationTile(int32_t coordX, int32_t coordZ);
+        void clearVegetationData();
+        void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
+        void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
+        void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void cleanupVegetation();
+
+        // Billboard rendering
+        void updateBillboards(const std::vector<BillboardInstanceGPU>& instances);
+        void renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                  uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+        void clearBillboardData();
+        void setBillboardRenderingEnabled(bool enabled) { billboard.renderingEnabled = enabled; }
+        bool isBillboardRenderingEnabled() const { return billboard.renderingEnabled; }
+        const BillboardRenderStats& getBillboardStats() const { return billboard.stats; }
+
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape);
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
+        void releaseMeshAsset(const std::string& meshPath);
+        void releaseTextureAsset(const std::string& texturePath);
+        void releaseMaterialAsset(const std::string& materialPath);
+
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
 
         float getTerrainUpdateUs() const { return terrain.updateUs; }
         float getTerrainStreamingUs() const { return terrain.streamingUs; }
         float getTerrainBuildTileDataUs() const { return terrain.buildTileDataUs; }
         float getTerrainUploadTileDataUs() const { return terrain.uploadTileDataUs; }
+
+        float getWaterReadbackUs() const { return water.readbackUs; }
+        float getWaterDispatchUs() const { return water.dispatchUs; }
+        float getWaterUpdateUs() const { return water.updateUs; }
+        float getWaterRenderUs() const { return water.renderUs; }
         const TerrainStreamingStats* getTerrainStreamingStats() const;
         TerrainCullingStats getTerrainCullingStats();
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);
         void registerTerrainLayerTextures(const std::string& materialPath);
+        void registerTextureDependencies(const std::string& materialPath,
+                                          const std::vector<std::string>& texturePaths);
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
-        void registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
-        LightmapIndexResolver createLightmapResolver();
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
 
+        void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
+        void updateLightCullingState(vk::CommandBuffer cmd);
+        void dispatchVolumetricFog(vk::CommandBuffer cmd);
+        void dispatchGIProbeUpdate(vk::CommandBuffer cmd);
+
+        static uint64_t makeTileKey(int32_t x, int32_t z);
     };
 }

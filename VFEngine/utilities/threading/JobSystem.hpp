@@ -7,24 +7,23 @@
 namespace threading {
 
 	enum class JobPriority : uint32_t {
-		HIGH = 0,    // Frame-critical work
-		NORMAL = 1,  // Regular async (resource loading, imports)
-		LOW = 2      // Background streaming, saves
+		HIGH = 0,
+		NORMAL = 1,
+		LOW = 2
 	};
 
 	class JobSystem {
 	public:
 		static JobSystem& instance();
 
-		// threadCount: 0 = auto (hw_concurrency - 2, min 2)
-		// maxExternalThreads: max number of non-enkiTS threads that can call submitTask concurrently
 		void init(uint32_t threadCount = 0, uint32_t maxExternalThreads = 8);
 		void shutdown();
 
-		// Returns the number of worker threads (excludes the main thread)
 		uint32_t getThreadCount() const;
 
-		// Submit a callable, returns std::future<T> (drop-in replacement for std::async)
+		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& body,
+			uint32_t minBatchSize = 64);
+
 		template<typename F>
 		auto submit(F&& callable, JobPriority priority = JobPriority::NORMAL)
 			-> std::future<std::invoke_result_t<std::decay_t<F>>>
@@ -61,7 +60,6 @@ namespace threading {
 		JobSystem(const JobSystem&) = delete;
 		JobSystem& operator=(const JobSystem&) = delete;
 
-		// Internal: enqueues a type-erased task on the enkiTS scheduler
 		void submitTask(std::function<void()> func, JobPriority priority);
 
 		struct Impl;

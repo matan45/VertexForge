@@ -50,8 +50,8 @@ namespace terrain
             tile->initializeFromHeights(heights);
         }
 
-        // Initialize weight map with default layer 0 = 1.0
-        tile->initializeWeightMap(1);
+        // Initialize weight map with default channel 0 = 1.0
+        tile->initializeWeightMap();
 
         if (progress)
             progress(0.2f, "Generating LODs");
@@ -97,8 +97,6 @@ namespace terrain
 
         calculateBounds(lodData);
 
-        extractEdgeVertices(tile, lodLevel);
-
         tile.clearLODDirty(lodLevel);
         if (tile.dirtyLODMask == 0)
         {
@@ -136,7 +134,6 @@ namespace terrain
         }
 
         calculateBounds(lodData);
-        extractEdgeVertices(tile, lodLevel);
 
         // Restore meshlet topology and update only the bounds
         lodData.meshlets = std::move(meshlets);
@@ -550,24 +547,6 @@ namespace terrain
                 break;
             }
         }
-    }
-
-    uint32_t TerrainTileGenerator::calculateLOD(
-        const glm::vec3& cameraPosition,
-        const TerrainTile& tile) const
-    {
-        glm::vec3 tileCenter = tile.worldBounds.getCenter();
-        float distance = glm::length(cameraPosition - tileCenter);
-
-        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
-        {
-            if (distance < config.lodDistances[lod])
-            {
-                return lod;
-            }
-        }
-
-        return TERRAIN_LOD_COUNT - 1; // Lowest detail
     }
 
     uint32_t TerrainTileGenerator::getLODVertexCount(uint32_t lodLevel) const

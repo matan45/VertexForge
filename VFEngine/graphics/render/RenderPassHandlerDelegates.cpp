@@ -3,7 +3,7 @@
 #include "mesh/MeshTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 
 namespace render
 {
@@ -194,6 +194,14 @@ namespace render
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setBillboardRenderingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setBillboardRenderingEnabled(enabled);
         }
     }
 
@@ -421,15 +429,4 @@ namespace render
         cameraOcclusionManager->initCameraHiZ(cameraId, depthImage, depthView, depthFormat);
     }
 
-    void RenderPassHandler::updateOcclusionObjects(occlusion::CameraId cameraId,
-                                                   const std::vector<occlusion::GPUObjectData>& objects)
-    {
-        cameraOcclusionManager->updateOcclusionObjects(cameraId, objects);
-    }
-
-    void RenderPassHandler::updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj,
-                                                  float nearPlane)
-    {
-        cameraOcclusionManager->updateCamera(cameraId, viewProj, nearPlane);
-    }
 }

@@ -11,7 +11,7 @@ namespace components
 
     struct NavmeshAgentComponent
     {
-        float radius = 0.3f;
+        float radius = 0.25f;
         float height = 2.0f;
         float maxSpeed = 3.5f;
         float maxAcceleration = 8.0f;
@@ -23,6 +23,12 @@ namespace components
 
         // Runtime state (not serialized)
         bool isActive = false;
+        bool isSuspended = false;
         int crowdAgentIndex = -1;
+
+        // Stored state for suspend/resume
+        glm::vec3 suspendedPosition{0.0f};
+        glm::vec3 suspendedTarget{0.0f};
+        bool hasSuspendedTarget = false;
     };
 }

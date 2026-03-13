@@ -1,5 +1,10 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "../vegetation/GrassComputePipeline.hpp"
+#include "../vegetation/GrassMeshShaderPipeline.hpp"
+#include "../vegetation/WindSystem.hpp"
+#include "../vegetation/VegetationBufferManager.hpp"
+#include "../vegetation/GrassStreamManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/RenderManager.hpp"
@@ -144,6 +149,8 @@ namespace render::gpudriven
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
             initWaterSubsystems(iblDescriptorSetLayout, renderPass);
+            initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
+            initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
         }
         else
         {
@@ -181,6 +188,14 @@ namespace render::gpudriven
 
         cachedWBOITRenderPass = wboitRenderPass;
 
+        vk::DescriptorSetLayout giLayout{};
+        if (giCascadeManager)
+        {
+            auto* storage = giCascadeManager->getProbeStorage();
+            if (storage && storage->isInitialized())
+                giLayout = storage->getSamplingLayout();
+        }
+
         wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
         wboitMeshShaderPipeline->init({
             .iblLayout = cachedIBLLayout,
@@ -191,10 +206,16 @@ namespace render::gpudriven
             .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
             .shadowDataLayout = shadowSystem->getShadowDataLayout(),
             .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+            .giProbeDataLayout = giLayout,
             .renderPass = wboitRenderPass,
             .wboitMode = true
         });
 
+        if (giLayout && giCascadeManager)
+        {
+            auto* storage = giCascadeManager->getProbeStorage();
+            wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+        }
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -212,15 +233,20 @@ namespace render::gpudriven
 
         materials.pbrCache.clear();
         materials.registeredPaths.clear();
-        materials.lightmapTextureCache.clear();
-        materials.registeredLightmapPaths.clear();
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        cleanupGI();
+        if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();
+        if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
+        if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
+        if (billboard.bufferManager) billboard.bufferManager->cleanup();
+        if (billboard.streamManager) billboard.streamManager->cleanup();
+        cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -239,12 +265,17 @@ namespace render::gpudriven
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        billboard.meshShaderPipeline.reset();
+        billboard.bufferManager.reset();
+        billboard.streamManager.reset();
+        billboard.initialized = false;
         volumetricPipeline.reset();
         meshStreamManager.reset();
         terrain.streamManager.reset();
         terrain.adapter.reset();
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
+        water.oceanFFT.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
         lightOcclusionCulling.reset();
@@ -317,6 +348,14 @@ namespace render::gpudriven
 
         if (canRecreate && shadowSystem)
         {
+            vk::DescriptorSetLayout giLayout{};
+            if (giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                if (storage && storage->isInitialized())
+                    giLayout = storage->getSamplingLayout();
+            }
+
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = cachedIBLLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -326,16 +365,27 @@ namespace render::gpudriven
                 .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
                 .renderPass = cachedRenderPass
             };
 
             meshShaderPipeline->recreate(pipelineInfo);
+            if (giLayout && giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+            }
 
             if (transparentMeshShaderPipeline)
             {
                 pipelineInfo.transparentMode = true;
                 transparentMeshShaderPipeline->recreate(pipelineInfo);
                 pipelineInfo.transparentMode = false;
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
             }
 
             if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
@@ -343,6 +393,11 @@ namespace render::gpudriven
                 pipelineInfo.renderPass = cachedWBOITRenderPass;
                 pipelineInfo.wboitMode = true;
                 wboitMeshShaderPipeline->recreate(pipelineInfo);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
             }
 
             if (terrain.pipeline)
@@ -361,6 +416,10 @@ namespace render::gpudriven
 
             if (water.pipeline)
             {
+                vk::DescriptorSetLayout oceanLayout{};
+                if (water.oceanFFT && water.oceanFFT->isInitialized())
+                    oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
                 water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
@@ -368,8 +427,17 @@ namespace render::gpudriven
                     lightCullingPipeline->getDescriptorSetLayout(),
                     shadowSystem->getShadowDataLayout(),
                     shadowSystem->getShadowTextureLayout(),
+                    oceanLayout,
                     cachedRenderPass
                 });
+            }
+
+            if (vegetation.grassMeshPipeline && vegetation.grassMeshPipeline->isInitialized())
+            {
+                vegetation.grassMeshPipeline->recreate(
+                    cachedIBLLayout,
+                    vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    cachedRenderPass);
             }
         }
         else

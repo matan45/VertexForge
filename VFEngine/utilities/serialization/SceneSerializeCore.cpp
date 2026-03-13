@@ -1,8 +1,7 @@
 #include "SceneSerialization.hpp"
-#include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../print/Log.hpp"
 
-// Helper to clean null terminators from strings
 static void cleanNullTerminators(std::string& str)
 {
     if (auto pos = str.find('\0'); pos != std::string::npos)
@@ -296,6 +295,12 @@ namespace serialization
         billboard.texturePath = j.value("texturePath", std::string(""));
         billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         billboard.renderTextureSource = entt::null; // Resolved post-load
+
+        // Warn about deprecated imposter fields from older scene files
+        if (j.contains("imposterPath"))
+            vfLogWarning("Scene contains deprecated 'imposterPath' field — impostor system has been removed.");
+        if (j.contains("billboardDistance") || j.contains("maxRenderDistance"))
+            vfLogWarning("Scene contains deprecated billboard distance fields — impostor system has been removed.");
     }
 
     json SceneSerialization::serializeText(const components::TextComponent& text)

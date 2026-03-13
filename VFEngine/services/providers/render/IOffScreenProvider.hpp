@@ -21,14 +21,9 @@ namespace services {
     struct CameraCullingStats {
         CameraId cameraId = 0;
         bool isActive = false;
-        bool occlusionEnabled = false;
-        bool occlusionInitialized = false;
         bool frustumReady = false;
         bool bvhBuilt = false;
         uint32_t totalMeshEntities = 0;
-        uint32_t visibleAfterFrustumCull = 0;
-        uint32_t visibleAfterOcclusionCull = 0;
-        uint32_t occludedCount = 0;
     };
 
     struct GPUDrivenDebugStats {
@@ -106,6 +101,13 @@ namespace services {
         size_t bytesUploadedThisFrame = 0;
     };
 
+    struct WaterDebugStats {
+        float readbackUs = 0.0f;
+        float dispatchUs = 0.0f;
+        float updateUs = 0.0f;
+        float renderUs = 0.0f;
+    };
+
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
@@ -122,6 +124,7 @@ namespace services {
 
         GPUDrivenDebugStats gpuDriven;
         TerrainDebugStats terrain;
+        WaterDebugStats water;
     };
 
     struct ShadowStats {
@@ -134,6 +137,12 @@ namespace services {
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
         uint32_t pointResolution = 512;
+
+        // Shadow cache stats for static lights
+        uint32_t totalStaticLights = 0;
+        uint32_t cachedShadowMaps = 0;
+        uint32_t renderedThisFrame = 0;
+        uint32_t skippedThisFrame = 0;
     };
 
     class IOffScreenProvider {
@@ -163,6 +172,7 @@ namespace services {
 
         virtual void prepareFrameBillboards() = 0;
         virtual void prepareFrameText() = 0;
+        virtual void prepareSceneData() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;

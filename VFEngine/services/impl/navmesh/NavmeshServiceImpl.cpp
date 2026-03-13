@@ -1,6 +1,8 @@
 #include "NavmeshServiceImpl.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/terrain/BrushEvents.hpp"
+#include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -17,7 +19,19 @@
 namespace services
 {
     NavmeshServiceImpl::NavmeshServiceImpl(INavmeshProvider* navmeshProvider)
-        : navmeshProvider(navmeshProvider)
+        : navmeshProvider(navmeshProvider),
+          tileManager(navmeshProvider, lastBakeSettings,
+                      [this](const navigation::NavmeshTileBounds& bounds,
+                             const types::NavmeshBakeSettings& settings,
+                             navigation::NavmeshInputGeometry& outGeometry)
+                      {
+                          collectTileGeometry(bounds, settings, outGeometry);
+                      }),
+          agentManager(navmeshProvider,
+                       [this](const glm::vec3& pos)
+                       {
+                           return tileManager.worldToTileCoord(pos);
+                       })
     {
         assert(navmeshProvider && "NavmeshProvider must not be null");
     }
@@ -28,12 +42,12 @@ namespace services
         {
             bakeFuture.wait();
         }
+        tileManager.unregisterEvents();
     }
 
     void NavmeshServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-
 
         dispatcher.registerCommandHandler<events::navmesh::BakeNavmeshCommand>(
             [this](const events::navmesh::BakeNavmeshCommand& cmd)
@@ -127,6 +141,88 @@ namespace services
                 getNavmeshDebugMesh(result.vertices, result.indices);
                 return result;
             });
+
+        // === Per-Tile Events (VK-739) ===
+
+        dispatcher.registerCommandHandler<events::navmesh::BakeTileCommand>(
+            [this](const events::navmesh::BakeTileCommand& cmd)
+            {
+                return bakeSingleTile(cmd.tileX, cmd.tileZ);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::BakeAllTilesCommand>(
+            [this](const events::navmesh::BakeAllTilesCommand& cmd)
+            {
+                bakeNavmesh(cmd.settings);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::SaveNavmeshTiledCommand>(
+            [this](const events::navmesh::SaveNavmeshTiledCommand& cmd)
+            {
+                return saveNavmeshTiled(cmd.directory);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::LoadNavmeshTiledCommand>(
+            [this](const events::navmesh::LoadNavmeshTiledCommand& cmd)
+            {
+                return loadNavmeshTiled(cmd.directory);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::SetNavmeshStreamingConfigCommand>(
+            [this](const events::navmesh::SetNavmeshStreamingConfigCommand& cmd)
+            {
+                tileManager.getStreamer().setConfig(cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::SetNavmeshStreamingEnabledCommand>(
+            [this](const events::navmesh::SetNavmeshStreamingEnabledCommand& cmd)
+            {
+                tileManager.getStreamer().setEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshStreamingConfigQuery>(
+            [this](const events::navmesh::GetNavmeshStreamingConfigQuery&)
+            {
+                return tileManager.getStreamer().getConfig();
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::IsNavmeshStreamingEnabledQuery>(
+            [this](const events::navmesh::IsNavmeshStreamingEnabledQuery&)
+            {
+                return tileManager.getStreamer().isEnabled();
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshTileStatusQuery>(
+            [this](const events::navmesh::GetNavmeshTileStatusQuery&)
+            {
+                std::vector<events::navmesh::NavmeshTileStatusInfo> result;
+                if (tileManager.getTileCache())
+                {
+                    tileManager.getTileCache()->forEachTile([&](const navigation::NavmeshTileCoord& coord)
+                    {
+                        events::navmesh::NavmeshTileStatusInfo info;
+                        info.coord = coord;
+                        if (tileManager.getDirtyTiles().count(coord))
+                            info.status = events::navmesh::NavmeshTileStatus::Dirty;
+                        else if (tileManager.getStreamer().isTileLoaded(coord))
+                            info.status = events::navmesh::NavmeshTileStatus::Loaded;
+                        else
+                            info.status = events::navmesh::NavmeshTileStatus::Baked;
+                        result.push_back(info);
+                    });
+                }
+                return result;
+            });
+
+        // Camera position tracking for streaming
+        dispatcher.subscribe<events::render::CameraPositionUpdatedNotification>(
+            [this](const events::render::CameraPositionUpdatedNotification& notif)
+            {
+                tileManager.setLastCameraPos(notif.position);
+            });
+
+        // Brush event subscriptions for incremental rebake
+        tileManager.registerEvents();
     }
 
 
@@ -206,7 +302,6 @@ namespace services
         bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
         if (result)
         {
-            // Store navmesh path on root entity (like IBL) so it persists with scene save
             auto& registry = scene::EntityRegistry::getRegistry();
             auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
             if (rootHandle.isValid())
@@ -256,9 +351,9 @@ namespace services
     void NavmeshServiceImpl::clearNavmesh()
     {
         navmeshProvider->clearNavmesh();
-        entityToAgentIndex.clear();
+        agentManager.clear();
+        tileManager.clear();
 
-        // Remove NavmeshComponent from root entity
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshComponent>();
         for (auto entity : view)
@@ -303,117 +398,35 @@ namespace services
 
     void NavmeshServiceImpl::addAgent(EntityHandle entity)
     {
-        if (entityToAgentIndex.count(entity.id))
-        {
-            return;
-        }
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto enttEntity = internal::fromHandle(entity);
-        if (!registry.valid(enttEntity))
-        {
-            return;
-        }
-
-        float radius = 0.3f;
-        float height = 2.0f;
-        float maxSpeed = 3.5f;
-        float maxAcceleration = 8.0f;
-
-        if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-        {
-            const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
-            radius = agent.radius;
-            height = agent.height;
-            maxSpeed = agent.maxSpeed;
-            maxAcceleration = agent.maxAcceleration;
-        }
-
-        glm::vec3 position{0.0f};
-        if (registry.all_of<components::TransformComponent>(enttEntity))
-        {
-            position = registry.get<components::TransformComponent>(enttEntity).position;
-        }
-
-        int agentIdx = navmeshProvider->addCrowdAgent(position, radius, height, maxSpeed, maxAcceleration);
-        if (agentIdx >= 0)
-        {
-            entityToAgentIndex[entity.id] = agentIdx;
-
-            if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-            {
-                auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
-                agent.isActive = true;
-                agent.crowdAgentIndex = agentIdx;
-            }
-        }
+        agentManager.addAgent(entity);
     }
 
     void NavmeshServiceImpl::removeAgent(EntityHandle entity)
     {
-        auto it = entityToAgentIndex.find(entity.id);
-        if (it != entityToAgentIndex.end())
-        {
-            navmeshProvider->removeCrowdAgent(it->second);
-
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto enttEntity = internal::fromHandle(entity);
-            if (registry.valid(enttEntity) && registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-            {
-                auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
-                agent.isActive = false;
-                agent.crowdAgentIndex = -1;
-            }
-
-            entityToAgentIndex.erase(it);
-        }
+        agentManager.removeAgent(entity);
     }
 
     void NavmeshServiceImpl::setAgentDestination(EntityHandle entity, const glm::vec3& target)
     {
-        auto it = entityToAgentIndex.find(entity.id);
-        if (it != entityToAgentIndex.end())
-        {
-            navmeshProvider->setCrowdAgentTarget(it->second, target);
-        }
+        agentManager.setAgentDestination(entity, target);
     }
 
     void NavmeshServiceImpl::stopAgent(EntityHandle entity)
     {
-        auto it = entityToAgentIndex.find(entity.id);
-        if (it != entityToAgentIndex.end())
-        {
-            navmeshProvider->stopCrowdAgent(it->second);
-        }
+        agentManager.stopAgent(entity);
     }
 
     void NavmeshServiceImpl::updateAgents(float deltaTime)
     {
         pollBakeCompletion();
-
-        if (entityToAgentIndex.empty())
-        {
-            return;
-        }
-
-        navmeshProvider->updateCrowd(deltaTime);
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        for (const auto& [entityId, agentIdx] : entityToAgentIndex)
-        {
-            EntityHandle handle{entityId};
-            auto enttEntity = internal::fromHandle(handle);
-            if (!registry.valid(enttEntity) || !registry.all_of<components::TransformComponent>(enttEntity))
-            {
-                continue;
-            }
-
-            glm::vec3 agentPos = navmeshProvider->getCrowdAgentPosition(agentIdx);
-            auto& transform = registry.get<components::TransformComponent>(enttEntity);
-            transform.position = agentPos;
-            transform.isDirty = true;
-
-        }
+        tileManager.pollTileBakeCompletions();
+        auto streamResult = tileManager.updateStreaming();
+        if (!streamResult.unloaded.empty())
+            agentManager.suspendAgentsOnUnloadedTiles(streamResult.unloaded);
+        if (!streamResult.loaded.empty())
+            agentManager.resumeAgentsOnLoadedTiles(streamResult.loaded);
+        tileManager.processDirtyTiles();
+        agentManager.updatePositions(deltaTime);
     }
 
 
@@ -421,6 +434,23 @@ namespace services
                                                    std::vector<uint32_t>& outIndices) const
     {
         navmeshProvider->getDebugMesh(outVertices, outIndices);
+    }
+
+    // === Per-Tile Delegations ===
+
+    bool NavmeshServiceImpl::bakeSingleTile(int tileX, int tileZ)
+    {
+        return tileManager.bakeSingleTile(tileX, tileZ);
+    }
+
+    bool NavmeshServiceImpl::saveNavmeshTiled(const std::string& directory)
+    {
+        return tileManager.saveNavmeshTiled(directory);
+    }
+
+    bool NavmeshServiceImpl::loadNavmeshTiled(const std::string& directory)
+    {
+        return tileManager.loadNavmeshTiled(directory, lastBakeSettings);
     }
 
 }

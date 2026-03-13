@@ -101,8 +101,6 @@ namespace terrain
         float worldTileSize = 32.0f;
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
-        std::array<float, TERRAIN_LOD_COUNT> lodDistances = {100.0f, 300.0f, 600.0f, 1200.0f};
-
         // Vertical skirt depth for LOD crack prevention
         float skirtDepth = 5.0f;
 
@@ -125,12 +123,11 @@ namespace terrain
     struct NeighborInfo
     {
         TileCoord coord;
-        uint8_t lodLevel = 0;
         bool exists = false;
 
         NeighborInfo() = default;
 
-        NeighborInfo(const TileCoord& c, uint8_t lod) : coord(c), lodLevel(lod), exists(true)
+        explicit NeighborInfo(const TileCoord& c) : coord(c), exists(true)
         {
         }
     };

@@ -11,6 +11,8 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../../graphics/render/gi/GITypes.hpp"
+#include "../../graphics/render/lighting/LightStreamManager.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 
@@ -24,6 +26,8 @@ namespace services
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
     class IWaterRenderProvider;
+    class IGrassRenderProvider;
+    class IVegetationRenderProvider;
 }
 
 namespace controllers
@@ -57,6 +61,9 @@ namespace controllers
 
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
+        void meshRelease(const std::string& meshPath);
+        void textureRelease(const std::string& texturePath);
+        void materialRelease(const std::string& materialPath);
         void meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
@@ -72,6 +79,7 @@ namespace controllers
 
         void prepareFrameBillboards();
         void prepareFrameText();
+        void prepareSceneData();
         void setShowBillboardIcons(bool show);
         bool getShowBillboardIcons() const;
         bool loadBillboardAtlas(const std::string& atlasPath);
@@ -135,6 +143,8 @@ namespace controllers
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
 
+        void setBillboardRenderingEnabled(bool enabled);
+
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
@@ -142,9 +152,26 @@ namespace controllers
         void setPostProcessEnabled(bool enabled);
         bool isPostProcessEnabled() const;
 
+        // GI settings
+        void applyGISettings(const render::gi::GISettings& settings);
+        render::gi::GISettings getGISettings() const;
+        render::gi::GIDebugStats getGIDebugStats() const;
+        void setGIShowProbes(bool show);
+        void setGIShowCascadeBounds(bool show);
+        void setGIShowProbeValidity(bool show);
+
+        // Light streaming settings
+        void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
+        render::lighting::LightStreamingConfig getLightStreamingConfig() const;
+        render::lighting::LightStreamingStats getLightStreamingStats() const;
+        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
+        void unregisterSectorLights(uint32_t sectorId);
+
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setGrassRenderProvider(services::IGrassRenderProvider* provider);
+        void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();

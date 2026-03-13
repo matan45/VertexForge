@@ -107,11 +107,13 @@
     <ClInclude Include="components\IKComponent.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />
+    <ClInclude Include="components\MeshBrushComponents.hpp" />
     <ClInclude Include="components\NavmeshComponents.hpp" />
     <ClInclude Include="components\PhysicsAnimationComponent.hpp" />
     <ClInclude Include="components\PhysicsComponents.hpp" />
     <ClInclude Include="components\TerrainComponents.hpp" />
     <ClInclude Include="components\UIComponents.hpp" />
+    <ClInclude Include="components\VegetationComponents.hpp" />
     <ClInclude Include="components\WaterComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\ProjectConfig.hpp" />
@@ -119,9 +121,6 @@
     <ClInclude Include="export\ExportConfig.hpp" />
     <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
-    <ClInclude Include="lightbake\BakeSceneMesh.hpp" />
-    <ClInclude Include="lightbake\LightBaker.hpp" />
-    <ClInclude Include="lightbake\LightmapAtlas.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
     <ClInclude Include="material\MaterialGraphHelper.hpp" />
     <ClInclude Include="material\MaterialInstanceAsset.hpp" />
@@ -134,8 +133,11 @@
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="math\RayBVH.hpp" />
     <ClInclude Include="math\TransformUtils.hpp" />
+    <ClInclude Include="meshbrush\MeshBrushSpatialGrid.hpp" />
+    <ClInclude Include="meshbrush\MeshBrushTypes.hpp" />
     <ClInclude Include="navigation\NavmeshData.hpp" />
     <ClInclude Include="navigation\NavmeshSerializer.hpp" />
+    <ClInclude Include="navigation\NavmeshTileCache.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="physics\PhysicsAnimationAsset.hpp" />
     <ClInclude Include="postprocess\PostProcessTypes.hpp" />
@@ -143,6 +145,9 @@
     <ClInclude Include="print\LogEntry.hpp" />
     <ClInclude Include="rendertexture\RenderTextureTypes.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
+    <ClInclude Include="resource\AssetLifecycleHelpers.hpp" />
+    <ClInclude Include="resource\AssetLifecycleManager.hpp" />
+    <ClInclude Include="resource\AssetTypes.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
@@ -183,6 +188,7 @@
     <ClInclude Include="terrain\TerrainTypes.hpp" />
     <ClInclude Include="terrain\TerrainWeightMap.hpp" />
     <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
+    <ClInclude Include="terrain\TerrainWorldStreamer.hpp" />
     <ClInclude Include="terrain\WeightBrushApplicator.hpp" />
     <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
@@ -196,6 +202,12 @@
     <ClInclude Include="types\PhysicsTypes.hpp" />
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
+    <ClInclude Include="vegetation\GrassConfig.hpp" />
+    <ClInclude Include="vegetation\VegetationDensityBrushApplicator.hpp" />
+    <ClInclude Include="vegetation\VegetationDensityMap.hpp" />
+    <ClInclude Include="vegetation\VegetationSerializer.hpp" />
+    <ClInclude Include="vegetation\VegetationTypes.hpp" />
+    <ClInclude Include="vegetation\WindConfig.hpp" />
     <ClInclude Include="vfx\VFXAsset.hpp" />
     <ClInclude Include="vfx\VFXCurveTypes.hpp" />
     <ClInclude Include="vfx\VFXEmitterConfigLoader.hpp" />
@@ -207,9 +219,21 @@
     <ClInclude Include="vfx\VFXShapeConfigLoader.hpp" />
     <ClInclude Include="vfx\VFXShapeTypes.hpp" />
     <ClInclude Include="vfx\VFXTypes.hpp" />
+    <ClInclude Include="water\WaterDefinitionMap.hpp" />
     <ClInclude Include="water\WaterGrid.hpp" />
+    <ClInclude Include="water\WaterSerializer.hpp" />
     <ClInclude Include="water\WaterTile.hpp" />
     <ClInclude Include="water\WaterTypes.hpp" />
+    <ClInclude Include="water\WaterWorldStreamer.hpp" />
+    <ClInclude Include="world\PendingReferenceResolver.hpp" />
+    <ClInclude Include="world\SectorEntityLoader.hpp" />
+    <ClInclude Include="world\SectorStreamer.hpp" />
+    <ClInclude Include="world\WorldDefinition.hpp" />
+    <ClInclude Include="world\WorldDefinitionSerialization.hpp" />
+    <ClInclude Include="world\WorldSector.hpp" />
+    <ClInclude Include="world\WorldSectorManager.hpp" />
+    <ClInclude Include="world\WorldSectorSerialization.hpp" />
+    <ClInclude Include="world\WorldTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animator\AnimatorAsset.cpp" />
@@ -222,19 +246,19 @@
     <ClCompile Include="export\ExeIconEmbedder.cpp" />
     <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
-    <ClCompile Include="lightbake\BakeSceneMesh.cpp" />
-    <ClCompile Include="lightbake\LightBaker.cpp" />
-    <ClCompile Include="lightbake\LightmapAtlas.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialAsset_Load.cpp" />
     <ClCompile Include="material\MaterialGraphHelper.cpp" />
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\RayBVH.cpp" />
+    <ClCompile Include="meshbrush\MeshBrushSpatialGrid.cpp" />
     <ClCompile Include="navigation\NavmeshSerializer.cpp" />
+    <ClCompile Include="navigation\NavmeshTileCache.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
+    <ClCompile Include="resource\AssetLifecycleManager.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
     <ClCompile Include="resource\FontResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
@@ -254,6 +278,7 @@
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerializeCore.cpp" />
     <ClCompile Include="serialization\SceneSerializeDispatch.cpp" />
+    <ClCompile Include="serialization\SceneSerializeGrass.cpp" />
     <ClCompile Include="serialization\SceneSerializeIK.cpp" />
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
@@ -279,11 +304,15 @@
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />
     <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
+    <ClCompile Include="terrain\TerrainWorldStreamer.cpp" />
     <ClCompile Include="terrain\WeightBrushApplicator.cpp" />
     <ClCompile Include="text\TextLayout.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="threading\JobSystem.cpp" />
     <ClCompile Include="time\Timer.cpp" />
+    <ClCompile Include="vegetation\VegetationDensityBrushApplicator.cpp" />
+    <ClCompile Include="vegetation\VegetationDensityMap.cpp" />
+    <ClCompile Include="vegetation\VegetationSerializer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />
     <ClCompile Include="vfx\VFXCurveTypes.cpp" />
     <ClCompile Include="vfx\VFXEventTypes.cpp" />
@@ -292,6 +321,15 @@
     <ClCompile Include="vfx\VFXShapeConfigLoader.cpp" />
     <ClCompile Include="vfx\VFXTypes.cpp" />
     <ClCompile Include="water\WaterGrid.cpp" />
+    <ClCompile Include="water\WaterSerializer.cpp" />
+    <ClCompile Include="water\WaterSerializerRead.cpp" />
+    <ClCompile Include="water\WaterWorldStreamer.cpp" />
+    <ClCompile Include="world\PendingReferenceResolver.cpp" />
+    <ClCompile Include="world\SectorEntityLoader.cpp" />
+    <ClCompile Include="world\SectorStreamer.cpp" />
+    <ClCompile Include="world\WorldDefinitionSerialization.cpp" />
+    <ClCompile Include="world\WorldSectorManager.cpp" />
+    <ClCompile Include="world\WorldSectorSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

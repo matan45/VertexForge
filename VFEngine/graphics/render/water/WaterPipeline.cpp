@@ -40,6 +40,16 @@ namespace render::water
         createWaterTileDescriptor();
         createDuDvTexture();
         createDuDvDescriptor();
+
+        if (config.oceanTextureLayout)
+        {
+            oceanTextureLayout = config.oceanTextureLayout;
+        }
+        else
+        {
+            createOceanDummyTexture();
+        }
+
         createGraphicsPipeline(config);
 
         initialized = true;
@@ -58,6 +68,15 @@ namespace render::water
         cachedCullingOutputLayout = config.cullingOutputLayout;
         cachedShadowDataLayout = config.shadowDataLayout;
         cachedShadowTextureLayout = config.shadowTextureLayout;
+
+        if (config.oceanTextureLayout)
+        {
+            oceanTextureLayout = config.oceanTextureLayout;
+        }
+        else
+        {
+            oceanTextureLayout = oceanDummyLayout;
+        }
 
         if (graphicsPipeline)
         {
@@ -141,6 +160,23 @@ namespace render::water
             vkDevice.destroyDescriptorSetLayout(waterTileLayout);
             waterTileLayout = nullptr;
         }
+
+        // Ocean dummy resources (only destroy what we created via createOceanDummyTexture)
+        if (oceanDummySampler) { vkDevice.destroySampler(oceanDummySampler); oceanDummySampler = nullptr; }
+        if (oceanDummyView)    { vkDevice.destroyImageView(oceanDummyView); oceanDummyView = nullptr; }
+        if (oceanDummyImage)   { vkDevice.destroyImage(oceanDummyImage); oceanDummyImage = nullptr; }
+        if (oceanDummyMemory)  { vkDevice.freeMemory(oceanDummyMemory); oceanDummyMemory = nullptr; }
+        if (oceanDummyPool)
+        {
+            vkDevice.destroyDescriptorPool(oceanDummyPool);
+            oceanDummyPool = nullptr;
+        }
+        if (oceanDummyLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(oceanDummyLayout);
+            oceanDummyLayout = nullptr;
+        }
+        oceanTextureLayout = nullptr;
 
         if (waterShader)
         {
@@ -412,6 +448,92 @@ namespace render::water
         vkDevice.updateDescriptorSets(write, nullptr);
     }
 
+    void WaterPipeline::createOceanDummyTexture()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Create a 1x1 RGBA16F dummy texture for when ocean FFT is not active
+        core::ImageInfoRequest imgReq(vkDevice, device.getPhysicalDevice(),
+            1, 1, 1, 1,
+            vk::Format::eR16G16B16A16Sfloat,
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::ImageUtilities::createImage(imgReq, oceanDummyImage, oceanDummyMemory);
+
+        core::ImageViewInfoRequest viewReq(vkDevice, oceanDummyImage,
+            vk::Format::eR16G16B16A16Sfloat,
+            vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D);
+        core::ImageUtilities::createImageView(viewReq, oceanDummyView);
+
+        // Transition to shader read optimal
+        auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
+        core::ImageUtilities::transitionImageLayout(cmd.get(), oceanDummyImage,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+
+        // Create sampler
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+        oceanDummySampler = vkDevice.createSampler(samplerInfo);
+
+        // Create descriptor set layout (2 combined image samplers for vertex + fragment)
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+        oceanDummyLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        oceanTextureLayout = oceanDummyLayout;
+
+        // Create descriptor pool + set
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        poolSize.descriptorCount = 2;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        oceanDummyPool = vkDevice.createDescriptorPool(poolInfo);
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = oceanDummyPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &oceanDummyLayout;
+        oceanDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        // Update with dummy texture
+        std::array<vk::DescriptorImageInfo, 2> imageInfos{};
+        imageInfos[0] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        imageInfos[1] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        for (int i = 0; i < 2; ++i)
+        {
+            writes[i].dstSet = oceanDummyDescSet;
+            writes[i].dstBinding = i;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[i].pImageInfo = &imageInfos[i];
+        }
+        vkDevice.updateDescriptorSets(writes, nullptr);
+    }
+
     void WaterPipeline::createGraphicsPipeline(const WaterPipelineLayoutConfig& layoutConfig)
     {
         vk::VertexInputBindingDescription vertexBinding{};
@@ -447,7 +569,8 @@ namespace render::water
                 layoutConfig.clusterGridLayout,
                 layoutConfig.cullingOutputLayout,
                 layoutConfig.shadowDataLayout,
-                layoutConfig.shadowTextureLayout
+                layoutConfig.shadowTextureLayout,
+                oceanTextureLayout
             },
             .pushConstantSize = sizeof(WaterPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -501,7 +624,12 @@ namespace render::water
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         cmd.bindIndexBuffer(meshBuffer.getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-        std::array<vk::DescriptorSet, 8> descriptorSets = {
+        // Use real ocean desc set if provided, otherwise the dummy
+        vk::DescriptorSet oceanDescSet = descriptors.oceanTextureDescSet
+            ? descriptors.oceanTextureDescSet
+            : oceanDummyDescSet;
+
+        std::array<vk::DescriptorSet, 9> descriptorSets = {
             descriptors.iblDescSet,
             waterTileDescriptorSet,
             dudvTextureDescriptorSet,
@@ -509,7 +637,8 @@ namespace render::water
             descriptors.clusterGridDescSet,
             descriptors.cullingOutputDescSet,
             descriptors.shadowDataDescSet,
-            descriptors.shadowTextureDescSet
+            descriptors.shadowTextureDescSet,
+            oceanDescSet
         };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                 0, descriptorSets, nullptr);

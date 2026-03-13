@@ -37,8 +37,6 @@ namespace controllers::offscreen
         void rebuild();
         void markDirty();
 
-        void updateOcclusionCullingData(render::RenderPassHandler* renderHandler);
-
         void queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const
         {
             sceneBVH.queryFrustum(frustum, results);

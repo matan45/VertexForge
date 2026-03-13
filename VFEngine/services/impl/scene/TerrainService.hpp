@@ -9,6 +9,7 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
+#include "terrain/TerrainWorldStreamer.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <memory>
@@ -53,6 +54,9 @@ namespace services
         float maxTerrainDistSq_ = 0.0f;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
+        std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
+        std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
+        std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -72,6 +76,8 @@ namespace services
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
 
+        std::vector<terrain::TerrainTile*> getAllLoadedTiles();
+
         std::vector<terrain::TerrainTile*> queryVisibleTiles(
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
@@ -87,7 +93,10 @@ namespace services
         void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
-        void setPhysicsProvider(IPhysicsProvider* provider) { physicsProvider = provider; }
+        void setPhysicsProvider(IPhysicsProvider* provider)
+        {
+            physicsProvider = provider;
+        }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
         void removeTerrainCollider(EntityHandle terrainEntity);
@@ -96,8 +105,19 @@ namespace services
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
 
+        bool prepareSave(uint64_t terrainEntityId);
+        bool prepareSaveIncremental(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
+        bool saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path);
         EntityHandle loadTerrain(const std::string& path);
+
+        bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+
+        bool streamInTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
+        void commitStreamingChanges(EntityHandle terrainEntity);
+        void loadAllTiles(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
@@ -105,6 +125,7 @@ namespace services
         ::events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh();
         ::events::terrain::TerrainBakeGeometryResult getTerrainBakeGeometry();
         ::events::terrain::TerrainHeightfieldResult getTerrainHeightfield();
+        ::events::terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ);
 
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
@@ -119,17 +140,29 @@ namespace services
         void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
-                                       const std::string& path);
+                                       const std::string& path,
+                                       uint64_t indexTableOffset = 0);
+
+        void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
+        TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,
+                                                       EntityHandle terrainEntity,
+                                                       std::vector<float>& physicsHeightsOut) const;
 
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
-        uint16_t getOverlayMask() const;
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
         static void generateTileColliderWireframe(const terrain::TerrainTile& tile,
                                                   components::TerrainColliderDebugData& out);
+
+        bool saveVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
+        bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
+        static std::string getVegetationDirectory(const std::string& terrainPath);
+
+        void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+        void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
     };
 }

@@ -7,13 +7,13 @@
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "../../core/Texture.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "lightbake/LightmapAtlas.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <unordered_map>
@@ -36,10 +36,8 @@ namespace render::gpudriven
 
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
-        registerSceneLightmapTextures(opaqueObjects);
 
         TextureIndexResolver textureResolver = createTextureResolver();
-        LightmapIndexResolver lightmapResolver = createLightmapResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
             auto it = materials.pbrCache.find(materialPath);
@@ -55,7 +53,7 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, lightmapResolver, time});
+        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition});
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -70,7 +68,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
@@ -115,7 +113,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
@@ -150,7 +148,7 @@ namespace render::gpudriven
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4]},
+            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
@@ -179,6 +177,59 @@ namespace render::gpudriven
         meshStreamManager->update(cameraPosition);
     }
 
+    void GPUDrivenRenderer::releaseMeshAsset(const std::string& meshPath)
+    {
+        if (meshStreamManager)
+        {
+            meshStreamManager->unrequestMesh(meshPath);
+        }
+    }
+
+    void GPUDrivenRenderer::releaseTextureAsset(const std::string& texturePath)
+    {
+        if (bindlessTextures)
+        {
+            bindlessTextures->unregisterTexture(texturePath);
+        }
+        if (materials.textureCache)
+        {
+            materials.textureCache->unloadTexture(texturePath);
+        }
+
+        // Invalidate any materials that used this texture so they re-register on next use
+        std::vector<std::string> materialsToInvalidate;
+        for (const auto& [matPath, pbrValues] : materials.pbrCache)
+        {
+            if (pbrValues.albedoTexturePath == texturePath ||
+                pbrValues.normalTexturePath == texturePath ||
+                pbrValues.ormTexturePath == texturePath ||
+                pbrValues.metallicTexturePath == texturePath ||
+                pbrValues.roughnessTexturePath == texturePath ||
+                pbrValues.aoTexturePath == texturePath ||
+                pbrValues.emissionTexturePath == texturePath ||
+                pbrValues.heightTexturePath == texturePath)
+            {
+                materialsToInvalidate.push_back(matPath);
+            }
+        }
+        for (const auto& matPath : materialsToInvalidate)
+        {
+            materials.registeredPaths.erase(matPath);
+            materials.pbrCache.erase(matPath);
+        }
+    }
+
+    void GPUDrivenRenderer::releaseMaterialAsset(const std::string& materialPath)
+    {
+        if (materials.textureCache)
+        {
+            materials.textureCache->invalidateMaterialDescriptorSet(materialPath);
+        }
+        materials.registeredPaths.erase(materialPath);
+        materials.pbrCache.erase(materialPath);
+        materials.loaded.erase(materialPath);
+    }
+
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
     {
         if (!materials.textureCache || !bindlessTextures)
@@ -201,82 +252,6 @@ namespace render::gpudriven
                 }
             }
         }
-    }
-
-    void GPUDrivenRenderer::registerSceneLightmapTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
-    {
-        if (!bindlessTextures)
-        {
-            return;
-        }
-
-        for (const auto& meshRender : opaqueObjects)
-        {
-            if (meshRender.lightmapPath.empty())
-            {
-                continue;
-            }
-
-            if (materials.registeredLightmapPaths.contains(meshRender.lightmapPath))
-            {
-                continue;
-            }
-
-            auto lightmapData = lightbake::LightmapAtlas::load(meshRender.lightmapPath);
-            if (lightmapData.width == 0 || lightmapData.height == 0 || lightmapData.texels.empty())
-            {
-                vfLogWarning("GPUDrivenRenderer: Failed to load lightmap: {}", meshRender.lightmapPath);
-                materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
-                continue;
-            }
-
-            // Convert 3-channel (RGB) lightmap to 4-channel (RGBA) HDRData
-            resource::HDRData hdrData;
-            hdrData.width = lightmapData.width;
-            hdrData.height = lightmapData.height;
-            hdrData.numbersOfChannels = 4;
-            hdrData.pixels.resize(lightmapData.width * lightmapData.height * 4);
-
-            const uint32_t channels = lightmapData.channels;
-            for (uint32_t i = 0; i < lightmapData.width * lightmapData.height; ++i)
-            {
-                hdrData.pixels[i * 4 + 0] = (channels > 0) ? lightmapData.texels[i * channels + 0] : 0.0f;
-                hdrData.pixels[i * 4 + 1] = (channels > 1) ? lightmapData.texels[i * channels + 1] : 0.0f;
-                hdrData.pixels[i * 4 + 2] = (channels > 2) ? lightmapData.texels[i * channels + 2] : 0.0f;
-                hdrData.pixels[i * 4 + 3] = 1.0f;
-            }
-
-            auto texture = std::make_unique<core::Texture>(device);
-            texture->loadHDRFromData(hdrData, false);
-
-            vk::ImageView view = texture->getImageView();
-            vk::Sampler sampler = texture->getSampler();
-
-            if (view && sampler)
-            {
-                bindlessTextures->registerTexture(meshRender.lightmapPath, view, sampler);
-                materials.lightmapTextureCache[meshRender.lightmapPath] = std::move(texture);
-            }
-
-            materials.registeredLightmapPaths.insert(meshRender.lightmapPath);
-        }
-    }
-
-    LightmapIndexResolver GPUDrivenRenderer::createLightmapResolver()
-    {
-        if (!bindlessTextures)
-        {
-            return nullptr;
-        }
-
-        return [this](const std::string& lightmapPath) -> uint32_t
-        {
-            if (lightmapPath.empty())
-            {
-                return INVALID_TEXTURE_INDEX;
-            }
-            return bindlessTextures->getTextureIndex(lightmapPath);
-        };
     }
 
     TextureIndexResolver GPUDrivenRenderer::createTextureResolver()
@@ -441,18 +416,24 @@ namespace render::gpudriven
         {
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            meshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (transparentMeshShaderPipeline)
         {
             transparentMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             transparentMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            transparentMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            transparentMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (wboitMeshShaderPipeline)
         {
             wboitMeshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+            wboitMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
+            wboitMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
         if (meshShaderPipeline && hasMeshes)
@@ -609,6 +590,17 @@ namespace render::gpudriven
         if (registered)
         {
             materials.registeredPaths.insert(materialPath);
+
+            registerTextureDependencies(materialPath, {
+                pbrValues.albedoTexturePath,
+                pbrValues.normalTexturePath,
+                pbrValues.ormTexturePath,
+                pbrValues.metallicTexturePath,
+                pbrValues.roughnessTexturePath,
+                pbrValues.aoTexturePath,
+                pbrValues.emissionTexturePath,
+                pbrValues.heightTexturePath
+            });
         }
 
         return registered;
@@ -626,6 +618,21 @@ namespace render::gpudriven
         if (cullPipeline && hiZView && hiZSampler)
         {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+        }
+    }
+
+    void GPUDrivenRenderer::registerTextureDependencies(const std::string& materialPath,
+                                                         const std::vector<std::string>& texturePaths)
+    {
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (!lifecycle.isTracked(materialPath))
+        {
+            lifecycle.acquire(materialPath, resource::AssetType::Material);
+        }
+        for (const auto& texPath : texturePaths)
+        {
+            if (!texPath.empty())
+                lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
         }
     }
 }

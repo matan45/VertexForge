@@ -2,6 +2,9 @@
 #include "../../providers/animation/IAnimatorProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/animation/AnimatorEvents.hpp"
+#include "../../events/animation/AnimationBudgetEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 
 namespace services
 {
@@ -220,6 +223,70 @@ namespace services
             [this](const events::animator::GetEntityRootMotionQuery& query)
             {
                 return getRootMotion(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<services::events::animation::GetAnimationBudgetStatsQuery>(
+            [this](const services::events::animation::GetAnimationBudgetStatsQuery&)
+            {
+                auto ps = animatorProvider->getBudgetStats();
+                services::events::animation::AnimationBudgetStatsResult result;
+                result.totalAnimators = ps.totalAnimators;
+                result.culledEntities = ps.culledEntities;
+                for (int i = 0; i < 4; ++i)
+                    result.lodCounts[i] = ps.lodCounts[i];
+                result.pendingStreamingInits = ps.pendingStreamingInits;
+                return result;
+            });
+
+        dispatcher.registerQueryHandler<services::events::animation::GetAnimationLODConfigQuery>(
+            [this](const services::events::animation::GetAnimationLODConfigQuery&)
+            {
+                auto lc = animatorProvider->getLODConfig();
+                services::events::animation::AnimationLODConfigResult result;
+                result.lod0Distance = lc.lod0Distance;
+                result.lod1Distance = lc.lod1Distance;
+                result.lod2Distance = lc.lod2Distance;
+                result.lod3Distance = lc.lod3Distance;
+                result.lod0Interval = lc.lod0Interval;
+                result.lod1Interval = lc.lod1Interval;
+                result.lod2Interval = lc.lod2Interval;
+                result.maxStreamingInitPerFrame = lc.maxStreamingInitPerFrame;
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<services::events::animation::SetAnimationLODConfigCommand>(
+            [this](const services::events::animation::SetAnimationLODConfigCommand& cmd)
+            {
+                services::IAnimatorProvider::LODConfig config;
+                config.lod0Distance = cmd.lod0Distance;
+                config.lod1Distance = cmd.lod1Distance;
+                config.lod2Distance = cmd.lod2Distance;
+                config.lod3Distance = cmd.lod3Distance;
+                config.lod0Interval = cmd.lod0Interval;
+                config.lod1Interval = cmd.lod1Interval;
+                config.lod2Interval = cmd.lod2Interval;
+                config.maxStreamingInitPerFrame = cmd.maxStreamingInitPerFrame;
+                animatorProvider->setLODConfig(config);
+            });
+
+        dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                auto& disp = ::events::EventDispatcher::instance();
+                ::events::scene::GetRenderSettingsQuery query;
+                auto settings = disp.query(query);
+                const auto& animLOD = settings.animationLOD;
+
+                services::events::animation::SetAnimationLODConfigCommand cmd;
+                cmd.lod0Distance = animLOD.lod0Distance;
+                cmd.lod1Distance = animLOD.lod1Distance;
+                cmd.lod2Distance = animLOD.lod2Distance;
+                cmd.lod3Distance = animLOD.lod3Distance;
+                cmd.lod0Interval = animLOD.lod0Interval;
+                cmd.lod1Interval = animLOD.lod1Interval;
+                cmd.lod2Interval = animLOD.lod2Interval;
+                cmd.maxStreamingInitPerFrame = animLOD.maxStreamingInitPerFrame;
+                disp.execute(cmd);
             });
     }
 }

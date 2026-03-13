@@ -1,6 +1,7 @@
 #pragma once
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
+#include <glm/glm.hpp>
 #include <vector>
 
 namespace render::mesh

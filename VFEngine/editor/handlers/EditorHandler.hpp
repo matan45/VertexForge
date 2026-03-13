@@ -25,13 +25,22 @@
 #include "interfaces/terrain/IHoleModeService.hpp"
 #include "interfaces/terrain/IHoleBrushService.hpp"
 #include "interfaces/terrain/ITerrainRaycastService.hpp"
+#include "interfaces/vegetation/IGrassService.hpp"
+#include "interfaces/vegetation/IVegetationBrushService.hpp"
+#include "interfaces/vegetation/IVegetationBrushModeService.hpp"
+#include "interfaces/meshbrush/IMeshBrushService.hpp"
+#include "interfaces/meshbrush/IMeshBrushModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
-#include "interfaces/lightbake/ILightBakeService.hpp"
 #include "interfaces/physics/IControllerService.hpp"
 #include "interfaces/render/IRenderHookService.hpp"
 #include "interfaces/render/IDebugDrawService.hpp"
+#include "interfaces/render/IBillboardRenderService.hpp"
+#include "interfaces/render/ILightStreamingService.hpp"
+#include "interfaces/render/IGIService.hpp"
 #include "impl/components/IKComponentService.hpp"
+#include "interfaces/lifecycle/IAssetLifecycleService.hpp"
+#include "interfaces/world/IWorldSectorService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace plugin {
@@ -95,11 +104,20 @@ namespace handlers {
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
-		std::shared_ptr<services::ILightBakeService> lightBakeService;
 		std::shared_ptr<services::IControllerService> controllerService;
 		std::shared_ptr<services::IKComponentService> ikComponentService;
 		std::shared_ptr<services::IRenderHookService> renderHookService;
 		std::shared_ptr<services::IDebugDrawService> debugDrawService;
+		std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
+		std::shared_ptr<services::IWorldSectorService> worldSectorService;
+		std::shared_ptr<services::IGrassService> grassService;
+		std::shared_ptr<services::IVegetationBrushService> vegetationBrushService;
+		std::shared_ptr<services::IVegetationBrushModeService> vegetationBrushModeService;
+		std::shared_ptr<services::IMeshBrushService> meshBrushService;
+		std::shared_ptr<services::IMeshBrushModeService> meshBrushModeService;
+		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
+		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
+		std::shared_ptr<services::IGIService> giService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
@@ -125,6 +143,8 @@ namespace handlers {
 		void createVFXServices();
 		void createTerrainServices();
 		void createWaterServices();
+		void createVegetationServices();
+		void createMeshBrushServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();

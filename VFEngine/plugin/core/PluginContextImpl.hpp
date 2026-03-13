@@ -40,6 +40,7 @@ namespace plugin {
             plugin::RenderPassHookPoint hookPoint,
             plugin::RenderHookCallback callback) override;
         void unregisterRenderPassHook(plugin::RenderHookHandle handle) override;
+        entt::registry& getRegistry() override;
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;
         std::string getPluginDataPath() const override;

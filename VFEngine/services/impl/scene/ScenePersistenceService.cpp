@@ -17,6 +17,7 @@
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include <functional>
+#include <fstream>
 
 namespace services
 {
@@ -159,7 +160,7 @@ namespace services
             return false;
         }
 
-        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
+        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);;
     }
 
     void ScenePersistenceService::update()

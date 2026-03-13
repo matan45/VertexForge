@@ -315,4 +315,10 @@ namespace core::audio
         if (!initialized) return types::AudioSettings::createDefault();
         return audioSystem->getCurrentSettings();
     }
+
+    void AudioController::unloadAudioBuffer(const std::string& path)
+    {
+        if (!initialized || !bufferManager) return;
+        bufferManager->unloadBuffer(path);
+    }
 }

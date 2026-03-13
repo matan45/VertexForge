@@ -16,7 +16,6 @@ namespace windows::details
         bool drawRenderTextureSource(services::BillboardData& data);
         bool drawSizeInput(services::BillboardData& data);
         bool drawColorTint(services::BillboardData& data);
-
         RenderTexturePickerWidget rttPicker;
     };
 }

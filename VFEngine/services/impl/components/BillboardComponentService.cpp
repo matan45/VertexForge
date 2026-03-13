@@ -123,7 +123,6 @@ namespace services {
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;
-
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;
         if (!comp.renderTextureSourceName.empty()) {
