@@ -161,6 +161,17 @@ namespace render::postprocess
         uint32_t readIdx = currentHistoryIndex;
         uint32_t writeIdx = 1 - currentHistoryIndex;
 
+        // On first frame (or after recreate), history buffers are in UNDEFINED layout.
+        // Transition the read buffer so the descriptor binding is valid.
+        if (!historyValid)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                historyBuffers[readIdx].image,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
         {
             vk::RenderPassBeginInfo rpBegin{};
             rpBegin.renderPass = taaRenderPass;
