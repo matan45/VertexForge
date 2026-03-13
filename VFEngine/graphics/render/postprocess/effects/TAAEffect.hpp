@@ -29,6 +29,13 @@ namespace render::postprocess
         uint32_t historyValid;
     };
 
+    struct TAASharpenPushConstants
+    {
+        float texelSizeX;
+        float texelSizeY;
+        float sharpenStrength;
+    };
+
     class TAAEffect : public PostProcessEffect
     {
     private:

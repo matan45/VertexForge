@@ -35,26 +35,20 @@ namespace render::postprocess
         sunInfo.hasSun = hasSun;
     }
 
-    void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
-                                              const glm::vec3& cameraPosition,
-                                              const glm::mat4& viewMatrix,
-                                              const glm::mat4& projectionMatrix,
-                                              const glm::mat4& unjitteredProjection,
-                                              const glm::vec2& jitterOffset,
-                                              uint32_t frameIndex, float time)
+    void PostProcessPipeline::setCameraData(const CameraInfo& incoming)
     {
         cameraInfo.prevViewMatrix = cameraInfo.viewMatrix;
         cameraInfo.prevProjectionMatrix = cameraInfo.unjitteredProjectionMatrix;
 
-        cameraInfo.nearPlane = nearPlane;
-        cameraInfo.farPlane = farPlane;
-        cameraInfo.cameraPosition = cameraPosition;
-        cameraInfo.viewMatrix = viewMatrix;
-        cameraInfo.projectionMatrix = projectionMatrix;
-        cameraInfo.unjitteredProjectionMatrix = unjitteredProjection;
-        cameraInfo.jitterOffset = jitterOffset;
-        cameraInfo.frameIndex = frameIndex;
-        cameraInfo.time = time;
+        cameraInfo.nearPlane = incoming.nearPlane;
+        cameraInfo.farPlane = incoming.farPlane;
+        cameraInfo.cameraPosition = incoming.cameraPosition;
+        cameraInfo.viewMatrix = incoming.viewMatrix;
+        cameraInfo.projectionMatrix = incoming.projectionMatrix;
+        cameraInfo.unjitteredProjectionMatrix = incoming.unjitteredProjectionMatrix;
+        cameraInfo.jitterOffset = incoming.jitterOffset;
+        cameraInfo.frameIndex = incoming.frameIndex;
+        cameraInfo.time = incoming.time;
     }
 
     bool PostProcessPipeline::hasEnabledEffects() const

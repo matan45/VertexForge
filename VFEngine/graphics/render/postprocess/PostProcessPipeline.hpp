@@ -89,10 +89,7 @@ namespace render::postprocess
         void setSunData(const glm::vec2& screenPos, bool hasSun);
         const SunInfo& getSunData() const { return sunInfo; }
 
-        void setCameraData(float nearPlane, float farPlane, const glm::vec3& cameraPosition,
-                          const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
-                          const glm::mat4& unjitteredProjection, const glm::vec2& jitterOffset,
-                          uint32_t frameIndex, float time);
+        void setCameraData(const CameraInfo& incoming);
         const CameraInfo& getCameraData() const { return cameraInfo; }
 
         bool hasEnabledEffects() const;

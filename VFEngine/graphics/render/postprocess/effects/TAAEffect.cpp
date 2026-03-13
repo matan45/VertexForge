@@ -217,19 +217,14 @@ namespace render::postprocess
                                           sharpenPipelineLayout, 0,
                                           1, &sharpenDescriptorSets[currentHistoryIndex], 0, nullptr);
 
-        struct SharpenPushConstants
-        {
-            float texelSizeX;
-            float texelSizeY;
-            float sharpenStrength;
-        } pc{};
+        TAASharpenPushConstants pc{};
         pc.texelSizeX = 1.0f / static_cast<float>(currentExtent.width);
         pc.texelSizeY = 1.0f / static_cast<float>(currentExtent.height);
         pc.sharpenStrength = currentSharpenStrength;
 
         commandBuffer.pushConstants(sharpenPipelineLayout,
                                      vk::ShaderStageFlagBits::eFragment,
-                                     0, sizeof(SharpenPushConstants), &pc);
+                                     0, sizeof(TAASharpenPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
     }
@@ -608,7 +603,7 @@ namespace render::postprocess
         config.extent = currentExtent;
         config.shaderStages = sharpenShader->getShaderStages();
         config.descriptorSetLayouts = {sharpenDescriptorSetLayout};
-        config.pushConstantSize = sizeof(float) * 3; // texelSizeX, texelSizeY, sharpenStrength
+        config.pushConstantSize = sizeof(TAASharpenPushConstants);
         config.pushConstantStages = vk::ShaderStageFlagBits::eFragment;
         config.depthTestEnable = false;
         config.depthWriteEnable = false;
