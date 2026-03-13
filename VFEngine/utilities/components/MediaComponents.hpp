@@ -182,4 +182,11 @@ namespace components
         std::vector<animator::SocketDefinition> additionalSockets;
         std::vector<animator::SocketDefinition> overriddenSockets;
     };
+
+    struct BehaviorTreeComponent
+    {
+        std::string behaviorTreePath;
+        bool isInitialized = false;
+        bool enabled = true;
+    };
 }

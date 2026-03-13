@@ -101,6 +101,10 @@
     <ClInclude Include="animator\LookAtIKHelper.hpp" />
     <ClInclude Include="animator\SocketTypes.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
+    <ClInclude Include="behaviortree\BehaviorTreeAsset.hpp" />
+    <ClInclude Include="behaviortree\BehaviorTreeRuntime.hpp" />
+    <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />
+    <ClInclude Include="behaviortree\Blackboard.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
@@ -243,6 +247,10 @@
     <ClCompile Include="animator\IKTypes.cpp" />
     <ClCompile Include="animator\LookAtIKHelper.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
+    <ClCompile Include="behaviortree\BehaviorTreeAsset.cpp" />
+    <ClCompile Include="behaviortree\BehaviorTreeRuntime.cpp" />
+    <ClCompile Include="behaviortree\BehaviorTreeTypes.cpp" />
+    <ClCompile Include="behaviortree\Blackboard.cpp" />
     <ClCompile Include="export\ExeIconEmbedder.cpp" />
     <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />

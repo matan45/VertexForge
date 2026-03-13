@@ -252,6 +252,12 @@ namespace serialization
                 entity.getComponent<components::IKTargetComponent>());
         }
 
+        if (entity.hasComponent<components::BehaviorTreeComponent>())
+        {
+            componentsJson["behaviorTree"] = serializeBehaviorTree(
+                entity.getComponent<components::BehaviorTreeComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -549,6 +555,12 @@ namespace serialization
         {
             auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
             deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
+        }
+
+        if (componentsJson.contains("behaviorTree"))
+        {
+            auto& btComp = entity.addOrReplaceComponent<components::BehaviorTreeComponent>();
+            deserializeBehaviorTree(componentsJson["behaviorTree"], btComp);
         }
     }
 

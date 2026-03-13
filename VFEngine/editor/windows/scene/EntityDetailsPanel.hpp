@@ -41,6 +41,7 @@
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
+#include "../details/BehaviorTreeDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
 #include "../details/WorldSectorDrawer.hpp"
 #include "../details/AddComponentPopup.hpp"
@@ -91,6 +92,7 @@ namespace windows
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;
+        details::BehaviorTreeDrawer behaviorTreeDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
         details::WorldSectorDrawer worldSectorDrawer;
         details::AddComponentPopup addComponentPopup;

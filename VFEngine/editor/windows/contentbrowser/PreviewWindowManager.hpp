@@ -20,6 +20,15 @@ namespace windows
     class AnimatorEditorWindow;
     class VFXEditorWindow;
     class TerrainMaterialEditorWindow;
+}
+
+namespace editor::windows
+{
+    class BehaviorTreeEditorWindow;
+}
+
+namespace windows
+{
     class PreviewWindowManager
     {
     private:
@@ -34,6 +43,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<AnimatorEditorWindow>> openAnimatorEditors;
         std::unordered_map<std::string, std::weak_ptr<VFXEditorWindow>> openVFXEditors;
         std::unordered_map<std::string, std::weak_ptr<TerrainMaterialEditorWindow>> openTerrainMaterialEditors;
+        std::unordered_map<std::string, std::weak_ptr<editor::windows::BehaviorTreeEditorWindow>> openBehaviorTreeEditors;
         template<typename T>
         static void eraseExpired(std::unordered_map<std::string, std::weak_ptr<T>>& map)
         {
@@ -67,5 +77,6 @@ namespace windows
         void openAnimatorEditor(const std::string& path);
         void openVFXEditor(const std::string& path);
         void openTerrainMaterialEditor(const std::string& path);
+        void openBehaviorTreeEditor(const std::string& path);
     };
 }

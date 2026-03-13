@@ -19,6 +19,7 @@
 #include "impl/components/IKComponentService.hpp"
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/world/IWorldSectorService.hpp"
+#include "interfaces/ai/IBehaviorTreeService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace plugin {
@@ -36,6 +37,7 @@ namespace core {
 namespace services {
     class PhysicsPlayModeHandler;
     class RenderTexturePlayModeHandler;
+    class BehaviorTreePlayModeHandler;
 }
 
 namespace handlers {
@@ -65,6 +67,8 @@ namespace handlers {
         std::shared_ptr<services::IDebugDrawService> debugDrawService;
         std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
         std::shared_ptr<services::IWorldSectorService> worldSectorService;
+        std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
+        std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 

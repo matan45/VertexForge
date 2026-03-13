@@ -53,7 +53,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
-                           c.hasIK;
+                           c.hasIK && c.hasBehaviorTree;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -309,6 +309,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("FABRIK IK solver for bone chain targeting (feet, hands, look-at)");
+            }
+        }
+
+        if (!c.hasBehaviorTree)
+        {
+            if (ImGui::Selectable("  Behavior Tree"))
+            {
+                events::scene::AddBehaviorTreeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("AI behavior tree for complex decision-making");
             }
         }
     }

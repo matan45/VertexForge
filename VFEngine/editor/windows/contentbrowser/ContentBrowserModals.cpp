@@ -10,6 +10,7 @@
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>
 #include <terrain/TerrainMaterialAsset.hpp>
+#include <behaviortree/BehaviorTreeAsset.hpp>
 
 namespace windows
 {
@@ -79,6 +80,12 @@ namespace windows
         }
         drawCreateTerrainMaterialModal(currentPath);
 
+        if (showCreateBehaviorTreeModal)
+        {
+            ImGui::OpenPopup("Create New Behavior Tree");
+        }
+        drawCreateBehaviorTreeModal(currentPath);
+
         if (showSavePrefabModal)
         {
             ImGui::OpenPopup("Save Prefab");
@@ -134,6 +141,11 @@ namespace windows
                 {
                     showCreateTerrainMaterialModal = true;
                     newTerrainMaterialName.clear();
+                }
+                if (ImGui::MenuItem("Behavior Tree"))
+                {
+                    showCreateBehaviorTreeModal = true;
+                    newBehaviorTreeName.clear();
                 }
                 ImGui::EndMenu();
             }
@@ -405,6 +417,53 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateTerrainMaterialModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateBehaviorTreeModal(const fs::path& currentPath)
+    {
+        if (showCreateBehaviorTreeModal &&
+            ImGui::BeginPopupModal("Create New Behavior Tree", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newBehaviorTreeName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Behavior Tree Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newBehaviorTreeName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newBehaviorTreeName.empty())
+                {
+                    std::string extension = ".vfBehaviorTree";
+                    fs::path newPath = currentPath / (newBehaviorTreeName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = currentPath / (newBehaviorTreeName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+                    auto defaultBT = behaviortree::BehaviorTreeAsset::createDefault(newBehaviorTreeName);
+                    if (behaviortree::BehaviorTreeAsset::save(pathStr, defaultBT))
+                    {
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateBehaviorTreeModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateBehaviorTreeModal = false;
             }
             ImGui::EndPopup();
         }

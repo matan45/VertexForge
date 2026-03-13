@@ -76,6 +76,9 @@ namespace core
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
         void callOnDestroy(uint64_t instanceId) override;
 
+        std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
+                                          const std::vector<std::any>& args = {}) override;
+
         void playVFX(uint64_t instanceId) override;
 
         std::optional<::services::ScriptError> getLastError() const override;

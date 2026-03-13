@@ -422,6 +422,53 @@ namespace core
         }
     }
 
+    std::string ScriptingAdapter::callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
+                                                       const std::vector<std::any>& args)
+    {
+        if (!isScriptLoaded(instanceId)) return "";
+
+        auto objIt = instanceToObject.find(instanceId);
+        if (objIt == instanceToObject.end()) return "";
+
+        try
+        {
+            NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+            // Convert std::any args to value::Value args
+            std::vector<value::Value> valueArgs;
+            for (const auto& arg : args)
+            {
+                if (arg.type() == typeid(float))
+                    valueArgs.emplace_back(static_cast<double>(std::any_cast<float>(arg)));
+                else if (arg.type() == typeid(double))
+                    valueArgs.emplace_back(std::any_cast<double>(arg));
+                else if (arg.type() == typeid(int))
+                    valueArgs.emplace_back(static_cast<int64_t>(std::any_cast<int>(arg)));
+                else if (arg.type() == typeid(int64_t))
+                    valueArgs.emplace_back(std::any_cast<int64_t>(arg));
+                else if (arg.type() == typeid(bool))
+                    valueArgs.emplace_back(std::any_cast<bool>(arg));
+                else if (arg.type() == typeid(std::string))
+                    valueArgs.emplace_back(std::any_cast<std::string>(arg));
+            }
+
+            auto result = interpreter->callMethod(instance, methodName, valueArgs);
+
+            if (std::holds_alternative<std::string>(result))
+                return std::get<std::string>(result);
+            if (std::holds_alternative<bool>(result))
+                return std::get<bool>(result) ? "success" : "failure";
+
+            return "";
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("[Script] {} failed: {}", methodName, e.what());
+            return "";
+        }
+    }
+
     void ScriptingAdapter::playVFX(uint64_t instanceId)
     {
         if (!isScriptLoaded(instanceId))

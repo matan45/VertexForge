@@ -23,6 +23,7 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
+#include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 
 namespace core
 {
@@ -154,5 +155,10 @@ namespace core
     services::IGIProvider* EditorBootstrap::getGIProvider()
     {
         return giAdapter.get();
+    }
+
+    services::IBehaviorTreeProvider* EditorBootstrap::getBehaviorTreeProvider()
+    {
+        return behaviorTreeAdapter.get();
     }
 }

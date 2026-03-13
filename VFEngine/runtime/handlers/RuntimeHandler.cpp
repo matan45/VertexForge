@@ -23,6 +23,8 @@
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
+#include "impl/ai/BehaviorTreeServiceImpl.hpp"
+#include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -95,6 +97,10 @@ namespace handlers {
 
             if (controllerService) {
                 controllerService->applyControllerMovement(deltaTime);
+            }
+
+            if (behaviorTreeService) {
+                behaviorTreeService->updateAll(deltaTime);
             }
 
             if (renderTexturePlayModeHandler) {
@@ -212,6 +218,8 @@ namespace handlers {
         worldSectorService.reset();
         assetLifecycleService.reset();
         controllerService.reset();
+        behaviorTreePlayModeHandler.reset();
+        behaviorTreeService.reset();
         ikComponentService.reset();
         physicsAnimationService.reset();
         physicsService.reset();
@@ -378,6 +386,16 @@ namespace handlers {
             bootstrap->getSceneGraphSystem()
         );
 
+        behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
+            bootstrap->getBehaviorTreeProvider()
+        );
+
+        if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
+        {
+            behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
+            behaviorTreePlayModeHandler->subscribeToEvents();
+        }
+
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
         {
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
@@ -410,6 +428,7 @@ namespace handlers {
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
+        behaviorTreeService->registerEventHandlers();
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();

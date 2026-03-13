@@ -671,6 +671,34 @@ namespace serialization
         controller.moveToDestination = glm::vec3(0.0f);
     }
 
+    // ============================================
+    // Behavior Tree Component
+    // ============================================
+
+    json SceneSerialization::serializeBehaviorTree(const components::BehaviorTreeComponent& bt)
+    {
+        json j;
+        std::string cleanPath = bt.behaviorTreePath;
+        cleanNullTerminators(cleanPath);
+        j["behaviorTreePath"] = cleanPath;
+        j["enabled"] = bt.enabled;
+        return j;
+    }
+
+    void SceneSerialization::deserializeBehaviorTree(const json& j, components::BehaviorTreeComponent& bt)
+    {
+        if (auto it = j.find("behaviorTreePath"); it != j.end() && it->is_string())
+        {
+            bt.behaviorTreePath = it->get<std::string>();
+        }
+        if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
+        {
+            bt.enabled = it->get<bool>();
+        }
+        // Reset runtime state
+        bt.isInitialized = false;
+    }
+
     json SceneSerialization::serializeNavmesh(const components::NavmeshComponent& navmesh)
     {
         json j;

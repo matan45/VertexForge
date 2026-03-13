@@ -13,6 +13,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
+#include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 
 namespace core
 {
@@ -89,5 +90,10 @@ namespace core
     services::IBillboardRenderProvider* RuntimeBootstrap::getBillboardRenderProvider()
     {
         return billboardRenderAdapter.get();
+    }
+
+    services::IBehaviorTreeProvider* RuntimeBootstrap::getBehaviorTreeProvider()
+    {
+        return behaviorTreeAdapter.get();
     }
 }

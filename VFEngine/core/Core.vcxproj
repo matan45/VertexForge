@@ -99,10 +99,12 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="adapters\ai\BehaviorTreeAdapter.hpp" />
     <ClInclude Include="adapters\animation\AnimationPreviewAdapter.hpp" />
     <ClInclude Include="adapters\animation\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
+    <ClInclude Include="adapters\api\BehaviorTreeAPI.hpp" />
     <ClInclude Include="adapters\api\CameraAPI.hpp" />
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
@@ -196,10 +198,12 @@
     <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="adapters\ai\BehaviorTreeAdapter.cpp" />
     <ClCompile Include="adapters\animation\AnimationPreviewAdapter.cpp" />
     <ClCompile Include="adapters\animation\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
+    <ClCompile Include="adapters\api\BehaviorTreeAPI.cpp" />
     <ClCompile Include="adapters\api\CameraAPI.cpp" />
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />
