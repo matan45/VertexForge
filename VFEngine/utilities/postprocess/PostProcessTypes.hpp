@@ -13,7 +13,8 @@ namespace postprocess
         FilmGrain,
         DepthOfField,
         SSAO,
-        EdgeDetection
+        EdgeDetection,
+        AutoExposure
     };
 
     enum class VolumetricQuality : uint8_t
@@ -147,6 +148,18 @@ namespace postprocess
         float opacity = 1.0f;
     };
 
+    struct AutoExposureSettings
+    {
+        bool enabled = false;
+        float minExposure = 0.1f;
+        float maxExposure = 10.0f;
+        float adaptSpeedUp = 3.0f;
+        float adaptSpeedDown = 1.0f;
+        float exposureCompensation = 0.0f;
+        float lowPercentile = 0.1f;
+        float highPercentile = 0.9f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
@@ -161,6 +174,7 @@ namespace postprocess
         VolumetricFogSettings volumetricFog;
         SSAOSettings ssao;
         EdgeDetectionSettings edgeDetection;
+        AutoExposureSettings autoExposure;
 
         static PostProcessSettings createDefault()
         {

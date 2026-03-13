@@ -223,6 +223,7 @@
     <ClInclude Include="render\occlusion\LightOcclusionCulling.hpp" />
     <ClInclude Include="render\postprocess\PostProcessEffect.hpp" />
     <ClInclude Include="render\postprocess\PostProcessPipeline.hpp" />
+    <ClInclude Include="render\postprocess\effects\AutoExposureEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\BloomEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ChromaticAberrationEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
@@ -444,6 +445,7 @@
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\LightOcclusionCulling.cpp" />
     <ClCompile Include="render\postprocess\PostProcessPipeline.cpp" />
+    <ClCompile Include="render\postprocess\effects\AutoExposureEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\BloomEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
@@ -571,6 +573,9 @@
     <None Include="..\..\resources\shaders\material\terrain_material_generated.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\auto_exposure_histogram.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\auto_exposure_passthrough.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\auto_exposure_reduce.glsl" />
     <None Include="..\..\resources\shaders\postprocess\bloom_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\bloom_downsample.glsl" />
     <None Include="..\..\resources\shaders\postprocess\bloom_upsample.glsl" />

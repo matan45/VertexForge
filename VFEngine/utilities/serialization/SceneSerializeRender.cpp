@@ -233,6 +233,20 @@ namespace serialization
             };
         }
 
+        json serializeAutoExposure(const postprocess::AutoExposureSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"minExposure", s.minExposure},
+                {"maxExposure", s.maxExposure},
+                {"adaptSpeedUp", s.adaptSpeedUp},
+                {"adaptSpeedDown", s.adaptSpeedDown},
+                {"exposureCompensation", s.exposureCompensation},
+                {"lowPercentile", s.lowPercentile},
+                {"highPercentile", s.highPercentile}
+            };
+        }
+
         json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
         {
             return {
@@ -452,6 +466,29 @@ namespace serialization
             }
             if (ed.contains("opacity") && ed["opacity"].is_number())
                 s.opacity = std::clamp(ed["opacity"].get<float>(), 0.0f, 1.0f);
+        }
+
+        void deserializeAutoExposure(const json& j, postprocess::AutoExposureSettings& s)
+        {
+            if (!j.contains("autoExposure") || !j["autoExposure"].is_object())
+                return;
+            const auto& ae = j["autoExposure"];
+            if (ae.contains("enabled") && ae["enabled"].is_boolean())
+                s.enabled = ae["enabled"].get<bool>();
+            if (ae.contains("minExposure") && ae["minExposure"].is_number())
+                s.minExposure = std::clamp(ae["minExposure"].get<float>(), 0.01f, 1.0f);
+            if (ae.contains("maxExposure") && ae["maxExposure"].is_number())
+                s.maxExposure = std::clamp(ae["maxExposure"].get<float>(), 1.0f, 20.0f);
+            if (ae.contains("adaptSpeedUp") && ae["adaptSpeedUp"].is_number())
+                s.adaptSpeedUp = std::clamp(ae["adaptSpeedUp"].get<float>(), 0.1f, 10.0f);
+            if (ae.contains("adaptSpeedDown") && ae["adaptSpeedDown"].is_number())
+                s.adaptSpeedDown = std::clamp(ae["adaptSpeedDown"].get<float>(), 0.1f, 10.0f);
+            if (ae.contains("exposureCompensation") && ae["exposureCompensation"].is_number())
+                s.exposureCompensation = std::clamp(ae["exposureCompensation"].get<float>(), -5.0f, 5.0f);
+            if (ae.contains("lowPercentile") && ae["lowPercentile"].is_number())
+                s.lowPercentile = std::clamp(ae["lowPercentile"].get<float>(), 0.0f, 0.5f);
+            if (ae.contains("highPercentile") && ae["highPercentile"].is_number())
+                s.highPercentile = std::clamp(ae["highPercentile"].get<float>(), 0.5f, 1.0f);
         }
 
         // ---- Deserialize render sub-helpers ----
@@ -761,6 +798,7 @@ namespace serialization
         j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
         j["ssao"] = serializeSSAO(settings.ssao);
         j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
+        j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
 
         return j;
     }
@@ -780,5 +818,6 @@ namespace serialization
         deserializeVolumetricFog(j, settings.volumetricFog);
         deserializeSSAO(j, settings.ssao);
         deserializeEdgeDetection(j, settings.edgeDetection);
+        deserializeAutoExposure(j, settings.autoExposure);
     }
 }

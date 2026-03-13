@@ -78,13 +78,94 @@ namespace windows
                     isDirty = true;
                 }
 
-                if (ImGui::DragFloat("Exposure", &settings.toneMapping.exposure, 0.01f, 0.01f, 10.0f, "%.2f"))
+                if (ImGui::Checkbox("Auto Exposure", &settings.autoExposure.enabled))
                 {
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Controls scene brightness before tone mapping.");
+                    ImGui::SetTooltip("Automatically adjusts exposure based on scene luminance.\nSimulates human eye adaptation.");
+                }
+
+                if (settings.autoExposure.enabled)
+                {
+                    ImGui::Indent(10.0f);
+
+                    if (ImGui::DragFloat("Min Exposure", &settings.autoExposure.minExposure, 0.01f, 0.01f, 1.0f, "%.2f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Minimum allowed exposure value.\nPrevents the scene from becoming too dark.");
+                    }
+
+                    if (ImGui::DragFloat("Max Exposure##ae", &settings.autoExposure.maxExposure, 0.1f, 1.0f, 20.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Maximum allowed exposure value.\nPrevents the scene from becoming too bright.");
+                    }
+
+                    if (ImGui::DragFloat("Adapt Speed Up", &settings.autoExposure.adaptSpeedUp, 0.1f, 0.1f, 10.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Speed of adaptation when scene gets brighter (EV/sec).");
+                    }
+
+                    if (ImGui::DragFloat("Adapt Speed Down", &settings.autoExposure.adaptSpeedDown, 0.1f, 0.1f, 10.0f, "%.1f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Speed of adaptation when scene gets darker (EV/sec).");
+                    }
+
+                    if (ImGui::DragFloat("Exposure Compensation", &settings.autoExposure.exposureCompensation, 0.1f, -5.0f, 5.0f, "%.1f EV"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Artistic offset in EV stops.\nPositive = brighter, Negative = darker.");
+                    }
+
+                    if (ImGui::DragFloat("Low Percentile", &settings.autoExposure.lowPercentile, 0.01f, 0.0f, 0.5f, "%.2f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Excludes the darkest pixels from the average.\nHigher values ignore more shadow areas.");
+                    }
+
+                    if (ImGui::DragFloat("High Percentile", &settings.autoExposure.highPercentile, 0.01f, 0.5f, 1.0f, "%.2f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Excludes the brightest pixels from the average.\nLower values ignore more highlight areas (sun, specular).");
+                    }
+
+                    ImGui::Unindent(10.0f);
+                }
+                else
+                {
+                    if (ImGui::DragFloat("Exposure", &settings.toneMapping.exposure, 0.01f, 0.01f, 10.0f, "%.2f"))
+                    {
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Controls scene brightness before tone mapping.");
+                    }
                 }
 
                 if (ImGui::DragFloat("Contrast", &settings.toneMapping.contrast, 0.01f, 0.5f, 2.0f, "%.2f"))

@@ -8,6 +8,7 @@
 #include "effects/DepthOfFieldEffect.hpp"
 #include "effects/SSAOEffect.hpp"
 #include "effects/EdgeDetectionEffect.hpp"
+#include "effects/AutoExposureEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -75,6 +76,8 @@ namespace render::postprocess
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
 
+        autoExposureOverride = -1.0f;
+
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
             vk::RenderPassBeginInfo rpBegin{};
@@ -84,6 +87,16 @@ namespace render::postprocess
             rpBegin.renderArea.extent = extent;
 
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::AutoExposure)
+            {
+                autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
+            }
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride > 0.0f)
+            {
+                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride);
+            }
 
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
@@ -420,6 +433,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::EdgeDetection, settings.edgeDetection.enabled,
             [this]() { return std::make_unique<EdgeDetectionEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::AutoExposure, settings.autoExposure.enabled,
+            [this]() { return std::make_unique<AutoExposureEffect>(device, swapChain, offscreenResources, *this); });
 
         updateSettings(settings);
     }
