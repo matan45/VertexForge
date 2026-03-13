@@ -213,6 +213,9 @@ namespace windows
         case Water:
             icon = AtlasIcon::Water;
             break;
+        case BehaviorTree:
+            icon = AtlasIcon::BehaviorTree;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

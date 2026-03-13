@@ -115,6 +115,7 @@
     <ClInclude Include="clipboard\ClipboardManager.hpp" />
     <ClInclude Include="dragdrop\DragDropManager.hpp" />
     <ClInclude Include="fileops\AsyncFileOperations.hpp" />
+    <ClInclude Include="graph\BTGraphEditor.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
     <ClInclude Include="graph\VFXGraphEditor.hpp" />
@@ -138,6 +139,8 @@
     <ClInclude Include="windows\VFXDebugWindow.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
     <ClInclude Include="windows\WorldSectorWindow.hpp" />
+    <ClInclude Include="windows\ai\BTPropertyPanel.hpp" />
+    <ClInclude Include="windows\ai\BehaviorTreeEditorWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationIKChainPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationInfoPanel.hpp" />
     <ClInclude Include="windows\animation\AnimationPhysicsPanel.hpp" />
@@ -247,6 +250,9 @@
     <ClCompile Include="clipboard\ClipboardManager.cpp" />
     <ClCompile Include="dragdrop\DragDropManager.cpp" />
     <ClCompile Include="fileops\AsyncFileOperations.cpp" />
+    <ClCompile Include="graph\BTGraphEditor.cpp" />
+    <ClCompile Include="graph\BTGraphEditorDraw.cpp" />
+    <ClCompile Include="graph\BTGraphEditorEvents.cpp" />
     <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
     <ClCompile Include="graph\ShaderGraphEditor.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
@@ -271,6 +277,8 @@
     <ClCompile Include="windows\VFXDebugWindow.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
     <ClCompile Include="windows\WorldSectorWindow.cpp" />
+    <ClCompile Include="windows\ai\BTPropertyPanel.cpp" />
+    <ClCompile Include="windows\ai\BehaviorTreeEditorWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationIKChainPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationInfoPanel.cpp" />
     <ClCompile Include="windows\animation\AnimationPhysicsPanel.cpp" />

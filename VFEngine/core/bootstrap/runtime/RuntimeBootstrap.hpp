@@ -18,6 +18,7 @@ namespace services
     class IRenderTextureProvider;
     class IDebugDrawProvider;
     class IBillboardRenderProvider;
+    class IBehaviorTreeProvider;
 }
 
 namespace window
@@ -57,6 +58,7 @@ namespace core
     {
         class BillboardRenderAdapter;
     }
+    class BehaviorTreeAdapter;
 
     class RuntimeBootstrap
     {
@@ -79,6 +81,7 @@ namespace core
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
+        std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -121,6 +124,8 @@ namespace core
         services::IDebugDrawProvider* getDebugDrawProvider();
 
         services::IBillboardRenderProvider* getBillboardRenderProvider();
+
+        services::IBehaviorTreeProvider* getBehaviorTreeProvider();
 
         // For late binding - allows RuntimeHandler to connect services
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();

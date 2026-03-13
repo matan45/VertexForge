@@ -16,6 +16,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 
 namespace core
 {
@@ -46,6 +47,7 @@ namespace core
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
+        behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
 
         offScreen->init();
 

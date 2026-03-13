@@ -20,6 +20,7 @@
 #include "../api/HandIKAPI.hpp"
 #include "../api/CameraAPI.hpp"
 #include "../api/DebugDrawAPI.hpp"
+#include "../api/BehaviorTreeAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -62,6 +63,7 @@ namespace core
         api::HandIKAPI::registerAPI(interpreter);
         api::CameraAPI::registerAPI(interpreter);
         api::DebugDrawAPI::registerAPI(interpreter);
+        api::BehaviorTreeAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

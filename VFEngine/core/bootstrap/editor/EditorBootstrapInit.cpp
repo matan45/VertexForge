@@ -27,6 +27,7 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
+#include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -69,6 +70,7 @@ namespace core
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
         lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
+        behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
 
         offScreen->init();
 

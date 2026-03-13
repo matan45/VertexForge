@@ -452,6 +452,7 @@ namespace windows
         if (extension == ".vfNavTile") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
         if (extension == ".vfWater") return Water;
+        if (extension == ".vfBehaviorTree") return BehaviorTree;
         if (extension == ".mt") return Script;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||

@@ -108,6 +108,7 @@
     <ClInclude Include="data\WaterData.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
+    <ClInclude Include="events\ai\BehaviorTreeEvents.hpp" />
     <ClInclude Include="events\animation\AnimationBudgetEvents.hpp" />
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
@@ -171,6 +172,7 @@
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
+    <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />
     <ClInclude Include="impl\audio\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
@@ -237,6 +239,7 @@
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
     <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
+    <ClInclude Include="interfaces\ai\IBehaviorTreeService.hpp" />
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
@@ -277,6 +280,7 @@
     <ClInclude Include="interfaces\vegetation\IVegetationBrushService.hpp" />
     <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
+    <ClInclude Include="providers\ai\IBehaviorTreeProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\audio\IAudioProvider.hpp" />
@@ -308,6 +312,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
+    <ClCompile Include="impl\ai\BehaviorTreeServiceImpl.cpp" />
     <ClCompile Include="impl\audio\AudioServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />

@@ -36,6 +36,7 @@
 #include "impl/render/BillboardRenderServiceImpl.hpp"
 #include "impl/render/LightStreamingServiceImpl.hpp"
 #include "impl/render/GIServiceImpl.hpp"
+#include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/GrassServiceImpl.hpp"
@@ -150,6 +151,11 @@ namespace handlers
                     controllerService->applyControllerMovement(deltaTime);
                 }
 
+                if (behaviorTreeService)
+                {
+                    behaviorTreeService->updateAll(deltaTime);
+                }
+
                 if (vfxPlayModeHandler)
                 {
                     vfxPlayModeHandler->update(deltaTime);
@@ -237,6 +243,7 @@ namespace handlers
         meshBrushModeService.reset();
         lightStreamingService.reset();
         giService.reset();
+        behaviorTreeService.reset();
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
@@ -280,6 +287,7 @@ namespace handlers
         createWaterServices();
         createVegetationServices();
         createMeshBrushServices();
+        createAIServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
@@ -457,6 +465,13 @@ namespace handlers
         meshBrushModeService = std::make_shared<services::MeshBrushModeServiceImpl>();
     }
 
+    void EditorHandler::createAIServices()
+    {
+        behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
+            bootstrap->getBehaviorTreeProvider()
+        );
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -507,6 +522,7 @@ namespace handlers
         billboardRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
+        behaviorTreeService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

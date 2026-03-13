@@ -38,6 +38,7 @@
 #include "interfaces/render/IBillboardRenderService.hpp"
 #include "interfaces/render/ILightStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
+#include "interfaces/ai/IBehaviorTreeService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/world/IWorldSectorService.hpp"
@@ -118,6 +119,7 @@ namespace handlers {
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
 		std::shared_ptr<services::IGIService> giService;
+		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
@@ -145,6 +147,7 @@ namespace handlers {
 		void createWaterServices();
 		void createVegetationServices();
 		void createMeshBrushServices();
+		void createAIServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();

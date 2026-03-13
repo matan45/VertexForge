@@ -30,6 +30,7 @@ namespace services
     class IBillboardRenderProvider;
     class ILightStreamingProvider;
     class IGIProvider;
+    class IBehaviorTreeProvider;
 }
 
 namespace window
@@ -80,6 +81,7 @@ namespace core
         class LightStreamingAdapter;
         class GIAdapter;
     }
+    class BehaviorTreeAdapter;
 
     class EditorBootstrap
     {
@@ -113,6 +115,7 @@ namespace core
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
+        std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
 
     public:
         explicit EditorBootstrap();
@@ -182,6 +185,8 @@ namespace core
         services::ILightStreamingProvider* getLightStreamingProvider();
 
         services::IGIProvider* getGIProvider();
+
+        services::IBehaviorTreeProvider* getBehaviorTreeProvider();
 
         // === Other Accessors ===
 

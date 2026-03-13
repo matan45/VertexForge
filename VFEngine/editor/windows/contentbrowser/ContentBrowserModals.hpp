@@ -27,6 +27,9 @@ namespace windows
         std::string newTerrainMaterialName;
         bool showCreateTerrainMaterialModal = false;
 
+        std::string newBehaviorTreeName;
+        bool showCreateBehaviorTreeModal = false;
+
         std::string newPrefabName;
         bool showSavePrefabModal = false;
         services::EntityHandle pendingSavePrefabEntity;
@@ -66,6 +69,7 @@ namespace windows
         void drawCreateAnimatorModal(const fs::path& currentPath);
         void drawCreateVFXModal(const fs::path& currentPath);
         void drawCreateTerrainMaterialModal(const fs::path& currentPath);
+        void drawCreateBehaviorTreeModal(const fs::path& currentPath);
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
         void drawDeleteModal(const fs::path& selectedFile);
