@@ -9,6 +9,7 @@
 #include "effects/SSAOEffect.hpp"
 #include "effects/EdgeDetectionEffect.hpp"
 #include "effects/AutoExposureEffect.hpp"
+#include "effects/ColorGradingEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -445,6 +446,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::AutoExposure, settings.autoExposure.enabled,
             [this]() { return std::make_unique<AutoExposureEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::ColorGrading, settings.colorGrading.enabled,
+            [this]() { return std::make_unique<ColorGradingEffect>(device); });
 
         updateSettings(settings);
     }

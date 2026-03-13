@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 namespace postprocess
 {
@@ -14,7 +15,8 @@ namespace postprocess
         DepthOfField,
         SSAO,
         EdgeDetection,
-        AutoExposure
+        AutoExposure,
+        ColorGrading
     };
 
     enum class VolumetricQuality : uint8_t
@@ -153,6 +155,21 @@ namespace postprocess
         float highPercentile = 0.9f;
     };
 
+    struct ColorGradingSettings
+    {
+        bool enabled = false;
+        std::string primaryLutPath;
+        std::string secondaryLutPath;
+        float lutIntensity = 1.0f;
+        float lutBlendFactor = 0.0f;
+        float liftR = 0.0f, liftG = 0.0f, liftB = 0.0f;
+        float gammaR = 1.0f, gammaG = 1.0f, gammaB = 1.0f;
+        float gainR = 1.0f, gainG = 1.0f, gainB = 1.0f;
+        float saturation = 1.0f;
+        float colorTemperature = 6500.0f;
+        float colorTint = 0.0f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
@@ -168,6 +185,7 @@ namespace postprocess
         SSAOSettings ssao;
         EdgeDetectionSettings edgeDetection;
         AutoExposureSettings autoExposure;
+        ColorGradingSettings colorGrading;
 
         static PostProcessSettings createDefault()
         {

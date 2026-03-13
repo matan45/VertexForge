@@ -623,5 +623,105 @@ namespace core::api
                     s.edgeDetection.opacity = extractFloat(args[0], "PostProcess.edgeDetection.setOpacity");
                 });
             });
+
+        // =============================================
+        // Color Grading
+        // =============================================
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_isEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.enabled);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.enabled = extractBool(args[0]);
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_getSaturation",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.saturation);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setSaturation",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.saturation = extractFloat(args[0], "PostProcess.colorGrading.setSaturation");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_getColorTemperature",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.colorTemperature);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setColorTemperature",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.colorTemperature = extractFloat(args[0], "PostProcess.colorGrading.setColorTemperature");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_getColorTint",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.colorTint);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setColorTint",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.colorTint = extractFloat(args[0], "PostProcess.colorGrading.setColorTint");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_getLutIntensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.lutIntensity);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setLutIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.lutIntensity = extractFloat(args[0], "PostProcess.colorGrading.setLutIntensity");
+                });
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_getLutBlendFactor",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.colorGrading.lutBlendFactor);
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_colorGrading_setLutBlendFactor",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.colorGrading.lutBlendFactor = extractFloat(args[0], "PostProcess.colorGrading.setLutBlendFactor");
+                });
+            });
     }
 }

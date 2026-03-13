@@ -1,6 +1,6 @@
 // PostProcess - Static utility class for post-processing settings
-// Controls all post-process effects: tone mapping, FXAA, bloom, vignette,
-// chromatic aberration, and film grain.
+// Controls all post-process effects: tone mapping, TAA, bloom, vignette,
+// chromatic aberration, film grain, color grading, and more.
 //
 // Usage examples:
 //   PostProcess::setEnabled(true);
@@ -8,6 +8,8 @@
 //   PostProcess::setExposure(1.5);
 //   PostProcess::setBloomEnabled(true);
 //   PostProcess::setBloomIntensity(0.8);
+//   PostProcess::setColorGradingEnabled(true);
+//   PostProcess::setColorGradingSaturation(1.2);
 
 import * from "../math/Vec3f.mt";
 
@@ -95,43 +97,33 @@ public class PostProcess {
     }
 
     // ============================================
-    // FXAA
+    // TAA (Temporal Anti-Aliasing)
     // ============================================
 
-    public static function isFXAAEnabled(): bool {
-        return _native_postprocess_fxaa_isEnabled();
+    public static function isTAAEnabled(): bool {
+        return _native_postprocess_taa_isEnabled();
     }
 
-    public static function setFXAAEnabled(bool enabled): void {
-        _native_postprocess_fxaa_setEnabled(enabled);
+    public static function setTAAEnabled(bool enabled): void {
+        _native_postprocess_taa_setEnabled(enabled);
     }
 
-    // Get FXAA quality level (see FXAAQuality constants)
-    public static function getFXAAQuality(): int {
-        return _native_postprocess_fxaa_getQuality();
+    // TAA blend factor: lower = more temporal smoothing (0.01 - 0.5)
+    public static function getTAABlendFactor(): float {
+        return _native_postprocess_taa_getBlendFactor();
     }
 
-    // Set FXAA quality level (use FXAAQuality constants)
-    public static function setFXAAQuality(int quality): void {
-        _native_postprocess_fxaa_setQuality(quality);
+    public static function setTAABlendFactor(float value): void {
+        _native_postprocess_taa_setBlendFactor(value);
     }
 
-    // Minimum luminance threshold for edge detection (0.01 - 0.1)
-    public static function getEdgeThresholdMin(): float {
-        return _native_postprocess_fxaa_getEdgeThresholdMin();
+    // TAA sharpening strength (0.0 - 1.0)
+    public static function getTAASharpenStrength(): float {
+        return _native_postprocess_taa_getSharpenStrength();
     }
 
-    public static function setEdgeThresholdMin(float value): void {
-        _native_postprocess_fxaa_setEdgeThresholdMin(value);
-    }
-
-    // Maximum luminance threshold for edge detection (0.05 - 0.5)
-    public static function getEdgeThreshold(): float {
-        return _native_postprocess_fxaa_getEdgeThreshold();
-    }
-
-    public static function setEdgeThreshold(float value): void {
-        _native_postprocess_fxaa_setEdgeThreshold(value);
+    public static function setTAASharpenStrength(float value): void {
+        _native_postprocess_taa_setSharpenStrength(value);
     }
 
     // ============================================
@@ -639,5 +631,62 @@ public class PostProcess {
 
     public static function setEdgeDetectionOpacity(float value): void {
         _native_postprocess_edgeDetection_setOpacity(value);
+    }
+
+    // ============================================
+    // Color Grading
+    // ============================================
+
+    public static function isColorGradingEnabled(): bool {
+        return _native_postprocess_colorGrading_isEnabled();
+    }
+
+    public static function setColorGradingEnabled(bool enabled): void {
+        _native_postprocess_colorGrading_setEnabled(enabled);
+    }
+
+    // Saturation: 0 = grayscale, 1 = neutral, 3 = max (0.0 - 3.0)
+    public static function getColorGradingSaturation(): float {
+        return _native_postprocess_colorGrading_getSaturation();
+    }
+
+    public static function setColorGradingSaturation(float value): void {
+        _native_postprocess_colorGrading_setSaturation(value);
+    }
+
+    // Color temperature in Kelvin. 6500 = neutral daylight (1000 - 15000)
+    public static function getColorGradingTemperature(): float {
+        return _native_postprocess_colorGrading_getColorTemperature();
+    }
+
+    public static function setColorGradingTemperature(float value): void {
+        _native_postprocess_colorGrading_setColorTemperature(value);
+    }
+
+    // Green-magenta tint (-1.0 to 1.0, 0 = neutral)
+    public static function getColorGradingTint(): float {
+        return _native_postprocess_colorGrading_getColorTint();
+    }
+
+    public static function setColorGradingTint(float value): void {
+        _native_postprocess_colorGrading_setColorTint(value);
+    }
+
+    // LUT intensity: 0 = no LUT effect, 1 = full LUT (0.0 - 1.0)
+    public static function getColorGradingLutIntensity(): float {
+        return _native_postprocess_colorGrading_getLutIntensity();
+    }
+
+    public static function setColorGradingLutIntensity(float value): void {
+        _native_postprocess_colorGrading_setLutIntensity(value);
+    }
+
+    // LUT blend factor: 0 = primary only, 1 = secondary only (0.0 - 1.0)
+    public static function getColorGradingLutBlendFactor(): float {
+        return _native_postprocess_colorGrading_getLutBlendFactor();
+    }
+
+    public static function setColorGradingLutBlendFactor(float value): void {
+        _native_postprocess_colorGrading_setLutBlendFactor(value);
     }
 }

@@ -227,6 +227,7 @@
     <ClInclude Include="render\postprocess\effects\AutoExposureEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\BloomEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ChromaticAberrationEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\ColorGradingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
@@ -449,6 +450,7 @@
     <ClCompile Include="render\postprocess\effects\AutoExposureEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\BloomEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\ColorGradingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\EdgeDetectionEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
@@ -581,6 +583,7 @@
     <None Include="..\..\resources\shaders\postprocess\bloom_downsample.glsl" />
     <None Include="..\..\resources\shaders\postprocess\bloom_upsample.glsl" />
     <None Include="..\..\resources\shaders\postprocess\chromatic_aberration.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\color_grading.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof.glsl" />
     <None Include="..\..\resources\shaders\postprocess\dof_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\edge_detection.glsl" />

@@ -472,6 +472,64 @@ namespace serialization
                 s.highPercentile = std::clamp(ae["highPercentile"].get<float>(), 0.5f, 1.0f);
         }
 
+        json serializeColorGrading(const postprocess::ColorGradingSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"primaryLutPath", s.primaryLutPath},
+                {"secondaryLutPath", s.secondaryLutPath},
+                {"lutIntensity", s.lutIntensity},
+                {"lutBlendFactor", s.lutBlendFactor},
+                {"liftR", s.liftR}, {"liftG", s.liftG}, {"liftB", s.liftB},
+                {"gammaR", s.gammaR}, {"gammaG", s.gammaG}, {"gammaB", s.gammaB},
+                {"gainR", s.gainR}, {"gainG", s.gainG}, {"gainB", s.gainB},
+                {"saturation", s.saturation},
+                {"colorTemperature", s.colorTemperature},
+                {"colorTint", s.colorTint}
+            };
+        }
+
+        void deserializeColorGrading(const json& j, postprocess::ColorGradingSettings& s)
+        {
+            if (!j.contains("colorGrading") || !j["colorGrading"].is_object())
+                return;
+            const auto& cg = j["colorGrading"];
+            if (cg.contains("enabled") && cg["enabled"].is_boolean())
+                s.enabled = cg["enabled"].get<bool>();
+            if (cg.contains("primaryLutPath") && cg["primaryLutPath"].is_string())
+                s.primaryLutPath = cg["primaryLutPath"].get<std::string>();
+            if (cg.contains("secondaryLutPath") && cg["secondaryLutPath"].is_string())
+                s.secondaryLutPath = cg["secondaryLutPath"].get<std::string>();
+            if (cg.contains("lutIntensity") && cg["lutIntensity"].is_number())
+                s.lutIntensity = std::clamp(cg["lutIntensity"].get<float>(), 0.0f, 1.0f);
+            if (cg.contains("lutBlendFactor") && cg["lutBlendFactor"].is_number())
+                s.lutBlendFactor = std::clamp(cg["lutBlendFactor"].get<float>(), 0.0f, 1.0f);
+            if (cg.contains("liftR") && cg["liftR"].is_number())
+                s.liftR = std::clamp(cg["liftR"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("liftG") && cg["liftG"].is_number())
+                s.liftG = std::clamp(cg["liftG"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("liftB") && cg["liftB"].is_number())
+                s.liftB = std::clamp(cg["liftB"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("gammaR") && cg["gammaR"].is_number())
+                s.gammaR = std::clamp(cg["gammaR"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gammaG") && cg["gammaG"].is_number())
+                s.gammaG = std::clamp(cg["gammaG"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gammaB") && cg["gammaB"].is_number())
+                s.gammaB = std::clamp(cg["gammaB"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gainR") && cg["gainR"].is_number())
+                s.gainR = std::clamp(cg["gainR"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("gainG") && cg["gainG"].is_number())
+                s.gainG = std::clamp(cg["gainG"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("gainB") && cg["gainB"].is_number())
+                s.gainB = std::clamp(cg["gainB"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("saturation") && cg["saturation"].is_number())
+                s.saturation = std::clamp(cg["saturation"].get<float>(), 0.0f, 3.0f);
+            if (cg.contains("colorTemperature") && cg["colorTemperature"].is_number())
+                s.colorTemperature = std::clamp(cg["colorTemperature"].get<float>(), 1000.0f, 15000.0f);
+            if (cg.contains("colorTint") && cg["colorTint"].is_number())
+                s.colorTint = std::clamp(cg["colorTint"].get<float>(), -1.0f, 1.0f);
+        }
+
         // ---- Deserialize render sub-helpers ----
 
         void deserializeShadowSettings(const json& j, types::ShadowSettings& settings)
@@ -780,6 +838,7 @@ namespace serialization
         j["ssao"] = serializeSSAO(settings.ssao);
         j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
         j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
+        j["colorGrading"] = serializeColorGrading(settings.colorGrading);
 
         return j;
     }
@@ -800,5 +859,6 @@ namespace serialization
         deserializeSSAO(j, settings.ssao);
         deserializeEdgeDetection(j, settings.edgeDetection);
         deserializeAutoExposure(j, settings.autoExposure);
+        deserializeColorGrading(j, settings.colorGrading);
     }
 }

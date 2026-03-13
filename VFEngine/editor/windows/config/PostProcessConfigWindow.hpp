@@ -20,6 +20,7 @@ namespace windows
         void drawDepthOfFieldSection();
         void drawSSAOSection();
         void drawEdgeDetectionSection();
+        void drawColorGradingSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();
