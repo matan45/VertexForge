@@ -61,6 +61,7 @@ namespace services {
 	class VFXPlayModeHandler;
 	class VFXRuntimeServiceImpl;
 	class RenderTexturePlayModeHandler;
+	class BehaviorTreePlayModeHandler;
 }
 
 namespace handlers {
@@ -120,6 +121,7 @@ namespace handlers {
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
+		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 

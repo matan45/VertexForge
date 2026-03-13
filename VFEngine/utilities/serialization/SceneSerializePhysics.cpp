@@ -696,7 +696,6 @@ namespace serialization
             bt.enabled = it->get<bool>();
         }
         // Reset runtime state
-        bt.runtimeInstance = nullptr;
         bt.isInitialized = false;
     }
 

@@ -71,6 +71,12 @@ namespace services
                 return provider->getBlackboardValue(query.entity, query.key);
             });
 
+        dispatcher.registerQueryHandler<events::ai::HasBlackboardKeyQuery>(
+            [this](const auto& query)
+            {
+                return provider->hasBlackboardKey(query.entity, query.key);
+            });
+
         // === ECS Component add/remove ===
         dispatcher.registerCommandHandler<::events::scene::AddBehaviorTreeComponentCommand>(
             [](const auto& cmd)

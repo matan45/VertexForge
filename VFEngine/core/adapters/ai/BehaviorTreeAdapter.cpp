@@ -35,9 +35,8 @@ namespace core
         }
 
         RuntimeInstance instance;
-        instance.treeData = std::make_unique<BehaviorTreeData>(std::move(dataOpt.value()));
         instance.runtime = std::make_unique<BehaviorTreeRuntime>();
-        instance.runtime->init(*instance.treeData, entity);
+        instance.runtime->init(std::move(dataOpt.value()), entity);
         instance.treePath = treePath;
         instance.enabled = true;
 
@@ -52,14 +51,14 @@ namespace core
         if (it != runtimes.end())
         {
             // Clean up script instances belonging to this entity's tree
-            if (it->second.treeData && scriptingProvider)
+            if (it->second.runtime && scriptingProvider)
             {
-                for (const auto& node : it->second.treeData->graph.nodes)
+                for (const auto& node : it->second.runtime->getTreeData().graph.nodes)
                 {
                     if (node.type == BTNodeType::ScriptTask && !node.scriptPath.empty())
                     {
-                        uint64_t scriptKey = entity.id ^ std::hash<std::string>{}(node.scriptPath);
-                        auto sit = scriptInstances.find(scriptKey);
+                        ScriptInstanceKey key{entity.id, node.scriptPath};
+                        auto sit = scriptInstances.find(key);
                         if (sit != scriptInstances.end())
                         {
                             if (scriptingProvider->isScriptLoaded(sit->second))
@@ -110,14 +109,24 @@ namespace core
         return false;
     }
 
+    // Bug 3 fix: snapshot entity IDs before iterating to avoid iterator invalidation
+    // if a script task dispatches events that call detachTree() mid-iteration.
     void BehaviorTreeAdapter::updateAll(float deltaTime)
     {
-        for (auto& [entityId, instance] : runtimes)
+        std::vector<uint64_t> entityIds;
+        entityIds.reserve(runtimes.size());
+        for (const auto& [entityId, instance] : runtimes)
         {
-            if (!instance.enabled || !instance.runtime)
-            {
-                continue;
-            }
+            entityIds.push_back(entityId);
+        }
+
+        for (uint64_t entityId : entityIds)
+        {
+            auto it = runtimes.find(entityId);
+            if (it == runtimes.end()) continue;
+
+            auto& instance = it->second;
+            if (!instance.enabled || !instance.runtime) continue;
 
             instance.runtime->tick(deltaTime, this);
         }
@@ -155,12 +164,24 @@ namespace core
         return 0.0f;
     }
 
+    bool BehaviorTreeAdapter::hasBlackboardKey(services::EntityHandle entity, const std::string& key) const
+    {
+        auto it = runtimes.find(entity.id);
+        if (it != runtimes.end() && it->second.runtime)
+        {
+            return it->second.runtime->getBlackboard().has(key);
+        }
+        return false;
+    }
+
     // === IBTTaskExecutor ===
 
+    // Bug 4 fix: only dispatch SetArrivalDistanceCommand on first tick
     BTNodeStatus BehaviorTreeAdapter::executeMoveTo(services::EntityHandle entity,
                                                      const std::string& targetKey,
                                                      float arrivalDistance,
-                                                     Blackboard& blackboard)
+                                                     Blackboard& blackboard,
+                                                     bool isFirstTick)
     {
         if (!blackboard.has(targetKey))
         {
@@ -172,17 +193,20 @@ namespace core
 
         glm::vec3 target = blackboard.getVec3(targetKey);
 
-        // Set arrival distance on the controller
-        events::controller::SetArrivalDistanceCommand arrivalCmd;
-        arrivalCmd.entity = entity;
-        arrivalCmd.arrivalDistance = arrivalDistance;
-        dispatcher.execute(arrivalCmd);
+        if (isFirstTick)
+        {
+            // Set arrival distance on the controller (only once)
+            events::controller::SetArrivalDistanceCommand arrivalCmd;
+            arrivalCmd.entity = entity;
+            arrivalCmd.arrivalDistance = arrivalDistance;
+            dispatcher.execute(arrivalCmd);
 
-        // Set navmesh agent destination
-        events::navmesh::SetAgentDestinationCommand navCmd;
-        navCmd.entity = entity;
-        navCmd.target = target;
-        dispatcher.execute(navCmd);
+            // Set navmesh agent destination (only once)
+            events::navmesh::SetAgentDestinationCommand navCmd;
+            navCmd.entity = entity;
+            navCmd.target = target;
+            dispatcher.execute(navCmd);
+        }
 
         // Check if we've reached the destination
         events::controller::HasReachedDestinationQuery reachedQuery;
@@ -231,8 +255,8 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        // Build a unique key for this entity+script combo
-        uint64_t scriptKey = entity.id ^ std::hash<std::string>{}(scriptPath);
+        // Bug 2 fix: collision-safe key using pair instead of XOR
+        ScriptInstanceKey scriptKey{entity.id, scriptPath};
 
         // Load script instance if not already loaded
         auto it = scriptInstances.find(scriptKey);
@@ -246,9 +270,10 @@ namespace core
             }
             scriptInstances[scriptKey] = info->instanceId;
             scriptingProvider->callOnStart(info->instanceId);
+            it = scriptInstances.find(scriptKey);
         }
 
-        uint64_t instanceId = scriptInstances[scriptKey];
+        uint64_t instanceId = it->second;
 
         // Call tick(deltaTime) and map result string to BTNodeStatus
         std::string result = scriptingProvider->callMethodWithReturn(

@@ -24,6 +24,7 @@
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
+#include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -217,6 +218,7 @@ namespace handlers {
         worldSectorService.reset();
         assetLifecycleService.reset();
         controllerService.reset();
+        behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
         ikComponentService.reset();
         physicsAnimationService.reset();
@@ -387,6 +389,12 @@ namespace handlers {
         behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
             bootstrap->getBehaviorTreeProvider()
         );
+
+        if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
+        {
+            behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
+            behaviorTreePlayModeHandler->subscribeToEvents();
+        }
 
         if (auto* rttProvider = bootstrap->getRenderTextureProvider())
         {

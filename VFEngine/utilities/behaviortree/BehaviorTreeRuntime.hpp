@@ -26,7 +26,8 @@ namespace behaviortree
         virtual BTNodeStatus executeMoveTo(services::EntityHandle entity,
                                            const std::string& targetKey,
                                            float arrivalDistance,
-                                           Blackboard& blackboard) = 0;
+                                           Blackboard& blackboard,
+                                           bool isFirstTick) = 0;
 
         virtual BTNodeStatus executePlayAnimation(services::EntityHandle entity,
                                                    const std::string& stateName,
@@ -44,14 +45,14 @@ namespace behaviortree
     class BehaviorTreeRuntime
     {
     public:
-        void init(const BehaviorTreeData& data, services::EntityHandle entity);
+        void init(BehaviorTreeData data, services::EntityHandle entity);
         BTNodeStatus tick(float deltaTime, IBTTaskExecutor* executor);
         void reset();
 
         Blackboard& getBlackboard() { return blackboard; }
         const Blackboard& getBlackboard() const { return blackboard; }
 
-        const BehaviorTreeData* getTreeData() const { return treeData; }
+        const BehaviorTreeData& getTreeData() const { return treeData; }
         services::EntityHandle getOwnerEntity() const { return ownerEntity; }
 
     private:
@@ -61,8 +62,9 @@ namespace behaviortree
         BTNodeStatus tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor);
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
+        void resetSubtreeState(uint32_t nodeId);
 
-        const BehaviorTreeData* treeData = nullptr;
+        BehaviorTreeData treeData;
         services::EntityHandle ownerEntity;
         Blackboard blackboard;
         std::unordered_map<uint32_t, BTNodeRuntime> nodeStates;

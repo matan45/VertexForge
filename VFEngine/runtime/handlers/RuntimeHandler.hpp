@@ -37,6 +37,7 @@ namespace core {
 namespace services {
     class PhysicsPlayModeHandler;
     class RenderTexturePlayModeHandler;
+    class BehaviorTreePlayModeHandler;
 }
 
 namespace handlers {
@@ -67,6 +68,7 @@ namespace handlers {
         std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
         std::shared_ptr<services::IWorldSectorService> worldSectorService;
         std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
+        std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 

@@ -172,6 +172,7 @@
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
+    <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />
     <ClInclude Include="impl\audio\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
@@ -312,6 +313,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
+    <ClCompile Include="impl\ai\BehaviorTreePlayModeHandler.cpp" />
     <ClCompile Include="impl\ai\BehaviorTreeServiceImpl.cpp" />
     <ClCompile Include="impl\audio\AudioServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />

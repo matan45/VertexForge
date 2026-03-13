@@ -34,12 +34,14 @@ namespace core
                                 const behaviortree::BlackboardValue& value) override;
         behaviortree::BlackboardValue getBlackboardValue(services::EntityHandle entity,
                                                           const std::string& key) override;
+        bool hasBlackboardKey(services::EntityHandle entity, const std::string& key) const override;
 
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
                                                   const std::string& targetKey,
                                                   float arrivalDistance,
-                                                  behaviortree::Blackboard& blackboard) override;
+                                                  behaviortree::Blackboard& blackboard,
+                                                  bool isFirstTick) override;
 
         behaviortree::BTNodeStatus executePlayAnimation(services::EntityHandle entity,
                                                          const std::string& stateName,
@@ -57,14 +59,34 @@ namespace core
     private:
         struct RuntimeInstance
         {
-            std::unique_ptr<behaviortree::BehaviorTreeData> treeData;
             std::unique_ptr<behaviortree::BehaviorTreeRuntime> runtime;
             std::string treePath;
             bool enabled = true;
         };
 
+        // Collision-safe key for script instances: (entityId, scriptPath)
+        struct ScriptInstanceKey
+        {
+            uint64_t entityId;
+            std::string scriptPath;
+            bool operator==(const ScriptInstanceKey& other) const
+            {
+                return entityId == other.entityId && scriptPath == other.scriptPath;
+            }
+        };
+
+        struct ScriptInstanceKeyHash
+        {
+            size_t operator()(const ScriptInstanceKey& k) const
+            {
+                size_t h = std::hash<uint64_t>{}(k.entityId);
+                h ^= std::hash<std::string>{}(k.scriptPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+
         services::IScriptingProvider* scriptingProvider;
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
-        std::unordered_map<uint64_t, uint64_t> scriptInstances; // hash(entity+scriptPath) -> script instanceId
+        std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
     };
 }

@@ -1,31 +1,39 @@
 #include "BehaviorTreeRuntime.hpp"
+#include <cmath>
 
 namespace behaviortree
 {
-    void BehaviorTreeRuntime::init(const BehaviorTreeData& data, services::EntityHandle entity)
+    void BehaviorTreeRuntime::init(BehaviorTreeData data, services::EntityHandle entity)
     {
-        treeData = &data;
+        treeData = std::move(data);
         ownerEntity = entity;
-        blackboard.initializeFromGraph(data.graph);
+        blackboard.initializeFromGraph(treeData.graph);
         nodeStates.clear();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tick(float deltaTime, IBTTaskExecutor* executor)
     {
-        if (!treeData || treeData->graph.rootNodeId == 0)
+        if (treeData.graph.rootNodeId == 0)
         {
             return BTNodeStatus::Failure;
         }
 
-        return tickNode(treeData->graph.rootNodeId, deltaTime, executor);
+        return tickNode(treeData.graph.rootNodeId, deltaTime, executor);
     }
 
     void BehaviorTreeRuntime::reset()
     {
         nodeStates.clear();
-        if (treeData)
+        blackboard.initializeFromGraph(treeData.graph);
+    }
+
+    void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId)
+    {
+        nodeStates.erase(nodeId);
+        auto children = treeData.graph.getChildren(nodeId);
+        for (const auto* child : children)
         {
-            blackboard.initializeFromGraph(treeData->graph);
+            resetSubtreeState(child->id);
         }
     }
 
@@ -36,7 +44,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickNode(uint32_t nodeId, float dt, IBTTaskExecutor* executor)
     {
-        const BTNode* node = treeData->graph.findNodeById(nodeId);
+        const BTNode* node = treeData.graph.findNodeById(nodeId);
         if (!node)
         {
             return BTNodeStatus::Failure;
@@ -47,7 +55,7 @@ namespace behaviortree
         if (isRootNode(node->type))
         {
             // Root just ticks its single child
-            auto children = treeData->graph.getChildren(nodeId);
+            auto children = treeData.graph.getChildren(nodeId);
             if (children.empty())
             {
                 status = BTNodeStatus::Failure;
@@ -79,7 +87,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickComposite(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData->graph.getChildren(node.id);
+        auto children = treeData.graph.getChildren(node.id);
         if (children.empty())
         {
             return BTNodeStatus::Failure;
@@ -103,10 +111,12 @@ namespace behaviortree
                 if (childStatus == BTNodeStatus::Failure)
                 {
                     state.currentChildIndex = 0;
+                    for (const auto* child : children) resetSubtreeState(child->id);
                     return BTNodeStatus::Failure;
                 }
             }
             state.currentChildIndex = 0;
+            for (const auto* child : children) resetSubtreeState(child->id);
             return BTNodeStatus::Success;
         }
 
@@ -124,10 +134,12 @@ namespace behaviortree
                 if (childStatus == BTNodeStatus::Success)
                 {
                     state.currentChildIndex = 0;
+                    for (const auto* child : children) resetSubtreeState(child->id);
                     return BTNodeStatus::Success;
                 }
             }
             state.currentChildIndex = 0;
+            for (const auto* child : children) resetSubtreeState(child->id);
             return BTNodeStatus::Failure;
         }
 
@@ -177,7 +189,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickDecorator(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData->graph.getChildren(node.id);
+        auto children = treeData.graph.getChildren(node.id);
         auto& state = getNodeState(node.id);
 
         switch (node.type)
@@ -213,6 +225,10 @@ namespace behaviortree
             if (childStatus == BTNodeStatus::Running) return BTNodeStatus::Running;
 
             state.repeatCount++;
+
+            // Reset child state for next iteration
+            resetSubtreeState(children[0]->id);
+
             if (maxRepeats <= 0 || state.repeatCount < maxRepeats)
             {
                 return BTNodeStatus::Running; // Keep repeating
@@ -365,7 +381,7 @@ namespace behaviortree
                 arrivalDistance = std::get<float>(distIt->second);
             }
 
-            return executor->executeMoveTo(ownerEntity, targetKey, arrivalDistance, blackboard);
+            return executor->executeMoveTo(ownerEntity, targetKey, arrivalDistance, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::PlayAnimation:
@@ -437,10 +453,11 @@ namespace behaviortree
             {
                 float a = std::get<float>(bbVal);
                 float b = std::get<float>(compareVal);
+                constexpr float epsilon = 1e-5f;
                 switch (op)
                 {
-                case CompareOp::Equal: return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::NotEqual: return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+                case CompareOp::Equal: return std::abs(a - b) < epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
+                case CompareOp::NotEqual: return std::abs(a - b) >= epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
                 case CompareOp::Greater: return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
                 case CompareOp::Less: return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
                 case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;

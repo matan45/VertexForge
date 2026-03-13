@@ -26,6 +26,7 @@ namespace services {
                                         const behaviortree::BlackboardValue& value) = 0;
         virtual behaviortree::BlackboardValue getBlackboardValue(EntityHandle entity,
                                                                   const std::string& key) = 0;
+        virtual bool hasBlackboardKey(EntityHandle entity, const std::string& key) const = 0;
     };
 
 }

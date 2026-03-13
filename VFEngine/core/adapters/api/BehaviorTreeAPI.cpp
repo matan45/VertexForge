@@ -197,16 +197,10 @@ namespace core::api
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(false);
 
-                // Check by trying to get the value - if it returns default float 0.0, key may not exist
-                // A more precise check would require a dedicated query, but for now use HasBehaviorTree + get
-                events::ai::GetBlackboardValueQuery query;
+                events::ai::HasBlackboardKeyQuery query;
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 query.key = extractString(args[1]);
-                // The provider returns 0.0f if key doesn't exist, which is ambiguous.
-                // For a proper check, we'd need a HasBlackboardKey query. For now, check if BT exists.
-                events::ai::HasBehaviorTreeQuery hasQuery;
-                hasQuery.entity = query.entity;
-                return value::Value(dispatcher.query(hasQuery));
+                return value::Value(dispatcher.query(query));
             });
 
         // === Behavior Tree control ===

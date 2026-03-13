@@ -37,6 +37,7 @@
 #include "impl/render/LightStreamingServiceImpl.hpp"
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
+#include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/GrassServiceImpl.hpp"
@@ -243,6 +244,7 @@ namespace handlers
         meshBrushModeService.reset();
         lightStreamingService.reset();
         giService.reset();
+        behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
         audioService.reset();
         scriptingService.reset();
@@ -470,6 +472,12 @@ namespace handlers
         behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
             bootstrap->getBehaviorTreeProvider()
         );
+
+        if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
+        {
+            behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
+            behaviorTreePlayModeHandler->subscribeToEvents();
+        }
     }
 
     void EditorHandler::registerAllEventHandlers()

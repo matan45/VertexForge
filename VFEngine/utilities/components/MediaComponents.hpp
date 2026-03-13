@@ -185,7 +185,6 @@ namespace components
 
     struct BehaviorTreeComponent
     {
-        void* runtimeInstance = nullptr;
         std::string behaviorTreePath;
         bool isInitialized = false;
         bool enabled = true;
