@@ -79,7 +79,6 @@ namespace editor::graph
         // Handle interactions
         handleCreation();
         handleDeletion();
-        handleSelection();
         handleContextMenu();
 
         // Sync positions back to graph
@@ -91,20 +90,8 @@ namespace editor::graph
 
         ed::End();
 
-        float currentZoom = ed::GetCurrentZoom();
-        drawZoomControls(canvasPos, canvasSize, currentZoom);
-
-        // Handle pending zoom
-        if (pendingZoomSteps != 0)
-        {
-            ed::SetCurrentEditor(editorContext);
-            float zoom = ed::GetCurrentZoom();
-            float factor = pendingZoomSteps > 0 ? 1.2f : 1.0f / 1.2f;
-            zoom *= factor;
-            zoom = std::clamp(zoom, 0.1f, 3.0f);
-            ed::NavigateToContent(0.0f);
-            pendingZoomSteps = 0;
-        }
+        // Selection must be checked after ed::End() (matches VFX/Shader editor pattern)
+        handleSelection();
 
         ed::SetCurrentEditor(nullptr);
     }

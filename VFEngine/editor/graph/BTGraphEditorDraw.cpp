@@ -98,22 +98,9 @@ namespace editor::graph
         }
     }
 
-    void BTGraphEditor::drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom)
+    void BTGraphEditor::drawZoomControls(ImVec2 /*canvasPos*/, ImVec2 /*canvasSize*/, float /*currentZoom*/)
     {
-        ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + canvasSize.x - 80.0f, canvasPos.y + 10.0f));
-
-        ImGui::BeginGroup();
-        if (ImGui::Button("+##btzoomin", ImVec2(30, 30)))
-        {
-            pendingZoomSteps = 1;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("-##btzoomout", ImVec2(30, 30)))
-        {
-            pendingZoomSteps = -1;
-        }
-        ImGui::Text("%.0f%%", currentZoom * 100.0f);
-        ImGui::EndGroup();
+        // Zoom is handled by mouse wheel in imgui-node-editor
     }
 
     // Forward declare to avoid circular issues - defined here

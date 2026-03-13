@@ -29,5 +29,6 @@ namespace components
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
-                                               GrassComponent, MeshBrushInstanceComponent>;
+                                               GrassComponent, MeshBrushInstanceComponent,
+                                               BehaviorTreeComponent>;
 }

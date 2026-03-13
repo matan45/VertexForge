@@ -217,6 +217,22 @@ namespace events::scene {
     };
 
     // ============================================
+    // Behavior Tree Component Events
+    // ============================================
+
+    struct AddBehaviorTreeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddBehaviorTreeComponent"; }
+    };
+
+    struct RemoveBehaviorTreeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveBehaviorTreeComponent"; }
+    };
+
+    // ============================================
     // Light Component Events (Directional)
     // ============================================
 
