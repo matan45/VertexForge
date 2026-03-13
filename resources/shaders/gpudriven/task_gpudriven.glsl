@@ -182,8 +182,19 @@ void main() {
             meshletOffset = lodData.x;
             meshletCount = lodData.y;
             actualLodLevel = lodLevel;
+
+            // Fallback: if selected LOD has 0 meshlets (e.g. mesh too simple
+            // to simplify), walk down to find a LOD with actual data.
+            while (meshletCount == 0u && actualLodLevel > 0u) {
+                actualLodLevel--;
+                if ((obj.availableLODMask & (1u << actualLodLevel)) == 0u) {
+                    continue;
+                }
+                lodData = getMeshletLODDataTask(obj, actualLodLevel);
+                meshletOffset = lodData.x;
+                meshletCount = lodData.y;
+            }
         }
-        // If no valid LOD, meshletCount stays as drawData's (fallback)
     } else {
         modelMatrix = drawData.modelMatrix;
     }
