@@ -2,7 +2,8 @@
 
 #include "AnimatorStateMachine.hpp"
 #include "AnimationLOD.hpp"
-#include "animator/AnimatorTypes.hpp"
+#include "AnimationDataCache.hpp"
+#include "SocketAttachmentUpdater.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "math/Frustum.hpp"
 #include <entt/entt.hpp>
@@ -23,9 +24,7 @@ namespace animation
     class RuntimeAnimatorSystem
     {
     private:
-        std::unordered_map<std::string, std::shared_ptr<animator::AnimatorData>> animatorDataCache;
-        std::unordered_map<std::string, std::shared_ptr<resource::AnimationData>> animationDataCache;
-        std::unordered_map<std::string, std::shared_ptr<resource::SkeletonData>> skeletonDataCache;
+        AnimationDataCache dataCache;
 
         std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>> animators;
 
@@ -33,14 +32,13 @@ namespace animation
         events::SubscriptionToken editorModeChangedToken;
         events::SubscriptionToken socketDataSavedToken;
 
-        std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
+        std::unique_ptr<SocketAttachmentUpdater> socketUpdater;
 
         AnimationCullingContext cullingContext;
         AnimationLODManager lodManager;
         std::unordered_map<entt::entity, EntityAnimationLODState> entityLODStates;
         uint32_t culledEntityCount = 0;
 
-        // Streaming integration: budgeted animator initialization
         struct PendingAnimatorInit
         {
             entt::entity entity;
@@ -56,7 +54,6 @@ namespace animation
         bool initialized = false;
         bool pendingCacheCleanup = false;
 
-        // Instance grouping for shared animation evaluation (ST-7)
         struct AnimationInstanceGroup
         {
             entt::entity leader = entt::null;
@@ -122,13 +119,7 @@ namespace animation
         void applyRootMotion(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
         void applyIKPostProcess(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
 
-        const resource::AnimationData* loadAnimation(const std::string& path);
-
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;
-
-        void buildSocketTransformCache();
-        void resolveAttachmentParent(entt::entity attachedEntity);
-        void applyAttachmentTransform(entt::entity attachedEntity);
     };
 }

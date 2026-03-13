@@ -84,7 +84,6 @@ namespace render::gpudriven
         vk::DeviceMemory objectStagingMemory;
         void* objectStagingMapped = nullptr;
 
-        // Instance transform buffer for hardware instancing
         vk::Buffer instanceTransformBuffer;
         vk::DeviceMemory instanceTransformBufferMemory;
         vk::Buffer instanceStagingBuffer;
@@ -199,6 +198,9 @@ namespace render::gpudriven
 
     private:
         void createBuffers();
+        void createGeometryBuffers();
+        void createObjectBuffers();
+        void createInstanceBuffers();
         void destroyBuffers();
 
         void uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount);
@@ -221,20 +223,15 @@ namespace render::gpudriven
 
         void applyDynamicEmission(GPUObjectData& obj, const std::string& materialPath, float time);
 
-        // Sequential fallback for small scenes (avoids parallel overhead)
         void updateObjectsSequential(const std::vector<mesh::MeshRenderData>& renderData,
                                      const ObjectResolvers& resolvers);
 
-        // Persistent work buffers for parallel updateObjects (avoid per-frame allocation)
         struct ObjectWorkItem
         {
             const mesh::MeshRenderData* meshRender;
             const SubmeshLocation* submeshLoc;
-            const glm::mat4* instanceTransform; // non-null for instanced entries
-            int32_t templateIndex;               // >=0: copy from template
         };
         std::vector<ObjectWorkItem> parallelWorkItems;
-        std::vector<GPUObjectData> parallelTemplates;
 
         static constexpr uint32_t PARALLEL_OBJECT_THRESHOLD = 512;
 

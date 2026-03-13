@@ -32,11 +32,9 @@ namespace render::gi
         vk::Buffer tlasBuffer;
         vk::DeviceMemory tlasMemory;
 
-        // Instance buffer for TLAS
         vk::Buffer instanceBuffer;
         vk::DeviceMemory instanceMemory;
 
-        // Scratch buffers
         vk::Buffer blasScratchBuffer;
         vk::DeviceMemory blasScratchMemory;
         vk::Buffer tlasScratchBuffer;
@@ -46,7 +44,6 @@ namespace render::gi
         vk::Buffer tlasStagingBuffer;
         vk::DeviceMemory tlasStagingMemory;
 
-        // Descriptor for compute shader access
         vk::DescriptorSetLayout tlasDescriptorLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet tlasDescriptorSet;
@@ -66,12 +63,10 @@ namespace render::gi
         void init();
         void cleanup();
 
-        // Build BLAS from merged mesh buffer geometry
         void buildBLAS(vk::CommandBuffer cmd,
                        vk::Buffer vertexBuffer, uint32_t vertexCount, uint32_t vertexStride,
                        vk::Buffer indexBuffer, uint32_t indexCount);
 
-        // Build/update TLAS from object transforms
         void buildTLAS(vk::CommandBuffer cmd,
                        const std::vector<gpudriven::GPUObjectData>& objects,
                        uint32_t objectCount);

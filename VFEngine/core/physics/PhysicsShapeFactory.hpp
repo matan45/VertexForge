@@ -4,7 +4,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
-#include "PhysicsWorld.hpp"
+#include "PhysicsRigidBodyManager.hpp"
 #include <unordered_map>
 #include <string>
 #include <mutex>

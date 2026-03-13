@@ -54,7 +54,6 @@ namespace windows
         uint32_t pendingCount = static_cast<uint32_t>(cachedPending.size());
         size_t totalMemory = 0;
 
-        // Count by type
         uint32_t typeCounts[static_cast<int>(resource::AssetType::COUNT)] = {};
         for (const auto& asset : cachedAssets)
         {
@@ -70,7 +69,6 @@ namespace windows
                      totalAssets, pendingCount,
                      static_cast<float>(totalMemory) / (1024.0f * 1024.0f));
 
-        // Type breakdown on one line
         ImGui::TextDisabled("Tex:%u Mesh:%u Audio:%u Anim:%u Mat:%u Other:%u",
                             typeCounts[static_cast<int>(resource::AssetType::Texture)],
                             typeCounts[static_cast<int>(resource::AssetType::Mesh)],
@@ -89,7 +87,6 @@ namespace windows
 
     void AssetLifecycleWindow::drawAssetTable()
     {
-        // Filter combo
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Filter:");
         ImGui::SameLine();
@@ -99,7 +96,6 @@ namespace windows
         ImGui::SetNextItemWidth(150);
         ImGui::Combo("##TypeFilter", &filterType, filterNames, IM_ARRAYSIZE(filterNames));
 
-        // Adjust filter index: -1 means All, 0+ maps to AssetType enum
         int effectiveFilter = filterType - 1;
 
         if (ImGui::BeginTable("AssetsTable", 5,
@@ -125,7 +121,6 @@ namespace windows
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
 
-                // Show just filename for readability
                 auto lastSlash = asset.path.find_last_of("/\\");
                 const char* displayPath = (lastSlash != std::string::npos)
                                               ? asset.path.c_str() + lastSlash + 1

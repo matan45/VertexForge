@@ -113,6 +113,7 @@ namespace core
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
+
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();

@@ -185,55 +185,7 @@ namespace render::gpudriven
             meshShaderPipeline->resetStats(cmd);
         }
 
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
-            uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
-            lightCulling.totalSceneLights = pointCount + spotCount;
-
-            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
-            {
-                lightCulling.lightsAfterBVHCull = std::min(static_cast<uint32_t>(lightCulling.visibleLightIds.size()), lightCulling.totalSceneLights);
-            }
-            else
-            {
-                lightCulling.lightsAfterBVHCull = lightCulling.totalSceneLights;
-            }
-
-            lightCulling.lightsAfterHiZCull = lightCulling.lightsAfterBVHCull;
-        }
-
-        if (shadowSystem && shadowSystem->isInitialized())
-        {
-            std::unordered_set<uint32_t> shadowVisibleLights;
-            bool hasShadowFilter = false;
-            collectShadowVisibleLights(shadowVisibleLights, hasShadowFilter);
-
-            if (hasShadowFilter && !shadowVisibleLights.empty())
-            {
-                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
-                                          cachedCamera.nearPlane, cachedCamera.farPlane,
-                                          &shadowVisibleLights);
-            }
-            else
-            {
-                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
-                                          cachedCamera.nearPlane, cachedCamera.farPlane);
-            }
-        }
-
-        if (lightBufferManager)
-        {
-            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
-            {
-                lightBufferManager->updateFromScene(lightCulling.visibleLightIds);
-            }
-            else
-            {
-                lightBufferManager->updateFromScene();
-            }
-            lightBufferManager->uploadToGPU(cmd);
-        }
+        updateLightCullingState(cmd);
 
         bool hasMeshObjects = stats.totalObjects > 0;
         bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
@@ -293,219 +245,263 @@ namespace render::gpudriven
 
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
 
-        // Dispatch grass compute: generate instances from density maps
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
         {
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
         }
 
-        // Volumetric fog runs AFTER shadow passes so that:
-        // 1. Shadow texture descriptor set is finalized (no updates after binding)
-        // 2. Shadow maps are rendered and available for sampling
-        if (volumetricPipeline && volumetricPipeline->isEnabled())
-        {
-            const auto& camData = cameraBuffer->getData();
-            glm::mat4 viewProj = camData.projection * camData.view;
-            glm::mat4 invViewProj = glm::inverse(viewProj);
-            volumetricPipeline->update(viewProj, invViewProj,
-                                       glm::vec3(camData.cameraPosition),
-                                       cachedCamera.nearPlane, cachedCamera.farPlane,
-                                       cachedVolumetricSettings);
-            volumetricPipeline->dispatch(cmd,
-                                         clusterGridManager->getDescriptorSet(),
-                                         lightBufferManager->getDescriptorSet(),
-                                         lightCullingPipeline->getDescriptorSet(),
-                                         shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
-                                         shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{});
-        }
+        dispatchVolumetricFog(cmd);
+        dispatchGIProbeUpdate(cmd);
 
-        // GI probe update
-        if (giCascadeManager && giCascadeManager->isInitialized() &&
-            giTracePipeline && giTracePipeline->isInitialized())
-        {
-            giCascadeManager->updateCameraPosition(cachedCamera.position);
-            giCascadeManager->beginFrame();
-
-            // Build/update acceleration structures for ray queries
-            if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
-            {
-                if (blasNeedsRebuild && mergedBuffer->getTotalVertexCount() > 0 &&
-                    mergedBuffer->getTotalIndexCount() > 0)
-                {
-                    accelStructManager->buildBLAS(cmd,
-                        mergedBuffer->getVertexBuffer(), mergedBuffer->getTotalVertexCount(), 64,
-                        mergedBuffer->getIndexBuffer(), mergedBuffer->getTotalIndexCount());
-                    blasNeedsRebuild = false;
-                }
-
-                if (accelStructManager->isTLASReady() || !blasNeedsRebuild)
-                {
-                    if (mergedBuffer->getObjectCount() > 0)
-                    {
-                        // Access CPU-side object data for transforms
-                        accelStructManager->buildTLAS(cmd,
-                            mergedBuffer->getCPUObjectData(),
-                            mergedBuffer->getObjectCount());
-                    }
-                }
-            }
-
-            auto* storage = giCascadeManager->getProbeStorage();
-
-            // Zero-initialize probe buffers on first frame (device-local needs explicit upload)
-            if (storage && giProbeBuffersNeedInit)
-            {
-                storage->uploadToGPU(cmd);
-                giProbeBuffersNeedInit = false;
-
-                // Barrier: transfer writes must complete before compute reads
-                vk::MemoryBarrier initBarrier{
-                    vk::AccessFlagBits::eTransferWrite,
-                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
-                };
-                cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eTransfer,
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::DependencyFlags{},
-                    1, &initBarrier, 0, nullptr, 0, nullptr);
-            }
-
-            auto batches = giCascadeManager->getProbeUpdateBatches();
-
-            if (storage && !batches.empty())
-            {
-                // Memory barrier before GI compute
-                vk::MemoryBarrier giBarrier{
-                    vk::AccessFlagBits::eShaderWrite,
-                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
-                };
-                cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::DependencyFlags{},
-                    1, &giBarrier, 0, nullptr, 0, nullptr);
-
-                // Trace pass
-                for (const auto& batch : batches)
-                {
-                    gi::GIComputePushConstants push{};
-                    push.cascadeIndex = batch.cascadeIndex;
-                    push.probeStartIndex = batch.probeStartOffset;
-                    push.probeCount = batch.probeCount;
-                    push.raysPerProbe = batch.isFarField
-                        ? cachedGISettings.farFieldRaysPerUpdate
-                        : cachedGISettings.probeRaysPerUpdate;
-                    push.maxDistance = batch.isFarField
-                        ? cachedGISettings.farFieldMaxDistance
-                        : cachedGISettings.maxProbeDistance;
-                    push.temporalBlend = cachedGISettings.temporalBlendFactor;
-                    push.frameRandom = static_cast<float>(giCascadeManager->getFrameIndex()) * 0.1f;
-                    push.frameIndex = giCascadeManager->getFrameIndex();
-
-                    vk::DescriptorSet tlasSet = (accelStructManager && accelStructManager->isTLASReady())
-                        ? accelStructManager->getTLASDescriptorSet()
-                        : vk::DescriptorSet{};
-
-                    vk::DescriptorSet lightSet = lightBufferManager
-                        ? lightBufferManager->getDescriptorSet()
-                        : vk::DescriptorSet{};
-
-                    giTracePipeline->dispatch(cmd,
-                                               storage->getProbeDataDescSet(),
-                                               giCascadeManager->getCascadeInfoDescSet(),
-                                               push,
-                                               tlasSet,
-                                               lightSet);
-                }
-
-                // Barrier: compute writes must finish before copy
-                vk::MemoryBarrier computeBarrier{
-                    vk::AccessFlagBits::eShaderWrite,
-                    vk::AccessFlagBits::eTransferRead
-                };
-                cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eComputeShader,
-                    vk::PipelineStageFlagBits::eTransfer,
-                    vk::DependencyFlags{},
-                    1, &computeBarrier, 0, nullptr, 0, nullptr);
-
-                // Swap ping-pong: trace wrote to the write buffer, now make it the read buffer
-                storage->swapBuffers();
-
-                // Copy only non-updated probe ranges from read to write buffer
-                // (updated probes were already written by compute; copying them again would be redundant)
-                {
-                    constexpr vk::DeviceSize probeSize = sizeof(gi::ProbeData);
-                    uint32_t totalProbes = storage->getProbeCount();
-
-                    // Collect updated probe ranges sorted by offset
-                    std::vector<std::pair<uint32_t, uint32_t>> updatedRanges;
-                    updatedRanges.reserve(batches.size());
-                    for (const auto& batch : batches)
-                    {
-                        updatedRanges.emplace_back(batch.probeStartOffset, batch.probeStartOffset + batch.probeCount);
-                    }
-                    std::sort(updatedRanges.begin(), updatedRanges.end());
-
-                    // Build copy regions for the gaps between updated ranges
-                    std::vector<vk::BufferCopy> copyRegions;
-                    uint32_t cursor = 0;
-                    for (const auto& [start, end] : updatedRanges)
-                    {
-                        if (start > cursor)
-                        {
-                            copyRegions.push_back({cursor * probeSize, cursor * probeSize, (start - cursor) * probeSize});
-                        }
-                        cursor = std::max(cursor, end);
-                    }
-                    if (cursor < totalProbes)
-                    {
-                        copyRegions.push_back({cursor * probeSize, cursor * probeSize, (totalProbes - cursor) * probeSize});
-                    }
-
-                    if (!copyRegions.empty())
-                    {
-                        cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(),
-                                       static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
-                    }
-                }
-
-                // Barrier: copy must finish before fragment reads and next frame's compute writes
-                vk::MemoryBarrier copyBarrier{
-                    vk::AccessFlagBits::eTransferWrite,
-                    vk::AccessFlagBits::eShaderRead
-                };
-                cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eTransfer,
-                    vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
-                    vk::DependencyFlags{},
-                    1, &copyBarrier, 0, nullptr, 0, nullptr);
-
-                // Update mesh shader pipelines with new read buffer's sampling set
-                auto samplingSet = storage->getSamplingDescSet();
-                if (meshShaderPipeline)
-                    meshShaderPipeline->updateGIProbeDescriptor(samplingSet);
-                if (transparentMeshShaderPipeline)
-                    transparentMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
-                if (wboitMeshShaderPipeline)
-                    wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
-
-                // Note: the copy barrier above already syncs transfer→fragment+compute
-            }
-        }
-
-        // Update shadow LOD based on camera distance
         if (shadowSystem && shadowSystem->isInitialized())
         {
             shadowSystem->updateShadowLOD(cachedCamera.position);
         }
 
-        // Update light streaming priorities
         if (lightStreamManager)
         {
             lightStreamManager->updatePriorities(cachedCamera.position);
             lightStreamManager->applyBudget();
         }
+    }
+
+    void GPUDrivenRenderer::updateLightCullingState(vk::CommandBuffer cmd)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
+        uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
+        lightCulling.totalSceneLights = pointCount + spotCount;
+
+        if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
+        {
+            lightCulling.lightsAfterBVHCull = std::min(static_cast<uint32_t>(lightCulling.visibleLightIds.size()), lightCulling.totalSceneLights);
+        }
+        else
+        {
+            lightCulling.lightsAfterBVHCull = lightCulling.totalSceneLights;
+        }
+
+        lightCulling.lightsAfterHiZCull = lightCulling.lightsAfterBVHCull;
+
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            std::unordered_set<uint32_t> shadowVisibleLights;
+            bool hasShadowFilter = false;
+            collectShadowVisibleLights(shadowVisibleLights, hasShadowFilter);
+
+            if (hasShadowFilter && !shadowVisibleLights.empty())
+            {
+                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
+                                          cachedCamera.nearPlane, cachedCamera.farPlane,
+                                          &shadowVisibleLights);
+            }
+            else
+            {
+                shadowSystem->beginFrame(cachedCamera.view, cachedCamera.projection,
+                                          cachedCamera.nearPlane, cachedCamera.farPlane);
+            }
+        }
+
+        if (lightBufferManager)
+        {
+            if (lightCulling.useBVH && !lightCulling.visibleLightIds.empty())
+            {
+                lightBufferManager->updateFromScene(lightCulling.visibleLightIds);
+            }
+            else
+            {
+                lightBufferManager->updateFromScene();
+            }
+            lightBufferManager->uploadToGPU(cmd);
+        }
+    }
+
+    // Volumetric fog runs AFTER shadow passes so that shadow maps are rendered and available for sampling
+    void GPUDrivenRenderer::dispatchVolumetricFog(vk::CommandBuffer cmd)
+    {
+        if (!volumetricPipeline || !volumetricPipeline->isEnabled())
+        {
+            return;
+        }
+
+        const auto& camData = cameraBuffer->getData();
+        glm::mat4 viewProj = camData.projection * camData.view;
+        glm::mat4 invViewProj = glm::inverse(viewProj);
+        volumetricPipeline->update(viewProj, invViewProj,
+                                   glm::vec3(camData.cameraPosition),
+                                   cachedCamera.nearPlane, cachedCamera.farPlane,
+                                   cachedVolumetricSettings);
+        volumetricPipeline->dispatch(cmd,
+                                     clusterGridManager->getDescriptorSet(),
+                                     lightBufferManager->getDescriptorSet(),
+                                     lightCullingPipeline->getDescriptorSet(),
+                                     shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
+                                     shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{});
+    }
+
+    void GPUDrivenRenderer::dispatchGIProbeUpdate(vk::CommandBuffer cmd)
+    {
+        if (!giCascadeManager || !giCascadeManager->isInitialized() ||
+            !giTracePipeline || !giTracePipeline->isInitialized())
+        {
+            return;
+        }
+
+        giCascadeManager->updateCameraPosition(cachedCamera.position);
+        giCascadeManager->beginFrame();
+
+        if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
+        {
+            if (blasNeedsRebuild && mergedBuffer->getTotalVertexCount() > 0 &&
+                mergedBuffer->getTotalIndexCount() > 0)
+            {
+                accelStructManager->buildBLAS(cmd,
+                    mergedBuffer->getVertexBuffer(), mergedBuffer->getTotalVertexCount(), 64,
+                    mergedBuffer->getIndexBuffer(), mergedBuffer->getTotalIndexCount());
+                blasNeedsRebuild = false;
+            }
+
+            if (accelStructManager->isTLASReady() || !blasNeedsRebuild)
+            {
+                if (mergedBuffer->getObjectCount() > 0)
+                {
+                    accelStructManager->buildTLAS(cmd,
+                        mergedBuffer->getCPUObjectData(),
+                        mergedBuffer->getObjectCount());
+                }
+            }
+        }
+
+        auto* storage = giCascadeManager->getProbeStorage();
+
+        if (storage && giProbeBuffersNeedInit)
+        {
+            storage->uploadToGPU(cmd);
+            giProbeBuffersNeedInit = false;
+
+            vk::MemoryBarrier initBarrier{
+                vk::AccessFlagBits::eTransferWrite,
+                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+            };
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::DependencyFlags{},
+                1, &initBarrier, 0, nullptr, 0, nullptr);
+        }
+
+        auto batches = giCascadeManager->getProbeUpdateBatches();
+
+        if (!storage || batches.empty())
+        {
+            return;
+        }
+
+        vk::MemoryBarrier giBarrier{
+            vk::AccessFlagBits::eShaderWrite,
+            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags{},
+            1, &giBarrier, 0, nullptr, 0, nullptr);
+
+        for (const auto& batch : batches)
+        {
+            gi::GIComputePushConstants push{};
+            push.cascadeIndex = batch.cascadeIndex;
+            push.probeStartIndex = batch.probeStartOffset;
+            push.probeCount = batch.probeCount;
+            push.raysPerProbe = batch.isFarField
+                ? cachedGISettings.farFieldRaysPerUpdate
+                : cachedGISettings.probeRaysPerUpdate;
+            push.maxDistance = batch.isFarField
+                ? cachedGISettings.farFieldMaxDistance
+                : cachedGISettings.maxProbeDistance;
+            push.temporalBlend = cachedGISettings.temporalBlendFactor;
+            push.frameRandom = static_cast<float>(giCascadeManager->getFrameIndex()) * 0.1f;
+            push.frameIndex = giCascadeManager->getFrameIndex();
+
+            vk::DescriptorSet tlasSet = (accelStructManager && accelStructManager->isTLASReady())
+                ? accelStructManager->getTLASDescriptorSet()
+                : vk::DescriptorSet{};
+
+            vk::DescriptorSet lightSet = lightBufferManager
+                ? lightBufferManager->getDescriptorSet()
+                : vk::DescriptorSet{};
+
+            giTracePipeline->dispatch(cmd,
+                                       storage->getProbeDataDescSet(),
+                                       giCascadeManager->getCascadeInfoDescSet(),
+                                       push,
+                                       tlasSet,
+                                       lightSet);
+        }
+
+        vk::MemoryBarrier computeBarrier{
+            vk::AccessFlagBits::eShaderWrite,
+            vk::AccessFlagBits::eTransferRead
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::DependencyFlags{},
+            1, &computeBarrier, 0, nullptr, 0, nullptr);
+
+        storage->swapBuffers();
+
+        {
+            constexpr vk::DeviceSize probeSize = sizeof(gi::ProbeData);
+            uint32_t totalProbes = storage->getProbeCount();
+
+            std::vector<std::pair<uint32_t, uint32_t>> updatedRanges;
+            updatedRanges.reserve(batches.size());
+            for (const auto& batch : batches)
+            {
+                updatedRanges.emplace_back(batch.probeStartOffset, batch.probeStartOffset + batch.probeCount);
+            }
+            std::sort(updatedRanges.begin(), updatedRanges.end());
+
+            std::vector<vk::BufferCopy> copyRegions;
+            uint32_t cursor = 0;
+            for (const auto& [start, end] : updatedRanges)
+            {
+                if (start > cursor)
+                {
+                    copyRegions.push_back({cursor * probeSize, cursor * probeSize, (start - cursor) * probeSize});
+                }
+                cursor = std::max(cursor, end);
+            }
+            if (cursor < totalProbes)
+            {
+                copyRegions.push_back({cursor * probeSize, cursor * probeSize, (totalProbes - cursor) * probeSize});
+            }
+
+            if (!copyRegions.empty())
+            {
+                cmd.copyBuffer(storage->getReadBuffer(), storage->getWriteBuffer(),
+                               static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+            }
+        }
+
+        vk::MemoryBarrier copyBarrier{
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags{},
+            1, &copyBarrier, 0, nullptr, 0, nullptr);
+
+        auto samplingSet = storage->getSamplingDescSet();
+        if (meshShaderPipeline)
+            meshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+        if (transparentMeshShaderPipeline)
+            transparentMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
+        if (wboitMeshShaderPipeline)
+            wboitMeshShaderPipeline->updateGIProbeDescriptor(samplingSet);
     }
 
     void GPUDrivenRenderer::initLightStreaming(const lighting::LightStreamingConfig& config)
@@ -523,7 +519,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Initialize cascade manager for probe-based GI (Medium+ quality)
         if (settings.quality >= gi::GIQuality::Medium)
         {
             giCascadeManager = std::make_unique<gi::RadianceCascadeManager>(device);
@@ -532,7 +527,6 @@ namespace render::gpudriven
             auto* storage = giCascadeManager->getProbeStorage();
             if (storage && storage->isInitialized())
             {
-                // Initialize acceleration structure manager for ray queries
                 vk::DescriptorSetLayout tlasLayout = nullptr;
                 if (device.isRayQuerySupported())
                 {
@@ -566,7 +560,6 @@ namespace render::gpudriven
                                            storage->getCascadeInfoLayout());
                 }
 
-                // Recreate mesh shader pipelines with GI sampling layout and update descriptors
                 if (meshShaderPipeline && shadowSystem)
                 {
                     MeshPipelineInitInfo pipelineInfo{
@@ -607,10 +600,8 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::cleanupGI()
     {
-        // Wait for all in-flight commands that reference GI descriptor sets
         device.getLogicalDevice().waitIdle();
 
-        // Clear stale GI descriptor handles from pipelines BEFORE destroying the pool
         if (meshShaderPipeline)
             meshShaderPipeline->updateGIProbeDescriptor(vk::DescriptorSet{});
         if (transparentMeshShaderPipeline)
@@ -640,7 +631,6 @@ namespace render::gpudriven
             cleanupGI();
             initGI(settings);
 
-            // If initGI returned early (disabled/Off), recreate pipelines without GI
             if (!giCascadeManager && meshShaderPipeline && shadowSystem && cachedRenderPass)
             {
                 MeshPipelineInitInfo pipelineInfo{

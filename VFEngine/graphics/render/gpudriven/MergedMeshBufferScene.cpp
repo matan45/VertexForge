@@ -278,15 +278,12 @@ namespace render::gpudriven
                     populateObjectData(obj, meshRender, submeshLoc, resolvers);
                     obj.entityId = currentObjectCount;
 
-                    // Use the first instance as representative for LOD/culling
                     obj.modelMatrix = meshRender.instanceTransforms[0];
 
-                    // Pack instancing data
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount; // instanceOffset
                     obj.flags |= ObjectFlags::Instanced;
 
-                    // Fill instance transform buffer
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
                         cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
@@ -316,7 +313,6 @@ namespace render::gpudriven
                 populateObjectData(obj, meshRender, submeshLoc, resolvers);
                 obj.entityId = currentObjectCount;
 
-                // Non-instanced: instanceCount = 1, no instance buffer needed
                 uint32_t one = 1;
                 std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
                 obj.instanceData.w = 0;
@@ -350,7 +346,6 @@ namespace render::gpudriven
         // Instanced groups are processed here (sequential) because they write to
         // the shared instance transform buffer with offsets.
         parallelWorkItems.clear();
-        parallelTemplates.clear();
 
         for (const auto& meshRender : renderData)
         {
@@ -429,7 +424,7 @@ namespace render::gpudriven
                         }
                     }
 
-                    parallelWorkItems.push_back({&meshRender, &submeshLoc, nullptr, -1});
+                    parallelWorkItems.push_back({&meshRender, &submeshLoc});
                 }
             }
         }
@@ -439,7 +434,6 @@ namespace render::gpudriven
 
         if (totalWork > 0)
         {
-            // ── Phase 2: Parallel object data population for non-instanced objects ──
             std::atomic<uint32_t> transparentCount{0};
 
             threading::JobSystem::instance().parallelFor(totalWork,
@@ -454,7 +448,6 @@ namespace render::gpudriven
                         populateObjectData(obj, *work.meshRender, *work.submeshLoc, resolvers);
                         obj.entityId = objIdx;
 
-                        // Non-instanced: instanceCount = 1
                         uint32_t one = 1;
                         std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
                         obj.instanceData.w = 0;

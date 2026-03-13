@@ -278,7 +278,6 @@ namespace controllers
                 uint32_t emitterIdx = it->second.gpuEmitterIndex;
                 emitterIndexToInstanceId.erase(emitterIdx);
 
-                // Return to pool if available, otherwise defer free
                 if (emitterPool)
                 {
                     pendingEmitterFrees.emplace_back(emitterIdx, frameNumber);
@@ -296,7 +295,6 @@ namespace controllers
 
             instances.erase(it);
 
-            // Destroy any sub-emitters owned by this instance
             std::vector<VFXInstanceId> subToDestroy;
             for (auto& sub : activeSubEmitters)
             {
@@ -357,7 +355,6 @@ namespace controllers
             gpuBufferManager->resetAllocator();
         }
 
-        // Re-warm the pool after reset
         if (emitterPool && gpuBufferManager)
         {
             emitterPool->warmUp();
@@ -491,7 +488,6 @@ namespace controllers
             uint32_t framesPassed = frameNumber - destroyedFrame;
             if (framesPassed >= FRAMES_BEFORE_FREE)
             {
-                // Return to pool instead of freeing
                 if (emitterPool)
                 {
                     emitterPool->release(emitterIndex);
@@ -541,7 +537,6 @@ namespace controllers
         currentCameraPos = camera.cameraPos;
         currentTime = camera.time;
 
-        // Extract frustum planes for culling
         extractFrustumPlanes(currentProjection * currentView);
 
         if (cpuPipeline && cpuPipeline->isInitialized())

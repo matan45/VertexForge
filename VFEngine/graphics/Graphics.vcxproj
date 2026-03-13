@@ -101,6 +101,7 @@
   <ItemGroup>
     <ClInclude Include="animation\AnimationBlender.hpp" />
     <ClInclude Include="animation\AnimationComputePipeline.hpp" />
+    <ClInclude Include="animation\AnimationDataCache.hpp" />
     <ClInclude Include="animation\AnimationEvaluator.hpp" />
     <ClInclude Include="animation\AnimationGPUData.hpp" />
     <ClInclude Include="animation\AnimationLOD.hpp" />
@@ -110,6 +111,7 @@
     <ClInclude Include="animation\IKPostProcess.hpp" />
     <ClInclude Include="animation\IKSolver.hpp" />
     <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
+    <ClInclude Include="animation\SocketAttachmentUpdater.hpp" />
     <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
@@ -177,7 +179,6 @@
     <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
     <ClInclude Include="render\gpudriven\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\BrushComputePipeline.hpp" />
-    <ClInclude Include="render\gpudriven\CrossfadeConfig.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
@@ -220,7 +221,6 @@
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\LightOcclusionCulling.hpp" />
-    <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\postprocess\PostProcessEffect.hpp" />
     <ClInclude Include="render\postprocess\PostProcessPipeline.hpp" />
     <ClInclude Include="render\postprocess\effects\BloomEffect.hpp" />
@@ -309,6 +309,7 @@
   <ItemGroup>
     <ClCompile Include="animation\AnimationBlender.cpp" />
     <ClCompile Include="animation\AnimationComputePipeline.cpp" />
+    <ClCompile Include="animation\AnimationDataCache.cpp" />
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="animation\AnimationLOD.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
@@ -317,6 +318,7 @@
     <ClCompile Include="animation\IKPostProcess.cpp" />
     <ClCompile Include="animation\IKSolver.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
+    <ClCompile Include="animation\SocketAttachmentUpdater.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
@@ -437,7 +439,6 @@
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\LightOcclusionCulling.cpp" />
-    <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
     <ClCompile Include="render\postprocess\PostProcessPipeline.cpp" />
     <ClCompile Include="render\postprocess\effects\BloomEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
@@ -549,7 +550,6 @@
     <None Include="..\..\resources\shaders\gpudriven\task_billboard.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_terrain.glsl" />
-    <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
     <None Include="..\..\resources\shaders\hiz\light_occlusion_cull.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />

@@ -534,6 +534,8 @@ namespace render::gpudriven
     private:
         bool registerMaterialTextures(const std::string& materialPath);
         void registerTerrainLayerTextures(const std::string& materialPath);
+        void registerTextureDependencies(const std::string& materialPath,
+                                          const std::vector<std::string>& texturePaths);
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
@@ -550,5 +552,10 @@ namespace render::gpudriven
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
+        void updateLightCullingState(vk::CommandBuffer cmd);
+        void dispatchVolumetricFog(vk::CommandBuffer cmd);
+        void dispatchGIProbeUpdate(vk::CommandBuffer cmd);
+
+        static uint64_t makeTileKey(int32_t x, int32_t z);
     };
 }

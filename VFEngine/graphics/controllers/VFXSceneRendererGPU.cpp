@@ -109,7 +109,6 @@ namespace controllers
                 gpuBufferManager->getRibbonHeadBufferSize()
             );
 
-            // Create emitter pool with warm slots for fast streaming reuse
             emitterPool = std::make_unique<render::vfx::VFXEmitterPool>(*gpuBufferManager, 32);
             emitterPool->warmUp();
 
@@ -193,13 +192,11 @@ namespace controllers
             return;
         }
 
-        // Upload scene colliders to GPU
         if (sceneColliderCount > 0)
         {
             gpuBufferManager->updateSceneColliders(sceneColliders, sceneColliderCount);
         }
 
-        // Upload terrain heightfield to GPU
         if (terrainDirty)
         {
             if (terrainHeader.enabled && !terrainHeights.empty())
@@ -238,7 +235,6 @@ namespace controllers
                 continue;
             }
 
-            // Update LOD based on camera distance
             updateInstanceLOD(instance);
 
             // Override transform for camera-relative emitters (weather effects)
@@ -262,7 +258,6 @@ namespace controllers
 
             if (instance.active && canSpawn)
             {
-                // Apply LOD spawn rate multiplier
                 float lodAdjustedRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
                 instance.spawnAccumulator += lodAdjustedRate * effectiveDt;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
@@ -287,7 +282,6 @@ namespace controllers
                 gpuConfig.softParticleDistance = 0.0f;
             }
 
-            // Apply LOD-scaled spawn rate to GPU config
             gpuConfig.spawnRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
 
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
@@ -564,7 +558,6 @@ namespace controllers
                 continue;
             }
 
-            // Skip compute dispatch for emitters fully outside the frustum
             if (!isEmitterInFrustum(instance))
             {
                 continue;
@@ -651,7 +644,6 @@ namespace controllers
         {
             const auto& event = lastFrameEvents[i];
 
-            // Find parent instance by emitter index via reverse map
             auto mapIt = emitterIndexToInstanceId.find(event.emitterIndex);
             if (mapIt == emitterIndexToInstanceId.end())
                 continue;
@@ -678,7 +670,6 @@ namespace controllers
                 continue;
             }
 
-            // Resolve .vfx path from event type
             std::string vfxPath;
             const auto& eventConfig = parentInstance->config.events;
 
@@ -703,7 +694,6 @@ namespace controllers
                 continue;
             }
 
-            // Count existing sub-emitters for this parent
             uint32_t parentSubCount = 0;
             for (const auto& sub : activeSubEmitters)
             {
@@ -718,7 +708,6 @@ namespace controllers
                 continue;
             }
 
-            // Create sub-emitter instance at event position
             VFXRuntimeParams subParams;
             subParams.vfxAssetPath = vfxPath;
             subParams.worldTransform = glm::translate(glm::mat4(1.0f),
@@ -735,7 +724,6 @@ namespace controllers
                 subEmitter.subId = subId;
                 subEmitter.lifetime = 0.0f;
 
-                // Use the sub-emitter's configured lifetime as max lifetime
                 auto subIt = instances.find(subId);
                 if (subIt != instances.end())
                 {
@@ -745,7 +733,6 @@ namespace controllers
                 activeSubEmitters.push_back(subEmitter);
             }
 
-            // Publish CQRS notification for external systems
             services::events::vfxruntime::VFXParticleEventNotification notification;
             notification.eventType = event.eventType;
             notification.position = glm::vec3(event.position.x, event.position.y, event.position.z);
@@ -775,7 +762,6 @@ namespace controllers
         // Far
         frustumPlanes[5] = glm::vec4(m[0][3] - m[0][2], m[1][3] - m[1][2], m[2][3] - m[2][2], m[3][3] - m[3][2]);
 
-        // Normalize planes
         for (int i = 0; i < 6; ++i)
         {
             float len = glm::length(glm::vec3(frustumPlanes[i]));
@@ -792,7 +778,6 @@ namespace controllers
         if (!frustumPlanesValid)
             return true;
 
-        // Camera-relative emitters are always visible
         if (instance.cameraRelative)
             return true;
 
@@ -807,7 +792,6 @@ namespace controllers
             instance.config.lifetime * instance.config.startSpeed,
             maxDim) + 5.0f; // margin to avoid pop-in
 
-        // Test sphere against all 6 planes
         for (int i = 0; i < 6; ++i)
         {
             float dist = glm::dot(glm::vec3(frustumPlanes[i]), emitterPos) + frustumPlanes[i].w;

@@ -26,7 +26,6 @@ namespace animation
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
 
-        // GPU buffers for animation data
         vk::Buffer requestBuffer;
         vk::DeviceMemory requestBufferMemory;
         void* requestMapped = nullptr;
@@ -64,16 +63,9 @@ namespace animation
         void cleanup();
         bool isInitialized() const { return initialized; }
 
-        // Upload animation/skeleton data to GPU (call when data changes)
         void uploadAnimationData(const AnimationGPUUploadData& data);
-
-        // Update per-frame evaluation requests
         void updateRequests(const std::vector<GPUAnimEvalRequest>& requests);
-
-        // Dispatch compute shader (call before mesh shader culling)
         void dispatch(vk::CommandBuffer cmd, uint32_t entityCount, vk::Buffer outputBoneBuffer);
-
-        // Insert memory barriers after dispatch
         void insertBarriersAfterDispatch(vk::CommandBuffer cmd, vk::Buffer outputBoneBuffer);
     };
 }

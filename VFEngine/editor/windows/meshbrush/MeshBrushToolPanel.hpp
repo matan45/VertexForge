@@ -38,6 +38,8 @@ namespace windows
         void subscribe();
         void drawBrushSettings();
         void drawPaletteSection();
+        void drawPaletteCombo();
+        void drawPaletteEntry(int index, int& removeIndex);
         void pushParams();
     };
 }

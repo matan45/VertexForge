@@ -27,7 +27,6 @@ namespace animation
         uint32_t framesSinceLastEval = 0;
         float distanceSquared = 0.0f;
 
-        // Cached poses for LOD 1 interpolation
         std::vector<glm::mat4> cachedPoseA;
         std::vector<glm::mat4> cachedPoseB;
         bool hasCachedPoseA = false;
@@ -46,14 +45,12 @@ namespace animation
         AnimationLODLevel computeLODLevel(float distanceSquared) const;
         bool shouldEvaluateThisFrame(const EntityAnimationLODState& state) const;
 
-        void updateEntityLOD(EntityAnimationLODState& state, float distanceSquared, float deltaTime);
+        void updateEntityLOD(EntityAnimationLODState& state, float distanceSquared);
 
-        // Interpolate between cached poses for skipped frames (LOD 1)
         void interpolateCachedPoses(const EntityAnimationLODState& state,
                                      float t,
                                      std::vector<glm::mat4>& outMatrices) const;
 
-        // Cache a new pose (shifts B→A, stores new in B)
         void cachePose(EntityAnimationLODState& state, const std::vector<glm::mat4>& pose);
 
         uint32_t getLODCount(AnimationLODLevel level) const { return lodCounts[static_cast<uint8_t>(level)]; }

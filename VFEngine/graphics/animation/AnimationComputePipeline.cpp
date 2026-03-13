@@ -25,8 +25,6 @@ namespace animation
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create descriptor set layout (8 bindings: requests, skeleton, clipHeaders,
-        // channelHeaders, positionKeys, rotationKeys, scaleKeys, outputBones)
         std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
         for (uint32_t i = 0; i < 8; ++i)
         {
@@ -41,17 +39,14 @@ namespace animation
         layoutInfo.pBindings = bindings.data();
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Create pipeline layout
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayout = vkDevice.createPipelineLayout(pipelineLayoutInfo);
 
-        // Create compute shader
         shader = std::make_unique<core::Shader>(device);
         shader->readShader("../../resources/shaders/animation/bone_evaluate.glsl");
 
-        // Create compute pipeline
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
@@ -69,7 +64,6 @@ namespace animation
         }
         computePipeline = result.value;
 
-        // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 8;
@@ -80,14 +74,12 @@ namespace animation
         poolInfo.pPoolSizes = &poolSize;
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
         descriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // Create request buffer (host-visible, updated every frame)
         {
             const auto& logicalDevice = device.getLogicalDevice();
             const auto& physicalDevice = device.getPhysicalDevice();
@@ -168,7 +160,6 @@ namespace animation
             if (vec.empty())
                 return;
 
-            // Destroy old buffer if exists
             core::BufferUtilities::destroyBuffer(vkDevice, buffer, memory);
 
             vk::DeviceSize size = vec.size() * elemSize;
@@ -178,7 +169,6 @@ namespace animation
             bufReq.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(bufReq, buffer, memory);
 
-            // Upload via staging
             vk::Buffer staging;
             vk::DeviceMemory stagingMem;
             core::BufferInfoRequest stagingReq(vkDevice, physicalDevice);
@@ -192,7 +182,6 @@ namespace animation
             std::memcpy(mapped, vec.data(), size);
             vkDevice.unmapMemory(stagingMem);
 
-            // Copy
             vk::CommandPool cmdPool = device.getStagingCommandPool();
             vk::CommandBufferAllocateInfo cmdAllocInfo{};
             cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -249,7 +238,6 @@ namespace animation
             return;
         }
 
-        // Update descriptors if needed
         if (descriptorsNeedUpdate)
         {
             vk::Device vkDevice = device.getLogicalDevice();
@@ -282,7 +270,6 @@ namespace animation
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, descriptorSet, {});
 
-        // 1 workgroup per entity, workgroup size = 128 (max bones per entity)
         cmd.dispatch(entityCount, 1, 1);
     }
 

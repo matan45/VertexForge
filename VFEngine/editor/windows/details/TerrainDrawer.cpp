@@ -51,286 +51,11 @@ namespace windows::details {
         {
             ImGui::Indent(10.0f);
 
-            const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
-            int resIndex = static_cast<int>(terrain.resolution);
-            if (resIndex >= 0 && resIndex < 4)
-            {
-                ImGui::Text("Resolution: %s", resolutionNames[resIndex]);
-            }
-
-            ImGui::Text("Tile Size: %.1f units", terrain.worldTileSize);
-            ImGui::Text("Height Range: %.1f to %.1f", terrain.minHeight, terrain.maxHeight);
-
-            int gridWidth = terrain.gridMaxX - terrain.gridMinX + 1;
-            int gridDepth = terrain.gridMaxZ - terrain.gridMinZ + 1;
-            ImGui::Text("Grid: %d x %d tiles", gridWidth, gridDepth);
-            ImGui::Text("Tile Count: %u", terrain.tileCount);
-
-            ImGui::Separator();
-
-            ImGui::Text("Active: %s", terrain.isActive ? "Yes" : "No");
-            ImGui::Text("Dirty: %s", terrain.isDirty ? "Yes" : "No");
-
-            ImGui::Separator();
-
-            ImGui::Text("Active Tiles: %u", terrain.activeTileCount);
-            ImGui::Text("Visible Tiles: %u", terrain.visibleTileCount);
-
-            if (!terrain.heightmapPath.empty())
-            {
-                ImGui::Separator();
-                ImGui::Text("Heightmap:");
-                ImGui::TextWrapped("%s", terrain.heightmapPath.c_str());
-            }
-
-            ImGui::Separator();
-            ImGui::Text("Save");
-
-            if (!terrain.savePath.empty())
-            {
-                std::filesystem::path p(terrain.savePath);
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "File: %s", p.filename().string().c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("Not saved");
-            }
-
-            ImGui::BeginDisabled(isSaving);
-
-            if (!terrain.savePath.empty())
-            {
-                if (ImGui::Button("Save"))
-                {
-                    startSave(handle, terrain.savePath);
-                }
-                ImGui::SameLine();
-            }
-
-            if (ImGui::Button("Save As..."))
-            {
-                startSaveAs(handle);
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Load..."))
-            {
-                startLoad();
-            }
-
-            ImGui::EndDisabled();
-
-            if (isSaving)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Saving...");
-            }
-
-            if (!saveStatusMessage.empty())
-            {
-                statusFrameCounter--;
-                if (statusFrameCounter <= 0)
-                {
-                    saveStatusMessage.clear();
-                }
-                else
-                {
-                    bool isError = saveStatusMessage.find("Failed") != std::string::npos;
-                    ImVec4 color = isError
-                        ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
-                        : ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
-                    ImGui::TextColored(color, "%s", saveStatusMessage.c_str());
-                }
-            }
-
-            ImGui::Separator();
-            ImGui::Text("Grid Expansion");
-
-            ImGui::InputInt("Tile X", &pendingTileX);
-            ImGui::InputInt("Tile Z", &pendingTileZ);
-
-            if (ImGui::Button("Add Tile"))
-            {
-                events::terrain::AddTerrainTileCommand cmd;
-                cmd.terrainEntity = handle;
-                cmd.tileX = pendingTileX;
-                cmd.tileZ = pendingTileZ;
-                bool result = dispatcher.execute(cmd);
-                if (!result)
-                {
-                    saveStatusMessage = "Tile already exists or add failed";
-                    statusFrameCounter = 180;
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Remove Tile"))
-            {
-                events::terrain::RemoveTerrainTileCommand cmd;
-                cmd.terrainEntity = handle;
-                cmd.tileX = pendingTileX;
-                cmd.tileZ = pendingTileZ;
-                bool result = dispatcher.execute(cmd);
-                if (!result)
-                {
-                    saveStatusMessage = "Tile not found or remove failed";
-                    statusFrameCounter = 180;
-                }
-            }
-
-            ImGui::Separator();
-            ImGui::Text("World Streaming");
-
-            {
-                events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
-                enabledQuery.terrainEntity = handle;
-                bool streamingEnabled = dispatcher.query(enabledQuery);
-
-                if (ImGui::Checkbox("Enable Streaming", &streamingEnabled))
-                {
-                    events::terrain::SetTerrainStreamingEnabledCommand cmd;
-                    cmd.terrainEntity = handle;
-                    cmd.enabled = streamingEnabled;
-                    dispatcher.execute(cmd);
-                }
-
-                events::terrain::GetTerrainStreamingConfigQuery configQuery;
-                configQuery.terrainEntity = handle;
-                auto streamConfig = dispatcher.query(configQuery);
-
-                bool configChanged = false;
-
-                if (ImGui::SliderFloat("Load Radius", &streamConfig.loadRadius, 64.0f, 2048.0f, "%.0f"))
-                    configChanged = true;
-
-                if (ImGui::SliderFloat("Unload Radius", &streamConfig.unloadRadius, 64.0f, 2048.0f, "%.0f"))
-                    configChanged = true;
-
-                if (streamConfig.unloadRadius < streamConfig.loadRadius)
-                    streamConfig.unloadRadius = streamConfig.loadRadius * 1.25f;
-
-                if (ImGui::SliderInt("Max Loads/Frame", &streamConfig.maxLoadsPerFrame, 1, 16))
-                    configChanged = true;
-
-                if (ImGui::SliderInt("Max Unloads/Frame", &streamConfig.maxUnloadsPerFrame, 1, 16))
-                    configChanged = true;
-
-                if (configChanged)
-                {
-                    events::terrain::SetTerrainStreamingConfigCommand cmd;
-                    cmd.terrainEntity = handle;
-                    cmd.loadRadius = streamConfig.loadRadius;
-                    cmd.unloadRadius = streamConfig.unloadRadius;
-                    cmd.maxLoadsPerFrame = streamConfig.maxLoadsPerFrame;
-                    cmd.maxUnloadsPerFrame = streamConfig.maxUnloadsPerFrame;
-                    dispatcher.execute(cmd);
-                }
-
-                if (streamingEnabled && ImGui::Button("Load All Tiles"))
-                {
-                    events::terrain::LoadAllTilesCommand cmd;
-                    cmd.terrainEntity = handle;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
-                                      "Re-enable streaming via the checkbox above.");
-                }
-            }
-
-            ImGui::Separator();
-            ImGui::Text("Physics");
-
-            events::physics::HasTerrainColliderQuery hasColliderQuery;
-            hasColliderQuery.terrainEntity = handle;
-            bool hasCollider = dispatcher.query(hasColliderQuery);
-
-            if (!hasCollider)
-            {
-                if (ImGui::Button("Add Collider"))
-                {
-                    events::physics::AddTerrainColliderCommand cmd;
-                    cmd.terrainEntity = handle;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Creates a static HeightField collider for all tiles");
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Collider Active");
-                ImGui::SameLine();
-                if (ImGui::Button("Remove Collider"))
-                {
-                    events::physics::RemoveTerrainColliderCommand cmd;
-                    cmd.terrainEntity = handle;
-                    dispatcher.execute(cmd);
-                }
-
-                std::vector<types::CollisionLayer> layers;
-                try
-                {
-                    events::physics::GetCollisionLayersQuery layersQuery;
-                    layers = dispatcher.query(layersQuery);
-                }
-                catch (...) {}
-
-                if (layers.empty())
-                    layers = types::PhysicsSettings::createDefault().layers;
-
-                if (!layers.empty())
-                {
-                    std::vector<std::string> layerLabels;
-                    int currentIndex = 0;
-                    for (size_t i = 0; i < layers.size(); ++i)
-                    {
-                        layerLabels.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
-                        if (layers[i].index == terrain.colliderCollisionLayer)
-                            currentIndex = static_cast<int>(i);
-                    }
-
-                    if (ImGui::BeginCombo("Collision Layer", layerLabels[currentIndex].c_str()))
-                    {
-                        for (size_t i = 0; i < layers.size(); ++i)
-                        {
-                            bool isSelected = (layers[i].index == terrain.colliderCollisionLayer);
-                            if (ImGui::Selectable(layerLabels[i].c_str(), isSelected))
-                            {
-                                events::terrain::SetTerrainColliderPropertiesCommand propCmd;
-                                propCmd.entity = handle;
-                                propCmd.collisionLayer = layers[i].index;
-                                propCmd.friction = terrain.colliderFriction;
-                                propCmd.restitution = terrain.colliderRestitution;
-                                dispatcher.execute(propCmd);
-                            }
-                            if (isSelected) ImGui::SetItemDefaultFocus();
-                        }
-                        ImGui::EndCombo();
-                    }
-                }
-
-                float friction = terrain.colliderFriction;
-                if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
-                {
-                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
-                    propCmd.entity = handle;
-                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
-                    propCmd.friction = friction;
-                    propCmd.restitution = terrain.colliderRestitution;
-                    dispatcher.execute(propCmd);
-                }
-
-                float restitution = terrain.colliderRestitution;
-                if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
-                {
-                    events::terrain::SetTerrainColliderPropertiesCommand propCmd;
-                    propCmd.entity = handle;
-                    propCmd.collisionLayer = terrain.colliderCollisionLayer;
-                    propCmd.friction = terrain.colliderFriction;
-                    propCmd.restitution = restitution;
-                    dispatcher.execute(propCmd);
-                }
-            }
+            drawInfo(terrain);
+            drawSaveLoad(handle, terrain);
+            drawGridExpansion(handle);
+            drawStreaming(handle);
+            drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
         }
@@ -338,6 +63,306 @@ namespace windows::details {
         ImGui::PopID();
 
         return true;
+    }
+
+    void TerrainDrawer::drawInfo(const services::TerrainData& terrain)
+    {
+        const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
+        int resIndex = static_cast<int>(terrain.resolution);
+        if (resIndex >= 0 && resIndex < 4)
+        {
+            ImGui::Text("Resolution: %s", resolutionNames[resIndex]);
+        }
+
+        ImGui::Text("Tile Size: %.1f units", terrain.worldTileSize);
+        ImGui::Text("Height Range: %.1f to %.1f", terrain.minHeight, terrain.maxHeight);
+
+        int gridWidth = terrain.gridMaxX - terrain.gridMinX + 1;
+        int gridDepth = terrain.gridMaxZ - terrain.gridMinZ + 1;
+        ImGui::Text("Grid: %d x %d tiles", gridWidth, gridDepth);
+        ImGui::Text("Tile Count: %u", terrain.tileCount);
+
+        ImGui::Separator();
+
+        ImGui::Text("Active: %s", terrain.isActive ? "Yes" : "No");
+        ImGui::Text("Dirty: %s", terrain.isDirty ? "Yes" : "No");
+
+        ImGui::Separator();
+
+        ImGui::Text("Active Tiles: %u", terrain.activeTileCount);
+        ImGui::Text("Visible Tiles: %u", terrain.visibleTileCount);
+
+        if (!terrain.heightmapPath.empty())
+        {
+            ImGui::Separator();
+            ImGui::Text("Heightmap:");
+            ImGui::TextWrapped("%s", terrain.heightmapPath.c_str());
+        }
+    }
+
+    void TerrainDrawer::drawSaveLoad(services::EntityHandle handle, const services::TerrainData& terrain)
+    {
+        ImGui::Separator();
+        ImGui::Text("Save");
+
+        if (!terrain.savePath.empty())
+        {
+            std::filesystem::path p(terrain.savePath);
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "File: %s", p.filename().string().c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("Not saved");
+        }
+
+        ImGui::BeginDisabled(isSaving);
+
+        if (!terrain.savePath.empty())
+        {
+            if (ImGui::Button("Save"))
+            {
+                startSave(handle, terrain.savePath);
+            }
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button("Save As..."))
+        {
+            startSaveAs(handle);
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Load..."))
+        {
+            startLoad();
+        }
+
+        ImGui::EndDisabled();
+
+        if (isSaving)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Saving...");
+        }
+
+        if (!saveStatusMessage.empty())
+        {
+            statusFrameCounter--;
+            if (statusFrameCounter <= 0)
+            {
+                saveStatusMessage.clear();
+            }
+            else
+            {
+                bool isError = saveStatusMessage.find("Failed") != std::string::npos;
+                ImVec4 color = isError
+                    ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
+                    : ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
+                ImGui::TextColored(color, "%s", saveStatusMessage.c_str());
+            }
+        }
+    }
+
+    void TerrainDrawer::drawGridExpansion(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Separator();
+        ImGui::Text("Grid Expansion");
+
+        ImGui::InputInt("Tile X", &pendingTileX);
+        ImGui::InputInt("Tile Z", &pendingTileZ);
+
+        if (ImGui::Button("Add Tile"))
+        {
+            events::terrain::AddTerrainTileCommand cmd;
+            cmd.terrainEntity = handle;
+            cmd.tileX = pendingTileX;
+            cmd.tileZ = pendingTileZ;
+            bool result = dispatcher.execute(cmd);
+            if (!result)
+            {
+                saveStatusMessage = "Tile already exists or add failed";
+                statusFrameCounter = 180;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Remove Tile"))
+        {
+            events::terrain::RemoveTerrainTileCommand cmd;
+            cmd.terrainEntity = handle;
+            cmd.tileX = pendingTileX;
+            cmd.tileZ = pendingTileZ;
+            bool result = dispatcher.execute(cmd);
+            if (!result)
+            {
+                saveStatusMessage = "Tile not found or remove failed";
+                statusFrameCounter = 180;
+            }
+        }
+    }
+
+    void TerrainDrawer::drawStreaming(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Separator();
+        ImGui::Text("World Streaming");
+
+        events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
+        enabledQuery.terrainEntity = handle;
+        bool streamingEnabled = dispatcher.query(enabledQuery);
+
+        if (ImGui::Checkbox("Enable Streaming", &streamingEnabled))
+        {
+            events::terrain::SetTerrainStreamingEnabledCommand cmd;
+            cmd.terrainEntity = handle;
+            cmd.enabled = streamingEnabled;
+            dispatcher.execute(cmd);
+        }
+
+        events::terrain::GetTerrainStreamingConfigQuery configQuery;
+        configQuery.terrainEntity = handle;
+        auto streamConfig = dispatcher.query(configQuery);
+
+        bool configChanged = false;
+
+        if (ImGui::SliderFloat("Load Radius", &streamConfig.loadRadius, 64.0f, 2048.0f, "%.0f"))
+            configChanged = true;
+
+        if (ImGui::SliderFloat("Unload Radius", &streamConfig.unloadRadius, 64.0f, 2048.0f, "%.0f"))
+            configChanged = true;
+
+        if (streamConfig.unloadRadius < streamConfig.loadRadius)
+            streamConfig.unloadRadius = streamConfig.loadRadius * 1.25f;
+
+        if (ImGui::SliderInt("Max Loads/Frame", &streamConfig.maxLoadsPerFrame, 1, 16))
+            configChanged = true;
+
+        if (ImGui::SliderInt("Max Unloads/Frame", &streamConfig.maxUnloadsPerFrame, 1, 16))
+            configChanged = true;
+
+        if (configChanged)
+        {
+            events::terrain::SetTerrainStreamingConfigCommand cmd;
+            cmd.terrainEntity = handle;
+            cmd.loadRadius = streamConfig.loadRadius;
+            cmd.unloadRadius = streamConfig.unloadRadius;
+            cmd.maxLoadsPerFrame = streamConfig.maxLoadsPerFrame;
+            cmd.maxUnloadsPerFrame = streamConfig.maxUnloadsPerFrame;
+            dispatcher.execute(cmd);
+        }
+
+        if (streamingEnabled && ImGui::Button("Load All Tiles"))
+        {
+            events::terrain::LoadAllTilesCommand cmd;
+            cmd.terrainEntity = handle;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
+                              "Re-enable streaming via the checkbox above.");
+        }
+    }
+
+    void TerrainDrawer::drawPhysics(services::EntityHandle handle, const services::TerrainData& terrain)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Separator();
+        ImGui::Text("Physics");
+
+        events::physics::HasTerrainColliderQuery hasColliderQuery;
+        hasColliderQuery.terrainEntity = handle;
+        bool hasCollider = dispatcher.query(hasColliderQuery);
+
+        if (!hasCollider)
+        {
+            if (ImGui::Button("Add Collider"))
+            {
+                events::physics::AddTerrainColliderCommand cmd;
+                cmd.terrainEntity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Creates a static HeightField collider for all tiles");
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Collider Active");
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Collider"))
+            {
+                events::physics::RemoveTerrainColliderCommand cmd;
+                cmd.terrainEntity = handle;
+                dispatcher.execute(cmd);
+            }
+
+            std::vector<types::CollisionLayer> layers;
+            try
+            {
+                events::physics::GetCollisionLayersQuery layersQuery;
+                layers = dispatcher.query(layersQuery);
+            }
+            catch (...) {}
+
+            if (layers.empty())
+                layers = types::PhysicsSettings::createDefault().layers;
+
+            if (!layers.empty())
+            {
+                std::vector<std::string> layerLabels;
+                int currentIndex = 0;
+                for (size_t i = 0; i < layers.size(); ++i)
+                {
+                    layerLabels.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
+                    if (layers[i].index == terrain.colliderCollisionLayer)
+                        currentIndex = static_cast<int>(i);
+                }
+
+                if (ImGui::BeginCombo("Collision Layer", layerLabels[currentIndex].c_str()))
+                {
+                    for (size_t i = 0; i < layers.size(); ++i)
+                    {
+                        bool isSelected = (layers[i].index == terrain.colliderCollisionLayer);
+                        if (ImGui::Selectable(layerLabels[i].c_str(), isSelected))
+                        {
+                            events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                            propCmd.entity = handle;
+                            propCmd.collisionLayer = layers[i].index;
+                            propCmd.friction = terrain.colliderFriction;
+                            propCmd.restitution = terrain.colliderRestitution;
+                            dispatcher.execute(propCmd);
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+
+            float friction = terrain.colliderFriction;
+            if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
+            {
+                events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                propCmd.entity = handle;
+                propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                propCmd.friction = friction;
+                propCmd.restitution = terrain.colliderRestitution;
+                dispatcher.execute(propCmd);
+            }
+
+            float restitution = terrain.colliderRestitution;
+            if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
+            {
+                events::terrain::SetTerrainColliderPropertiesCommand propCmd;
+                propCmd.entity = handle;
+                propCmd.collisionLayer = terrain.colliderCollisionLayer;
+                propCmd.friction = terrain.colliderFriction;
+                propCmd.restitution = restitution;
+                dispatcher.execute(propCmd);
+            }
+        }
     }
 
     void TerrainDrawer::startSave(services::EntityHandle handle, const std::string& path)

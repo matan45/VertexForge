@@ -24,10 +24,6 @@ namespace render::gi
         vk::Pipeline computePipeline;
         vk::PipelineLayout pipelineLayout;
 
-        vk::DescriptorSetLayout traceDescriptorLayout;
-        vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet traceDescriptorSet;
-
         bool initialized = false;
 
     public:

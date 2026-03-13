@@ -22,17 +22,14 @@ namespace render::gi
         vk::Buffer probeBufferB;
         vk::DeviceMemory probeMemoryB;
 
-        // Staging buffer for initial upload
         vk::Buffer probeStagingBuffer;
         vk::DeviceMemory probeStagingMemory;
         void* probeStagingMapped = nullptr;
 
-        // Cascade info UBO
         vk::Buffer cascadeInfoBuffer;
         vk::DeviceMemory cascadeInfoMemory;
         void* cascadeInfoMapped = nullptr;
 
-        // Descriptors
         vk::DescriptorSetLayout probeDataLayout;
         vk::DescriptorSetLayout cascadeInfoLayout;
         vk::DescriptorSetLayout samplingLayout;  // Combined layout for fragment shader GI sampling
@@ -61,10 +58,8 @@ namespace render::gi
         void uploadCascadeInfo(const std::vector<CascadeLevel>& cascades);
         void uploadToGPU(vk::CommandBuffer cmd);
 
-        // Swap ping-pong buffers at end of frame
         void swapBuffers();
 
-        // Current frame writes to write buffer, reads from read buffer
         vk::Buffer getReadBuffer() const { return currentReadBuffer == 0 ? probeBufferA : probeBufferB; }
         vk::Buffer getWriteBuffer() const { return currentReadBuffer == 0 ? probeBufferB : probeBufferA; }
 

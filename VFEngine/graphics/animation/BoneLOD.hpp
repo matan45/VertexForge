@@ -8,18 +8,15 @@
 
 namespace animation
 {
-    // Maximum bones supported per skeleton for LOD bitset
     constexpr uint32_t MAX_SKELETON_BONES = 256;
 
-    // Bitset marking which bones are active at a given LOD level
     using BoneLODSet = std::bitset<MAX_SKELETON_BONES>;
 
     struct BoneLODSets
     {
-        BoneLODSet essential;  // Core bones (spine, arms, legs, head)
-        BoneLODSet full;       // All bones
+        BoneLODSet essential;
+        BoneLODSet full;
 
-        // LOD 0-1: full set, LOD 2: essential, LOD 3: none (frozen)
         const BoneLODSet& getSetForLOD(uint8_t lodLevel) const
         {
             if (lodLevel >= 2)
@@ -28,9 +25,6 @@ namespace animation
         }
     };
 
-    // Auto-generate bone LOD sets from skeleton hierarchy
-    // Detail bones: depth > maxEssentialDepth from root, or name contains
-    // finger/toe/face/eye/jaw keywords
     inline BoneLODSets generateBoneLODSets(const resource::SkeletonData& skeleton,
                                             int maxEssentialDepth = 4)
     {
@@ -38,14 +32,11 @@ namespace animation
         const size_t boneCount = skeleton.bones.size();
         if (boneCount == 0 || boneCount > MAX_SKELETON_BONES)
         {
-            // Fallback: all bones essential
             sets.full.set();
             sets.essential.set();
             return sets;
         }
 
-        // Compute depth for each bone in O(n) using topological order
-        // (Assimp guarantees parents come before children)
         std::vector<int> depths(boneCount, 0);
         for (size_t i = 0; i < boneCount; ++i)
         {
@@ -55,7 +46,6 @@ namespace animation
                 : 0;
         }
 
-        // Detail bone name keywords (case-insensitive check via lowercase)
         auto containsKeyword = [](const std::string& name) -> bool
         {
             std::string lower = name;

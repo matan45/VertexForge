@@ -36,6 +36,11 @@ namespace windows
         void draw(ViewPortGizmo& gizmo);
 
     private:
+        void drawToolbar(ViewPortGizmo& gizmo, ImGuiWindowFlags overlayFlags, const ImVec2& overlayPos);
+        void drawViewModeDropdown(ImGuiWindowFlags overlayFlags, const ImVec2& windowPos,
+                                  const ImVec2& contentMin);
+        bool isTerrainSelected() const;
+
         void loadIconAtlas();
         std::pair<glm::vec2, glm::vec2> getIconUV(ViewportIcon icon) const;
         bool iconButton(ViewportIcon icon, bool isActive, const char* tooltip);

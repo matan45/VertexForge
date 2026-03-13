@@ -9,9 +9,7 @@ namespace windows
     {
     private:
         bool visible = false;
-        int filterType = 0; // 0 = All in combo, effectiveFilter = filterType - 1
-        int sortColumn = 0;  // 0=path, 1=type, 2=refs, 3=memory, 4=state
-        bool sortAscending = true;
+        int filterType = 0;
 
         std::vector<resource::AssetEntry> cachedAssets;
         std::vector<resource::AssetEntry> cachedPending;

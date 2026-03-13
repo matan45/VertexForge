@@ -3,7 +3,6 @@
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "imgui.h"
 #include "print/Log.hpp"
-#include <stdexcept>
 
 namespace windows
 {
@@ -21,7 +20,6 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("VFX Debug Stats", &visible))
         {
-            // Emitter budget
             ImGui::Text("Emitters: %u / %u", stats.activeEmitters, stats.maxEmitters);
             if (stats.maxEmitters > 0)
             {
@@ -31,7 +29,6 @@ namespace windows
 
             ImGui::Spacing();
 
-            // Particle budget
             ImGui::Text("Particles: %u / %u", stats.allocatedParticles, stats.maxParticles);
             if (stats.maxParticles > 0)
             {
@@ -42,7 +39,6 @@ namespace windows
             ImGui::Spacing();
             ImGui::Separator();
 
-            // LOD breakdown
             ImGui::Text("LOD Distribution:");
             ImGui::Text("  LOD 0 (Full):    %u", stats.lodCounts[0]);
             ImGui::Text("  LOD 1 (Half):    %u", stats.lodCounts[1]);
@@ -52,7 +48,6 @@ namespace windows
             ImGui::Spacing();
             ImGui::Separator();
 
-            // Pool stats
             ImGui::Text("Emitter Pool:");
             ImGui::Text("  Warm (available): %u", stats.poolWarmSlots);
             ImGui::Text("  In use:           %u", stats.poolUsedSlots);
@@ -61,7 +56,6 @@ namespace windows
             ImGui::Spacing();
             ImGui::Separator();
 
-            // Fragmentation
             ImGui::Text("Buffer Fragmentation: %.1f%%", stats.fragmentationPercent);
             if (stats.fragmentationPercent > 50.0f)
             {

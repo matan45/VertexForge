@@ -123,6 +123,13 @@ namespace render::gpudriven
 
     void MergedMeshBuffer::createBuffers()
     {
+        createGeometryBuffers();
+        createObjectBuffers();
+        createInstanceBuffers();
+    }
+
+    void MergedMeshBuffer::createGeometryBuffers()
+    {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
@@ -149,6 +156,12 @@ namespace render::gpudriven
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
         }
+    }
+
+    void MergedMeshBuffer::createObjectBuffers()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+        const auto& physicalDevice = device.getPhysicalDevice();
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
@@ -171,8 +184,13 @@ namespace render::gpudriven
                 objectStagingMemory, 0, request.size, vk::MemoryMapFlags{}
             );
         }
+    }
 
-        // Instance transform buffer (device-local)
+    void MergedMeshBuffer::createInstanceBuffers()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+        const auto& physicalDevice = device.getPhysicalDevice();
+
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
@@ -182,7 +200,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, instanceTransformBuffer, instanceTransformBufferMemory);
         }
 
-        // Instance transform staging buffer (host-visible)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
@@ -544,7 +561,6 @@ namespace render::gpudriven
         size_t meshIdx = pathIt->second;
         auto& meshInfo = registeredMeshes[meshIdx];
 
-        // Free all LOD allocations for each submesh
         for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
         {
             std::string key = makeSubmeshKey(meshPath, meshInfo.submeshes[subIdx].submeshName, subIdx);
@@ -576,7 +592,6 @@ namespace render::gpudriven
 
         meshPathToIndex.erase(pathIt);
 
-        // Clear the mesh info and track slot for reuse
         meshInfo = MergedMeshInfo{};
         freeMeshSlots.push_back(meshIdx);
 

@@ -57,7 +57,6 @@ namespace controllers
         bool loop = true;
         bool active = true;
         uint32_t entityId = 0;
-        uint64_t uuid = 0;
 
         bool gpuDriven = false;
         uint32_t gpuEmitterIndex = UINT32_MAX;
@@ -69,7 +68,6 @@ namespace controllers
         services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
         bool cameraRelative = false;
 
-        // LOD state
         uint8_t currentLOD = 0;
         float lodSpawnMultiplier = 1.0f;
         float lodBias = 0.0f;
@@ -101,7 +99,7 @@ namespace controllers
 
         VFXInstanceId nextInstanceId = 1;
         bool initialized = false;
-        bool gpuDrivenEnabled = true;  // Enable GPU mode by default
+        bool gpuDrivenEnabled = true;
         uint32_t frameNumber = 0;
         static constexpr uint32_t FRAMES_BEFORE_FREE = 3;
 
@@ -129,11 +127,9 @@ namespace controllers
         bool distanceCullingEnabled = false;
         float maxVFXDistSq = 0.0f;
 
-        // Frustum culling
         glm::vec4 frustumPlanes[6]{};
         bool frustumPlanesValid = false;
 
-        // LOD thresholds (distances)
         float LOD0_DIST = 50.0f;
         float LOD1_DIST = 100.0f;
         float LOD2_DIST = 200.0f;

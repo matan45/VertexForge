@@ -6,17 +6,11 @@
 #include "../vegetation/VegetationGPUTypes.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
-#include "GPUDrivenCameraBuffer.hpp"
-#include "MeshShaderPipeline.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/Utilities.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "vegetation/WindConfig.hpp"
 #include "BindlessTextureManager.hpp"
-#include <glm/gtc/matrix_transform.hpp>
-#include <cmath>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -25,7 +19,7 @@
 
 namespace render::gpudriven
 {
-    static uint64_t makeTileKey(int32_t x, int32_t z)
+    uint64_t GPUDrivenRenderer::makeTileKey(int32_t x, int32_t z)
     {
         return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) |
                static_cast<uint64_t>(static_cast<uint32_t>(z));
@@ -35,7 +29,6 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Grass instance buffer (device-local for GPU compute output)
         vk::DeviceSize instanceSize = maxInstances * sizeof(vegetation::GrassInstanceGPU);
 
         core::BufferInfoRequest instanceRequest(vkDevice, device.getPhysicalDevice());
@@ -63,15 +56,12 @@ namespace render::gpudriven
     void GPUDrivenRenderer::initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                                       vk::RenderPass renderPass)
     {
-        // Wind system
         vegetation.windSystem = std::make_unique<vegetation::WindSystem>();
         vegetation.windSystem->init(device);
 
-        // Buffer manager for vegetation tile allocations
         vegetation.bufferManager = std::make_unique<vegetation::VegetationBufferManager>();
         vegetation.bufferManager->init(device);
 
-        // Grass stream manager
         vegetation.grassStreamManager = std::make_unique<vegetation::GrassStreamManager>();
         vegetation.grassStreamManager->init(device, *vegetation.bufferManager);
 
@@ -80,12 +70,9 @@ namespace render::gpudriven
         constexpr uint32_t initialGrassCapacity = 1024 * 1024; // ~1M instances
         createGrassBuffers(initialGrassCapacity);
 
-        // Grass compute pipeline
         vegetation.grassComputePipeline = std::make_unique<vegetation::GrassComputePipeline>();
         vegetation.grassComputePipeline->init(device);
 
-        // Grass mesh shader pipeline
-        // Use IBL descriptor set layout for camera data (set 1)
         vegetation.grassMeshPipeline = std::make_unique<vegetation::GrassMeshShaderPipeline>();
         vegetation.grassMeshPipeline->init(
             device,
@@ -146,7 +133,6 @@ namespace render::gpudriven
             uint64_t key = makeTileKey(cx, cz);
             currentlyLoaded.insert(key);
 
-            // Register new tiles with stream managers
             if (!vegetation.registeredTileKeys.contains(key))
             {
                 vegetation.registeredTileKeys.insert(key);
@@ -181,7 +167,6 @@ namespace render::gpudriven
             }
         }
 
-        // Run per-frame streaming updates
         if (vegetation.grassStreamManager)
         {
             vegetation.grassStreamManager->update(cameraPosition);
@@ -212,7 +197,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::clearVegetationData()
     {
-        // Remove all registered vegetation tiles and free their GPU buffers
         for (uint64_t key : vegetation.registeredTileKeys)
         {
             int32_t coordX = static_cast<int32_t>(key >> 32);
@@ -248,7 +232,6 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Unmap and destroy old staging buffer
         if (vegetation.tileStagingMapped)
         {
             vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
@@ -259,7 +242,6 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
 
-        // Per-tile data sizes
         vk::DeviceSize densityPerTile = texelsPerTile * sizeof(float);
         vk::DeviceSize heightPerTile = texelsPerTile * sizeof(float);
         vk::DeviceSize holePerTile = texelsPerTile * sizeof(uint32_t);
@@ -301,7 +283,6 @@ namespace render::gpudriven
         if (!vegetation.grassRenderingEnabled) return;
         if (!vegetation.grassComputePipeline || !vegetation.grassComputePipeline->isInitialized()) return;
 
-        // Collect tiles with density data
         struct TileDispatchInfo
         {
             const terrain::TerrainTile* tile;
@@ -327,7 +308,6 @@ namespace render::gpudriven
 
         uint32_t tileCount = static_cast<uint32_t>(dispatchTiles.size());
 
-        // Ensure buffers are large enough for all tiles
         ensureTileStagingBuffers(maxTexelCount, tileCount);
 
         // Per-tile slot layout in staging buffer:
@@ -348,10 +328,8 @@ namespace render::gpudriven
             vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
             vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
 
-            // Density
             std::memcpy(slotPtr, info.tile->vegetationDensity.densityData.data(), actualDensitySize);
 
-            // Height
             uint8_t* heightPtr = slotPtr + densityPerTile;
             if (info.tile->heightData.size() >= info.texelCount)
             {
@@ -362,7 +340,6 @@ namespace render::gpudriven
                 std::memset(heightPtr, 0, actualHeightSize);
             }
 
-            // Hole mask
             uint8_t* holePtr = slotPtr + densityPerTile + heightPerTile;
             if (info.tile->hasHoleMask())
             {
@@ -380,7 +357,6 @@ namespace render::gpudriven
 
         // Phase 2: GPU commands — reset counter, then per-tile copy+dispatch
 
-        // Reset counter to 0 on GPU timeline
         cmd.fillBuffer(vegetation.grassCounterBuffer, 0, sizeof(uint32_t), 0);
 
         vk::MemoryBarrier fillBarrier(
@@ -411,7 +387,6 @@ namespace render::gpudriven
             vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
             vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
 
-            // Copy this tile's data from staging to compute input buffers
             vk::BufferCopy densityCopy(stagingOffset, 0, actualDensitySize);
             cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeDensity, densityCopy);
 
@@ -483,7 +458,6 @@ namespace render::gpudriven
         uint32_t maxPossibleInstances = tileCount * maxTexelCount * 4;
         vegetation.currentGrassInstanceCount = std::min(maxPossibleInstances, vegetation.grassInstanceCapacity);
 
-        // Update mesh pipeline descriptors with the instance buffer
         if (vegetation.grassMeshPipeline)
         {
             vegetation.grassMeshPipeline->updateGrassDataDescriptors(
@@ -510,14 +484,11 @@ namespace render::gpudriven
             return;
         }
 
-        // Update shared descriptors
-        // Pass IBL descriptor set as camera data source
         vegetation.grassMeshPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             vegetation.windSystem ? vegetation.windSystem->getDescriptorSet() : vk::DescriptorSet{}
         );
 
-        // Dispatch grass mesh shader
         vegetation.grassMeshPipeline->dispatch(
             cmd,
             vegetation.currentGrassInstanceCount,
@@ -569,7 +540,6 @@ namespace render::gpudriven
                                              vegetation.grassCounterBuffer,
                                              vegetation.grassCounterBufferMemory);
 
-        // Unmap and destroy staging buffer
         if (vegetation.tileStagingMapped)
         {
             vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
@@ -577,7 +547,6 @@ namespace render::gpudriven
         }
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
 
-        // Destroy compute input buffers
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);

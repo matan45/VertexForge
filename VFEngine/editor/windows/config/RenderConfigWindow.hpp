@@ -27,6 +27,8 @@ namespace windows
         void saveToScene();
         void resetToDefaults();
         void applySettings();
+        void applyVFXLODSettings();
+        void applyAnimationLODSettings();
 
     public:
         void draw();

@@ -74,27 +74,32 @@ namespace windows
         shadowCmd.settings = settings;
         dispatcher.execute(shadowCmd);
 
-        {
-            services::events::vfxruntime::SetVFXLODConfigCommand cmd;
-            cmd.lod0Distance = settings.vfxLOD.lod0Distance;
-            cmd.lod1Distance = settings.vfxLOD.lod1Distance;
-            cmd.lod2Distance = settings.vfxLOD.lod2Distance;
-            cmd.transitionZone = settings.vfxLOD.transitionZone;
-            dispatcher.execute(cmd);
-        }
+        applyVFXLODSettings();
+        applyAnimationLODSettings();
+    }
 
-        {
-            services::events::animation::SetAnimationLODConfigCommand cmd;
-            cmd.lod0Distance = settings.animationLOD.lod0Distance;
-            cmd.lod1Distance = settings.animationLOD.lod1Distance;
-            cmd.lod2Distance = settings.animationLOD.lod2Distance;
-            cmd.lod3Distance = settings.animationLOD.lod3Distance;
-            cmd.lod0Interval = settings.animationLOD.lod0Interval;
-            cmd.lod1Interval = settings.animationLOD.lod1Interval;
-            cmd.lod2Interval = settings.animationLOD.lod2Interval;
-            cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
-            dispatcher.execute(cmd);
-        }
+    void RenderConfigWindow::applyVFXLODSettings()
+    {
+        services::events::vfxruntime::SetVFXLODConfigCommand cmd;
+        cmd.lod0Distance = settings.vfxLOD.lod0Distance;
+        cmd.lod1Distance = settings.vfxLOD.lod1Distance;
+        cmd.lod2Distance = settings.vfxLOD.lod2Distance;
+        cmd.transitionZone = settings.vfxLOD.transitionZone;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void RenderConfigWindow::applyAnimationLODSettings()
+    {
+        services::events::animation::SetAnimationLODConfigCommand cmd;
+        cmd.lod0Distance = settings.animationLOD.lod0Distance;
+        cmd.lod1Distance = settings.animationLOD.lod1Distance;
+        cmd.lod2Distance = settings.animationLOD.lod2Distance;
+        cmd.lod3Distance = settings.animationLOD.lod3Distance;
+        cmd.lod0Interval = settings.animationLOD.lod0Interval;
+        cmd.lod1Interval = settings.animationLOD.lod1Interval;
+        cmd.lod2Interval = settings.animationLOD.lod2Interval;
+        cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void RenderConfigWindow::drawShadowQualitySettings()

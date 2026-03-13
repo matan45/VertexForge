@@ -22,7 +22,6 @@ namespace render::gpudriven
         if (initialized) return;
 
         devicePtr = &device;
-        cachedBindlessTextureLayout = bindlessTextureLayout;
 
         createOwnedDescriptors();
         createPipeline(cameraLayout, bindlessTextureLayout, renderPass);
@@ -104,8 +103,6 @@ namespace render::gpudriven
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
         vkDevice.waitIdle();
-
-        cachedBindlessTextureLayout = bindlessTextureLayout;
 
         if (graphicsPipeline)
         {

@@ -98,7 +98,6 @@ namespace render::gi
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Get buffer device addresses
         vk::BufferDeviceAddressInfo vertexAddrInfo{};
         vertexAddrInfo.buffer = vertexBuffer;
         vk::DeviceAddress vertexAddress = vkDevice.getBufferAddress(vertexAddrInfo);
@@ -109,7 +108,6 @@ namespace render::gi
 
         uint32_t triangleCount = indexCount / 3;
 
-        // Geometry description
         vk::AccelerationStructureGeometryTrianglesDataKHR triangleData{};
         triangleData.vertexFormat = vk::Format::eR32G32B32Sfloat; // position is first 3 floats
         triangleData.vertexData.deviceAddress = vertexAddress;
@@ -130,13 +128,11 @@ namespace render::gi
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &geometry;
 
-        // Query sizes
         vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
         vkDevice.getAccelerationStructureBuildSizesKHR(
             vk::AccelerationStructureBuildTypeKHR::eDevice,
             &buildInfo, &triangleCount, &sizeInfo);
 
-        // Destroy old BLAS if exists
         if (blas)
         {
             vkDevice.destroyAccelerationStructureKHR(blas);
@@ -145,7 +141,6 @@ namespace render::gi
         core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchMemory);
 
-        // Create BLAS buffer
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
             request.size = sizeInfo.accelerationStructureSize;
@@ -155,14 +150,12 @@ namespace render::gi
             core::BufferUtilities::createBuffer(request, blasBuffer, blasMemory);
         }
 
-        // Create BLAS
         vk::AccelerationStructureCreateInfoKHR createInfo{};
         createInfo.buffer = blasBuffer;
         createInfo.size = sizeInfo.accelerationStructureSize;
         createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
         blas = vkDevice.createAccelerationStructureKHR(createInfo);
 
-        // Create scratch buffer
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
             request.size = sizeInfo.buildScratchSize;
@@ -176,7 +169,6 @@ namespace render::gi
         scratchAddrInfo.buffer = blasScratchBuffer;
         vk::DeviceAddress scratchAddress = vkDevice.getBufferAddress(scratchAddrInfo);
 
-        // Build
         buildInfo.dstAccelerationStructure = blas;
         buildInfo.scratchData.deviceAddress = scratchAddress;
 
@@ -189,7 +181,6 @@ namespace render::gi
         const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
         cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
 
-        // Barrier after BLAS build
         vk::MemoryBarrier barrier{
             vk::AccessFlagBits::eAccelerationStructureWriteKHR,
             vk::AccessFlagBits::eAccelerationStructureReadKHR
@@ -215,12 +206,10 @@ namespace render::gi
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Get BLAS device address
         vk::AccelerationStructureDeviceAddressInfoKHR blasAddrInfo{};
         blasAddrInfo.accelerationStructure = blas;
         vk::DeviceAddress blasAddress = vkDevice.getAccelerationStructureAddressKHR(blasAddrInfo);
 
-        // Build instance data
         std::vector<vk::AccelerationStructureInstanceKHR> instances;
         instances.reserve(objectCount);
 
@@ -247,13 +236,11 @@ namespace render::gi
             instances.push_back(inst);
         }
 
-        // Destroy old instance buffer if size changed
         if (currentInstanceCount != objectCount)
         {
             core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceMemory);
         }
 
-        // Create/update instance buffer
         vk::DeviceSize instanceBufferSize = sizeof(vk::AccelerationStructureInstanceKHR) * objectCount;
         if (!instanceBuffer)
         {
@@ -269,7 +256,6 @@ namespace render::gi
         // Destroy previous frame's staging buffer (safe now - previous cmd has completed)
         core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingMemory);
 
-        // Upload instance data via staging
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
             request.size = instanceBufferSize;
@@ -286,7 +272,6 @@ namespace render::gi
         copyRegion.size = instanceBufferSize;
         cmd.copyBuffer(tlasStagingBuffer, instanceBuffer, 1, &copyRegion);
 
-        // Barrier after copy
         vk::MemoryBarrier copyBarrier{
             vk::AccessFlagBits::eTransferWrite,
             vk::AccessFlagBits::eAccelerationStructureReadKHR
@@ -297,12 +282,10 @@ namespace render::gi
             vk::DependencyFlags{},
             1, &copyBarrier, 0, nullptr, 0, nullptr);
 
-        // Get instance buffer address
         vk::BufferDeviceAddressInfo instanceAddrInfo{};
         instanceAddrInfo.buffer = instanceBuffer;
         vk::DeviceAddress instanceAddress = vkDevice.getBufferAddress(instanceAddrInfo);
 
-        // TLAS geometry
         vk::AccelerationStructureGeometryInstancesDataKHR instancesData{};
         instancesData.arrayOfPointers = VK_FALSE;
         instancesData.data.deviceAddress = instanceAddress;
@@ -320,13 +303,11 @@ namespace render::gi
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &tlasGeometry;
 
-        // Query sizes
         vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
         vkDevice.getAccelerationStructureBuildSizesKHR(
             vk::AccelerationStructureBuildTypeKHR::eDevice,
             &buildInfo, &objectCount, &sizeInfo);
 
-        // Create TLAS buffer and structure (only on first build or resize)
         if (!tlasBuilt || currentInstanceCount != objectCount)
         {
             if (tlas)
@@ -383,7 +364,6 @@ namespace render::gi
 
         cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
 
-        // Barrier after TLAS build
         vk::MemoryBarrier barrier{
             vk::AccessFlagBits::eAccelerationStructureWriteKHR,
             vk::AccessFlagBits::eAccelerationStructureReadKHR

@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "world/WorldTypes.hpp"
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace windows
@@ -14,22 +15,18 @@ namespace windows
         float refreshTimer = 0.0f;
         static constexpr float REFRESH_INTERVAL = 0.25f;
 
-        // Creation wizard state
         bool showCreationWizard = false;
         char worldName[128] = "New World";
-        char worldPath[512] = "";
         float sectorSize = 128.0f;
         int tilesPerSector = 4;
         float loadRadius = 4.0f;
         float unloadRadius = 5.0f;
 
-        // Cached stats
         int totalSectors = 0;
         int loadedSectors = 0;
         int unloadedSectors = 0;
         int loadingSectors = 0;
 
-        // Cached grid data (refreshed at REFRESH_INTERVAL)
         struct CachedSectorInfo {
             world::SectorCoord coord;
             bool exists = false;
@@ -38,7 +35,7 @@ namespace windows
         std::vector<CachedSectorInfo> cachedGrid;
 
     public:
-        explicit WorldSectorWindow() = default;
+        WorldSectorWindow() = default;
         ~WorldSectorWindow() override = default;
 
         void draw() override;
@@ -50,6 +47,8 @@ namespace windows
         void drawStreamingConfig();
         void drawCreationWizard();
         void refreshStats();
+
+        static const std::vector<std::pair<std::wstring, std::wstring>> WORLD_FILE_TYPES;
     };
 
 } // namespace windows

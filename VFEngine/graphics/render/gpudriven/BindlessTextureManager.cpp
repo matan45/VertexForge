@@ -41,7 +41,6 @@ namespace render::gpudriven {
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Descriptor set is freed when pool is destroyed
         if (descriptorPool) {
             vkDevice.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
@@ -64,7 +63,6 @@ namespace render::gpudriven {
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Binding for the bindless texture array
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -72,7 +70,6 @@ namespace render::gpudriven {
         textureBinding.stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
         textureBinding.pImmutableSamplers = nullptr;
 
-        // Binding flags for descriptor indexing
         std::array<vk::DescriptorBindingFlags, 1> bindingFlags = {
             vk::DescriptorBindingFlagBits::ePartiallyBound |
             vk::DescriptorBindingFlagBits::eVariableDescriptorCount |
@@ -115,7 +112,6 @@ namespace render::gpudriven {
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Variable descriptor count for the texture array
         uint32_t variableDescCount = MAX_BINDLESS_TEXTURES;
 
         vk::DescriptorSetVariableDescriptorCountAllocateInfo variableCountInfo{};
@@ -140,7 +136,6 @@ namespace render::gpudriven {
             throw std::runtime_error("BindlessTextureManager: Cannot set default texture before initialization");
         }
 
-        // Default texture is always at index 0
         defaultImageView = imageView;
         defaultSampler = sampler;
         updateDescriptor(0, imageView, sampler);
@@ -162,7 +157,6 @@ namespace render::gpudriven {
             return it->second;
         }
 
-        // Reuse a free slot if available, otherwise allocate new
         uint32_t index;
         if (!freeIndices.empty()) {
             index = freeIndices.back();
@@ -199,13 +193,11 @@ namespace render::gpudriven {
 
         uint32_t index = it->second;
 
-        // Never free index 0 (default texture)
         if (index == 0) {
             vfLogWarning("BindlessTextureManager: Cannot unregister default texture (index 0)");
             return;
         }
 
-        // Reset descriptor to default texture to avoid stale data
         if (defaultTextureSet) {
             updateDescriptor(index, defaultImageView, defaultSampler);
         }

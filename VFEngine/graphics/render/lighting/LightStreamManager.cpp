@@ -210,7 +210,6 @@ namespace render::lighting
     {
         std::lock_guard<std::mutex> lock(mtx);
 
-        // Sort all registered lights by priority (descending)
         sortedPriorities.clear();
         sortedPriorities.reserve(registeredLights.size());
         for (const auto& [entityId, entry] : registeredLights)
@@ -225,7 +224,6 @@ namespace render::lighting
         uint32_t pointActive = 0;
         uint32_t spotActive = 0;
 
-        // Track which lights should be active
         std::unordered_set<uint32_t> shouldBeActive;
 
         for (const auto& [entityId, priority] : sortedPriorities)
@@ -250,7 +248,6 @@ namespace render::lighting
             }
         }
 
-        // Deactivate lights that are no longer in budget
         for (auto& [entityId, entry] : registeredLights)
         {
             if (entry.active && !shouldBeActive.contains(entityId))
@@ -260,7 +257,6 @@ namespace render::lighting
                 if (config.hysteresisMargin > 0.0f && !sortedPriorities.empty())
                 {
                     float cutoffPriority = 0.0f;
-                    // Find the cutoff priority (lowest active priority)
                     for (auto rit = sortedPriorities.rbegin(); rit != sortedPriorities.rend(); ++rit)
                     {
                         if (shouldBeActive.contains(rit->first))
@@ -288,7 +284,6 @@ namespace render::lighting
             }
         }
 
-        // Activate lights that should be active but aren't
         for (uint32_t entityId : shouldBeActive)
         {
             auto& entry = registeredLights[entityId];
@@ -364,7 +359,6 @@ namespace render::lighting
 
     float LightStreamManager::computePriority(const LightStreamEntry& entry) const
     {
-        // Higher priority = more important light
         float distanceFactor = 1.0f / (1.0f + entry.distance * 0.01f);
         float intensityFactor = entry.intensity;
         float radiusFactor = entry.radius;

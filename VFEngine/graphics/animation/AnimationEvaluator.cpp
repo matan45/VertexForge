@@ -167,7 +167,6 @@ namespace animation
                     animationData->channels[itB->second].positionKeys.size() <= 1)
                     continue;
 
-                // Compute depth in hierarchy
                 int depth = 0;
                 int idx = static_cast<int>(b);
                 while (idx >= 0)
@@ -213,9 +212,6 @@ namespace animation
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
 
-                // Extract root motion as displacement from bind pose.
-                // Keep the bind pose position in the bone (correct height/offset),
-                // output only the animated displacement for entity movement.
                 if (static_cast<int>(i) == rootMotionBone)
                 {
                     glm::vec3 bindPos = glm::vec3(computedLocalBindPoses[i][3]);
@@ -266,11 +262,9 @@ namespace animation
     {
         const size_t lastIndex = keys.size() - 1;
 
-        // Try current hint - O(1) if time hasn't changed
         if (hint < lastIndex && keys[hint].time <= time && time < keys[hint + 1].time)
             return hint;
 
-        // Try hint + 1 - O(1) for sequential playback
         size_t next = hint + 1;
         if (next < lastIndex && keys[next].time <= time && time < keys[next + 1].time)
         {
@@ -278,7 +272,6 @@ namespace animation
             return next;
         }
 
-        // Fall back to binary search - O(log n)
         auto it = std::upper_bound(keys.begin(), keys.end(), time,
             [](float t, const KeyType& key) { return t < key.time; });
 
@@ -361,14 +354,12 @@ namespace animation
         if (animationData->duration > 0.0f)
             timeInTicks = std::fmod(timeInTicks, animationData->duration);
 
-        // Phase 1: Evaluate local transforms (only for active bones)
         for (size_t i = 0; i < boneCount; ++i)
         {
             const auto& bone = skeletonData->bones[i];
 
             if (i < MAX_SKELETON_BONES && activeBones.test(i))
             {
-                // Active bone: full evaluation
                 auto it = boneNameToChannelIndex.find(bone.name);
                 glm::mat4 animatedTransform;
 
@@ -406,12 +397,10 @@ namespace animation
             }
             else
             {
-                // Skipped bone: use bind pose
                 evaluatedBones[i].localTransform = bone.preTransform * computedLocalBindPoses[i];
             }
         }
 
-        // Phase 2: Compute world transforms (all bones, since children need parents)
         for (size_t i = 0; i < boneCount; ++i)
         {
             int parent = skeletonData->bones[i].parentIndex;
@@ -422,7 +411,6 @@ namespace animation
                 evaluatedBones[i].worldTransform = evaluatedBones[i].localTransform;
         }
 
-        // Phase 3: Compute final skinning matrices
         const glm::mat4& globalInv = skeletonData->globalInverseTransform;
         std::vector<glm::mat4> result(boneCount);
         for (size_t i = 0; i < boneCount; ++i)

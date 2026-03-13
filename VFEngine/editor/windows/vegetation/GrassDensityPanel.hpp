@@ -16,7 +16,6 @@ namespace windows
         int falloffIndex = 2;
         int shapeIndex = 0;
 
-        // Grass render config (cached from ECS)
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;
 

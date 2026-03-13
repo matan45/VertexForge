@@ -81,10 +81,6 @@ namespace render::gi
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Set 0: probe data (read + write SSBOs)
-        // Set 1: cascade info UBO
-        // Set 2 (optional): TLAS for ray queries
-        // Set 3 (optional): light data (directional, point, spot SSBOs + counts UBO)
         std::vector<vk::DescriptorSetLayout> setLayouts = {probeDataLayout, cascadeInfoLayout};
         if (tlasLayout)
         {
@@ -140,7 +136,6 @@ namespace render::gi
             return;
         }
 
-        // If pipeline was compiled with ray query support, TLAS must be available
         if (rayQueryEnabled && !tlasDescSet)
         {
             return;
@@ -164,7 +159,6 @@ namespace render::gi
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GIComputePushConstants), &pushConstants);
 
-        // Dispatch one workgroup per probe
         uint32_t workgroupCount = (pushConstants.probeCount + 63) / 64;
         cmd.dispatch(workgroupCount, 1, 1);
     }

@@ -47,7 +47,6 @@ namespace windows
             return;
         }
 
-        // Paint/Erase mode toggle
         const char* modes[] = {"Paint", "Erase"};
         if (ImGui::Combo("Mode", &selectedMode, modes, IM_ARRAYSIZE(modes)))
         {
@@ -99,61 +98,7 @@ namespace windows
         if (!ImGui::CollapsingHeader("Mesh Palette", ImGuiTreeNodeFlags_DefaultOpen))
             return;
 
-        // Dropdown to select which entry to paint
-        {
-            // Build combo items: "All (Random)" + one per entry
-            std::string preview = "All (Random)";
-            if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(paletteEntries.size()))
-            {
-                const auto& sel = paletteEntries[selectedPaletteIndex];
-                preview = "Entry " + std::to_string(selectedPaletteIndex);
-                if (!sel.meshPath.empty())
-                {
-                    auto pos = sel.meshPath.find_last_of("\\/");
-                    std::string filename = (pos != std::string::npos)
-                        ? sel.meshPath.substr(pos + 1) : sel.meshPath;
-                    preview += " - " + filename;
-                }
-            }
-
-            if (ImGui::BeginCombo("Paint Entry", preview.c_str()))
-            {
-                // "All (Random)" option
-                bool isAllSelected = (selectedPaletteIndex == -1);
-                if (ImGui::Selectable("All (Random)", isAllSelected))
-                {
-                    selectedPaletteIndex = -1;
-                    events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
-                    cmd.selectedIndex = -1;
-                    events::EventDispatcher::instance().execute(cmd);
-                }
-                if (isAllSelected) ImGui::SetItemDefaultFocus();
-
-                // Per-entry options
-                for (int i = 0; i < static_cast<int>(paletteEntries.size()); ++i)
-                {
-                    std::string itemLabel = "Entry " + std::to_string(i);
-                    if (!paletteEntries[i].meshPath.empty())
-                    {
-                        auto pos = paletteEntries[i].meshPath.find_last_of("\\/");
-                        std::string filename = (pos != std::string::npos)
-                            ? paletteEntries[i].meshPath.substr(pos + 1) : paletteEntries[i].meshPath;
-                        itemLabel += " - " + filename;
-                    }
-                    bool isSelected = (selectedPaletteIndex == i);
-                    if (ImGui::Selectable(itemLabel.c_str(), isSelected))
-                    {
-                        selectedPaletteIndex = i;
-                        events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
-                        cmd.selectedIndex = i;
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
-                    if (isSelected) ImGui::SetItemDefaultFocus();
-                }
-
-                ImGui::EndCombo();
-            }
-        }
+        drawPaletteCombo();
 
         ImGui::Separator();
 
@@ -161,90 +106,7 @@ namespace windows
 
         for (int i = 0; i < static_cast<int>(paletteEntries.size()); ++i)
         {
-            ImGui::PushID(i);
-            auto& entry = paletteEntries[i];
-
-            // Color indicator: blue if selected, default otherwise
-            ImVec4 headerColor = (selectedPaletteIndex == i)
-                ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
-                : ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
-
-            ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
-                ImVec4(headerColor.x + 0.1f, headerColor.y + 0.1f, headerColor.z + 0.1f, 1.0f));
-
-            // Show mesh filename in header
-            std::string label = "Entry " + std::to_string(i);
-            if (!entry.meshPath.empty())
-            {
-                auto pos = entry.meshPath.find_last_of("\\/");
-                std::string filename = (pos != std::string::npos)
-                    ? entry.meshPath.substr(pos + 1) : entry.meshPath;
-                label += " - " + filename;
-            }
-            if (ImGui::TreeNode("Entry", "%s", label.c_str()))
-            {
-                bool changed = false;
-
-                // Mesh path input with browse button
-                char meshBuf[256] = {}; // Read-only display; paths > 255 chars are truncated
-                strncpy(meshBuf, entry.meshPath.c_str(), sizeof(meshBuf) - 1);
-                ImGui::InputText("Mesh Path", meshBuf, sizeof(meshBuf), ImGuiInputTextFlags_ReadOnly);
-                ImGui::SameLine();
-                if (ImGui::Button("Browse##mesh"))
-                {
-                    std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                        {L"Mesh Files", L"*.vfMesh"}
-                    };
-                    std::string selectedPath = fileDialog.openFileDialog(filters);
-                    if (!selectedPath.empty())
-                    {
-                        entry.meshPath = selectedPath;
-                        changed = true;
-                    }
-                }
-
-                // Material path input with browse button
-                char matBuf[256] = {}; // Read-only display; paths > 255 chars are truncated
-                strncpy(matBuf, entry.materialPath.c_str(), sizeof(matBuf) - 1);
-                ImGui::InputText("Material Path", matBuf, sizeof(matBuf), ImGuiInputTextFlags_ReadOnly);
-                ImGui::SameLine();
-                if (ImGui::Button("Browse##mat"))
-                {
-                    std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                        {L"Material Files", L"*.vfMat;*.vfMatInstance"}
-                    };
-                    std::string selectedPath = fileDialog.openFileDialog(filters);
-                    if (!selectedPath.empty())
-                    {
-                        entry.materialPath = selectedPath;
-                        changed = true;
-                    }
-                }
-
-                changed |= ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
-                changed |= ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.01f, 10.0f);
-                changed |= ImGui::DragFloat2("Rotation Y Range", &entry.rotationYRange.x, 1.0f, 0.0f, 360.0f);
-                changed |= ImGui::Checkbox("Random Rotation X", &entry.randomRotationX);
-                ImGui::SameLine();
-                changed |= ImGui::Checkbox("Random Rotation Z", &entry.randomRotationZ);
-                changed |= ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
-                changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
-                changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
-                changed |= ImGui::Checkbox("Use Collider", &entry.useCollider);
-
-                if (changed) paletteDirty = true;
-
-                if (ImGui::Button("Remove"))
-                {
-                    removeIndex = i;
-                }
-
-                ImGui::TreePop();
-            }
-
-            ImGui::PopStyleColor(2);
-            ImGui::PopID();
+            drawPaletteEntry(i, removeIndex);
         }
 
         if (removeIndex >= 0)
@@ -252,7 +114,6 @@ namespace windows
             paletteDirty = true;
             paletteEntries.erase(paletteEntries.begin() + removeIndex);
 
-            // Adjust selected index if needed
             if (selectedPaletteIndex == removeIndex)
             {
                 selectedPaletteIndex = -1;
@@ -267,7 +128,6 @@ namespace windows
                 selCmd.selectedIndex = selectedPaletteIndex;
                 events::EventDispatcher::instance().execute(selCmd);
             }
-
         }
 
         if (ImGui::Button("Add Entry"))
@@ -284,6 +144,143 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
             paletteDirty = false;
         }
+    }
+
+    void MeshBrushToolPanel::drawPaletteCombo()
+    {
+        std::string preview = "All (Random)";
+        if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(paletteEntries.size()))
+        {
+            const auto& sel = paletteEntries[selectedPaletteIndex];
+            preview = "Entry " + std::to_string(selectedPaletteIndex);
+            if (!sel.meshPath.empty())
+            {
+                auto pos = sel.meshPath.find_last_of("\\/");
+                std::string filename = (pos != std::string::npos)
+                    ? sel.meshPath.substr(pos + 1) : sel.meshPath;
+                preview += " - " + filename;
+            }
+        }
+
+        if (ImGui::BeginCombo("Paint Entry", preview.c_str()))
+        {
+            bool isAllSelected = (selectedPaletteIndex == -1);
+            if (ImGui::Selectable("All (Random)", isAllSelected))
+            {
+                selectedPaletteIndex = -1;
+                events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
+                cmd.selectedIndex = -1;
+                events::EventDispatcher::instance().execute(cmd);
+            }
+            if (isAllSelected) ImGui::SetItemDefaultFocus();
+
+            for (int i = 0; i < static_cast<int>(paletteEntries.size()); ++i)
+            {
+                std::string itemLabel = "Entry " + std::to_string(i);
+                if (!paletteEntries[i].meshPath.empty())
+                {
+                    auto pos = paletteEntries[i].meshPath.find_last_of("\\/");
+                    std::string filename = (pos != std::string::npos)
+                        ? paletteEntries[i].meshPath.substr(pos + 1) : paletteEntries[i].meshPath;
+                    itemLabel += " - " + filename;
+                }
+                bool isSelected = (selectedPaletteIndex == i);
+                if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+                {
+                    selectedPaletteIndex = i;
+                    events::meshBrush::SetMeshBrushSelectedEntryCommand cmd;
+                    cmd.selectedIndex = i;
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+
+            ImGui::EndCombo();
+        }
+    }
+
+    void MeshBrushToolPanel::drawPaletteEntry(int index, int& removeIndex)
+    {
+        ImGui::PushID(index);
+        auto& entry = paletteEntries[index];
+
+        ImVec4 headerColor = (selectedPaletteIndex == index)
+            ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
+            : ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+            ImVec4(headerColor.x + 0.1f, headerColor.y + 0.1f, headerColor.z + 0.1f, 1.0f));
+
+        std::string label = "Entry " + std::to_string(index);
+        if (!entry.meshPath.empty())
+        {
+            auto pos = entry.meshPath.find_last_of("\\/");
+            std::string filename = (pos != std::string::npos)
+                ? entry.meshPath.substr(pos + 1) : entry.meshPath;
+            label += " - " + filename;
+        }
+        if (ImGui::TreeNode("Entry", "%s", label.c_str()))
+        {
+            bool changed = false;
+
+            char meshBuf[256] = {};
+            strncpy(meshBuf, entry.meshPath.c_str(), sizeof(meshBuf) - 1);
+            ImGui::InputText("Mesh Path", meshBuf, sizeof(meshBuf), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button("Browse##mesh"))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                    {L"Mesh Files", L"*.vfMesh"}
+                };
+                std::string selectedPath = fileDialog.openFileDialog(filters);
+                if (!selectedPath.empty())
+                {
+                    entry.meshPath = selectedPath;
+                    changed = true;
+                }
+            }
+
+            char matBuf[256] = {};
+            strncpy(matBuf, entry.materialPath.c_str(), sizeof(matBuf) - 1);
+            ImGui::InputText("Material Path", matBuf, sizeof(matBuf), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button("Browse##mat"))
+            {
+                std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                    {L"Material Files", L"*.vfMat;*.vfMatInstance"}
+                };
+                std::string selectedPath = fileDialog.openFileDialog(filters);
+                if (!selectedPath.empty())
+                {
+                    entry.materialPath = selectedPath;
+                    changed = true;
+                }
+            }
+
+            changed |= ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
+            changed |= ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.01f, 10.0f);
+            changed |= ImGui::DragFloat2("Rotation Y Range", &entry.rotationYRange.x, 1.0f, 0.0f, 360.0f);
+            changed |= ImGui::Checkbox("Random Rotation X", &entry.randomRotationX);
+            ImGui::SameLine();
+            changed |= ImGui::Checkbox("Random Rotation Z", &entry.randomRotationZ);
+            changed |= ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+            changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
+            changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
+            changed |= ImGui::Checkbox("Use Collider", &entry.useCollider);
+
+            if (changed) paletteDirty = true;
+
+            if (ImGui::Button("Remove"))
+            {
+                removeIndex = index;
+            }
+
+            ImGui::TreePop();
+        }
+
+        ImGui::PopStyleColor(2);
+        ImGui::PopID();
     }
 
     void MeshBrushToolPanel::pushParams()

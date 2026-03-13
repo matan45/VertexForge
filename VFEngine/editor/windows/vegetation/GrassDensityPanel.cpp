@@ -43,7 +43,6 @@ namespace windows
             return;
         }
 
-        // Brush type
         const char* brushTypes[] = {"Paint", "Erase", "Smooth", "Fill"};
         if (ImGui::Combo("Brush Type", &selectedBrushType, brushTypes, IM_ARRAYSIZE(brushTypes)))
         {
@@ -52,7 +51,6 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Radius
         if (ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f))
         {
             vegetation::DensityBrushParams params;
@@ -67,13 +65,9 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Strength
         ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f);
-
-        // Opacity
         ImGui::SliderFloat("Opacity", &brushOpacity, 0.0f, 1.0f);
 
-        // Falloff
         const char* falloffTypes[] = {"Constant", "Linear", "Smooth", "Sharp"};
         ImGui::Combo("Falloff", &falloffIndex, falloffTypes, IM_ARRAYSIZE(falloffTypes));
 

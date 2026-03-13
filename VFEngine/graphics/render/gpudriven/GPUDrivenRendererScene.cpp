@@ -225,7 +225,6 @@ namespace render::gpudriven
         {
             materials.textureCache->invalidateMaterialDescriptorSet(materialPath);
         }
-        // Remove from registered set so it can be re-registered if needed again
         materials.registeredPaths.erase(materialPath);
         materials.pbrCache.erase(materialPath);
         materials.loaded.erase(materialPath);
@@ -592,26 +591,16 @@ namespace render::gpudriven
         {
             materials.registeredPaths.insert(materialPath);
 
-            // Register texture dependencies so textures stay alive while material is in use
-            auto& lifecycle = resource::AssetLifecycleManager::instance();
-            // Ensure the material is tracked before adding dependencies
-            // (the renderer may load materials that weren't yet acquired by the component service)
-            if (!lifecycle.isTracked(materialPath))
-            {
-                lifecycle.acquire(materialPath, resource::AssetType::Material);
-            }
-            auto addDep = [&](const std::string& texPath) {
-                if (!texPath.empty())
-                    lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
-            };
-            addDep(pbrValues.albedoTexturePath);
-            addDep(pbrValues.normalTexturePath);
-            addDep(pbrValues.ormTexturePath);
-            addDep(pbrValues.metallicTexturePath);
-            addDep(pbrValues.roughnessTexturePath);
-            addDep(pbrValues.aoTexturePath);
-            addDep(pbrValues.emissionTexturePath);
-            addDep(pbrValues.heightTexturePath);
+            registerTextureDependencies(materialPath, {
+                pbrValues.albedoTexturePath,
+                pbrValues.normalTexturePath,
+                pbrValues.ormTexturePath,
+                pbrValues.metallicTexturePath,
+                pbrValues.roughnessTexturePath,
+                pbrValues.aoTexturePath,
+                pbrValues.emissionTexturePath,
+                pbrValues.heightTexturePath
+            });
         }
 
         return registered;
@@ -629,6 +618,21 @@ namespace render::gpudriven
         if (cullPipeline && hiZView && hiZSampler)
         {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+        }
+    }
+
+    void GPUDrivenRenderer::registerTextureDependencies(const std::string& materialPath,
+                                                         const std::vector<std::string>& texturePaths)
+    {
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+        if (!lifecycle.isTracked(materialPath))
+        {
+            lifecycle.acquire(materialPath, resource::AssetType::Material);
+        }
+        for (const auto& texPath : texturePaths)
+        {
+            if (!texPath.empty())
+                lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
         }
     }
 }

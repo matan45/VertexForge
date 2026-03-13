@@ -14,6 +14,20 @@ namespace render::gpudriven
 {
     class BillboardBufferManager
     {
+    private:
+        void createBuffers(uint32_t maxInstances);
+        void destroyBuffers();
+
+        core::Device* devicePtr = nullptr;
+
+        vk::Buffer instanceBuffer;
+        vk::DeviceMemory instanceBufferMemory;
+        vk::Buffer countBuffer;
+        vk::DeviceMemory countBufferMemory;
+
+        uint32_t capacity = 0;
+        uint32_t currentInstanceCount = 0;
+        bool pendingCountReset = false;
     public:
         void init(core::Device& device);
         void cleanup();
@@ -29,20 +43,5 @@ namespace render::gpudriven
         [[nodiscard]] uint32_t getInstanceCount() const { return currentInstanceCount; }
         [[nodiscard]] uint32_t getCapacity() const { return capacity; }
         [[nodiscard]] bool needsCountReset() const { return pendingCountReset; }
-
-    private:
-        void createBuffers(uint32_t maxInstances);
-        void destroyBuffers();
-
-        core::Device* devicePtr = nullptr;
-
-        vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
-        vk::Buffer countBuffer;
-        vk::DeviceMemory countBufferMemory;
-
-        uint32_t capacity = 0;
-        uint32_t currentInstanceCount = 0;
-        bool pendingCountReset = false;
     };
 }

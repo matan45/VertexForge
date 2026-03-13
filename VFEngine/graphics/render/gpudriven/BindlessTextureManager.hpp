@@ -34,7 +34,6 @@ namespace render::gpudriven {
         explicit BindlessTextureManager(core::Device& device);
         ~BindlessTextureManager();
 
-        // Non-copyable
         BindlessTextureManager(const BindlessTextureManager&) = delete;
         BindlessTextureManager& operator=(const BindlessTextureManager&) = delete;
 
@@ -57,7 +56,6 @@ namespace render::gpudriven {
         uint32_t getRegisteredTextureCount() const { return nextTextureIndex - 1 - static_cast<uint32_t>(freeIndices.size()); }
 
     private:
-        // Helper methods
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();

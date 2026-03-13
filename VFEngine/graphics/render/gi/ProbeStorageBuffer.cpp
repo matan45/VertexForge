@@ -84,7 +84,6 @@ namespace render::gi
 
         vk::DeviceSize probeBufferSize = probeCount * sizeof(ProbeData);
 
-        // Probe buffer A (device local)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = probeBufferSize;
@@ -93,7 +92,6 @@ namespace render::gi
             core::BufferUtilities::createBuffer(request, probeBufferA, probeMemoryA);
         }
 
-        // Probe buffer B (device local)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = probeBufferSize;
@@ -102,7 +100,6 @@ namespace render::gi
             core::BufferUtilities::createBuffer(request, probeBufferB, probeMemoryB);
         }
 
-        // Staging buffer for probe data
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = probeBufferSize;
@@ -111,7 +108,6 @@ namespace render::gi
             core::BufferUtilities::createBuffer(request, probeStagingBuffer, probeStagingMemory);
             probeStagingMapped = logicalDevice.mapMemory(probeStagingMemory, 0, probeBufferSize, vk::MemoryMapFlags{});
 
-            // Zero-initialize
             std::memset(probeStagingMapped, 0, probeBufferSize);
         }
 
@@ -174,7 +170,6 @@ namespace render::gi
             probeDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         }
 
-        // Cascade info layout: binding 0 = UBO
         {
             vk::DescriptorSetLayoutBinding binding{};
             binding.binding = 0;
@@ -250,7 +245,6 @@ namespace render::gi
             probeDataDescSetB = sets[0];
         }
 
-        // Cascade info set
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = descriptorPool;
@@ -322,7 +316,6 @@ namespace render::gi
             vkDevice.updateDescriptorSets(writes, {});
         }
 
-        // Cascade info
         {
             vk::DescriptorBufferInfo bufferInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
 

@@ -162,7 +162,6 @@ namespace windows
 
     void WaterEditorWindow::drawSettingsSection()
     {
-        // Gerstner wave settings — only shown when Ocean FFT is disabled
         if (!oceanConfig.enabled)
         {
             if (ImGui::CollapsingHeader("Wave Settings (Gerstner)", ImGuiTreeNodeFlags_DefaultOpen))
@@ -457,7 +456,6 @@ namespace windows
 
     void WaterEditorWindow::createOcean()
     {
-        // Create water with ocean-friendly defaults
         services::WaterCreationData config;
         config.tilesX = 10;
         config.tilesZ = 10;
@@ -474,7 +472,6 @@ namespace windows
 
         refreshWaterState();
 
-        // Auto-enable ocean FFT (uses struct defaults for all other fields)
         oceanConfig = services::OceanFFTConfigData{};
         oceanConfig.enabled = true;
 

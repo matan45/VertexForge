@@ -181,11 +181,17 @@
     <ClInclude Include="core\MainLoop.hpp" />
     <ClInclude Include="physics\FixedTimestep.hpp" />
     <ClInclude Include="physics\JoltConversions.hpp" />
+    <ClInclude Include="physics\PhysicsBodyRegistry.hpp" />
+    <ClInclude Include="physics\PhysicsCharacterManager.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
+    <ClInclude Include="physics\PhysicsContext.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
+    <ClInclude Include="physics\PhysicsRagdollManager.hpp" />
+    <ClInclude Include="physics\PhysicsRigidBodyManager.hpp" />
     <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
     <ClInclude Include="physics\PhysicsSkeletonConverter.hpp" />
+    <ClInclude Include="physics\PhysicsTerrainManager.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
     <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
   </ItemGroup>
@@ -278,12 +284,16 @@
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
     <ClCompile Include="physics\FixedTimestep.cpp" />
+    <ClCompile Include="physics\PhysicsBodyRegistry.cpp" />
+    <ClCompile Include="physics\PhysicsCharacterManager.cpp" />
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
     <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
+    <ClCompile Include="physics\PhysicsRagdollManager.cpp" />
+    <ClCompile Include="physics\PhysicsRigidBodyManager.cpp" />
     <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
+    <ClCompile Include="physics\PhysicsTerrainManager.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
-    <ClCompile Include="physics\PhysicsWorldRagdollOps.cpp" />
     <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
   </ItemGroup>
   <ItemGroup>

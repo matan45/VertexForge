@@ -3,7 +3,6 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
-#include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
 #include "../../services/events/project/SceneEvents.hpp"
 #include "../../services/events/editor/EditorModeEvents.hpp"
@@ -12,7 +11,6 @@
 #include "../../services/events/world/WorldSectorEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include <glm/gtc/quaternion.hpp>
-#include <unordered_set>
 
 namespace animation
 {
@@ -29,6 +27,8 @@ namespace animation
             return;
         }
         initialized = true;
+
+        socketUpdater = std::make_unique<SocketAttachmentUpdater>(animators, dataCache);
 
         auto& dispatcher = events::EventDispatcher::instance();
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
@@ -57,7 +57,7 @@ namespace animation
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
                 clearAnimatorInstances();
-                skeletonDataCache.clear();
+                dataCache.clearSkeletons();
                 pendingCacheCleanup = true;
 
                 auto& reg = scene::EntityRegistry::getRegistry();
@@ -71,7 +71,7 @@ namespace animation
         socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
             [this](const events::socket::SocketDataSavedNotification& notification)
             {
-                skeletonDataCache.erase(notification.meshPath);
+                dataCache.invalidateSkeleton(notification.meshPath);
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::SocketAttachmentComponent>();
                 for (auto entity : view)
@@ -81,7 +81,6 @@ namespace animation
                 }
             });
 
-        // Streaming integration: queue animator init on sector load, cleanup on unload
         sectorLoadedToken = dispatcher.subscribe<events::world::SectorLoadedNotification>(
             [this](const events::world::SectorLoadedNotification&)
             {
@@ -115,7 +114,6 @@ namespace animation
                     destroyEntityAnimator(entity);
                 }
 
-                // Remove invalid entities from pending queue
                 std::lock_guard<std::mutex> lock(pendingInitMutex);
                 pendingInitQueue.erase(
                     std::remove_if(pendingInitQueue.begin(), pendingInitQueue.end(),
@@ -166,6 +164,7 @@ namespace animation
             pendingInitQueue.clear();
         }
         clearAll();
+        socketUpdater.reset();
         initialized = false;
     }
 
@@ -189,7 +188,6 @@ namespace animation
             if (pendingInitQueue.empty())
                 return;
 
-            // Take up to maxInitPerFrame items from the back
             uint32_t count = std::min(maxInitPerFrame, static_cast<uint32_t>(pendingInitQueue.size()));
             batch.assign(pendingInitQueue.end() - count, pendingInitQueue.end());
             pendingInitQueue.erase(pendingInitQueue.end() - count, pendingInitQueue.end());
@@ -241,14 +239,12 @@ namespace animation
         constexpr float FRUSTUM_MARGIN = 1.05f;
         float radius = ANIM_ENTITY_RADIUS * FRUSTUM_MARGIN;
 
-        // Extract scale from world matrix for better radius estimation
         float scaleX = glm::length(glm::vec3(worldTransform.worldMatrix[0]));
         float scaleY = glm::length(glm::vec3(worldTransform.worldMatrix[1]));
         float scaleZ = glm::length(glm::vec3(worldTransform.worldMatrix[2]));
         float maxScale = glm::max(scaleX, glm::max(scaleY, scaleZ));
         radius *= maxScale;
 
-        // Sphere-frustum test: check against all 6 planes
         math::AABB aabb(worldPos - glm::vec3(radius), worldPos + glm::vec3(radius));
         return cullingContext.frustum.intersectsAABB(aabb);
     }
@@ -265,7 +261,6 @@ namespace animation
         ActiveAnimatorList activeAnimators;
         std::vector<std::pair<entt::entity, AnimatorStateMachine*>> lodInterpolateEntities;
 
-        // Collect candidates that pass frustum/LOD filtering
         struct EvalCandidate
         {
             entt::entity entity;
@@ -281,15 +276,12 @@ namespace animation
             if (!registry.valid(entity))
                 continue;
 
-            // Frustum culling: skip bone evaluation for off-screen entities
-            // Their last bone matrices remain in the GPU buffer
             if (!isEntityInFrustum(entity, registry))
             {
                 ++culledEntityCount;
                 continue;
             }
 
-            // LOD: compute distance to camera and determine update frequency
             auto& lodState = entityLODStates[entity];
             if (cullingContext.enabled)
             {
@@ -301,11 +293,11 @@ namespace animation
                     glm::vec3 diff = pos - cullingContext.cameraPos;
                     distSq = glm::dot(diff, diff);
                 }
-                lodManager.updateEntityLOD(lodState, distSq, deltaTime);
+                lodManager.updateEntityLOD(lodState, distSq);
             }
             else
             {
-                lodManager.updateEntityLOD(lodState, 0.0f, deltaTime);
+                lodManager.updateEntityLOD(lodState, 0.0f);
             }
 
             lodManager.incrementLODCount(lodState.currentLOD);
@@ -319,20 +311,15 @@ namespace animation
             else if (lodState.currentLOD == AnimationLODLevel::LOD1 &&
                      lodState.hasCachedPoseA && lodState.hasCachedPoseB)
             {
-                // LOD 1 skipped frame: interpolate between cached poses
                 lodInterpolateEntities.push_back({entity, animator.get()});
             }
-            // LOD 3 (frozen): do nothing, last pose stays in GPU buffer
         }
 
-        // Build instance groups from eval candidates
-        // Entities that are blending have unique poses and cannot be grouped
         ActiveAnimatorList leadersToEvaluate;
         std::vector<std::pair<entt::entity, AnimatorStateMachine*>> followersToSync;
 
         for (auto& candidate : evalCandidates)
         {
-            // Don't group blending entities - they have unique cross-state poses
             if (candidate.anim->isBlending())
             {
                 leadersToEvaluate.push_back({candidate.entity, candidate.anim});
@@ -346,7 +333,6 @@ namespace animation
                 continue;
             }
 
-            // Get animator path from component
             std::string animatorPath;
             if (registry.all_of<components::AnimatorComponent>(candidate.entity))
             {
@@ -366,19 +352,16 @@ namespace animation
             auto& group = instanceGroups[groupKey];
             if (group.leader == entt::null)
             {
-                // First entity in this group becomes the leader
                 group.leader = candidate.entity;
                 leadersToEvaluate.push_back({candidate.entity, candidate.anim});
             }
             else
             {
-                // Additional entities become followers
                 group.followers.push_back(candidate.entity);
                 followersToSync.push_back({candidate.entity, candidate.anim});
             }
         }
 
-        // Count groups with 2+ members (actual instancing savings)
         for (const auto& [key, group] : instanceGroups)
         {
             if (!group.followers.empty())
@@ -387,7 +370,6 @@ namespace animation
             }
         }
 
-        // Evaluate leaders via job system (only leaders compute bone matrices)
         if (leadersToEvaluate.size() > 1)
         {
             std::vector<std::future<void>> futures;
@@ -413,7 +395,6 @@ namespace animation
             leadersToEvaluate[0].second->update(deltaTime);
         }
 
-        // Copy leader bone matrices to followers
         for (const auto& [key, group] : instanceGroups)
         {
             if (group.followers.empty())
@@ -434,14 +415,12 @@ namespace animation
             }
         }
 
-        // Build final activeAnimators list: leaders + followers
         activeAnimators = std::move(leadersToEvaluate);
         for (auto& [entity, anim] : followersToSync)
         {
             activeAnimators.push_back({entity, anim});
         }
 
-        // Cache poses for LOD 1 entities that were evaluated
         for (auto& [entity, anim] : activeAnimators)
         {
             auto it = entityLODStates.find(entity);
@@ -452,7 +431,6 @@ namespace animation
             }
         }
 
-        // Interpolate cached poses for LOD 1 entities on skipped frames
         for (auto& [entity, anim] : lodInterpolateEntities)
         {
             auto it = entityLODStates.find(entity);
@@ -468,7 +446,6 @@ namespace animation
                 if (!interpolated.empty())
                 {
                     anim->getMutableBoneMatrices() = std::move(interpolated);
-                    // Add to activeAnimators so bones get uploaded
                     activeAnimators.push_back({entity, anim});
                 }
             }
@@ -535,7 +512,7 @@ namespace animation
         {
             const auto& meshComp = registry.get<components::MeshComponent>(entity);
             if (!meshComp.meshPath.empty())
-                skeleton = loadSkeleton(meshComp.meshPath);
+                skeleton = dataCache.loadSkeleton(meshComp.meshPath);
         }
 
         if (skeleton)
@@ -548,198 +525,7 @@ namespace animation
 
     void RuntimeAnimatorSystem::updateSocketAttachments()
     {
-        buildSocketTransformCache();
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto attachmentView = registry.view<components::SocketAttachmentComponent>();
-        for (auto attachedEntity : attachmentView)
-        {
-            if (!registry.valid(attachedEntity))
-                continue;
-            resolveAttachmentParent(attachedEntity);
-            applyAttachmentTransform(attachedEntity);
-        }
-    }
-
-    void RuntimeAnimatorSystem::buildSocketTransformCache()
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        socketTransformCache.clear();
-        for (auto& [entity, animator] : animators)
-        {
-            if (!animator || !animator->isInitialized())
-                continue;
-
-            if (!registry.valid(entity))
-                continue;
-
-            const resource::SkeletonData* skeleton = nullptr;
-            if (registry.all_of<components::MeshComponent>(entity))
-            {
-                const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (!meshComp.meshPath.empty())
-                {
-                    skeleton = loadSkeleton(meshComp.meshPath);
-                }
-            }
-
-            if (!skeleton || skeleton->sockets.empty())
-                continue;
-
-            auto& transforms = socketTransformCache[entity];
-            animator->computeSocketTransforms(skeleton->sockets, transforms);
-        }
-    }
-
-    void RuntimeAnimatorSystem::resolveAttachmentParent(entt::entity attachedEntity)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!registry.valid(attachedEntity) || !registry.all_of<components::SocketAttachmentComponent>(attachedEntity))
-        {
-            return;
-        }
-        auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-
-        if (!attachment.needsParentResolution || attachment.parentEntityName.empty())
-            return;
-
-        attachment.needsParentResolution = false;
-        attachment.parentEntity = entt::null;
-        attachment.cachedSocketIndex = -1;
-
-        entt::entity ancestor = entt::null;
-        if (registry.all_of<components::ParentComponent>(attachedEntity))
-        {
-            ancestor = registry.get<components::ParentComponent>(attachedEntity).parent;
-        }
-        while (ancestor != entt::null && registry.valid(ancestor))
-        {
-            if (registry.all_of<components::NameComponent>(ancestor) &&
-                registry.get<components::NameComponent>(ancestor).name == attachment.parentEntityName)
-            {
-                attachment.parentEntity = ancestor;
-                break;
-            }
-            if (registry.all_of<components::ParentComponent>(ancestor))
-                ancestor = registry.get<components::ParentComponent>(ancestor).parent;
-            else
-                break;
-        }
-
-        if (attachment.parentEntity == entt::null)
-        {
-            auto nameView = registry.view<components::NameComponent>();
-            for (auto candidate : nameView)
-            {
-                if (nameView.get<components::NameComponent>(candidate).name == attachment.parentEntityName)
-                {
-                    attachment.parentEntity = candidate;
-                    break;
-                }
-            }
-        }
-    }
-
-    void RuntimeAnimatorSystem::applyAttachmentTransform(entt::entity attachedEntity)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!registry.valid(attachedEntity) || !registry.all_of<components::SocketAttachmentComponent>(attachedEntity))
-            return;
-        auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-
-        if (!attachment.isActive || attachment.parentEntity == entt::null)
-            return;
-
-        if (!registry.valid(attachment.parentEntity))
-            return;
-
-        const resource::SkeletonData* skeleton = nullptr;
-        if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
-        {
-            const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
-            if (!meshComp.meshPath.empty())
-            {
-                skeleton = loadSkeleton(meshComp.meshPath);
-            }
-        }
-
-        int32_t socketIdx = attachment.cachedSocketIndex;
-        if (socketIdx < 0 && skeleton)
-        {
-            socketIdx = skeleton->getSocketIndex(attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty() &&
-                registry.all_of<components::MeshComponent>(attachment.parentEntity))
-            {
-                const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
-                skeletonDataCache.erase(meshComp.meshPath);
-                skeleton = loadSkeleton(meshComp.meshPath);
-                if (skeleton)
-                {
-                    socketIdx = skeleton->getSocketIndex(attachment.socketName);
-                }
-            }
-            auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-            mutableAttachment.cachedSocketIndex = socketIdx;
-        }
-
-        if (socketIdx < 0)
-            return;
-
-        glm::mat4 socketModelTransform = glm::mat4(1.0f);
-
-        auto cacheIt = socketTransformCache.find(attachment.parentEntity);
-        if (cacheIt != socketTransformCache.end() &&
-            socketIdx < static_cast<int32_t>(cacheIt->second.size()))
-        {
-            socketModelTransform = cacheIt->second[socketIdx];
-        }
-        else if (skeleton && socketIdx < static_cast<int32_t>(skeleton->sockets.size()))
-        {
-            const auto& socket = skeleton->sockets[socketIdx];
-            glm::vec3 boneMeshPos(0.0f);
-            if (socket.boneIndex >= 0 &&
-                socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
-            {
-                boneMeshPos = glm::vec3(
-                    skeleton->globalInverseTransform
-                    * skeleton->bindPoses[socket.boneIndex]
-                    * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
-            }
-            socketModelTransform = glm::translate(glm::mat4(1.0f),
-                boneMeshPos + socket.localPosition);
-        }
-        else
-        {
-            return;
-        }
-
-        glm::mat4 parentWorld = glm::mat4(1.0f);
-        if (registry.all_of<components::WorldTransformComponent>(attachment.parentEntity))
-        {
-            parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
-        }
-
-        glm::mat4 socketWorld = parentWorld * socketModelTransform;
-
-        glm::mat4 entityLocal = glm::mat4(1.0f);
-        if (registry.all_of<components::TransformComponent>(attachedEntity))
-        {
-            const auto& transform = registry.get<components::TransformComponent>(attachedEntity);
-            glm::mat4 rot = glm::mat4_cast(glm::quat(glm::radians(transform.rotation)));
-            entityLocal = rot * glm::scale(glm::mat4(1.0f), transform.scale);
-        }
-
-        glm::mat4 finalWorld = socketWorld * entityLocal;
-
-        registry.get_or_emplace<components::WorldTransformComponent>(attachedEntity).worldMatrix = finalWorld;
-
-        if (registry.all_of<components::TransformComponent>(attachedEntity))
-        {
-            auto& transform = registry.get<components::TransformComponent>(attachedEntity);
-            transform.position = glm::vec3(finalWorld[3]);
-            transform.isDirty = false;
-        }
+        socketUpdater->update();
     }
 
     void RuntimeAnimatorSystem::initializeEntityAnimator(entt::entity entity, const std::string& animatorPath)
@@ -764,22 +550,10 @@ namespace animation
             destroyEntityAnimator(entity);
         }
 
-        auto cacheIt = animatorDataCache.find(animatorPath);
-        std::shared_ptr<animator::AnimatorData> animatorData;
-
-        if (cacheIt != animatorDataCache.end())
+        auto animatorData = dataCache.loadAnimatorData(animatorPath);
+        if (!animatorData)
         {
-            animatorData = cacheIt->second;
-        }
-        else
-        {
-            animatorData = resource::ResourceManager::loadAnimator(animatorPath);
-            if (!animatorData)
-            {
-                vfLogError("[RuntimeAnimatorSystem] Failed to load animator: {}", animatorPath);
-                return;
-            }
-            animatorDataCache[animatorPath] = animatorData;
+            return;
         }
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -792,7 +566,7 @@ namespace animation
             meshPath = meshComp.meshPath;
             if (!meshPath.empty())
             {
-                skeleton = loadSkeleton(meshPath);
+                skeleton = dataCache.loadSkeleton(meshPath);
             }
         }
 
@@ -810,7 +584,7 @@ namespace animation
 
         stateMachine->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
         {
-            return loadAnimation(path);
+            return dataCache.loadAnimation(path);
         });
 
         AnimatorStateMachine* rawPtr = stateMachine.get();
@@ -939,9 +713,7 @@ namespace animation
 
         animators.clear();
         entityLODStates.clear();
-        animatorDataCache.clear();
-        animationDataCache.clear();
-        skeletonDataCache.clear();
+        dataCache.clearAll();
     }
 
     void RuntimeAnimatorSystem::clearAnimatorInstances()
@@ -963,172 +735,17 @@ namespace animation
 
     void RuntimeAnimatorSystem::cleanupUnusedCaches()
     {
-        std::unordered_set<std::string> usedAnimatorPaths;
-        std::unordered_set<std::string> usedMeshPaths;
-        std::unordered_set<std::string> usedAnimationPaths;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        for (const auto& [entity, animator] : animators)
-        {
-            if (!animator)
-            {
-                continue;
-            }
-
-            if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
-            {
-                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                if (!animComp.animatorPath.empty())
-                {
-                    usedAnimatorPaths.insert(animComp.animatorPath);
-                }
-            }
-
-            if (registry.valid(entity) && registry.all_of<components::MeshComponent>(entity))
-            {
-                const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (!meshComp.meshPath.empty())
-                {
-                    usedMeshPaths.insert(meshComp.meshPath);
-                }
-            }
-
-            const animator::AnimatorData* animData = animator->getAnimatorData();
-            if (animData)
-            {
-                for (const auto& state : animData->graph.states)
-                {
-                    if (!state.animationPath.empty())
-                    {
-                        usedAnimationPaths.insert(state.animationPath);
-                    }
-                }
-            }
-        }
-
-        size_t removedAnimators = 0;
-        size_t removedAnimations = 0;
-        size_t removedSkeletons = 0;
-
-        for (auto it = animatorDataCache.begin(); it != animatorDataCache.end();)
-        {
-            if (usedAnimatorPaths.find(it->first) == usedAnimatorPaths.end())
-            {
-                it = animatorDataCache.erase(it);
-                ++removedAnimators;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        for (auto it = animationDataCache.begin(); it != animationDataCache.end();)
-        {
-            if (usedAnimationPaths.find(it->first) == usedAnimationPaths.end())
-            {
-                it = animationDataCache.erase(it);
-                ++removedAnimations;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        for (auto it = skeletonDataCache.begin(); it != skeletonDataCache.end();)
-        {
-            if (usedMeshPaths.find(it->first) == usedMeshPaths.end())
-            {
-                it = skeletonDataCache.erase(it);
-                ++removedSkeletons;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        if (removedAnimators > 0 || removedAnimations > 0 || removedSkeletons > 0)
-        {
-            vfLogInfo("Cleaned up {} animators, {} animations, {} skeletons",
-                      removedAnimators, removedAnimations, removedSkeletons);
-        }
-    }
-
-    const resource::AnimationData* RuntimeAnimatorSystem::loadAnimation(const std::string& path)
-    {
-        if (path.empty())
-        {
-            return nullptr;
-        }
-
-        auto it = animationDataCache.find(path);
-        if (it != animationDataCache.end())
-        {
-            return it->second.get();
-        }
-
-        auto future = resource::ResourceManager::loadAnimationAsync(path);
-        auto animData = future.get();
-
-        if (!animData)
-        {
-            vfLogError("[RuntimeAnimatorSystem] Failed to load animation: {}", path);
-            return nullptr;
-        }
-
-        animationDataCache[path] = animData;
-
-        return animData.get();
+        dataCache.cleanupUnused(animators);
     }
 
     const resource::SkeletonData* RuntimeAnimatorSystem::loadSkeleton(const std::string& meshPath)
     {
-        if (meshPath.empty())
-        {
-            return nullptr;
-        }
-
-        auto it = skeletonDataCache.find(meshPath);
-        if (it != skeletonDataCache.end())
-        {
-            return it->second.get();
-        }
-
-        auto stream = resource::MeshStreamResource::openStream(meshPath);
-        if (!stream)
-        {
-            vfLogError("[RuntimeAnimatorSystem] Failed to open mesh for skeleton: {}", meshPath);
-            return nullptr;
-        }
-
-        if (!stream->hasSkeletonData())
-        {
-            skeletonDataCache[meshPath] = nullptr;
-            vfLogWarning("[RuntimeAnimatorSystem] Mesh has no skeleton data: {}", meshPath);
-            return nullptr;
-        }
-
-        auto skeletonData = std::make_shared<resource::SkeletonData>();
-        if (!stream->readSkeleton(*skeletonData))
-        {
-            skeletonDataCache[meshPath] = nullptr;
-            vfLogError("[RuntimeAnimatorSystem] Failed to read skeleton from: {}", meshPath);
-            return nullptr;
-        }
-
-        skeletonDataCache[meshPath] = skeletonData;
-
-        return skeletonData.get();
+        return dataCache.loadSkeleton(meshPath);
     }
 
     const std::vector<glm::mat4>* RuntimeAnimatorSystem::getCachedSocketTransforms(entt::entity entity) const
     {
-        auto it = socketTransformCache.find(entity);
-        if (it != socketTransformCache.end())
-            return &it->second;
-        return nullptr;
+        return socketUpdater->getCachedSocketTransforms(entity);
     }
 
     uint64_t RuntimeAnimatorSystem::computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,

@@ -4,7 +4,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
-#include <cmath>
 
 namespace animation
 {
@@ -28,14 +27,13 @@ namespace animation
         uint8_t lodIdx = static_cast<uint8_t>(state.currentLOD);
         uint32_t interval = config.updateIntervals[lodIdx];
 
-        // interval 0 means frozen (LOD3)
         if (interval == 0)
             return false;
 
         return state.framesSinceLastEval >= interval;
     }
 
-    void AnimationLODManager::updateEntityLOD(EntityAnimationLODState& state, float distanceSquared, float deltaTime)
+    void AnimationLODManager::updateEntityLOD(EntityAnimationLODState& state, float distanceSquared)
     {
         state.distanceSquared = distanceSquared;
         AnimationLODLevel newLOD = computeLODLevel(distanceSquared);
@@ -62,7 +60,6 @@ namespace animation
 
         for (size_t i = 0; i < minCount; ++i)
         {
-            // Decompose both matrices into T/R/S, SLERP rotation, lerp the rest
             glm::vec3 scaleA, transA, skewA;
             glm::vec4 perspA;
             glm::quat rotA;

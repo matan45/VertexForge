@@ -11,7 +11,6 @@ namespace windows
     private:
         bool visible = false;
 
-        // Creation params
         int tilesX = 4;
         int tilesZ = 4;
         float worldTileSize = 32.0f;
@@ -21,13 +20,11 @@ namespace windows
         float shallowColor[4] = {0.0f, 0.5f, 0.7f, 0.6f};
         float deepColor[4] = {0.0f, 0.1f, 0.3f, 0.9f};
 
-        // Settings (when water exists)
         bool hasWater = false;
         services::EntityHandle waterEntity;
         services::WaterGlobalSettingsData globalSettings;
         bool settingsDirty = false;
 
-        // Ocean FFT config
         services::OceanFFTConfigData oceanConfig;
         bool oceanConfigDirty = false;
 

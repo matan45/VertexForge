@@ -24,7 +24,6 @@ namespace render::gi
         uint32_t probeRaysPerUpdate = 64;     // Rays traced per probe per frame
         float temporalBlendFactor = 0.95f;    // Hysteresis for temporal accumulation
         float probeUpdateRate = 0.25f;        // Fraction of probes updated per frame
-        float irradianceGamma = 5.0f;         // Encoding gamma for SH
         float maxProbeDistance = 200.0f;      // Max ray distance
 
         // Far-field GI extension for open worlds
@@ -35,7 +34,6 @@ namespace render::gi
         uint32_t farFieldRaysPerUpdate = 32;  // Fewer rays for far-field (cheaper)
         float farFieldUpdateRate = 0.1f;      // 10% probes updated per frame (slower)
 
-        // Debug
         bool showProbes = false;
         bool showCascadeBounds = false;
         bool showProbeValidity = false;
@@ -101,7 +99,6 @@ namespace render::gi
     };
     static_assert(sizeof(ProbeData) == 64, "ProbeData must be 64 bytes");
 
-    // GPU-side cascade info
     struct alignas(16) GPUCascadeInfo
     {
         glm::vec4 gridOriginSpacing;     // xyz = origin, w = spacing
@@ -109,7 +106,6 @@ namespace render::gi
     };
     static_assert(sizeof(GPUCascadeInfo) == 32, "GPUCascadeInfo must be 32 bytes");
 
-    // Push constants for GI compute shaders
     struct GIComputePushConstants
     {
         uint32_t cascadeIndex;
@@ -122,13 +118,10 @@ namespace render::gi
         uint32_t frameIndex;
     };
 
-    // Stats for editor display
     struct GIDebugStats
     {
         uint32_t totalProbes = 0;
         uint32_t activeCascades = 0;
         uint32_t probesUpdatedThisFrame = 0;
-        float gpuTimeMs = 0.0f;
-        float averageProbeValidity = 0.0f;
     };
 }

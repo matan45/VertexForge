@@ -31,7 +31,6 @@ namespace render::lighting
         uint32_t maxPointLights = 1024;
         uint32_t maxSpotLights = 512;
 
-        // Priority weights for scoring
         float distanceWeight = 1.0f;
         float intensityWeight = 0.5f;
         float radiusWeight = 0.3f;
@@ -72,7 +71,6 @@ namespace render::lighting
 
         LightStreamingConfig config;
 
-        // Priority scoring state
         glm::vec3 cameraPosition{0.0f};
         std::vector<std::pair<uint32_t, float>> sortedPriorities; // entityId, priority
 
@@ -88,29 +86,23 @@ namespace render::lighting
         void init(const LightStreamingConfig& cfg = {});
         void cleanup();
 
-        // Sector lifecycle
         void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
         void unregisterSectorLights(uint32_t sectorId);
 
-        // Individual light management
         bool registerLight(uint32_t entityId, LightStreamEntry::LightType type,
                           uint32_t sectorId = 0);
         void unregisterLight(uint32_t entityId);
 
-        // Priority update
         void updatePriorities(const glm::vec3& cameraPos);
         void applyBudget();
 
-        // Access
         bool isLightActive(uint32_t entityId) const;
         const std::unordered_set<uint32_t>& getActiveLightIds() const { return activeLightIds; }
         uint32_t getSlotIndex(uint32_t entityId) const;
 
-        // Configuration
         void setConfig(const LightStreamingConfig& cfg);
         const LightStreamingConfig& getConfig() const { return config; }
 
-        // Stats
         LightStreamingStats getStats() const;
 
     private:

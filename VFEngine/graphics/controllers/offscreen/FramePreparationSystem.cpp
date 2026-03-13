@@ -97,7 +97,6 @@ namespace controllers::offscreen
                 const auto& frustum = ctx.cameraController->getCurrentFrustum();
                 if (frustum.isInitialized())
                 {
-                    // Extract camera position from inverse view matrix
                     glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
                     glm::vec3 cameraPos = glm::vec3(invView[3]);
                     animatorSystem.setCullingContext(frustum, cameraPos);
@@ -255,7 +254,6 @@ namespace controllers::offscreen
             return h;
         };
 
-        // Map from batch key to index in meshDrawList (for the template MeshRenderData)
         std::unordered_map<BatchKey, size_t, BatchKeyHash> batchMap;
 
         auto collectEntity = [&](entt::entity entity, const components::MeshComponent& meshComp,
@@ -271,12 +269,10 @@ namespace controllers::offscreen
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())
                 {
-                    // Append transform to existing batch
                     meshDrawList[it->second].instanceTransforms.push_back(worldTransform.worldMatrix);
                     return;
                 }
 
-                // Start new batch: first instance goes into instanceTransforms
                 size_t idx = meshDrawList.size();
                 renderData.instanceTransforms.push_back(worldTransform.worldMatrix);
                 meshDrawList.push_back(std::move(renderData));

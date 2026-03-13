@@ -131,6 +131,36 @@ namespace windows
             return;
         }
 
+        drawBrushType();
+        drawTerrainMaterial();
+        drawLayerSelection();
+        drawBrushParams();
+
+        bool isBaseLayerMode = (selectedBrushType == static_cast<int>(terrain::PaintBrushType::SetBaseLayer));
+        ImGui::Spacing();
+        ImGui::Separator();
+        if (isBaseLayerMode)
+        {
+            ImGui::TextDisabled("Left-click to set base layer on tiles");
+        }
+        else
+        {
+            ImGui::TextDisabled("Left-click to paint");
+            ImGui::TextDisabled("Hold Shift to erase");
+        }
+
+        ImGui::End();
+
+        if (!visible)
+        {
+            events::paint::SetPaintModeActiveCommand cmd;
+            cmd.active = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void PaintToolPanel::drawBrushType()
+    {
         auto& dispatcher = events::EventDispatcher::instance();
 
         ImGui::Text("Brush Type");
@@ -157,6 +187,11 @@ namespace windows
             cmd.type = static_cast<terrain::PaintBrushType>(selectedBrushType);
             dispatcher.execute(cmd);
         }
+    }
+
+    void PaintToolPanel::drawTerrainMaterial()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
         ImGui::Spacing();
         ImGui::Text("Terrain Material");
@@ -200,6 +235,11 @@ namespace windows
                 }
             }
         }
+    }
+
+    void PaintToolPanel::drawLayerSelection()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
         ImGui::Spacing();
         ImGui::Text("Layer Selection");
@@ -241,6 +281,11 @@ namespace windows
         {
             ImGui::TextDisabled("No layers - assign a terrain material above");
         }
+    }
+
+    void PaintToolPanel::drawBrushParams()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
         ImGui::Spacing();
         ImGui::Text("Brush Parameters");
@@ -286,28 +331,6 @@ namespace windows
                 cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
                 dispatcher.execute(cmd);
             }
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        if (isBaseLayerMode)
-        {
-            ImGui::TextDisabled("Left-click to set base layer on tiles");
-        }
-        else
-        {
-            ImGui::TextDisabled("Left-click to paint");
-            ImGui::TextDisabled("Hold Shift to erase");
-        }
-
-        ImGui::End();
-
-        // If user closed the panel, deactivate paint mode
-        if (!visible)
-        {
-            events::paint::SetPaintModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
         }
     }
 }

@@ -6,6 +6,13 @@ namespace core::adapters
 {
     class GrassRenderAdapter : public services::IGrassRenderProvider
     {
+    private:
+        bool renderingEnabled = true;
+        TileCallback addTileCallback;
+        TileCallback removeTileCallback;
+        TileCallback markDirtyCallback;
+        GetConfigCallback getConfigCallback;
+        
     public:
         GrassRenderAdapter() = default;
         ~GrassRenderAdapter() override = default;
@@ -23,12 +30,6 @@ namespace core::adapters
         void setRemoveTileCallback(TileCallback cb) override { removeTileCallback = std::move(cb); }
         void setMarkDirtyCallback(TileCallback cb) override { markDirtyCallback = std::move(cb); }
         void setGetConfigCallback(GetConfigCallback cb) override { getConfigCallback = std::move(cb); }
-
-    private:
-        bool renderingEnabled = true;
-        TileCallback addTileCallback;
-        TileCallback removeTileCallback;
-        TileCallback markDirtyCallback;
-        GetConfigCallback getConfigCallback;
+        
     };
 }

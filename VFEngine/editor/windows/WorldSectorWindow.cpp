@@ -4,15 +4,11 @@
 #include "imgui.h"
 #include "nfd/FileDialog.hpp"
 
-namespace
-{
-    const std::vector<std::pair<std::wstring, std::wstring>> WORLD_FILE_TYPES = {
-        {L"World Files", L"*.vfworld"}
-    };
-}
-
 namespace windows
 {
+    const std::vector<std::pair<std::wstring, std::wstring>> WorldSectorWindow::WORLD_FILE_TYPES = {
+        {L"World Files", L"*.vfworld"}
+    };
     void WorldSectorWindow::draw()
     {
         if (!visible) return;
@@ -52,7 +48,6 @@ namespace windows
 
                 ImGui::Separator();
 
-                // Debug draw toggle
                 bool debugDraw = dispatcher.query(events::world::GetSectorDebugDrawQuery{});
                 if (ImGui::Checkbox("Show Sector Bounds", &debugDraw))
                 {

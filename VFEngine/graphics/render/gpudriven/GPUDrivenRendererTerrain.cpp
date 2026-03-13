@@ -122,24 +122,16 @@ namespace render::gpudriven
             gpuLayer.emissionStrength = layer.emissionStrength;
         }
 
-        // Register texture dependencies so textures stay alive while terrain material is in use
         {
-            auto& lifecycle = resource::AssetLifecycleManager::instance();
-            if (!lifecycle.isTracked(materialPath))
-            {
-                lifecycle.acquire(materialPath, resource::AssetType::Material);
-            }
-            auto addDep = [&](const std::string& texPath) {
-                if (!texPath.empty())
-                    lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
-            };
+            std::vector<std::string> texPaths;
             for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
             {
                 const auto& layer = materialData->layers[i];
-                addDep(layer.albedoTexturePath);
-                addDep(layer.normalTexturePath);
-                addDep(layer.ormTexturePath);
+                texPaths.push_back(layer.albedoTexturePath);
+                texPaths.push_back(layer.normalTexturePath);
+                texPaths.push_back(layer.ormTexturePath);
             }
+            registerTextureDependencies(materialPath, texPaths);
         }
 
         if (terrain.pipeline)

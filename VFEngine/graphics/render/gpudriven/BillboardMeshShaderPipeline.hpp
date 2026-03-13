@@ -22,20 +22,14 @@ namespace render::gpudriven
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Set 0: instance data (owned)
         vk::DescriptorSetLayout instanceDataLayout;
         vk::DescriptorPool instanceDataPool;
         vk::DescriptorSet instanceDataDescriptorSet;
 
-        // Set 1: camera UBO (owned)
         vk::DescriptorSetLayout cameraLayout;
         vk::DescriptorPool cameraPool;
         vk::DescriptorSet cameraDescriptorSet;
 
-        // External layouts (not owned)
-        vk::DescriptorSetLayout cachedBindlessTextureLayout;
-
-        // External descriptor sets (not owned)
         vk::DescriptorSet bindlessTextureDescriptorSet;
 
         bool initialized = false;
@@ -57,7 +51,6 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout bindlessTextureLayout,
                       vk::RenderPass renderPass);
 
-        // Set 0 descriptors: billboard instance buffer + count buffer
         void updateInstanceDescriptors(vk::Buffer instanceBuffer, vk::Buffer countBuffer);
 
         void updateCameraDescriptor(vk::Buffer cameraBuffer);
@@ -67,7 +60,7 @@ namespace render::gpudriven
         void dispatch(vk::CommandBuffer cmd, uint32_t instanceCount);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
-        [[nodiscard]] vk::Pipeline getPipeline() const { return graphicsPipeline; }
+
 
     private:
 
