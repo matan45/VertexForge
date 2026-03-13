@@ -221,6 +221,9 @@ namespace serialization
         static json serializeIKTarget(const components::IKTargetComponent& ikTarget);
         static void deserializeIKTarget(const json& j, components::IKTargetComponent& ikTarget);
 
+        static json serializeBehaviorTree(const components::BehaviorTreeComponent& bt);
+        static void deserializeBehaviorTree(const json& j, components::BehaviorTreeComponent& bt);
+
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
 

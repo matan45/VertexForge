@@ -27,17 +27,17 @@ namespace windows::details
         {
             ImGui::Indent();
 
-            // Tree path
-            char pathBuf[256];
-            strncpy(pathBuf, bt.behaviorTreePath.c_str(), sizeof(pathBuf) - 1);
-            pathBuf[sizeof(pathBuf) - 1] = '\0';
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 35.0f);
-            if (ImGui::InputText("##TreePath", pathBuf, sizeof(pathBuf)))
+            // Tree path display (read-only text, like material drawer)
+            ImGui::Text("Tree:");
+            std::string display = bt.behaviorTreePath.empty() ? "(None)" : bt.behaviorTreePath;
+            if (display.length() > 35)
             {
-                bt.behaviorTreePath = pathBuf;
+                display = "..." + display.substr(display.length() - 32);
             }
+            ImGui::TextDisabled("%s", display.c_str());
+
             ImGui::SameLine();
-            if (ImGui::Button("...##btBrowse"))
+            if (ImGui::Button("Browse##BT"))
             {
                 static const std::vector<std::pair<std::wstring, std::wstring>> BT_FILE_TYPES = {
                     {L"Behavior Tree", L"*.vfBehaviorTree"}
@@ -48,6 +48,19 @@ namespace windows::details
                 {
                     bt.behaviorTreePath = path;
                 }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Clear##BT"))
+            {
+                if (bt.isInitialized)
+                {
+                    events::ai::DetachBehaviorTreeCommand cmd;
+                    cmd.entity = handle;
+                    events::EventDispatcher::instance().execute(cmd);
+                    bt.isInitialized = false;
+                }
+                bt.behaviorTreePath.clear();
             }
 
             // Enabled toggle
