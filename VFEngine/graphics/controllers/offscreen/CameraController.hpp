@@ -21,6 +21,13 @@ namespace controllers::offscreen
         bool occlusionCullingEnabled = true;
         bool occlusionCullingReady = false;
         math::Frustum currentFrustum;
+
+        bool taaEnabled = false;
+        uint32_t taaFrameIndex = 0;
+        glm::mat4 unjitteredProjection{1.0f};
+        glm::vec2 currentJitterOffset{0.0f};
+        uint32_t viewportWidth = 1920;
+        uint32_t viewportHeight = 1080;
     public:
         explicit CameraController(render::RenderPassHandler& renderHandler);
 
@@ -41,5 +48,11 @@ namespace controllers::offscreen
         const glm::mat4& getCurrentViewProj() const { return currentViewProj; }
         const glm::mat4& getCurrentViewMatrix() const { return currentViewMatrix; }
         float getCurrentNearPlane() const { return currentNearPlane; }
+
+        void setTAAEnabled(bool enabled) { taaEnabled = enabled; if (!enabled) taaFrameIndex = 0; }
+        void setViewportExtent(uint32_t width, uint32_t height) { viewportWidth = width; viewportHeight = height; }
+        const glm::mat4& getUnjitteredProjection() const { return unjitteredProjection; }
+        uint32_t getTAAFrameIndex() const { return taaFrameIndex; }
+        const glm::vec2& getCurrentJitterOffset() const { return currentJitterOffset; }
     };
 }

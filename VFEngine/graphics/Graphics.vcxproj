@@ -221,6 +221,7 @@
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\LightOcclusionCulling.hpp" />
+    <ClInclude Include="render\postprocess\JitterSequence.hpp" />
     <ClInclude Include="render\postprocess\PostProcessEffect.hpp" />
     <ClInclude Include="render\postprocess\PostProcessPipeline.hpp" />
     <ClInclude Include="render\postprocess\effects\AutoExposureEffect.hpp" />
@@ -228,9 +229,9 @@
     <ClInclude Include="render\postprocess\effects\ChromaticAberrationEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
-    <ClInclude Include="render\postprocess\effects\FXAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\TAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
@@ -450,10 +451,10 @@
     <ClCompile Include="render\postprocess\effects\ChromaticAberrationEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\EdgeDetectionEffect.cpp" />
-    <ClCompile Include="render\postprocess\effects\FXAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
+    <ClCompile Include="render\postprocess\effects\TAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
@@ -586,10 +587,11 @@
     <None Include="..\..\resources\shaders\postprocess\edge_detection_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\fxaa.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\taa_resolve.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\taa_sharpen.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />

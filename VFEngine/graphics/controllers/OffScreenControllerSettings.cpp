@@ -1,5 +1,6 @@
 #include "OffScreenController.hpp"
 #include "../core/VulkanContext.hpp"
+#include "../core/SwapChain.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -9,6 +10,7 @@
 #include "../render/gi/RadianceCascadeManager.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
+#include "offscreen/CameraController.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
 #include "types/RenderSettings.hpp"
@@ -167,6 +169,14 @@ namespace controllers
                     composite->setIntensity(settings.volumetricFog.intensity);
                 }
             }
+        }
+
+        // Forward TAA enabled state to CameraController for jitter
+        if (cameraController)
+        {
+            cameraController->setTAAEnabled(settings.enabled && settings.taa.enabled);
+            auto extent = swapChain.getSwapchainExtent();
+            cameraController->setViewportExtent(extent.width, extent.height);
         }
 
         auto* pipeline = renderHandler->getPostProcessPipeline();

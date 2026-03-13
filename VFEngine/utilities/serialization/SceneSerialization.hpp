@@ -143,9 +143,6 @@ namespace serialization
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);
 
-        static std::string fxaaQualityToString(postprocess::FXAAQuality quality);
-        static postprocess::FXAAQuality stringToFXAAQuality(const std::string& str);
-
         static json serializeTerrain(const components::TerrainComponent& terrain);
         static void deserializeTerrain(const json& j, components::TerrainComponent& terrain);
 

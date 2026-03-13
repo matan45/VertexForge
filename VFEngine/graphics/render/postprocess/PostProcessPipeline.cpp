@@ -1,6 +1,6 @@
 #include "PostProcessPipeline.hpp"
 #include "effects/ToneMappingEffect.hpp"
-#include "effects/FXAAEffect.hpp"
+#include "effects/TAAEffect.hpp"
 #include "effects/BloomEffect.hpp"
 #include "effects/VignetteEffect.hpp"
 #include "effects/ChromaticAberrationEffect.hpp"
@@ -37,13 +37,22 @@ namespace render::postprocess
     void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
                                               const glm::vec3& cameraPosition,
                                               const glm::mat4& viewMatrix,
-                                              const glm::mat4& projectionMatrix, float time)
+                                              const glm::mat4& projectionMatrix,
+                                              const glm::mat4& unjitteredProjection,
+                                              const glm::vec2& jitterOffset,
+                                              uint32_t frameIndex, float time)
     {
+        cameraInfo.prevViewMatrix = cameraInfo.viewMatrix;
+        cameraInfo.prevProjectionMatrix = cameraInfo.unjitteredProjectionMatrix;
+
         cameraInfo.nearPlane = nearPlane;
         cameraInfo.farPlane = farPlane;
         cameraInfo.cameraPosition = cameraPosition;
         cameraInfo.viewMatrix = viewMatrix;
         cameraInfo.projectionMatrix = projectionMatrix;
+        cameraInfo.unjitteredProjectionMatrix = unjitteredProjection;
+        cameraInfo.jitterOffset = jitterOffset;
+        cameraInfo.frameIndex = frameIndex;
         cameraInfo.time = time;
     }
 
@@ -410,8 +419,8 @@ namespace render::postprocess
         syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
             [this]() { return std::make_unique<ToneMappingEffect>(device); });
 
-        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
-            [this]() { return std::make_unique<FXAAEffect>(device); });
+        syncEffect(::postprocess::EffectType::TAA, settings.taa.enabled,
+            [this]() { return std::make_unique<TAAEffect>(device, swapChain, offscreenResources, *this); });
 
         syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,
             [this]() { return std::make_unique<BloomEffect>(device); });

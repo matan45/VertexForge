@@ -181,24 +181,7 @@ namespace serialization
         return postprocess::ToneMappingMode::ACES;
     }
 
-    std::string SceneSerialization::fxaaQualityToString(postprocess::FXAAQuality quality)
-    {
-        switch (quality)
-        {
-        case postprocess::FXAAQuality::Low: return "low";
-        case postprocess::FXAAQuality::Medium: return "medium";
-        case postprocess::FXAAQuality::High: return "high";
-        default: return "medium";
-        }
-    }
 
-    postprocess::FXAAQuality SceneSerialization::stringToFXAAQuality(const std::string& str)
-    {
-        if (str == "low") return postprocess::FXAAQuality::Low;
-        if (str == "medium") return postprocess::FXAAQuality::Medium;
-        if (str == "high") return postprocess::FXAAQuality::High;
-        return postprocess::FXAAQuality::Medium;
-    }
 
     // ---- Physics Settings ----
 

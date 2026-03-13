@@ -162,74 +162,54 @@ namespace core::api
             });
 
         // =============================================
-        // FXAA
+        // TAA
         // =============================================
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_isEnabled",
+        interpreter->registerNativeFunction("_native_postprocess_taa_isEnabled",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.fxaa.enabled);
+                return value::Value(s.taa.enabled);
             });
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEnabled",
+        interpreter->registerNativeFunction("_native_postprocess_taa_setEnabled",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.fxaa.enabled = extractBool(args[0]);
+                    s.taa.enabled = extractBool(args[0]);
                 });
             });
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_getQuality",
+        interpreter->registerNativeFunction("_native_postprocess_taa_getBlendFactor",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(static_cast<int64_t>(s.fxaa.quality));
+                return value::Value(s.taa.blendFactor);
             });
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_setQuality",
+        interpreter->registerNativeFunction("_native_postprocess_taa_setBlendFactor",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    int64_t quality = extractInt64(args[0], "PostProcess.fxaa.setQuality");
-                    if (quality >= 0 && quality <= 2)
-                    {
-                        s.fxaa.quality = static_cast<postprocess::FXAAQuality>(quality);
-                    }
+                    s.taa.blendFactor = extractFloat(args[0], "PostProcess.taa.setBlendFactor");
                 });
             });
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_getEdgeThresholdMin",
+        interpreter->registerNativeFunction("_native_postprocess_taa_getSharpenStrength",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.fxaa.edgeThresholdMin);
+                return value::Value(s.taa.sharpenStrength);
             });
 
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEdgeThresholdMin",
+        interpreter->registerNativeFunction("_native_postprocess_taa_setSharpenStrength",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
-                    s.fxaa.edgeThresholdMin = extractFloat(args[0], "PostProcess.fxaa.setEdgeThresholdMin");
-                });
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_getEdgeThreshold",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
-                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.fxaa.edgeThreshold);
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEdgeThreshold",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
-                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
-                {
-                    s.fxaa.edgeThreshold = extractFloat(args[0], "PostProcess.fxaa.setEdgeThreshold");
+                    s.taa.sharpenStrength = extractFloat(args[0], "PostProcess.taa.setSharpenStrength");
                 });
             });
 

@@ -6,7 +6,7 @@ namespace postprocess
     enum class EffectType : uint8_t
     {
         ToneMapping = 0,
-        FXAA,
+        TAA,
         Bloom,
         Vignette,
         ChromaticAberration,
@@ -35,11 +35,12 @@ namespace postprocess
         KhronosPBRNeutral
     };
 
-    enum class FXAAQuality : uint8_t
+    struct TAASettings
     {
-        Low = 0,
-        Medium,
-        High
+        bool enabled = false;
+        float blendFactor = 0.1f;
+        float sharpenStrength = 0.5f;
+        bool useVarianceClipping = true;
     };
 
     struct ToneMappingSettings
@@ -51,14 +52,6 @@ namespace postprocess
         float contrast = 1.0f;
         float toe = 0.0f;
         float shoulder = 0.0f;
-    };
-
-    struct FXAASettings
-    {
-        bool enabled = false;
-        FXAAQuality quality = FXAAQuality::Medium;
-        float edgeThresholdMin = 0.0312f;
-        float edgeThreshold = 0.125f;
     };
 
     struct BloomSettings
@@ -165,7 +158,7 @@ namespace postprocess
         bool enabled = false;
 
         ToneMappingSettings toneMapping;
-        FXAASettings fxaa;
+        TAASettings taa;
         BloomSettings bloom;
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;

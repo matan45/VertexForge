@@ -93,25 +93,6 @@ namespace serialization
             return postprocess::ToneMappingMode::ACES;
         }
 
-        std::string fxaaQualityToStr(postprocess::FXAAQuality quality)
-        {
-            switch (quality)
-            {
-            case postprocess::FXAAQuality::Low: return "low";
-            case postprocess::FXAAQuality::Medium: return "medium";
-            case postprocess::FXAAQuality::High: return "high";
-            default: return "medium";
-            }
-        }
-
-        postprocess::FXAAQuality strToFXAAQuality(const std::string& str)
-        {
-            if (str == "low") return postprocess::FXAAQuality::Low;
-            if (str == "medium") return postprocess::FXAAQuality::Medium;
-            if (str == "high") return postprocess::FXAAQuality::High;
-            return postprocess::FXAAQuality::Medium;
-        }
-
         // ---- Serialize post-process helpers ----
 
         json serializeToneMapping(const postprocess::ToneMappingSettings& s)
@@ -127,13 +108,13 @@ namespace serialization
             };
         }
 
-        json serializeFxaa(const postprocess::FXAASettings& s)
+        json serializeTAA(const postprocess::TAASettings& s)
         {
             return {
                 {"enabled", s.enabled},
-                {"quality", fxaaQualityToStr(s.quality)},
-                {"edgeThresholdMin", s.edgeThresholdMin},
-                {"edgeThreshold", s.edgeThreshold}
+                {"blendFactor", s.blendFactor},
+                {"sharpenStrength", s.sharpenStrength},
+                {"useVarianceClipping", s.useVarianceClipping}
             };
         }
 
@@ -290,19 +271,19 @@ namespace serialization
                 s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
         }
 
-        void deserializeFxaa(const json& j, postprocess::FXAASettings& s)
+        void deserializeTAA(const json& j, postprocess::TAASettings& s)
         {
-            if (!j.contains("fxaa") || !j["fxaa"].is_object())
+            if (!j.contains("taa") || !j["taa"].is_object())
                 return;
-            const auto& fxaa = j["fxaa"];
-            if (fxaa.contains("enabled") && fxaa["enabled"].is_boolean())
-                s.enabled = fxaa["enabled"].get<bool>();
-            if (fxaa.contains("quality") && fxaa["quality"].is_string())
-                s.quality = strToFXAAQuality(fxaa["quality"].get<std::string>());
-            if (fxaa.contains("edgeThresholdMin") && fxaa["edgeThresholdMin"].is_number())
-                s.edgeThresholdMin = std::clamp(fxaa["edgeThresholdMin"].get<float>(), 0.0f, 1.0f);
-            if (fxaa.contains("edgeThreshold") && fxaa["edgeThreshold"].is_number())
-                s.edgeThreshold = std::clamp(fxaa["edgeThreshold"].get<float>(), 0.0f, 1.0f);
+            const auto& taa = j["taa"];
+            if (taa.contains("enabled") && taa["enabled"].is_boolean())
+                s.enabled = taa["enabled"].get<bool>();
+            if (taa.contains("blendFactor") && taa["blendFactor"].is_number())
+                s.blendFactor = std::clamp(taa["blendFactor"].get<float>(), 0.01f, 0.5f);
+            if (taa.contains("sharpenStrength") && taa["sharpenStrength"].is_number())
+                s.sharpenStrength = std::clamp(taa["sharpenStrength"].get<float>(), 0.0f, 1.0f);
+            if (taa.contains("useVarianceClipping") && taa["useVarianceClipping"].is_boolean())
+                s.useVarianceClipping = taa["useVarianceClipping"].get<bool>();
         }
 
         void deserializeBloom(const json& j, postprocess::BloomSettings& s)
@@ -789,7 +770,7 @@ namespace serialization
 
         j["enabled"] = settings.enabled;
         j["toneMapping"] = serializeToneMapping(settings.toneMapping);
-        j["fxaa"] = serializeFxaa(settings.fxaa);
+        j["taa"] = serializeTAA(settings.taa);
         j["bloom"] = serializeBloom(settings.bloom);
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
@@ -809,7 +790,7 @@ namespace serialization
             settings.enabled = j["enabled"].get<bool>();
 
         deserializeToneMapping(j, settings.toneMapping);
-        deserializeFxaa(j, settings.fxaa);
+        deserializeTAA(j, settings.taa);
         deserializeBloom(j, settings.bloom);
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);

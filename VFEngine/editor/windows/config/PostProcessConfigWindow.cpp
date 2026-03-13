@@ -209,45 +209,46 @@ namespace windows
         }
     }
 
-    void PostProcessConfigWindow::drawFXAASection()
+    void PostProcessConfigWindow::drawTAASection()
     {
-        if (ImGui::CollapsingHeader("FXAA", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::CollapsingHeader("TAA (Temporal Anti-Aliasing)", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Indent(10.0f);
 
-            if (ImGui::Checkbox("Enable FXAA", &settings.fxaa.enabled))
+            if (ImGui::Checkbox("Enable TAA", &settings.taa.enabled))
             {
                 isDirty = true;
             }
 
-            if (settings.fxaa.enabled)
+            if (settings.taa.enabled)
             {
                 ImGui::Spacing();
 
-                const char* qualityItems[] = {"Low", "Medium", "High"};
-                int currentQuality = static_cast<int>(settings.fxaa.quality);
-                if (ImGui::Combo("Quality", &currentQuality, qualityItems, 3))
-                {
-                    settings.fxaa.quality = static_cast<postprocess::FXAAQuality>(currentQuality);
-                    isDirty = true;
-                }
-
-                if (ImGui::DragFloat("Edge Threshold Min", &settings.fxaa.edgeThresholdMin, 0.001f, 0.01f, 0.1f, "%.4f"))
+                if (ImGui::DragFloat("Blend Factor", &settings.taa.blendFactor, 0.01f, 0.01f, 0.5f, "%.2f"))
                 {
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Minimum luminance threshold for edge detection.\nLower = more edges detected.");
+                    ImGui::SetTooltip("How much of the current frame to blend in.\nLower = more temporal smoothing, higher = more responsive.");
                 }
 
-                if (ImGui::DragFloat("Edge Threshold", &settings.fxaa.edgeThreshold, 0.001f, 0.05f, 0.5f, "%.4f"))
+                if (ImGui::DragFloat("Sharpen Strength", &settings.taa.sharpenStrength, 0.01f, 0.0f, 1.0f, "%.2f"))
                 {
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Maximum luminance threshold for edge detection.\nLower = more aggressive anti-aliasing.");
+                    ImGui::SetTooltip("Contrast-adaptive sharpening intensity.\nCounteracts TAA blur.");
+                }
+
+                if (ImGui::Checkbox("Variance Clipping", &settings.taa.useVarianceClipping))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Use variance-based clipping instead of min/max AABB.\nMore robust against ghosting artifacts.");
                 }
             }
 
@@ -436,7 +437,7 @@ namespace windows
             ImGui::Spacing();
 
             drawToneMappingSection();
-            drawFXAASection();
+            drawTAASection();
             drawBloomSection();
             drawVignetteSection();
             drawChromaticAberrationSection();

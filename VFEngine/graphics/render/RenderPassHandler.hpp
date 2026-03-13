@@ -134,6 +134,9 @@ namespace render
         bool debugRendererInitialized = false;
         glm::mat4 currentView{1.0f};
         glm::mat4 currentProjection{1.0f};
+        glm::mat4 unjitteredProjection{1.0f};
+        glm::vec2 currentJitterOffset{0.0f};
+        uint32_t taaFrameIndex = 0;
 
         bool gpuDrivenRendererInitialized = false;
         glm::vec3 currentCameraPosition{0.0f};
@@ -232,6 +235,9 @@ namespace render
         void clearNavmeshDebugMesh();
 
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        void setUnjitteredProjection(const glm::mat4& proj) { unjitteredProjection = proj; }
+        const glm::mat4& getUnjitteredProjection() const { return unjitteredProjection; }
+        void setTAAJitterData(const glm::vec2& jitter, uint32_t frameIndex) { currentJitterOffset = jitter; taaFrameIndex = frameIndex; }
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }
 
