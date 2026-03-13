@@ -1,7 +1,7 @@
 #pragma once
 
-#include "MeshletBufferTypes.hpp"
-#include "FreeListAllocator.hpp"
+#include "../MeshletBufferTypes.hpp"
+#include "../FreeListAllocator.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <string>

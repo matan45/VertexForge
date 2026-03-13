@@ -1,5 +1,5 @@
 #include "BillboardStreamManager.hpp"
-#include "../../core/Device.hpp"
+#include "../../../core/Device.hpp"
 #include <algorithm>
 
 namespace render::gpudriven

@@ -3,7 +3,7 @@
 #include "mesh/MeshTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 
 namespace render
 {

@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 #include <array>
-#include "GPUDrivenTypes.hpp"
+#include "../GPUDrivenTypes.hpp"
 
 namespace core
 {

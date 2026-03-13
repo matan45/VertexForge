@@ -1,7 +1,7 @@
 #include "BrushComputePipeline.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/Shader.hpp"
-#include "../../core/BufferUtilities.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/Shader.hpp"
+#include "../../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
 
 #include <cstring>

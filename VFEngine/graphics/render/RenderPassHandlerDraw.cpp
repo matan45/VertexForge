@@ -14,7 +14,7 @@
 #include "ui/UITextPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
-#include "gpudriven/TerrainRaycastPipeline.hpp"
+#include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "transparency/WBOITPipeline.hpp"

@@ -1,11 +1,11 @@
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
 #include "MergedMeshBuffer.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
-#include "../../core/Shader.hpp"
-#include "../../core/PipelineUtilities.hpp"
-#include "../../core/BufferUtilities.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/SwapChain.hpp"
+#include "../../../core/Shader.hpp"
+#include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
 #include <array>
 

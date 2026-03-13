@@ -1,5 +1,5 @@
 #include "GPUDrivenCameraBuffer.hpp"
-#include "IndirectBatchManager.hpp"
+#include "scene/IndirectBatchManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"

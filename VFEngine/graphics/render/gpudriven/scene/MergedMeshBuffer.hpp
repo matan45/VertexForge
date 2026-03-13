@@ -1,8 +1,8 @@
 #pragma once
 
-#include "GPUDrivenTypes.hpp"
-#include "FreeListAllocator.hpp"
-#include "../material/MaterialPBRExtractor.hpp"
+#include "../GPUDrivenTypes.hpp"
+#include "../FreeListAllocator.hpp"
+#include "../../material/MaterialPBRExtractor.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <entt/entt.hpp>

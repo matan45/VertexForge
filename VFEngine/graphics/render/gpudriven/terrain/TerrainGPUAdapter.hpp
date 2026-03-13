@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GPUDrivenTypes.hpp"
+#include "../GPUDrivenTypes.hpp"
 #include "TerrainMeshBuffer.hpp"
 #include "resource/MeshletTypes.hpp"
 #include <glm/glm.hpp>

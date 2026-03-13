@@ -10,7 +10,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "vegetation/WindConfig.hpp"
-#include "BindlessTextureManager.hpp"
+#include "scene/BindlessTextureManager.hpp"
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier

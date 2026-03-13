@@ -1,6 +1,6 @@
 #include "OffScreenController.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
-#include "../render/gpudriven/BrushComputePipeline.hpp"
+#include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"

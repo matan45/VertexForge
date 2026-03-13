@@ -1,7 +1,7 @@
 #include "GPUCullLODPipeline.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/Shader.hpp"
-#include "GPUDrivenTypes.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/Shader.hpp"
+#include "../GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
 #include <array>
 

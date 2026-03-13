@@ -1,5 +1,5 @@
 #include "MergedMeshBuffer.hpp"
-#include "../mesh/MeshTypes.hpp"
+#include "../../mesh/MeshTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"

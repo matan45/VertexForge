@@ -1,7 +1,7 @@
 #include "IndirectBatchManager.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/BufferUtilities.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/BufferUtilities.hpp"
+#include "../../../core/Utilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 

@@ -1,8 +1,8 @@
 #include "print/Log.hpp"
 #include "MeshletBuffer.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/BufferUtilities.hpp"
-#include "../../core/TransferManager.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/BufferUtilities.hpp"
+#include "../../../core/TransferManager.hpp"
 #include "resource/MeshletTypes.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include <cassert>

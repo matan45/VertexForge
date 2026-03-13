@@ -1,8 +1,8 @@
 #include "BoneMatrixManager.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/BufferUtilities.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
-#include "GPUDrivenTypes.hpp"
+#include "../GPUDrivenTypes.hpp"
 #include <algorithm>
 
 

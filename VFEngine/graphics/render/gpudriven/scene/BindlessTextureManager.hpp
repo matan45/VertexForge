@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GPUDrivenTypes.hpp"
+#include "../GPUDrivenTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <string>
 #include <mutex>

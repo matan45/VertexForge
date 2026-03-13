@@ -1,8 +1,8 @@
 #pragma once
 
-#include "GPUDrivenTypes.hpp"
-#include "MeshletBufferTypes.hpp"
-#include "FreeListAllocator.hpp"
+#include "../GPUDrivenTypes.hpp"
+#include "../MeshletBufferTypes.hpp"
+#include "../FreeListAllocator.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>

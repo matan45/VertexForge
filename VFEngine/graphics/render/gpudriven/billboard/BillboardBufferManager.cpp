@@ -1,6 +1,6 @@
 #include "BillboardBufferManager.hpp"
-#include "../../core/Device.hpp"
-#include "../../core/BufferUtilities.hpp"
+#include "../../../core/Device.hpp"
+#include "../../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 

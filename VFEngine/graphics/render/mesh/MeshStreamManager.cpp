@@ -1,6 +1,6 @@
 #include "MeshStreamManager.hpp"
-#include "../gpudriven/MergedMeshBuffer.hpp"
-#include "../gpudriven/MeshletBuffer.hpp"
+#include "../gpudriven/scene/MergedMeshBuffer.hpp"
+#include "../gpudriven/scene/MeshletBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "resource/MeshletTypes.hpp"
