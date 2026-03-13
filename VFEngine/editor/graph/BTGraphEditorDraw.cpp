@@ -39,8 +39,8 @@ namespace editor::graph
         ImU32 nodeColor = getNodeColor(node.type);
         ImU32 headerColor = getNodeHeaderColor(node.type);
 
-        ed::PushStyleColor(ed::StyleColor_NodeBg, nodeColor);
-        ed::PushStyleColor(ed::StyleColor_NodeBorder, IM_COL32(200, 200, 200, 100));
+        ed::PushStyleColor(ed::StyleColor_NodeBg, ImGui::ColorConvertU32ToFloat4(nodeColor));
+        ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.78f, 0.78f, 0.78f, 0.39f));
 
         ed::BeginNode(toEditorNodeId(node.id));
 

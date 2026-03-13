@@ -65,5 +65,6 @@ namespace core
 
         services::IScriptingProvider* scriptingProvider;
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
+        std::unordered_map<uint64_t, uint64_t> scriptInstances; // hash(entity+scriptPath) -> script instanceId
     };
 }

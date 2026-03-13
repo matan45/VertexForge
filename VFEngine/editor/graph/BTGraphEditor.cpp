@@ -1,4 +1,5 @@
 #include "BTGraphEditor.hpp"
+#include <algorithm>
 
 namespace ed = ax::NodeEditor;
 

@@ -4,15 +4,17 @@
 #include <fstream>
 #include <filesystem>
 #include <format>
+#include <functional>
 
 namespace behaviortree
 {
     using json = nlohmann::json;
     namespace fs = std::filesystem;
+    using WarningLogger = std::function<void(const std::string&)>;
 
     // --- BlackboardValue serialization ---
 
-    json BehaviorTreeAsset::serializeBlackboardValue(const BlackboardValue& val, BlackboardValueType type)
+    static json serializeBlackboardValue(const BlackboardValue& val, BlackboardValueType type)
     {
         switch (type)
         {
@@ -41,7 +43,7 @@ namespace behaviortree
         }
     }
 
-    BlackboardValue BehaviorTreeAsset::deserializeBlackboardValue(const json& j, BlackboardValueType type)
+    static BlackboardValue deserializeBlackboardValue(const json& j, BlackboardValueType type)
     {
         try
         {
@@ -81,7 +83,7 @@ namespace behaviortree
 
     // --- Properties serialization ---
 
-    json BehaviorTreeAsset::serializeProperties(const std::unordered_map<std::string, BlackboardValue>& properties)
+    static json serializeProperties(const std::unordered_map<std::string, BlackboardValue>& properties)
     {
         json j = json::object();
         for (const auto& [key, val] : properties)
@@ -106,7 +108,7 @@ namespace behaviortree
         return j;
     }
 
-    std::unordered_map<std::string, BlackboardValue> BehaviorTreeAsset::deserializeProperties(const json& j)
+    static std::unordered_map<std::string, BlackboardValue> deserializeProperties(const json& j)
     {
         std::unordered_map<std::string, BlackboardValue> properties;
         if (!j.is_object()) return properties;
@@ -130,7 +132,7 @@ namespace behaviortree
 
     // --- Node serialization ---
 
-    json BehaviorTreeAsset::serializeNode(const BTNode& node)
+    static json serializeNode(const BTNode& node)
     {
         json j;
         j["id"] = node.id;
@@ -155,7 +157,7 @@ namespace behaviortree
         return j;
     }
 
-    BTNode BehaviorTreeAsset::deserializeNode(const json& j)
+    static BTNode deserializeNode(const json& j)
     {
         BTNode node;
         node.id = j.value("id", 0u);
@@ -181,7 +183,7 @@ namespace behaviortree
 
     // --- Link serialization ---
 
-    json BehaviorTreeAsset::serializeLink(const BTLink& link)
+    static json serializeLink(const BTLink& link)
     {
         json j;
         j["id"] = link.id;
@@ -191,7 +193,7 @@ namespace behaviortree
         return j;
     }
 
-    BTLink BehaviorTreeAsset::deserializeLink(const json& j)
+    static BTLink deserializeLink(const json& j)
     {
         BTLink link;
         link.id = j.value("id", 0u);
@@ -203,7 +205,7 @@ namespace behaviortree
 
     // --- Blackboard key serialization ---
 
-    json BehaviorTreeAsset::serializeBlackboardKey(const BlackboardKeyDef& keyDef)
+    static json serializeBlackboardKey(const BlackboardKeyDef& keyDef)
     {
         json j;
         j["name"] = keyDef.name;
@@ -212,7 +214,7 @@ namespace behaviortree
         return j;
     }
 
-    BlackboardKeyDef BehaviorTreeAsset::deserializeBlackboardKey(const json& j)
+    static BlackboardKeyDef deserializeBlackboardKey(const json& j)
     {
         BlackboardKeyDef keyDef;
         keyDef.name = j.value("name", "");
@@ -226,7 +228,7 @@ namespace behaviortree
 
     // --- Parse helpers ---
 
-    void BehaviorTreeAsset::parseNodes(const json& j, BTGraph& graph, const WarningLogger& logWarning)
+    static void parseNodes(const json& j, BTGraph& graph, const WarningLogger& logWarning)
     {
         if (!j.contains("nodes") || !j["nodes"].is_array())
         {
@@ -247,7 +249,7 @@ namespace behaviortree
         }
     }
 
-    void BehaviorTreeAsset::parseLinks(const json& j, BTGraph& graph, const WarningLogger& logWarning)
+    static void parseLinks(const json& j, BTGraph& graph, const WarningLogger& logWarning)
     {
         if (!j.contains("links") || !j["links"].is_array())
         {
@@ -268,7 +270,7 @@ namespace behaviortree
         }
     }
 
-    void BehaviorTreeAsset::parseBlackboardKeys(const json& j, BTGraph& graph, const WarningLogger& logWarning)
+    static void parseBlackboardKeys(const json& j, BTGraph& graph, const WarningLogger& logWarning)
     {
         if (!j.contains("blackboardKeys") || !j["blackboardKeys"].is_array())
         {
@@ -287,7 +289,7 @@ namespace behaviortree
         }
     }
 
-    BehaviorTreeData BehaviorTreeAsset::parseBehaviorTreeData(const json& j, const WarningLogger& logWarning)
+    static BehaviorTreeData parseBehaviorTreeData(const json& j, const WarningLogger& logWarning)
     {
         BehaviorTreeData data;
         data.version = j.value("version", BT_FORMAT_VERSION);
@@ -321,9 +323,7 @@ namespace behaviortree
         return data;
     }
 
-    // --- Load/Save ---
-
-    std::optional<json> BehaviorTreeAsset::readJsonFromFile(std::string_view path)
+    static std::optional<json> readJsonFromFile(std::string_view path)
     {
         fs::path filePath(path);
         if (!fs::exists(filePath))
@@ -371,6 +371,40 @@ namespace behaviortree
         }
         return j;
     }
+
+    static json buildBehaviorTreeJson(const BehaviorTreeData& data)
+    {
+        json j;
+
+        j["version"] = BT_FORMAT_VERSION;
+        j["name"] = data.name;
+        j["rootNodeId"] = data.graph.rootNodeId;
+
+        json nodesJson = json::array();
+        for (const auto& node : data.graph.nodes)
+        {
+            nodesJson.push_back(serializeNode(node));
+        }
+        j["nodes"] = nodesJson;
+
+        json linksJson = json::array();
+        for (const auto& link : data.graph.links)
+        {
+            linksJson.push_back(serializeLink(link));
+        }
+        j["links"] = linksJson;
+
+        json bbKeysJson = json::array();
+        for (const auto& keyDef : data.graph.blackboardKeys)
+        {
+            bbKeysJson.push_back(serializeBlackboardKey(keyDef));
+        }
+        j["blackboardKeys"] = bbKeysJson;
+
+        return j;
+    }
+
+    // --- Public API ---
 
     std::optional<BehaviorTreeData> BehaviorTreeAsset::load(std::string_view path)
     {
@@ -422,38 +456,6 @@ namespace behaviortree
             vfLogError("Unexpected error loading behavior tree '{}': {}", path, e.what());
             return std::nullopt;
         }
-    }
-
-    json BehaviorTreeAsset::buildBehaviorTreeJson(const BehaviorTreeData& data)
-    {
-        json j;
-
-        j["version"] = BT_FORMAT_VERSION;
-        j["name"] = data.name;
-        j["rootNodeId"] = data.graph.rootNodeId;
-
-        json nodesJson = json::array();
-        for (const auto& node : data.graph.nodes)
-        {
-            nodesJson.push_back(serializeNode(node));
-        }
-        j["nodes"] = nodesJson;
-
-        json linksJson = json::array();
-        for (const auto& link : data.graph.links)
-        {
-            linksJson.push_back(serializeLink(link));
-        }
-        j["links"] = linksJson;
-
-        json bbKeysJson = json::array();
-        for (const auto& keyDef : data.graph.blackboardKeys)
-        {
-            bbKeysJson.push_back(serializeBlackboardKey(keyDef));
-        }
-        j["blackboardKeys"] = bbKeysJson;
-
-        return j;
     }
 
     bool BehaviorTreeAsset::save(std::string_view path, const BehaviorTreeData& data)

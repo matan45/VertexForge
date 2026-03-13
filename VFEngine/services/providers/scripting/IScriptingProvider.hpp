@@ -47,6 +47,10 @@ namespace services {
         virtual void callOnUpdate(uint64_t instanceId, float deltaTime) = 0;
         virtual void callOnDestroy(uint64_t instanceId) = 0;
 
+        // === Generic Method Call ===
+        virtual std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
+                                                  const std::vector<std::any>& args = {}) = 0;
+
         virtual void playVFX(uint64_t instanceId) = 0;
 
         // === Error Handling ===

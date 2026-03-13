@@ -1,5 +1,9 @@
 #include "BehaviorTreeAdapter.hpp"
 #include "../../../services/providers/scripting/IScriptingProvider.hpp"
+#include "../../../services/events/EventDispatcher.hpp"
+#include "../../../services/events/navmesh/NavmeshEvents.hpp"
+#include "../../../services/events/physics/ControllerEvents.hpp"
+#include "../../../services/events/animation/AnimatorEvents.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -47,6 +51,27 @@ namespace core
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end())
         {
+            // Clean up script instances belonging to this entity's tree
+            if (it->second.treeData && scriptingProvider)
+            {
+                for (const auto& node : it->second.treeData->graph.nodes)
+                {
+                    if (node.type == BTNodeType::ScriptTask && !node.scriptPath.empty())
+                    {
+                        uint64_t scriptKey = entity.id ^ std::hash<std::string>{}(node.scriptPath);
+                        auto sit = scriptInstances.find(scriptKey);
+                        if (sit != scriptInstances.end())
+                        {
+                            if (scriptingProvider->isScriptLoaded(sit->second))
+                            {
+                                scriptingProvider->callOnDestroy(sit->second);
+                                scriptingProvider->unloadScript(sit->second);
+                            }
+                            scriptInstances.erase(sit);
+                        }
+                    }
+                }
+            }
             runtimes.erase(it);
         }
     }
@@ -143,14 +168,28 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        // TODO: Dispatch NavMesh/Controller CQRS events when those systems are wired
-        // For now, return Success as placeholder
-        // glm::vec3 target = blackboard.getVec3(targetKey);
-        // events::EventDispatcher::instance().execute(events::navmesh::SetAgentDestinationCommand{entity, target});
-        // auto reached = events::EventDispatcher::instance().query(events::controller::HasReachedDestinationQuery{entity});
-        // return reached ? BTNodeStatus::Success : BTNodeStatus::Running;
+        auto& dispatcher = events::EventDispatcher::instance();
 
-        return BTNodeStatus::Success;
+        glm::vec3 target = blackboard.getVec3(targetKey);
+
+        // Set arrival distance on the controller
+        events::controller::SetArrivalDistanceCommand arrivalCmd;
+        arrivalCmd.entity = entity;
+        arrivalCmd.arrivalDistance = arrivalDistance;
+        dispatcher.execute(arrivalCmd);
+
+        // Set navmesh agent destination
+        events::navmesh::SetAgentDestinationCommand navCmd;
+        navCmd.entity = entity;
+        navCmd.target = target;
+        dispatcher.execute(navCmd);
+
+        // Check if we've reached the destination
+        events::controller::HasReachedDestinationQuery reachedQuery;
+        reachedQuery.entity = entity;
+        bool reached = dispatcher.query(reachedQuery);
+
+        return reached ? BTNodeStatus::Success : BTNodeStatus::Running;
     }
 
     BTNodeStatus BehaviorTreeAdapter::executePlayAnimation(services::EntityHandle entity,
@@ -162,14 +201,21 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        // TODO: Dispatch Animator CQRS events when wired
-        // events::EventDispatcher::instance().execute(
-        //     events::animator::ForceEntityTransitionToCommand{entity, stateName});
-        // if (waitForCompletion) {
-        //     auto time = events::EventDispatcher::instance().query(
-        //         events::animator::GetEntityAnimatorNormalizedTimeQuery{entity});
-        //     return time >= 1.0f ? BTNodeStatus::Success : BTNodeStatus::Running;
-        // }
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Force transition to the target animation state
+        services::events::animator::ForceEntityTransitionToCommand transitionCmd;
+        transitionCmd.entity = entity;
+        transitionCmd.stateName = stateName;
+        dispatcher.execute(transitionCmd);
+
+        if (waitForCompletion)
+        {
+            services::events::animator::GetEntityAnimatorNormalizedTimeQuery timeQuery;
+            timeQuery.entity = entity;
+            float normalizedTime = dispatcher.query(timeQuery);
+            return normalizedTime >= 1.0f ? BTNodeStatus::Success : BTNodeStatus::Running;
+        }
 
         return BTNodeStatus::Success;
     }
@@ -185,12 +231,31 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        // TODO: Load script instance and call tick method via ScriptingProvider
-        // auto instanceInfo = scriptingProvider->loadScript(scriptPath, entity);
-        // if (!instanceInfo) return BTNodeStatus::Failure;
-        // auto result = scriptingProvider->callMethod(instanceInfo->instanceId, "tick", {deltaTime});
-        // Map result string to BTNodeStatus
+        // Build a unique key for this entity+script combo
+        uint64_t scriptKey = entity.id ^ std::hash<std::string>{}(scriptPath);
 
+        // Load script instance if not already loaded
+        auto it = scriptInstances.find(scriptKey);
+        if (it == scriptInstances.end())
+        {
+            auto info = scriptingProvider->loadScript(scriptPath, entity);
+            if (!info.has_value())
+            {
+                vfLogWarning("BT ScriptTask: failed to load script '{}' for entity {}", scriptPath, entity.id);
+                return BTNodeStatus::Failure;
+            }
+            scriptInstances[scriptKey] = info->instanceId;
+            scriptingProvider->callOnStart(info->instanceId);
+        }
+
+        uint64_t instanceId = scriptInstances[scriptKey];
+
+        // Call tick(deltaTime) and map result string to BTNodeStatus
+        std::string result = scriptingProvider->callMethodWithReturn(
+            instanceId, "tick", {std::any(deltaTime)});
+
+        if (result == "success") return BTNodeStatus::Success;
+        if (result == "running") return BTNodeStatus::Running;
         return BTNodeStatus::Failure;
     }
 
