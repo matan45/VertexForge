@@ -460,8 +460,17 @@ namespace render
 
     void RenderPassHandler::executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        postProcessPipeline->setCameraData(currentNearPlane, currentFarPlane,
-                                           currentCameraPosition, currentView, currentProjection, currentTime);
+        render::postprocess::CameraInfo camInfo{};
+        camInfo.nearPlane = currentNearPlane;
+        camInfo.farPlane = currentFarPlane;
+        camInfo.cameraPosition = currentCameraPosition;
+        camInfo.viewMatrix = currentView;
+        camInfo.projectionMatrix = currentProjection;
+        camInfo.unjitteredProjectionMatrix = unjitteredProjection;
+        camInfo.jitterOffset = currentJitterOffset;
+        camInfo.frameIndex = taaFrameIndex;
+        camInfo.time = currentTime;
+        postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)
         {

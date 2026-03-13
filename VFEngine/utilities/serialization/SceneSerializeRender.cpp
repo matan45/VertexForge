@@ -93,25 +93,6 @@ namespace serialization
             return postprocess::ToneMappingMode::ACES;
         }
 
-        std::string fxaaQualityToStr(postprocess::FXAAQuality quality)
-        {
-            switch (quality)
-            {
-            case postprocess::FXAAQuality::Low: return "low";
-            case postprocess::FXAAQuality::Medium: return "medium";
-            case postprocess::FXAAQuality::High: return "high";
-            default: return "medium";
-            }
-        }
-
-        postprocess::FXAAQuality strToFXAAQuality(const std::string& str)
-        {
-            if (str == "low") return postprocess::FXAAQuality::Low;
-            if (str == "medium") return postprocess::FXAAQuality::Medium;
-            if (str == "high") return postprocess::FXAAQuality::High;
-            return postprocess::FXAAQuality::Medium;
-        }
-
         // ---- Serialize post-process helpers ----
 
         json serializeToneMapping(const postprocess::ToneMappingSettings& s)
@@ -127,13 +108,13 @@ namespace serialization
             };
         }
 
-        json serializeFxaa(const postprocess::FXAASettings& s)
+        json serializeTAA(const postprocess::TAASettings& s)
         {
             return {
                 {"enabled", s.enabled},
-                {"quality", fxaaQualityToStr(s.quality)},
-                {"edgeThresholdMin", s.edgeThresholdMin},
-                {"edgeThreshold", s.edgeThreshold}
+                {"blendFactor", s.blendFactor},
+                {"sharpenStrength", s.sharpenStrength},
+                {"useVarianceClipping", s.useVarianceClipping}
             };
         }
 
@@ -233,6 +214,20 @@ namespace serialization
             };
         }
 
+        json serializeAutoExposure(const postprocess::AutoExposureSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"minExposure", s.minExposure},
+                {"maxExposure", s.maxExposure},
+                {"adaptSpeedUp", s.adaptSpeedUp},
+                {"adaptSpeedDown", s.adaptSpeedDown},
+                {"exposureCompensation", s.exposureCompensation},
+                {"lowPercentile", s.lowPercentile},
+                {"highPercentile", s.highPercentile}
+            };
+        }
+
         json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
         {
             return {
@@ -276,19 +271,19 @@ namespace serialization
                 s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
         }
 
-        void deserializeFxaa(const json& j, postprocess::FXAASettings& s)
+        void deserializeTAA(const json& j, postprocess::TAASettings& s)
         {
-            if (!j.contains("fxaa") || !j["fxaa"].is_object())
+            if (!j.contains("taa") || !j["taa"].is_object())
                 return;
-            const auto& fxaa = j["fxaa"];
-            if (fxaa.contains("enabled") && fxaa["enabled"].is_boolean())
-                s.enabled = fxaa["enabled"].get<bool>();
-            if (fxaa.contains("quality") && fxaa["quality"].is_string())
-                s.quality = strToFXAAQuality(fxaa["quality"].get<std::string>());
-            if (fxaa.contains("edgeThresholdMin") && fxaa["edgeThresholdMin"].is_number())
-                s.edgeThresholdMin = std::clamp(fxaa["edgeThresholdMin"].get<float>(), 0.0f, 1.0f);
-            if (fxaa.contains("edgeThreshold") && fxaa["edgeThreshold"].is_number())
-                s.edgeThreshold = std::clamp(fxaa["edgeThreshold"].get<float>(), 0.0f, 1.0f);
+            const auto& taa = j["taa"];
+            if (taa.contains("enabled") && taa["enabled"].is_boolean())
+                s.enabled = taa["enabled"].get<bool>();
+            if (taa.contains("blendFactor") && taa["blendFactor"].is_number())
+                s.blendFactor = std::clamp(taa["blendFactor"].get<float>(), 0.01f, 0.5f);
+            if (taa.contains("sharpenStrength") && taa["sharpenStrength"].is_number())
+                s.sharpenStrength = std::clamp(taa["sharpenStrength"].get<float>(), 0.0f, 1.0f);
+            if (taa.contains("useVarianceClipping") && taa["useVarianceClipping"].is_boolean())
+                s.useVarianceClipping = taa["useVarianceClipping"].get<bool>();
         }
 
         void deserializeBloom(const json& j, postprocess::BloomSettings& s)
@@ -452,6 +447,87 @@ namespace serialization
             }
             if (ed.contains("opacity") && ed["opacity"].is_number())
                 s.opacity = std::clamp(ed["opacity"].get<float>(), 0.0f, 1.0f);
+        }
+
+        void deserializeAutoExposure(const json& j, postprocess::AutoExposureSettings& s)
+        {
+            if (!j.contains("autoExposure") || !j["autoExposure"].is_object())
+                return;
+            const auto& ae = j["autoExposure"];
+            if (ae.contains("enabled") && ae["enabled"].is_boolean())
+                s.enabled = ae["enabled"].get<bool>();
+            if (ae.contains("minExposure") && ae["minExposure"].is_number())
+                s.minExposure = std::clamp(ae["minExposure"].get<float>(), 0.01f, 1.0f);
+            if (ae.contains("maxExposure") && ae["maxExposure"].is_number())
+                s.maxExposure = std::clamp(ae["maxExposure"].get<float>(), 1.0f, 20.0f);
+            if (ae.contains("adaptSpeedUp") && ae["adaptSpeedUp"].is_number())
+                s.adaptSpeedUp = std::clamp(ae["adaptSpeedUp"].get<float>(), 0.1f, 10.0f);
+            if (ae.contains("adaptSpeedDown") && ae["adaptSpeedDown"].is_number())
+                s.adaptSpeedDown = std::clamp(ae["adaptSpeedDown"].get<float>(), 0.1f, 10.0f);
+            if (ae.contains("exposureCompensation") && ae["exposureCompensation"].is_number())
+                s.exposureCompensation = std::clamp(ae["exposureCompensation"].get<float>(), -5.0f, 5.0f);
+            if (ae.contains("lowPercentile") && ae["lowPercentile"].is_number())
+                s.lowPercentile = std::clamp(ae["lowPercentile"].get<float>(), 0.0f, 0.5f);
+            if (ae.contains("highPercentile") && ae["highPercentile"].is_number())
+                s.highPercentile = std::clamp(ae["highPercentile"].get<float>(), 0.5f, 1.0f);
+        }
+
+        json serializeColorGrading(const postprocess::ColorGradingSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"primaryLutPath", s.primaryLutPath},
+                {"secondaryLutPath", s.secondaryLutPath},
+                {"lutIntensity", s.lutIntensity},
+                {"lutBlendFactor", s.lutBlendFactor},
+                {"liftR", s.liftR}, {"liftG", s.liftG}, {"liftB", s.liftB},
+                {"gammaR", s.gammaR}, {"gammaG", s.gammaG}, {"gammaB", s.gammaB},
+                {"gainR", s.gainR}, {"gainG", s.gainG}, {"gainB", s.gainB},
+                {"saturation", s.saturation},
+                {"colorTemperature", s.colorTemperature},
+                {"colorTint", s.colorTint}
+            };
+        }
+
+        void deserializeColorGrading(const json& j, postprocess::ColorGradingSettings& s)
+        {
+            if (!j.contains("colorGrading") || !j["colorGrading"].is_object())
+                return;
+            const auto& cg = j["colorGrading"];
+            if (cg.contains("enabled") && cg["enabled"].is_boolean())
+                s.enabled = cg["enabled"].get<bool>();
+            if (cg.contains("primaryLutPath") && cg["primaryLutPath"].is_string())
+                s.primaryLutPath = cg["primaryLutPath"].get<std::string>();
+            if (cg.contains("secondaryLutPath") && cg["secondaryLutPath"].is_string())
+                s.secondaryLutPath = cg["secondaryLutPath"].get<std::string>();
+            if (cg.contains("lutIntensity") && cg["lutIntensity"].is_number())
+                s.lutIntensity = std::clamp(cg["lutIntensity"].get<float>(), 0.0f, 1.0f);
+            if (cg.contains("lutBlendFactor") && cg["lutBlendFactor"].is_number())
+                s.lutBlendFactor = std::clamp(cg["lutBlendFactor"].get<float>(), 0.0f, 1.0f);
+            if (cg.contains("liftR") && cg["liftR"].is_number())
+                s.liftR = std::clamp(cg["liftR"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("liftG") && cg["liftG"].is_number())
+                s.liftG = std::clamp(cg["liftG"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("liftB") && cg["liftB"].is_number())
+                s.liftB = std::clamp(cg["liftB"].get<float>(), -1.0f, 1.0f);
+            if (cg.contains("gammaR") && cg["gammaR"].is_number())
+                s.gammaR = std::clamp(cg["gammaR"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gammaG") && cg["gammaG"].is_number())
+                s.gammaG = std::clamp(cg["gammaG"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gammaB") && cg["gammaB"].is_number())
+                s.gammaB = std::clamp(cg["gammaB"].get<float>(), 0.01f, 5.0f);
+            if (cg.contains("gainR") && cg["gainR"].is_number())
+                s.gainR = std::clamp(cg["gainR"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("gainG") && cg["gainG"].is_number())
+                s.gainG = std::clamp(cg["gainG"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("gainB") && cg["gainB"].is_number())
+                s.gainB = std::clamp(cg["gainB"].get<float>(), 0.0f, 5.0f);
+            if (cg.contains("saturation") && cg["saturation"].is_number())
+                s.saturation = std::clamp(cg["saturation"].get<float>(), 0.0f, 3.0f);
+            if (cg.contains("colorTemperature") && cg["colorTemperature"].is_number())
+                s.colorTemperature = std::clamp(cg["colorTemperature"].get<float>(), 1000.0f, 15000.0f);
+            if (cg.contains("colorTint") && cg["colorTint"].is_number())
+                s.colorTint = std::clamp(cg["colorTint"].get<float>(), -1.0f, 1.0f);
         }
 
         // ---- Deserialize render sub-helpers ----
@@ -752,7 +828,7 @@ namespace serialization
 
         j["enabled"] = settings.enabled;
         j["toneMapping"] = serializeToneMapping(settings.toneMapping);
-        j["fxaa"] = serializeFxaa(settings.fxaa);
+        j["taa"] = serializeTAA(settings.taa);
         j["bloom"] = serializeBloom(settings.bloom);
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
@@ -761,6 +837,8 @@ namespace serialization
         j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
         j["ssao"] = serializeSSAO(settings.ssao);
         j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
+        j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
+        j["colorGrading"] = serializeColorGrading(settings.colorGrading);
 
         return j;
     }
@@ -771,7 +849,7 @@ namespace serialization
             settings.enabled = j["enabled"].get<bool>();
 
         deserializeToneMapping(j, settings.toneMapping);
-        deserializeFxaa(j, settings.fxaa);
+        deserializeTAA(j, settings.taa);
         deserializeBloom(j, settings.bloom);
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);
@@ -780,5 +858,7 @@ namespace serialization
         deserializeVolumetricFog(j, settings.volumetricFog);
         deserializeSSAO(j, settings.ssao);
         deserializeEdgeDetection(j, settings.edgeDetection);
+        deserializeAutoExposure(j, settings.autoExposure);
+        deserializeColorGrading(j, settings.colorGrading);
     }
 }

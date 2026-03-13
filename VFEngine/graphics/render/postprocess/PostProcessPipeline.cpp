@@ -1,6 +1,6 @@
 #include "PostProcessPipeline.hpp"
 #include "effects/ToneMappingEffect.hpp"
-#include "effects/FXAAEffect.hpp"
+#include "effects/TAAEffect.hpp"
 #include "effects/BloomEffect.hpp"
 #include "effects/VignetteEffect.hpp"
 #include "effects/ChromaticAberrationEffect.hpp"
@@ -8,6 +8,8 @@
 #include "effects/DepthOfFieldEffect.hpp"
 #include "effects/SSAOEffect.hpp"
 #include "effects/EdgeDetectionEffect.hpp"
+#include "effects/AutoExposureEffect.hpp"
+#include "effects/ColorGradingEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -33,17 +35,20 @@ namespace render::postprocess
         sunInfo.hasSun = hasSun;
     }
 
-    void PostProcessPipeline::setCameraData(float nearPlane, float farPlane,
-                                              const glm::vec3& cameraPosition,
-                                              const glm::mat4& viewMatrix,
-                                              const glm::mat4& projectionMatrix, float time)
+    void PostProcessPipeline::setCameraData(const CameraInfo& incoming)
     {
-        cameraInfo.nearPlane = nearPlane;
-        cameraInfo.farPlane = farPlane;
-        cameraInfo.cameraPosition = cameraPosition;
-        cameraInfo.viewMatrix = viewMatrix;
-        cameraInfo.projectionMatrix = projectionMatrix;
-        cameraInfo.time = time;
+        cameraInfo.prevViewMatrix = cameraInfo.viewMatrix;
+        cameraInfo.prevProjectionMatrix = cameraInfo.unjitteredProjectionMatrix;
+
+        cameraInfo.nearPlane = incoming.nearPlane;
+        cameraInfo.farPlane = incoming.farPlane;
+        cameraInfo.cameraPosition = incoming.cameraPosition;
+        cameraInfo.viewMatrix = incoming.viewMatrix;
+        cameraInfo.projectionMatrix = incoming.projectionMatrix;
+        cameraInfo.unjitteredProjectionMatrix = incoming.unjitteredProjectionMatrix;
+        cameraInfo.jitterOffset = incoming.jitterOffset;
+        cameraInfo.frameIndex = incoming.frameIndex;
+        cameraInfo.time = incoming.time;
     }
 
     bool PostProcessPipeline::hasEnabledEffects() const
@@ -75,6 +80,8 @@ namespace render::postprocess
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
 
+        autoExposureOverride.reset();
+
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
             vk::RenderPassBeginInfo rpBegin{};
@@ -84,6 +91,16 @@ namespace render::postprocess
             rpBegin.renderArea.extent = extent;
 
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::AutoExposure)
+            {
+                autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
+            }
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride.has_value())
+            {
+                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
+            }
 
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
@@ -397,8 +414,8 @@ namespace render::postprocess
         syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
             [this]() { return std::make_unique<ToneMappingEffect>(device); });
 
-        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
-            [this]() { return std::make_unique<FXAAEffect>(device); });
+        syncEffect(::postprocess::EffectType::TAA, settings.taa.enabled,
+            [this]() { return std::make_unique<TAAEffect>(device, swapChain, offscreenResources, *this); });
 
         syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,
             [this]() { return std::make_unique<BloomEffect>(device); });
@@ -420,6 +437,12 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::EdgeDetection, settings.edgeDetection.enabled,
             [this]() { return std::make_unique<EdgeDetectionEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::AutoExposure, settings.autoExposure.enabled,
+            [this]() { return std::make_unique<AutoExposureEffect>(device, swapChain, offscreenResources, *this); });
+
+        syncEffect(::postprocess::EffectType::ColorGrading, settings.colorGrading.enabled,
+            [this]() { return std::make_unique<ColorGradingEffect>(device); });
 
         updateSettings(settings);
     }

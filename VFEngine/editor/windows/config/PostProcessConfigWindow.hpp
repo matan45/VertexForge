@@ -12,7 +12,7 @@ namespace windows
         bool isDirty = false;
 
         void drawToneMappingSection();
-        void drawFXAASection();
+        void drawTAASection();
         void drawBloomSection();
         void drawVignetteSection();
         void drawChromaticAberrationSection();
@@ -20,6 +20,7 @@ namespace windows
         void drawDepthOfFieldSection();
         void drawSSAOSection();
         void drawEdgeDetectionSection();
+        void drawColorGradingSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();

@@ -3,6 +3,7 @@
 #include "PostProcessEffect.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace core
@@ -27,6 +28,11 @@ namespace render::postprocess
         glm::vec3 cameraPosition{0.0f};
         glm::mat4 viewMatrix{1.0f};
         glm::mat4 projectionMatrix{1.0f};
+        glm::mat4 prevViewMatrix{1.0f};
+        glm::mat4 prevProjectionMatrix{1.0f};
+        glm::mat4 unjitteredProjectionMatrix{1.0f};
+        glm::vec2 jitterOffset{0.0f};
+        uint32_t frameIndex = 0;
         float time = 0.0f;
     };
 
@@ -63,6 +69,7 @@ namespace render::postprocess
         CameraInfo cameraInfo{};
 
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
+        std::optional<float> autoExposureOverride;
 
     public:
         explicit PostProcessPipeline(core::Device& device, core::SwapChain& swapChain,
@@ -82,8 +89,7 @@ namespace render::postprocess
         void setSunData(const glm::vec2& screenPos, bool hasSun);
         const SunInfo& getSunData() const { return sunInfo; }
 
-        void setCameraData(float nearPlane, float farPlane, const glm::vec3& cameraPosition,
-                          const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, float time);
+        void setCameraData(const CameraInfo& incoming);
         const CameraInfo& getCameraData() const { return cameraInfo; }
 
         bool hasEnabledEffects() const;

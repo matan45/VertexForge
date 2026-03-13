@@ -1,19 +1,22 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 namespace postprocess
 {
     enum class EffectType : uint8_t
     {
         ToneMapping = 0,
-        FXAA,
+        TAA,
         Bloom,
         Vignette,
         ChromaticAberration,
         FilmGrain,
         DepthOfField,
         SSAO,
-        EdgeDetection
+        EdgeDetection,
+        AutoExposure,
+        ColorGrading
     };
 
     enum class VolumetricQuality : uint8_t
@@ -34,11 +37,12 @@ namespace postprocess
         KhronosPBRNeutral
     };
 
-    enum class FXAAQuality : uint8_t
+    struct TAASettings
     {
-        Low = 0,
-        Medium,
-        High
+        bool enabled = false;
+        float blendFactor = 0.1f;
+        float sharpenStrength = 0.5f;
+        bool useVarianceClipping = true;
     };
 
     struct ToneMappingSettings
@@ -50,14 +54,6 @@ namespace postprocess
         float contrast = 1.0f;
         float toe = 0.0f;
         float shoulder = 0.0f;
-    };
-
-    struct FXAASettings
-    {
-        bool enabled = false;
-        FXAAQuality quality = FXAAQuality::Medium;
-        float edgeThresholdMin = 0.0312f;
-        float edgeThreshold = 0.125f;
     };
 
     struct BloomSettings
@@ -147,12 +143,39 @@ namespace postprocess
         float opacity = 1.0f;
     };
 
+    struct AutoExposureSettings
+    {
+        bool enabled = false;
+        float minExposure = 0.1f;
+        float maxExposure = 10.0f;
+        float adaptSpeedUp = 3.0f;
+        float adaptSpeedDown = 1.0f;
+        float exposureCompensation = 0.0f;
+        float lowPercentile = 0.1f;
+        float highPercentile = 0.9f;
+    };
+
+    struct ColorGradingSettings
+    {
+        bool enabled = false;
+        std::string primaryLutPath;
+        std::string secondaryLutPath;
+        float lutIntensity = 1.0f;
+        float lutBlendFactor = 0.0f;
+        float liftR = 0.0f, liftG = 0.0f, liftB = 0.0f;
+        float gammaR = 1.0f, gammaG = 1.0f, gammaB = 1.0f;
+        float gainR = 1.0f, gainG = 1.0f, gainB = 1.0f;
+        float saturation = 1.0f;
+        float colorTemperature = 6500.0f;
+        float colorTint = 0.0f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
 
         ToneMappingSettings toneMapping;
-        FXAASettings fxaa;
+        TAASettings taa;
         BloomSettings bloom;
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;
@@ -161,6 +184,8 @@ namespace postprocess
         VolumetricFogSettings volumetricFog;
         SSAOSettings ssao;
         EdgeDetectionSettings edgeDetection;
+        AutoExposureSettings autoExposure;
+        ColorGradingSettings colorGrading;
 
         static PostProcessSettings createDefault()
         {

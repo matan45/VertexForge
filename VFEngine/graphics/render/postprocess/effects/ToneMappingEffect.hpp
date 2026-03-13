@@ -42,6 +42,8 @@ namespace render::postprocess
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::ToneMapping; }
         uint32_t getPriority() const override { return 100; }
 
+        void setExposureOverride(float value) { currentExposure = value; }
+
     private:
         void loadShader();
         void createDescriptorSetLayout();
