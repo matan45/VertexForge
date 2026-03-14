@@ -254,6 +254,12 @@ namespace render
 
         if (!needsMeshPass)
         {
+            // Still render decals even without meshes (they project onto previously rendered geometry)
+            if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
+            {
+                decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
+                decalPipeline->render(commandBuffer, imageIndex);
+            }
             return;
         }
 

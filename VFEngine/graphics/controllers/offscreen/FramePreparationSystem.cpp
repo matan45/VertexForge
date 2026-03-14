@@ -579,10 +579,21 @@ namespace controllers::offscreen
             const auto& decal = view.get<components::DecalComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Build world matrix with half extents baked into scale
+            // Extract position and rotation from world matrix, replace scale with halfExtents
+            // This way Transform.scale is ignored — only halfExtents controls decal size
             glm::mat4 worldMatrix = worldTransform.worldMatrix;
-            glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), decal.halfExtents);
-            glm::mat4 decalWorldMatrix = worldMatrix * scaleMatrix;
+            glm::vec3 col0 = glm::vec3(worldMatrix[0]);
+            glm::vec3 col1 = glm::vec3(worldMatrix[1]);
+            glm::vec3 col2 = glm::vec3(worldMatrix[2]);
+            glm::vec3 axisX = glm::normalize(col0);
+            glm::vec3 axisY = glm::normalize(col1);
+            glm::vec3 axisZ = glm::normalize(col2);
+
+            glm::mat4 decalWorldMatrix = glm::mat4(1.0f);
+            decalWorldMatrix[0] = glm::vec4(axisX * decal.halfExtents.x, 0.0f);
+            decalWorldMatrix[1] = glm::vec4(axisY * decal.halfExtents.y, 0.0f);
+            decalWorldMatrix[2] = glm::vec4(axisZ * decal.halfExtents.z, 0.0f);
+            decalWorldMatrix[3] = worldMatrix[3]; // position
 
             services::DecalRenderData renderData;
             renderData.worldMatrix = decalWorldMatrix;

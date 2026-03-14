@@ -34,7 +34,14 @@ namespace render::decal
         createDescriptorResources();
         createPipeline();
 
+        if (!pipeline)
+        {
+            vfLogError("DecalPipeline: init failed - pipeline is null");
+            return;
+        }
+
         initialized = true;
+        vfLogInfo("DecalPipeline: initialized successfully");
     }
 
     void DecalPipeline::cleanup()
@@ -309,9 +316,8 @@ namespace render::decal
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.polygonMode = vk::PolygonMode::eFill;
         rasterizer.lineWidth = 1.0f;
-        // Cull front faces so we render back faces of the cube
-        // This means the shader runs for fragments inside the volume
-        rasterizer.cullMode = vk::CullModeFlagBits::eFront;
+        // No culling — decal must be visible from any camera angle
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
@@ -436,6 +442,15 @@ namespace render::decal
 
     void DecalPipeline::updateDecals(const std::vector<services::DecalRenderData>& decals)
     {
+        if (!decals.empty())
+        {
+            static bool loggedOnce = false;
+            if (!loggedOnce)
+            {
+                vfLogInfo("DecalPipeline: received {} decals", decals.size());
+                loggedOnce = true;
+            }
+        }
         currentDecals = decals;
 
         // Sort by priority (lower = rendered first, higher = on top)
@@ -547,6 +562,13 @@ namespace render::decal
     void DecalPipeline::render(const vk::CommandBuffer& cmd, uint32_t imageIndex)
     {
         if (!initialized || currentDecals.empty() || !pipeline) return;
+
+        static bool loggedRenderOnce = false;
+        if (!loggedRenderOnce)
+        {
+            vfLogInfo("DecalPipeline: rendering {} decals, imageIndex={}", currentDecals.size(), imageIndex);
+            loggedRenderOnce = true;
+        }
 
         uploadDecalData();
         uploadCameraUBO();
