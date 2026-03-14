@@ -205,6 +205,7 @@
     <ClInclude Include="windows\details\UIImageDrawer.hpp" />
     <ClInclude Include="windows\details\UILabelDrawer.hpp" />
     <ClInclude Include="windows\details\UILayoutGroupDrawer.hpp" />
+    <ClInclude Include="windows\details\UIMaskDrawer.hpp" />
     <ClInclude Include="windows\details\UIProgressBarDrawer.hpp" />
     <ClInclude Include="windows\details\UIRectDrawer.hpp" />
     <ClInclude Include="windows\details\UIScrollDrawer.hpp" />
@@ -347,6 +348,7 @@
     <ClCompile Include="windows\details\UIImageDrawer.cpp" />
     <ClCompile Include="windows\details\UILabelDrawer.cpp" />
     <ClCompile Include="windows\details\UILayoutGroupDrawer.cpp" />
+    <ClCompile Include="windows\details\UIMaskDrawer.cpp" />
     <ClCompile Include="windows\details\UIProgressBarDrawer.cpp" />
     <ClCompile Include="windows\details\UIRectDrawer.cpp" />
     <ClCompile Include="windows\details\UIScrollDrawer.cpp" />

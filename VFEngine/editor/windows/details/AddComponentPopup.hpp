@@ -41,6 +41,7 @@ namespace windows::details {
         bool hasBehaviorTree = false;
         bool hasDecal = false;
         bool hasUIAnimation = false;
+        bool hasUIMask = false;
     };
 
     class AddComponentPopup {

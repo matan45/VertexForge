@@ -79,8 +79,14 @@ namespace render::ui
             device.getLogicalDevice().destroyFramebuffer(framebuffer);
         }
         device.getLogicalDevice().destroyRenderPass(renderPass);
-        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
-        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
+
+        auto& dev = device.getLogicalDevice();
+        if (pipelineNormal) dev.destroyPipeline(pipelineNormal);
+        if (pipelineStencilIncNoColor) dev.destroyPipeline(pipelineStencilIncNoColor);
+        if (pipelineStencilIncColor) dev.destroyPipeline(pipelineStencilIncColor);
+        if (pipelineStencilTest) dev.destroyPipeline(pipelineStencilTest);
+        if (pipelineStencilDecNoColor) dev.destroyPipeline(pipelineStencilDecNoColor);
+        dev.destroyPipelineLayout(pipelineLayout);
 
         createRenderPass();
         createPipeline();
@@ -97,7 +103,11 @@ namespace render::ui
         }
         framebuffers.clear();
 
-        if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
+        if (pipelineNormal) dev.destroyPipeline(pipelineNormal);
+        if (pipelineStencilIncNoColor) dev.destroyPipeline(pipelineStencilIncNoColor);
+        if (pipelineStencilIncColor) dev.destroyPipeline(pipelineStencilIncColor);
+        if (pipelineStencilTest) dev.destroyPipeline(pipelineStencilTest);
+        if (pipelineStencilDecNoColor) dev.destroyPipeline(pipelineStencilDecNoColor);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         textureCache.clear();
@@ -138,17 +148,31 @@ namespace render::ui
         colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
+        vk::AttachmentDescription stencilAttachment{};
+        stencilAttachment.format = vk::Format::eS8Uint;
+        stencilAttachment.samples = vk::SampleCountFlagBits::e1;
+        stencilAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
+        stencilAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+        stencilAttachment.stencilLoadOp = vk::AttachmentLoadOp::eClear;
+        stencilAttachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
+        stencilAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        stencilAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
         vk::AttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        vk::AttachmentReference stencilAttachmentRef{};
+        stencilAttachmentRef.attachment = 1;
+        stencilAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
         vk::SubpassDescription subpass{};
         subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = nullptr;
+        subpass.pDepthStencilAttachment = &stencilAttachmentRef;
 
-        std::array<vk::AttachmentDescription, 1> attachments = {colorAttachment};
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, stencilAttachment};
 
         vk::RenderPassCreateInfo renderPassInfo{};
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -234,17 +258,18 @@ namespace render::ui
         allAttribs.insert(allAttribs.end(), vertexAttribs.begin(), vertexAttribs.end());
         allAttribs.insert(allAttribs.end(), instanceAttribs.begin(), instanceAttribs.end());
 
+        // 1. Normal pipeline (no stencil)
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
             .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
             .shaderStages = uiShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
-            .vertexAttributes = std::move(allAttribs),
+            .vertexAttributes = allAttribs,
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(UIPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = false,
             .depthWriteEnable = false,
@@ -253,8 +278,88 @@ namespace render::ui
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
-        graphicsPipeline = result.pipeline;
+        pipelineNormal = result.pipeline;
         pipelineLayout = result.pipelineLayout;
+
+        // Stencil op states
+        vk::StencilOpState stencilIncOp{};
+        stencilIncOp.failOp = vk::StencilOp::eKeep;
+        stencilIncOp.passOp = vk::StencilOp::eIncrementAndClamp;
+        stencilIncOp.depthFailOp = vk::StencilOp::eKeep;
+        stencilIncOp.compareOp = vk::CompareOp::eAlways;
+        stencilIncOp.compareMask = 0xFF;
+        stencilIncOp.writeMask = 0xFF;
+        stencilIncOp.reference = 0; // overridden dynamically
+
+        vk::StencilOpState stencilTestOp{};
+        stencilTestOp.failOp = vk::StencilOp::eKeep;
+        stencilTestOp.passOp = vk::StencilOp::eKeep;
+        stencilTestOp.depthFailOp = vk::StencilOp::eKeep;
+        stencilTestOp.compareOp = vk::CompareOp::eLessOrEqual;
+        stencilTestOp.compareMask = 0xFF;
+        stencilTestOp.writeMask = 0x00;
+        stencilTestOp.reference = 0; // overridden dynamically
+
+        vk::StencilOpState stencilDecOp{};
+        stencilDecOp.failOp = vk::StencilOp::eKeep;
+        stencilDecOp.passOp = vk::StencilOp::eDecrementAndClamp;
+        stencilDecOp.depthFailOp = vk::StencilOp::eKeep;
+        stencilDecOp.compareOp = vk::CompareOp::eAlways;
+        stencilDecOp.compareMask = 0xFF;
+        stencilDecOp.writeMask = 0xFF;
+        stencilDecOp.reference = 0;
+
+        std::vector<vk::DynamicState> stencilDynStates = { vk::DynamicState::eScissor, vk::DynamicState::eStencilReference };
+
+        // 2. Stencil increment, no color write (invisible mask)
+        {
+            core::GraphicsPipelineConfig cfg = config;
+            cfg.existingPipelineLayout = pipelineLayout;
+            cfg.stencilTestEnable = true;
+            cfg.stencilFront = stencilIncOp;
+            cfg.stencilBack = stencilIncOp;
+            cfg.colorWriteMask = {};  // no color write
+            cfg.dynamicStates = stencilDynStates;
+            auto r = core::PipelineUtilities::createGraphicsPipeline(cfg);
+            pipelineStencilIncNoColor = r.pipeline;
+        }
+
+        // 3. Stencil increment + color write (visible mask)
+        {
+            core::GraphicsPipelineConfig cfg = config;
+            cfg.existingPipelineLayout = pipelineLayout;
+            cfg.stencilTestEnable = true;
+            cfg.stencilFront = stencilIncOp;
+            cfg.stencilBack = stencilIncOp;
+            cfg.dynamicStates = stencilDynStates;
+            auto r = core::PipelineUtilities::createGraphicsPipeline(cfg);
+            pipelineStencilIncColor = r.pipeline;
+        }
+
+        // 4. Stencil test (render only where stencil >= ref)
+        {
+            core::GraphicsPipelineConfig cfg = config;
+            cfg.existingPipelineLayout = pipelineLayout;
+            cfg.stencilTestEnable = true;
+            cfg.stencilFront = stencilTestOp;
+            cfg.stencilBack = stencilTestOp;
+            cfg.dynamicStates = stencilDynStates;
+            auto r = core::PipelineUtilities::createGraphicsPipeline(cfg);
+            pipelineStencilTest = r.pipeline;
+        }
+
+        // 5. Stencil decrement, no color write (restore after mask group)
+        {
+            core::GraphicsPipelineConfig cfg = config;
+            cfg.existingPipelineLayout = pipelineLayout;
+            cfg.stencilTestEnable = true;
+            cfg.stencilFront = stencilDecOp;
+            cfg.stencilBack = stencilDecOp;
+            cfg.colorWriteMask = {};  // no color write
+            cfg.dynamicStates = stencilDynStates;
+            auto r = core::PipelineUtilities::createGraphicsPipeline(cfg);
+            pipelineStencilDecNoColor = r.pipeline;
+        }
     }
 
     void UIRenderPipeline::createFramebuffers()
@@ -264,7 +369,8 @@ namespace render::ui
         for (uint32_t i = 0; i < framebuffers.size(); i++)
         {
             vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-            std::array<vk::ImageView, 1> attachments = {colorView};
+            vk::ImageView stencilView = offscreenResources.uiStencilImage.stencilImageView;
+            std::array<vk::ImageView, 2> attachments = {colorView, stencilView};
 
             vk::FramebufferCreateInfo framebufferInfo{};
             framebufferInfo.renderPass = renderPass;
@@ -379,94 +485,77 @@ namespace render::ui
             return;
         }
 
-        // Group images by scissor rect, then by texture within each group
-        struct ScissorKey
-        {
-            int32_t x, y, w, h;
-            bool operator==(const ScissorKey& o) const { return x == o.x && y == o.y && w == o.w && h == o.h; }
-        };
-        struct ScissorKeyHash
-        {
-            size_t operator()(const ScissorKey& k) const
-            {
-                size_t h = std::hash<int32_t>{}(k.x);
-                h ^= std::hash<int32_t>{}(k.y) << 1;
-                h ^= std::hash<int32_t>{}(k.w) << 2;
-                h ^= std::hash<int32_t>{}(k.h) << 3;
-                return h;
-            }
-        };
+        // Ordered sequential batching: preserve insertion order, break batch on state change
+        // (scissor, texture, stencilOp, stencilRef, discardColor)
+        std::vector<UIImageInstance> allInstances;
+        allInstances.reserve(images.size());
 
-        struct ImageEntry
-        {
-            std::string_view texturePath;
-            UIImageInstance instance;
-        };
-
-        std::unordered_map<ScissorKey, std::vector<ImageEntry>, ScissorKeyHash> scissorMap;
+        UIScissorGroup* currentGroup = nullptr;
+        glm::ivec4 currentScissor{-1};
 
         for (const auto& image : images)
         {
             if (image.texturePath.empty())
-            {
                 continue;
-            }
 
-            ScissorKey key{
+            std::string resolvedPath = image.texturePath;
+            bool isRTTSynthetic = resolvedPath.starts_with("__rtt_");
+            bool hasTexture = externalTextureCache.contains(resolvedPath)
+                           || (!isRTTSynthetic && loadTexture(resolvedPath));
+            if (!hasTexture)
+                continue;
+
+            glm::ivec4 scissorKey{
                 static_cast<int32_t>(image.scissorRect.x),
                 static_cast<int32_t>(image.scissorRect.y),
                 static_cast<int32_t>(image.scissorRect.z),
                 static_cast<int32_t>(image.scissorRect.w)
             };
 
+            // Start new scissor group if scissor changed
+            if (!currentGroup || scissorKey != currentScissor)
+            {
+                scissorGroups.emplace_back();
+                currentGroup = &scissorGroups.back();
+                currentGroup->scissorRect = glm::vec4(scissorKey);
+                currentScissor = scissorKey;
+            }
+
+            // Check if we can extend the current batch (same texture + same stencil state)
+            bool canExtend = false;
+            if (!currentGroup->batches.empty())
+            {
+                auto& lastBatch = currentGroup->batches.back();
+                canExtend = (lastBatch.texturePath == resolvedPath
+                          && lastBatch.stencilOp == image.stencilOp
+                          && lastBatch.stencilRef == image.stencilRef
+                          && lastBatch.discardColor == image.discardColor
+                          && lastBatch.alphaThreshold == image.alphaThreshold);
+            }
+
             UIImageInstance inst{};
             inst.posAndSize = glm::vec4(image.position, image.size);
             inst.colorTint = image.colorTint;
             inst.uvRect = image.uvRect;
 
-            scissorMap[key].push_back({image.texturePath, inst});
-        }
-
-        // Build ordered instance buffer and scissor groups
-        std::vector<UIImageInstance> allInstances;
-        allInstances.reserve(images.size());
-
-        for (auto& [key, entries] : scissorMap)
-        {
-            UIScissorGroup group;
-            group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
-
-            // Sub-group by texture within this scissor group
-            std::unordered_map<std::string_view, std::vector<UIImageInstance>> texturedInstances;
-            for (auto& entry : entries)
+            if (canExtend)
             {
-                texturedInstances[entry.texturePath].push_back(entry.instance);
+                currentGroup->batches.back().instanceCount++;
             }
-
-            for (auto& [path, instances] : texturedInstances)
+            else
             {
-                std::string pathStr(path);
-                // RTT synthetic keys are only in externalTextureCache, never file-loaded
-                bool isRTTSynthetic = pathStr.starts_with("__rtt_");
-                bool hasTexture = externalTextureCache.contains(pathStr) || (!isRTTSynthetic && loadTexture(pathStr));
-                if (!hasTexture)
-                {
-                    continue;
-                }
-
                 UITextureBatch batch;
-                batch.texturePath = std::string(path);
+                batch.texturePath = resolvedPath;
                 batch.firstInstance = static_cast<uint32_t>(allInstances.size());
-                batch.instanceCount = static_cast<uint32_t>(instances.size());
-                group.batches.push_back(std::move(batch));
-
-                allInstances.insert(allInstances.end(), instances.begin(), instances.end());
+                batch.instanceCount = 1;
+                batch.stencilOp = image.stencilOp;
+                batch.stencilRef = image.stencilRef;
+                batch.discardColor = image.discardColor;
+                batch.alphaThreshold = image.alphaThreshold;
+                currentGroup->batches.push_back(std::move(batch));
             }
 
-            if (!group.batches.empty())
-            {
-                scissorGroups.push_back(std::move(group));
-            }
+            allInstances.push_back(inst);
         }
 
         totalInstanceCount = static_cast<uint32_t>(allInstances.size());
@@ -481,15 +570,22 @@ namespace render::ui
             return;
         }
 
+        vk::ClearValue stencilClear{};
+        stencilClear.depthStencil = vk::ClearDepthStencilValue{0.0f, 0};
+
+        std::array<vk::ClearValue, 2> clearValues = {{vk::ClearValue{}, stencilClear}};
+
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        vk::Pipeline currentPipeline = nullptr;
 
         vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
         vk::DeviceSize offsets[] = {0, 0};
@@ -500,12 +596,6 @@ namespace render::ui
             static_cast<float>(swapChain.getSwapchainExtent().width),
             static_cast<float>(swapChain.getSwapchainExtent().height)
         );
-
-        UIPushConstants pushConstants{};
-        pushConstants.viewportSize = viewportSize;
-
-        commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                                     0, sizeof(UIPushConstants), &pushConstants);
 
         for (const auto& group : scissorGroups)
         {
@@ -520,7 +610,6 @@ namespace render::ui
             }
             else
             {
-                // No scissor - full viewport
                 scissor.offset = vk::Offset2D{0, 0};
                 scissor.extent = swapChain.getSwapchainExtent();
             }
@@ -546,6 +635,46 @@ namespace render::ui
                         continue;
                     }
                 }
+
+                // Select pipeline variant based on stencil op
+                vk::Pipeline targetPipeline;
+                switch (batch.stencilOp)
+                {
+                case UIStencilOp::Write:
+                    targetPipeline = batch.discardColor ? pipelineStencilIncNoColor : pipelineStencilIncColor;
+                    break;
+                case UIStencilOp::Test:
+                    targetPipeline = pipelineStencilTest;
+                    break;
+                case UIStencilOp::Restore:
+                    targetPipeline = pipelineStencilDecNoColor;
+                    break;
+                default:
+                    targetPipeline = pipelineNormal;
+                    break;
+                }
+
+                if (targetPipeline != currentPipeline)
+                {
+                    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, targetPipeline);
+                    currentPipeline = targetPipeline;
+                }
+
+                // Set dynamic stencil reference for stencil pipelines
+                if (batch.stencilOp != UIStencilOp::None)
+                {
+                    commandBuffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, batch.stencilRef);
+                }
+
+                // Push constants with alpha threshold and stencil flags
+                UIPushConstants pushConstants{};
+                pushConstants.viewportSize = viewportSize;
+                pushConstants.alphaThreshold = batch.alphaThreshold;
+                pushConstants.flags = (batch.stencilOp == UIStencilOp::Write) ? 1u : 0u;
+
+                commandBuffer.pushConstants(pipelineLayout,
+                                             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                             0, sizeof(UIPushConstants), &pushConstants);
 
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                                   0, texDescSet, nullptr);

@@ -543,6 +543,16 @@ namespace services
         float displayValue = 0.0f;
     };
 
+    // ========== UI Mask ==========
+
+    struct UIMaskData
+    {
+        uint8_t maskMode = 0;     // 0=Rectangle, 1=AlphaTexture
+        std::string maskTexturePath;
+        float alphaThreshold = 0.5f;
+        bool showMaskGraphic = false;
+    };
+
     // ========== UI Animation ==========
 
     struct UIAnimationClipData

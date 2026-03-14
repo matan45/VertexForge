@@ -15,7 +15,8 @@ layout(location = 1) out vec4 fragColorTint;
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
-    vec2 padding;
+    float alphaThreshold;
+    uint flags;
 } pc;
 
 void main() {
@@ -43,9 +44,20 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 0) uniform sampler2D uiTexture;
 
+layout(push_constant) uniform PushConstants {
+    vec2 viewportSize;
+    float alphaThreshold;
+    uint flags;
+} pc;
+
 void main() {
     vec4 texColor = texture(uiTexture, fragTexCoord);
     outColor = texColor * fragColorTint;
+
+    // Stencil write mode: discard transparent mask pixels so stencil isn't written there
+    if (pc.flags == 1u && outColor.a < pc.alphaThreshold) {
+        discard;
+    }
 
     if (outColor.a < 0.01) {
         discard;

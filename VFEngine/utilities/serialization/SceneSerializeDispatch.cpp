@@ -216,6 +216,12 @@ namespace serialization
                 entity.getComponent<components::UIAnimationComponent>());
         }
 
+        if (entity.hasComponent<components::UIMaskComponent>())
+        {
+            componentsJson["uiMask"] = serializeUIMask(
+                entity.getComponent<components::UIMaskComponent>());
+        }
+
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
             componentsJson["socketAttachment"] = serializeSocketAttachment(
@@ -531,6 +537,12 @@ namespace serialization
         {
             auto& animComp = entity.addOrReplaceComponent<components::UIAnimationComponent>();
             deserializeUIAnimation(componentsJson["uiAnimation"], animComp);
+        }
+
+        if (componentsJson.contains("uiMask"))
+        {
+            auto& maskComp = entity.addOrReplaceComponent<components::UIMaskComponent>();
+            deserializeUIMask(componentsJson["uiMask"], maskComp);
         }
 
         if (componentsJson.contains("socketAttachment"))

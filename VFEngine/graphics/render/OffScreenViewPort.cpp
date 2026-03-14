@@ -146,6 +146,23 @@ namespace render
             device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
             offscreenResources.depthImage.depthImageMemory = nullptr;
         }
+
+        // Cleanup UI stencil image
+        if (offscreenResources.uiStencilImage.stencilImageView)
+        {
+            device.getLogicalDevice().destroyImageView(offscreenResources.uiStencilImage.stencilImageView);
+            offscreenResources.uiStencilImage.stencilImageView = nullptr;
+        }
+        if (offscreenResources.uiStencilImage.stencilImage)
+        {
+            device.getLogicalDevice().destroyImage(offscreenResources.uiStencilImage.stencilImage);
+            offscreenResources.uiStencilImage.stencilImage = nullptr;
+        }
+        if (offscreenResources.uiStencilImage.stencilImageMemory)
+        {
+            device.getLogicalDevice().freeMemory(offscreenResources.uiStencilImage.stencilImageMemory);
+            offscreenResources.uiStencilImage.stencilImageMemory = nullptr;
+        }
     }
 
     void OffScreenViewPort::recreate()
@@ -220,6 +237,35 @@ namespace render
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionDepthImage);
 
         offscreenResources.depthImage = std::move(depth);
+
+        // Create UI stencil image (eS8Uint, 1 byte per pixel)
+        {
+            core::ImageInfoRequest stencilInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            stencilInfo.width = swapChain.getSwapchainExtent().width;
+            stencilInfo.height = swapChain.getSwapchainExtent().height;
+            stencilInfo.format = vk::Format::eS8Uint;
+            stencilInfo.tiling = vk::ImageTiling::eOptimal;
+            stencilInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+            stencilInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+            core::StencilImage stencil;
+            core::ImageUtilities::createImage(stencilInfo, stencil.stencilImage, stencil.stencilImageMemory);
+
+            core::ImageViewInfoRequest stencilViewRequest(device.getLogicalDevice(), stencil.stencilImage);
+            stencilViewRequest.format = vk::Format::eS8Uint;
+            stencilViewRequest.aspectFlags = vk::ImageAspectFlagBits::eStencil;
+            core::ImageUtilities::createImageView(stencilViewRequest, stencil.stencilImageView);
+
+            vk::UniqueCommandBuffer transitionStencilImage = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool->getCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionStencilImage.get(), stencil.stencilImage,
+                                                   vk::ImageLayout::eUndefined,
+                                                   vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                   vk::ImageAspectFlagBits::eStencil);
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionStencilImage);
+
+            offscreenResources.uiStencilImage = std::move(stencil);
+        }
 
         offscreenResources.colorImages.reserve(swapChain.getImageCount());
 

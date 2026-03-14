@@ -165,6 +165,7 @@
     <ClInclude Include="events\ui\UIEvents.hpp" />
     <ClInclude Include="events\ui\UIInputCheckboxEvents.hpp" />
     <ClInclude Include="events\ui\UILabelButtonEvents.hpp" />
+    <ClInclude Include="events\ui\UIMaskEvents.hpp" />
     <ClInclude Include="events\ui\UIScrollLayoutEvents.hpp" />
     <ClInclude Include="events\ui\UISliderProgressEvents.hpp" />
     <ClInclude Include="events\vegetation\GrassEvents.hpp" />
@@ -342,6 +343,7 @@
     <ClCompile Include="impl\components\UIComponentService.cpp" />
     <ClCompile Include="impl\components\UIDropdownTabsOps.cpp" />
     <ClCompile Include="impl\components\UIInteractiveOps.cpp" />
+    <ClCompile Include="impl\components\UIMaskOps.cpp" />
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />

@@ -16,8 +16,15 @@ namespace core {
 		vk::ImageView depthImageView;
 	};
 
+	struct StencilImage {
+		vk::Image stencilImage;
+		vk::DeviceMemory stencilImageMemory;
+		vk::ImageView stencilImageView;
+	};
+
 	struct OffscreenResources {
 		std::vector<core::ColorImage> colorImages;
 		core::DepthImage depthImage;
+		core::StencilImage uiStencilImage;
 	};
 }

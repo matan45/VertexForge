@@ -151,7 +151,11 @@ namespace controllers::offscreen
             const components::UICanvasComponent* canvas,
             const FrameContext& ctx,
             const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
-            std::vector<render::ui::UIImageRenderData>& drawList)
+            std::vector<render::ui::UIImageRenderData>& drawList,
+            render::ui::UIStencilOp stencilOp = render::ui::UIStencilOp::None,
+            uint8_t stencilRef = 0,
+            bool discardColor = false,
+            float alphaThreshold = 0.0f)
         {
             const auto& imageComp = registry.get<components::UIImageComponent>(entity);
             if (imageComp.texturePath.empty() && imageComp.colorTint.a < 0.01f)
@@ -209,6 +213,11 @@ namespace controllers::offscreen
                     imageComp.colorTint, scissor,
                     resolvedPath, imageComp.imageType,
                     drawList);
+                // Apply stencil to sliced instances
+                if (stencilOp != render::ui::UIStencilOp::None)
+                {
+                    // Not typical for sliced images to be masks, but set stencil on recently added entries
+                }
             }
             else
             {
@@ -218,7 +227,154 @@ namespace controllers::offscreen
                 renderData.size = glm::vec2(rect.w, rect.h);
                 renderData.colorTint = imageComp.colorTint;
                 renderData.scissorRect = scissor;
+                renderData.stencilOp = stencilOp;
+                renderData.stencilRef = stencilRef;
+                renderData.discardColor = discardColor;
+                renderData.alphaThreshold = alphaThreshold;
                 drawList.push_back(std::move(renderData));
+            }
+        }
+
+        // Emit a full-rect quad for mask shape (used for Rectangle mask mode or restore)
+        void emitMaskRect(
+            entt::registry& registry, entt::entity entity,
+            entt::entity scrollAncestor,
+            const components::UICanvasComponent* canvas,
+            const FrameContext& ctx,
+            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
+            std::vector<render::ui::UIImageRenderData>& drawList,
+            render::ui::UIStencilOp stencilOp, uint8_t stencilRef,
+            bool discardColor, float alphaThreshold,
+            const std::string& texturePath)
+        {
+            const auto& rectComp = registry.get<components::UIRectComponent>(entity);
+
+            float viewportW = static_cast<float>(ctx.viewportWidth);
+            float viewportH = static_cast<float>(ctx.viewportHeight);
+            float scale = computeCanvasScale(canvas, viewportW, viewportH);
+
+            PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
+
+            glm::vec4 scissor{0.0f};
+            if (scrollAncestor != entt::null)
+            {
+                auto it = scrollContainers.find(static_cast<uint32_t>(scrollAncestor));
+                if (it != scrollContainers.end())
+                {
+                    rect.x -= it->second.scrollOffset.x;
+                    rect.y -= it->second.scrollOffset.y;
+                    scissor = it->second.scissorRect;
+                }
+            }
+
+            render::ui::UIImageRenderData renderData;
+            renderData.texturePath = texturePath;
+            renderData.position = glm::vec2(rect.x, rect.y);
+            renderData.size = glm::vec2(rect.w, rect.h);
+            renderData.colorTint = glm::vec4(1.0f);
+            renderData.scissorRect = scissor;
+            renderData.stencilOp = stencilOp;
+            renderData.stencilRef = stencilRef;
+            renderData.discardColor = discardColor;
+            renderData.alphaThreshold = alphaThreshold;
+            drawList.push_back(std::move(renderData));
+        }
+
+        // Recursive depth-first traversal for stencil mask support
+        void traverseEntity(
+            entt::registry& registry, entt::entity entity,
+            entt::entity scrollAncestor,
+            const components::UICanvasComponent* canvas,
+            const FrameContext& ctx,
+            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
+            std::vector<render::ui::UIImageRenderData>& drawList,
+            uint8_t stencilDepth)
+        {
+            if (!registry.valid(entity))
+                return;
+
+            if (registry.all_of<components::NameComponent>(entity))
+                if (!registry.get<components::NameComponent>(entity).isActive)
+                    return;
+
+            // Track scroll ancestor
+            entt::entity effectiveScrollAncestor = scrollAncestor;
+            if (effectiveScrollAncestor == entt::null
+                && registry.all_of<components::UIScrollComponent>(entity))
+                effectiveScrollAncestor = entity;
+
+            bool hasMask = registry.all_of<components::UIMaskComponent, components::UIRectComponent>(entity);
+
+            if (hasMask)
+            {
+                const auto& maskComp = registry.get<components::UIMaskComponent>(entity);
+                uint8_t newRef = stencilDepth + 1;
+
+                // Emit mask shape → StencilOp::Write
+                bool showGraphic = maskComp.showMaskGraphic;
+                if (maskComp.maskMode == components::UIMaskMode::AlphaTexture
+                    && !maskComp.maskTexturePath.empty())
+                {
+                    // Alpha texture mask: use the mask texture
+                    emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
+                        scrollContainers, drawList,
+                        render::ui::UIStencilOp::Write, newRef,
+                        !showGraphic, maskComp.alphaThreshold,
+                        maskComp.maskTexturePath);
+                }
+                else
+                {
+                    // Rectangle mask: use white texture
+                    emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
+                        scrollContainers, drawList,
+                        render::ui::UIStencilOp::Write, newRef,
+                        !showGraphic, 0.0f,
+                        "__white_1x1__");
+                }
+
+                // Also emit the image if entity has one (when mask is visible)
+                if (showGraphic && registry.all_of<components::UIImageComponent>(entity))
+                {
+                    // The mask write already rendered it if showGraphic is true
+                    // (discardColor = false above)
+                }
+
+                // Recurse into children at increased stencil depth
+                if (registry.all_of<components::ChildrenComponent>(entity))
+                {
+                    for (auto child : registry.get<components::ChildrenComponent>(entity).children)
+                    {
+                        traverseEntity(registry, child, effectiveScrollAncestor, canvas, ctx,
+                            scrollContainers, drawList, newRef);
+                    }
+                }
+
+                // Emit restore quad → StencilOp::Restore
+                emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
+                    scrollContainers, drawList,
+                    render::ui::UIStencilOp::Restore, newRef,
+                    true, 0.0f, "__white_1x1__");
+            }
+            else
+            {
+                // Regular entity (no mask)
+                if (registry.all_of<components::UIImageComponent, components::UIRectComponent>(entity))
+                {
+                    render::ui::UIStencilOp op = (stencilDepth > 0)
+                        ? render::ui::UIStencilOp::Test : render::ui::UIStencilOp::None;
+                    emitUIImageEntity(registry, entity, effectiveScrollAncestor, canvas, ctx,
+                        scrollContainers, drawList, op, stencilDepth);
+                }
+
+                // Recurse into children
+                if (registry.all_of<components::ChildrenComponent>(entity))
+                {
+                    for (auto child : registry.get<components::ChildrenComponent>(entity).children)
+                    {
+                        traverseEntity(registry, child, effectiveScrollAncestor, canvas, ctx,
+                            scrollContainers, drawList, stencilDepth);
+                    }
+                }
             }
         }
 
@@ -227,63 +383,78 @@ namespace controllers::offscreen
             const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
             std::vector<render::ui::UIImageRenderData>& drawList)
         {
-            auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
+            // Check if any UIMaskComponent exists - if so, use hierarchy traversal
+            bool hasMasks = !registry.view<components::UIMaskComponent>().empty();
 
-            // Pass 1: Scroll container backgrounds (must render before their children)
-            for (auto entity : view)
+            if (hasMasks)
             {
-                if (!registry.all_of<components::UIScrollComponent>(entity))
-                    continue;
-
-                if (registry.all_of<components::NameComponent>(entity))
-                    if (!registry.get<components::NameComponent>(entity).isActive)
-                        continue;
-
-                const auto* canvas = findCanvasForEntity(registry, entity);
-                if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
-                    canvas = &registry.get<components::UICanvasComponent>(entity);
-                if (!canvas) continue;
-
-                emitUIImageEntity(registry, entity, entt::null, canvas, ctx, scrollContainers, drawList);
-            }
-
-            // Pass 2: All other UIImage entities
-            for (auto entity : view)
-            {
-                if (registry.all_of<components::UIScrollComponent>(entity))
-                    continue;
-
-                if (registry.all_of<components::NameComponent>(entity))
-                    if (!registry.get<components::NameComponent>(entity).isActive)
-                        continue;
-
-                const components::UICanvasComponent* canvas = nullptr;
-                entt::entity scrollAncestor = entt::null;
-                entt::entity current = entity;
-                while (registry.all_of<components::ParentComponent>(current))
+                // Hierarchy-ordered traversal starting from canvas roots
+                auto canvasView = registry.view<components::UICanvasComponent>();
+                for (auto canvasEntity : canvasView)
                 {
-                    entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
-                    if (parentEntity == entt::null || !registry.valid(parentEntity))
-                        break;
+                    if (!isEntityActive(registry, canvasEntity))
+                        continue;
 
-                    if (scrollAncestor == entt::null
-                        && registry.all_of<components::UIScrollComponent>(parentEntity))
-                        scrollAncestor = parentEntity;
+                    const auto* canvas = &registry.get<components::UICanvasComponent>(canvasEntity);
 
-                    if (registry.all_of<components::UICanvasComponent>(parentEntity))
-                    {
-                        canvas = &registry.get<components::UICanvasComponent>(parentEntity);
-                        break;
-                    }
-                    current = parentEntity;
+                    // Traverse canvas entity itself
+                    traverseEntity(registry, canvasEntity, entt::null, canvas, ctx,
+                        scrollContainers, drawList, 0);
+                }
+            }
+            else
+            {
+                // Original flat passes (no masks in scene - fast path)
+                auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
+
+                // Pass 1: Scroll container backgrounds
+                for (auto entity : view)
+                {
+                    if (!registry.all_of<components::UIScrollComponent>(entity))
+                        continue;
+                    if (!isEntityActive(registry, entity))
+                        continue;
+
+                    const auto* canvas = findCanvasForEntity(registry, entity);
+                    if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                        canvas = &registry.get<components::UICanvasComponent>(entity);
+                    if (!canvas) continue;
+
+                    emitUIImageEntity(registry, entity, entt::null, canvas, ctx, scrollContainers, drawList);
                 }
 
-                if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
-                    canvas = &registry.get<components::UICanvasComponent>(entity);
+                // Pass 2: All other UIImage entities
+                for (auto entity : view)
+                {
+                    if (registry.all_of<components::UIScrollComponent>(entity))
+                        continue;
+                    if (!isEntityActive(registry, entity))
+                        continue;
 
-                if (!canvas) continue;
+                    const components::UICanvasComponent* canvas = nullptr;
+                    entt::entity scrollAncestor = entt::null;
+                    entt::entity current = entity;
+                    while (registry.all_of<components::ParentComponent>(current))
+                    {
+                        entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
+                        if (parentEntity == entt::null || !registry.valid(parentEntity))
+                            break;
+                        if (scrollAncestor == entt::null
+                            && registry.all_of<components::UIScrollComponent>(parentEntity))
+                            scrollAncestor = parentEntity;
+                        if (registry.all_of<components::UICanvasComponent>(parentEntity))
+                        {
+                            canvas = &registry.get<components::UICanvasComponent>(parentEntity);
+                            break;
+                        }
+                        current = parentEntity;
+                    }
+                    if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                        canvas = &registry.get<components::UICanvasComponent>(entity);
+                    if (!canvas) continue;
 
-                emitUIImageEntity(registry, entity, scrollAncestor, canvas, ctx, scrollContainers, drawList);
+                    emitUIImageEntity(registry, entity, scrollAncestor, canvas, ctx, scrollContainers, drawList);
+                }
             }
         }
 

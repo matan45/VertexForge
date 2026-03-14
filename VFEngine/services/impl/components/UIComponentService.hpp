@@ -136,6 +136,13 @@ namespace services {
         bool resumeUIAnimation(EntityHandle entity);
         bool isUIAnimationPlaying(EntityHandle entity) const;
 
+        // UI Mask Operations
+        bool addUIMaskComponent(EntityHandle entity);
+        bool removeUIMaskComponent(EntityHandle entity);
+        bool hasUIMaskComponent(EntityHandle entity) const;
+        std::optional<UIMaskData> getUIMaskData(EntityHandle entity) const;
+        bool setUIMaskData(EntityHandle entity, const UIMaskData& data);
+
     private:
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
@@ -143,6 +150,7 @@ namespace services {
         void registerDropdownTabsHandlers(events::EventDispatcher& dispatcher);
         void registerSliderProgressHandlers(events::EventDispatcher& dispatcher);
         void registerAnimationHandlers(events::EventDispatcher& dispatcher);
+        void registerMaskHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

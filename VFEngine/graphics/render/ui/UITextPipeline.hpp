@@ -27,6 +27,8 @@ namespace render::ui
         std::string fontPath;
         uint32_t firstInstance = 0;
         uint32_t instanceCount = 0;
+        UIStencilOp stencilOp = UIStencilOp::None;
+        uint8_t stencilRef = 0;
     };
 
     struct UITextScissorGroup
@@ -49,6 +51,7 @@ namespace render::ui
 
         vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline pipelineStencilTest;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;

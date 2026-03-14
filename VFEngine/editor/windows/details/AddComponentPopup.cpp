@@ -52,7 +52,7 @@ namespace windows::details
                            c.hasSocketAttachment && c.hasUICanvas &&
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
-                           c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation &&
+                           c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal;
             if (allAdded)
@@ -596,6 +596,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Tween animation system for UI elements");
+            }
+        }
+
+        if (!c.hasUIMask)
+        {
+            if (ImGui::Selectable("  UI Mask"))
+            {
+                events::ui::AddUIMaskComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Stencil mask for clipping children to arbitrary shapes");
             }
         }
     }

@@ -657,4 +657,28 @@ namespace serialization {
         anim.completedFired = false;
     }
 
+    // ---- UI Mask ----
+
+    json SceneSerialization::serializeUIMask(const components::UIMaskComponent& mask)
+    {
+        json j;
+        j["maskMode"] = static_cast<int>(mask.maskMode);
+        j["maskTexturePath"] = mask.maskTexturePath;
+        j["alphaThreshold"] = mask.alphaThreshold;
+        j["showMaskGraphic"] = mask.showMaskGraphic;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIMask(const json& j, components::UIMaskComponent& mask)
+    {
+        if (j.contains("maskMode"))
+            mask.maskMode = static_cast<components::UIMaskMode>(j["maskMode"].get<int>());
+        if (j.contains("maskTexturePath"))
+            mask.maskTexturePath = j["maskTexturePath"].get<std::string>();
+        if (j.contains("alphaThreshold"))
+            mask.alphaThreshold = j["alphaThreshold"].get<float>();
+        if (j.contains("showMaskGraphic"))
+            mask.showMaskGraphic = j["showMaskGraphic"].get<bool>();
+    }
+
 } // namespace serialization

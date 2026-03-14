@@ -37,6 +37,7 @@
 #include "../details/UISliderDrawer.hpp"
 #include "../details/UIProgressBarDrawer.hpp"
 #include "../details/UIAnimationDrawer.hpp"
+#include "../details/UIMaskDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
 #include "../details/NavmeshAgentDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
@@ -90,6 +91,7 @@ namespace windows
         details::UISliderDrawer uiSliderDrawer;
         details::UIProgressBarDrawer uiProgressBarDrawer;
         details::UIAnimationDrawer uiAnimationDrawer;
+        details::UIMaskDrawer uiMaskDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;
         details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::ControllerDrawer controllerDrawer;

@@ -121,6 +121,23 @@ namespace controllers::offscreen
         }
 
         // --- Screen-space labels: emit UILabel entities ---
+        // Count mask depth for a label entity by walking up parent chain
+        uint8_t computeStencilDepthForEntity(entt::registry& registry, entt::entity entity)
+        {
+            uint8_t depth = 0;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parent = registry.get<components::ParentComponent>(current).parent;
+                if (parent == entt::null || !registry.valid(parent))
+                    break;
+                if (registry.all_of<components::UIMaskComponent>(parent))
+                    depth++;
+                current = parent;
+            }
+            return depth;
+        }
+
         void emitLabelEntities(
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
@@ -148,6 +165,9 @@ namespace controllers::offscreen
                 auto [scrollAncestor, scissor] = findScrollInfo(registry, entity, scrollContainers);
                 applyScrollOffset(rect, scrollAncestor, scrollContainers);
 
+                // Determine stencil depth for this label
+                uint8_t stencilDepth = computeStencilDepthForEntity(registry, entity);
+
                 render::ui::UITextRenderData renderData;
                 renderData.fontPath = labelComp.fontPath;
                 renderData.text = labelComp.text;
@@ -162,6 +182,9 @@ namespace controllers::offscreen
                 renderData.position = glm::vec2(rect.x, rect.y);
                 renderData.size = glm::vec2(rect.w, rect.h);
                 renderData.scissorRect = scissor;
+                renderData.stencilOp = (stencilDepth > 0)
+                    ? render::ui::UIStencilOp::Test : render::ui::UIStencilOp::None;
+                renderData.stencilRef = stencilDepth;
                 drawList.push_back(std::move(renderData));
             }
         }
