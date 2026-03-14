@@ -721,6 +721,7 @@ namespace serialization {
             j["acceptTag"] = comp.acceptTag;
         }
         j["highlightColor"] = writeVec4(comp.highlightColor);
+        j["rejectColor"] = writeVec4(comp.rejectColor);
         j["interactable"] = comp.interactable;
         return j;
     }
@@ -729,6 +730,7 @@ namespace serialization {
     {
         comp.acceptTag = j.value("acceptTag", std::string(""));
         readVec4(j, "highlightColor", comp.highlightColor);
+        readVec4(j, "rejectColor", comp.rejectColor);
         comp.interactable = j.value("interactable", true);
     }
 

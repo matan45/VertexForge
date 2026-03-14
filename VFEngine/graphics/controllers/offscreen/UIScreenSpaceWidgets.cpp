@@ -536,7 +536,7 @@ namespace controllers::offscreen::ui_screenspace
                 continue;
 
             const auto& targetComp = registry.get<components::UIDropTargetComponent>(targetEntity);
-            if (!targetComp.isHighlighted)
+            if (!targetComp.isHighlighted && !targetComp.isRejected)
                 continue;
 
             const auto* canvas = findCanvasForEntity(registry, targetEntity);
@@ -546,12 +546,13 @@ namespace controllers::offscreen::ui_screenspace
             const auto& rectComp = registry.get<components::UIRectComponent>(targetEntity);
             PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
 
-            render::ui::UIImageRenderData highlight;
-            highlight.texturePath = "__white_1x1__";
-            highlight.position = glm::vec2(rect.x, rect.y);
-            highlight.size = glm::vec2(rect.w, rect.h);
-            highlight.colorTint = targetComp.highlightColor;
-            drawList.push_back(std::move(highlight));
+            render::ui::UIImageRenderData overlay;
+            overlay.texturePath = "__white_1x1__";
+            overlay.position = glm::vec2(rect.x, rect.y);
+            overlay.size = glm::vec2(rect.w, rect.h);
+            overlay.colorTint = targetComp.isHighlighted
+                ? targetComp.highlightColor : targetComp.rejectColor;
+            drawList.push_back(std::move(overlay));
         }
 
         // Draw ghost image

@@ -162,6 +162,7 @@ namespace services {
         UIDropTargetData data;
         data.acceptTag = comp.acceptTag;
         data.highlightColor = comp.highlightColor;
+        data.rejectColor = comp.rejectColor;
         data.interactable = comp.interactable;
         return data;
     }
@@ -180,6 +181,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::UIDropTargetComponent>();
         comp.acceptTag = data.acceptTag;
         comp.highlightColor = data.highlightColor;
+        comp.rejectColor = data.rejectColor;
         comp.interactable = data.interactable;
         return true;
     }

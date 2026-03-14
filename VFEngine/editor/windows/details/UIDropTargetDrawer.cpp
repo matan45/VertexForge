@@ -58,6 +58,17 @@ namespace windows::details
                 data.highlightColor = glm::vec4(color[0], color[1], color[2], color[3]);
                 changed = true;
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Overlay color when a compatible draggable hovers over this target");
+
+            float rejColor[4] = {data.rejectColor.r, data.rejectColor.g, data.rejectColor.b, data.rejectColor.a};
+            if (ImGui::ColorEdit4("Reject Color##UIDropTarget", rejColor))
+            {
+                data.rejectColor = glm::vec4(rejColor[0], rejColor[1], rejColor[2], rejColor[3]);
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Overlay color when an incompatible draggable hovers over this target");
 
             ImGui::Spacing();
 

@@ -496,10 +496,12 @@ namespace components
         // Config (serialized)
         std::string acceptTag;                              // empty = accept all
         glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f}; // overlay when valid drag hovers
+        glm::vec4 rejectColor{1.0f, 0.2f, 0.2f, 0.3f};    // overlay when incompatible drag hovers
         bool interactable = true;
 
         // Runtime state (NOT serialized)
         bool isHighlighted = false;
+        bool isRejected = false;  // true when hovered by incompatible drag
     };
 
     struct UIAnimationComponent

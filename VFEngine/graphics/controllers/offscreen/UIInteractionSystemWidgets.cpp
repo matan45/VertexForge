@@ -823,6 +823,31 @@ namespace controllers::offscreen
 
     // ========== UI Drag & Drop Interaction ==========
 
+    bool UIInteractionSystem::tagMatches(const std::string& acceptTag, const std::string& dragTag)
+    {
+        if (acceptTag.empty())
+            return true;
+
+        size_t start = 0;
+        while (start < acceptTag.size())
+        {
+            size_t end = acceptTag.find(',', start);
+            if (end == std::string::npos)
+                end = acceptTag.size();
+
+            size_t tStart = start;
+            size_t tEnd = end;
+            while (tStart < tEnd && acceptTag[tStart] == ' ') tStart++;
+            while (tEnd > tStart && acceptTag[tEnd - 1] == ' ') tEnd--;
+
+            if (acceptTag.compare(tStart, tEnd - tStart, dragTag) == 0)
+                return true;
+
+            start = end + 1;
+        }
+        return false;
+    }
+
     void UIInteractionSystem::processDragDropInteraction(const FrameContext& ctx)
     {
         if (!ctx.playModeActive)
@@ -890,21 +915,14 @@ namespace controllers::offscreen
                         continue;
 
                     auto& targetComp = registry.get<components::UIDropTargetComponent>(targetEntity);
-                    if (!targetComp.interactable)
-                    {
-                        targetComp.isHighlighted = false;
-                        continue;
-                    }
+                    targetComp.isHighlighted = false;
+                    targetComp.isRejected = false;
 
-                    // Tag check
-                    if (!targetComp.acceptTag.empty() && targetComp.acceptTag != dragComp.dragTag)
-                    {
-                        targetComp.isHighlighted = false;
+                    if (!targetComp.interactable)
                         continue;
-                    }
 
                     const auto* canvas = ui_common::findCanvasForEntity(registry, targetEntity);
-                    if (!canvas) { targetComp.isHighlighted = false; continue; }
+                    if (!canvas) continue;
 
                     float scale = ui_common::computeCanvasScale(canvas, vw, vh);
                     const auto& rectComp = registry.get<components::UIRectComponent>(targetEntity);
@@ -916,7 +934,14 @@ namespace controllers::offscreen
                     ui_common::applyScrollOffset(rect, scrollAnc,
                         ui_common::buildScrollContainerMap(registry, vw, vh));
 
-                    targetComp.isHighlighted = ui_common::hitTestRect(ctx.mousePosition, rect, scissor);
+                    bool hovered = ui_common::hitTestRect(ctx.mousePosition, rect, scissor);
+                    if (hovered)
+                    {
+                        if (tagMatches(targetComp.acceptTag, dragComp.dragTag))
+                            targetComp.isHighlighted = true;
+                        else
+                            targetComp.isRejected = true;
+                    }
                 }
             }
             else
@@ -935,7 +960,7 @@ namespace controllers::offscreen
                     if (!targetComp.interactable)
                         continue;
 
-                    if (!targetComp.acceptTag.empty() && targetComp.acceptTag != dragComp.dragTag)
+                    if (!tagMatches(targetComp.acceptTag, dragComp.dragTag))
                         continue;
 
                     const auto* canvas = ui_common::findCanvasForEntity(registry, targetEntity);
@@ -994,7 +1019,11 @@ namespace controllers::offscreen
                 for (auto targetEntity : dropView)
                 {
                     if (registry.all_of<components::UIDropTargetComponent>(targetEntity))
-                        registry.get<components::UIDropTargetComponent>(targetEntity).isHighlighted = false;
+                    {
+                        auto& tc = registry.get<components::UIDropTargetComponent>(targetEntity);
+                        tc.isHighlighted = false;
+                        tc.isRejected = false;
+                    }
                 }
             }
             return;

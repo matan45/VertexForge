@@ -23,6 +23,9 @@ namespace controllers::offscreen
     private:
         entt::entity focusedTextInput = entt::null;
 
+        // Drag-drop tag matching
+        static bool tagMatches(const std::string& acceptTag, const std::string& dragTag);
+
         // Text input sub-methods
         void textInputHitTest(const FrameContext& ctx, entt::entity& hoveredTextInput);
         void textInputFocusManagement(const FrameContext& ctx, entt::entity hoveredTextInput);

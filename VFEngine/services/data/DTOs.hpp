@@ -566,6 +566,7 @@ namespace services
     {
         std::string acceptTag;
         glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f};
+        glm::vec4 rejectColor{1.0f, 0.2f, 0.2f, 0.3f};
         bool interactable = true;
     };
 
