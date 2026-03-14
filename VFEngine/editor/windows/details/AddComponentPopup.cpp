@@ -205,7 +205,7 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
             {
-                ImGui::SetTooltip("Projected decal onto scene geometry (footprints, bullet holes, etc.)");
+                ImGui::SetTooltip("Projects decal onto scene geometry (footprints, bullet holes, etc.)");
             }
         }
     }

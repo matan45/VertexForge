@@ -53,7 +53,7 @@ namespace render::decal
         vk::DescriptorPool globalDescriptorPool;
         vk::DescriptorSet globalDescriptorSet;
 
-        // Set 1: per-decal textures (albedo + normal)
+        // Set 1: per-decal textures (albedo, normal, ORM)
         vk::DescriptorSetLayout textureDescriptorSetLayout;
         vk::DescriptorPool textureDescriptorPool;
 

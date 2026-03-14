@@ -9,7 +9,7 @@
 #include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
-#include <glm/gtc/matrix_inverse.hpp>
+
 
 namespace render::decal
 {
@@ -420,15 +420,9 @@ namespace render::decal
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
 
-        auto extent = swapChain.getSwapchainExtent();
-        vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent.width),
-                              static_cast<float>(extent.height), 0.0f, 1.0f};
-        vk::Rect2D scissor{{0, 0}, extent};
         vk::PipelineViewportStateCreateInfo viewportState{};
         viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
 
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.polygonMode = vk::PolygonMode::eFill;
@@ -586,7 +580,6 @@ namespace render::decal
             return fallbackDescriptorSet;
         }
 
-        // Resolve textures (use fallbacks for empty paths)
         core::Texture* albedoTex = albedoPath.empty() ? fallbackWhiteTexture.get()
                                                        : getOrLoadTexture(albedoPath, vk::Format::eR8G8B8A8Srgb);
         core::Texture* normalTex = normalPath.empty() ? fallbackNormalTexture.get()
@@ -598,14 +591,12 @@ namespace render::decal
         if (!normalTex) normalTex = fallbackNormalTexture.get();
         if (!ormTex) ormTex = fallbackWhiteTexture.get();
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = textureDescriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &textureDescriptorSetLayout;
         vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-        // Write all 3 textures
         std::array<vk::DescriptorImageInfo, 3> imgInfos{};
         imgInfos[0].sampler = textureSampler;
         imgInfos[0].imageView = albedoTex->getImageView();
@@ -783,7 +774,6 @@ namespace render::decal
         uint32_t count = std::min(static_cast<uint32_t>(currentDecals.size()), maxDecals);
         for (uint32_t i = 0; i < count; ++i)
         {
-            // Bind per-decal textures (set 1: albedo, normal, ORM)
             vk::DescriptorSet texDescSet = getOrCreateDecalTextureSet(
                 currentDecals[i].albedoTexture,
                 currentDecals[i].normalTexture,

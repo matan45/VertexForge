@@ -114,118 +114,58 @@ namespace windows::details
         return changed;
     }
 
+    bool DecalDrawer::drawTextureSlot(const char* label, const char* emptyText, std::string& texturePath)
+    {
+        bool changed = false;
+
+        if (!texturePath.empty())
+        {
+            std::string filename = texturePath;
+            auto lastSlash = filename.find_last_of("/\\");
+            if (lastSlash != std::string::npos)
+                filename = filename.substr(lastSlash + 1);
+            ImGui::Text("%s: %s", label, filename.c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("%s", emptyText);
+        }
+
+        ImGui::PushID(label);
+        if (ImGui::Button("Select##Decal"))
+        {
+            nfd::FileDialog fileDialog;
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
+            if (!path.empty())
+            {
+                texturePath = path;
+                changed = true;
+            }
+        }
+        ImGui::SameLine();
+        if (!texturePath.empty())
+        {
+            if (ImGui::Button("Clear##Decal"))
+            {
+                texturePath = "";
+                changed = true;
+            }
+        }
+        ImGui::PopID();
+
+        return changed;
+    }
+
     bool DecalDrawer::drawTextures(services::DecalData& data)
     {
         bool changed = false;
 
-        // Albedo texture
-        if (!data.albedoTexture.empty())
-        {
-            std::string filename = data.albedoTexture;
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-                filename = filename.substr(lastSlash + 1);
-            ImGui::Text("Albedo: %s", filename.c_str());
-        }
-        else
-        {
-            ImGui::TextDisabled("No albedo texture");
-        }
-
-        if (ImGui::Button("Select Albedo##Decal"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                data.albedoTexture = path;
-                changed = true;
-            }
-        }
-        ImGui::SameLine();
-        if (!data.albedoTexture.empty())
-        {
-            if (ImGui::Button("Clear##DecalAlbedo"))
-            {
-                data.albedoTexture = "";
-                changed = true;
-            }
-        }
-
+        changed |= drawTextureSlot("Albedo", "No albedo texture", data.albedoTexture);
         ImGui::Spacing();
-
-        // Normal texture
-        if (!data.normalTexture.empty())
-        {
-            std::string filename = data.normalTexture;
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-                filename = filename.substr(lastSlash + 1);
-            ImGui::Text("Normal: %s", filename.c_str());
-        }
-        else
-        {
-            ImGui::TextDisabled("No normal map");
-        }
-
-        if (ImGui::Button("Select Normal##Decal"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                data.normalTexture = path;
-                changed = true;
-            }
-        }
-        ImGui::SameLine();
-        if (!data.normalTexture.empty())
-        {
-            if (ImGui::Button("Clear##DecalNormal"))
-            {
-                data.normalTexture = "";
-                changed = true;
-            }
-        }
-
+        changed |= drawTextureSlot("Normal", "No normal map", data.normalTexture);
         ImGui::Spacing();
-
-        // ORM texture
-        if (!data.ormTexture.empty())
-        {
-            std::string filename = data.ormTexture;
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-                filename = filename.substr(lastSlash + 1);
-            ImGui::Text("ORM: %s", filename.c_str());
-        }
-        else
-        {
-            ImGui::TextDisabled("No ORM texture");
-        }
-
-        if (ImGui::Button("Select ORM##Decal"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                data.ormTexture = path;
-                changed = true;
-            }
-        }
-        ImGui::SameLine();
-        if (!data.ormTexture.empty())
-        {
-            if (ImGui::Button("Clear##DecalORM"))
-            {
-                data.ormTexture = "";
-                changed = true;
-            }
-        }
+        changed |= drawTextureSlot("ORM", "No ORM texture", data.ormTexture);
 
         return changed;
     }

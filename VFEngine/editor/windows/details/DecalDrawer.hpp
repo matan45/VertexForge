@@ -16,5 +16,6 @@ namespace windows::details
         bool drawColor(services::DecalData& data);
         bool drawFadeSettings(services::DecalData& data);
         bool drawAdvancedSettings(services::DecalData& data);
+        bool drawTextureSlot(const char* label, const char* emptyText, std::string& texturePath);
     };
 }
