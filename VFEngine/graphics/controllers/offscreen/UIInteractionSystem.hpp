@@ -16,6 +16,7 @@ namespace controllers::offscreen
         void processDropdownInteraction(const FrameContext& ctx);
         void processTabsInteraction(const FrameContext& ctx);
         void processSliderInteraction(const FrameContext& ctx);
+        void processDragDropInteraction(const FrameContext& ctx);
 
         entt::entity getFocusedTextInput() const { return focusedTextInput; }
 

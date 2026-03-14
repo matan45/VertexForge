@@ -472,6 +472,36 @@ namespace components
         bool showMaskGraphic = false; // render the mask shape visually
     };
 
+    struct UIDraggableComponent
+    {
+        // Config (serialized)
+        float ghostOpacity = 0.5f;
+        glm::vec2 ghostOffset{0.0f, 0.0f};
+        bool constrainToParent = true;
+        std::string dragTag;
+
+        // Runtime state (NOT serialized)
+        bool isDragging = false;
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
+        glm::vec2 dragStartEntityPos{0.0f, 0.0f};
+        glm::vec2 currentGhostPos{0.0f, 0.0f};
+        glm::vec2 ghostSize{0.0f, 0.0f};
+
+        // Global singleton: only one entity can be dragged at a time
+        static inline entt::entity activeDragEntity = entt::null;
+    };
+
+    struct UIDropTargetComponent
+    {
+        // Config (serialized)
+        std::string acceptTag;                              // empty = accept all
+        glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f}; // overlay when valid drag hovers
+        bool interactable = true;
+
+        // Runtime state (NOT serialized)
+        bool isHighlighted = false;
+    };
+
     struct UIAnimationComponent
     {
         // Config (serialized)

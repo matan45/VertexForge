@@ -15,6 +15,7 @@ namespace services {
         registerSliderProgressHandlers(dispatcher);
         registerAnimationHandlers(dispatcher);
         registerMaskHandlers(dispatcher);
+        registerDragDropHandlers(dispatcher);
     }
 
 }

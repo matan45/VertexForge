@@ -161,6 +161,7 @@
     <ClInclude Include="events\terrain\WaterEvents.hpp" />
     <ClInclude Include="events\ui\UIAnimationEvents.hpp" />
     <ClInclude Include="events\ui\UICanvasRectImageEvents.hpp" />
+    <ClInclude Include="events\ui\UIDragDropEvents.hpp" />
     <ClInclude Include="events\ui\UIDropdownTabsEvents.hpp" />
     <ClInclude Include="events\ui\UIEvents.hpp" />
     <ClInclude Include="events\ui\UIInputCheckboxEvents.hpp" />
@@ -341,6 +342,7 @@
     <ClCompile Include="impl\components\UIAnimationOps.cpp" />
     <ClCompile Include="impl\components\UICanvasRectImageOps.cpp" />
     <ClCompile Include="impl\components\UIComponentService.cpp" />
+    <ClCompile Include="impl\components\UIDragDropOps.cpp" />
     <ClCompile Include="impl\components\UIDropdownTabsOps.cpp" />
     <ClCompile Include="impl\components\UIInteractiveOps.cpp" />
     <ClCompile Include="impl\components\UIMaskOps.cpp" />

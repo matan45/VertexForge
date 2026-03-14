@@ -257,6 +257,51 @@ namespace core
         });
     }
 
+    void ScriptUIEventBridge::dispatchDragDropCallback(
+        const char* methodName,
+        ::services::EntityHandle sourceEntity,
+        const std::string& sourceEntityName,
+        ::services::EntityHandle targetEntity,
+        const std::string& targetEntityName,
+        const std::string& dragTag,
+        bool wasDropped)
+    {
+        dispatchToListeners("IUIDragDropListener", methodName, [&]()
+        {
+            std::string_view method(methodName);
+            if (method == "onDragStart")
+            {
+                return std::vector<value::Value>{
+                    value::Value(static_cast<int>(sourceEntity.id)),
+                    value::Value(sourceEntityName),
+                    value::Value(dragTag)
+                };
+            }
+            if (method == "onDragEnd")
+            {
+                return std::vector<value::Value>{
+                    value::Value(static_cast<int>(sourceEntity.id)),
+                    value::Value(sourceEntityName),
+                    value::Value(wasDropped)
+                };
+            }
+            if (method == "onDrop")
+            {
+                return std::vector<value::Value>{
+                    value::Value(static_cast<int>(sourceEntity.id)),
+                    value::Value(sourceEntityName),
+                    value::Value(static_cast<int>(targetEntity.id)),
+                    value::Value(targetEntityName),
+                    value::Value(dragTag)
+                };
+            }
+            return std::vector<value::Value>{
+                value::Value(static_cast<int>(sourceEntity.id)),
+                value::Value(sourceEntityName)
+            };
+        });
+    }
+
     // ============================================
     // Subscribe / Unsubscribe All
     // ============================================
@@ -326,6 +371,14 @@ namespace core
             [this](const auto& n) { dispatchProgressBarCallback("onProgressBarValueChanged", n.entity, n.entityName, n.newValue, n.previousValue); }));
         tokens.push_back(dispatcher.subscribe<::events::ui::UIProgressBarCompletedNotification>(
             [this](const auto& n) { dispatchProgressBarCallback("onProgressBarCompleted", n.entity, n.entityName); }));
+
+        // Drag & Drop events
+        tokens.push_back(dispatcher.subscribe<::events::ui::UIDragStartNotification>(
+            [this](const auto& n) { dispatchDragDropCallback("onDragStart", n.entity, n.entityName, {}, "", n.dragTag); }));
+        tokens.push_back(dispatcher.subscribe<::events::ui::UIDragEndNotification>(
+            [this](const auto& n) { dispatchDragDropCallback("onDragEnd", n.entity, n.entityName, {}, "", "", n.wasDropped); }));
+        tokens.push_back(dispatcher.subscribe<::events::ui::UIDropNotification>(
+            [this](const auto& n) { dispatchDragDropCallback("onDrop", n.sourceEntity, n.sourceEntityName, n.targetEntity, n.targetEntityName, n.dragTag); }));
 
         vfLogInfo("[ScriptingAdapter] Subscribed to all UI events ({} subscriptions)", tokens.size());
     }

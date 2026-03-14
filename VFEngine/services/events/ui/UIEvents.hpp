@@ -7,3 +7,4 @@
 #include "UISliderProgressEvents.hpp"
 #include "UIAnimationEvents.hpp"
 #include "UIMaskEvents.hpp"
+#include "UIDragDropEvents.hpp"

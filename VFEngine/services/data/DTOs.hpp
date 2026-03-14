@@ -552,6 +552,23 @@ namespace services
         bool showMaskGraphic = false;
     };
 
+    // ========== UI Drag & Drop ==========
+
+    struct UIDraggableData
+    {
+        float ghostOpacity = 0.5f;
+        glm::vec2 ghostOffset{0.0f, 0.0f};
+        bool constrainToParent = true;
+        std::string dragTag;
+    };
+
+    struct UIDropTargetData
+    {
+        std::string acceptTag;
+        glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f};
+        bool interactable = true;
+    };
+
     // ========== UI Animation ==========
 
     struct UIAnimationClipData

@@ -201,6 +201,8 @@
     <ClInclude Include="windows\details\UIButtonDrawer.hpp" />
     <ClInclude Include="windows\details\UICanvasDrawer.hpp" />
     <ClInclude Include="windows\details\UICheckboxDrawer.hpp" />
+    <ClInclude Include="windows\details\UIDraggableDrawer.hpp" />
+    <ClInclude Include="windows\details\UIDropTargetDrawer.hpp" />
     <ClInclude Include="windows\details\UIDropdownDrawer.hpp" />
     <ClInclude Include="windows\details\UIImageDrawer.hpp" />
     <ClInclude Include="windows\details\UILabelDrawer.hpp" />
@@ -344,6 +346,8 @@
     <ClCompile Include="windows\details\UIButtonDrawer.cpp" />
     <ClCompile Include="windows\details\UICanvasDrawer.cpp" />
     <ClCompile Include="windows\details\UICheckboxDrawer.cpp" />
+    <ClCompile Include="windows\details\UIDraggableDrawer.cpp" />
+    <ClCompile Include="windows\details\UIDropTargetDrawer.cpp" />
     <ClCompile Include="windows\details\UIDropdownDrawer.cpp" />
     <ClCompile Include="windows\details\UIImageDrawer.cpp" />
     <ClCompile Include="windows\details\UILabelDrawer.cpp" />

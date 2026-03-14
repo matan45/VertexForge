@@ -15,6 +15,16 @@ namespace {
     json writeVec4(const glm::vec4& v) {
         return json::array({v.x, v.y, v.z, v.w});
     }
+
+    void readVec2(const json& j, const std::string& key, glm::vec2& out) {
+        if (j.contains(key) && j[key].is_array() && j[key].size() >= 2) {
+            out = glm::vec2(j[key][0].get<float>(), j[key][1].get<float>());
+        }
+    }
+
+    json writeVec2(const glm::vec2& v) {
+        return json::array({v.x, v.y});
+    }
 }
 
 namespace serialization {
@@ -676,6 +686,50 @@ namespace serialization {
             mask.alphaThreshold = j["alphaThreshold"].get<float>();
         if (j.contains("showMaskGraphic"))
             mask.showMaskGraphic = j["showMaskGraphic"].get<bool>();
+    }
+
+    // ---- UI Draggable ----
+
+    json SceneSerialization::serializeUIDraggable(const components::UIDraggableComponent& comp)
+    {
+        json j;
+        j["ghostOpacity"] = comp.ghostOpacity;
+        j["ghostOffset"] = writeVec2(comp.ghostOffset);
+        j["constrainToParent"] = comp.constrainToParent;
+        if (!comp.dragTag.empty())
+        {
+            j["dragTag"] = comp.dragTag;
+        }
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIDraggable(const json& j, components::UIDraggableComponent& comp)
+    {
+        comp.ghostOpacity = j.value("ghostOpacity", 0.5f);
+        readVec2(j, "ghostOffset", comp.ghostOffset);
+        comp.constrainToParent = j.value("constrainToParent", true);
+        comp.dragTag = j.value("dragTag", std::string(""));
+    }
+
+    // ---- UI Drop Target ----
+
+    json SceneSerialization::serializeUIDropTarget(const components::UIDropTargetComponent& comp)
+    {
+        json j;
+        if (!comp.acceptTag.empty())
+        {
+            j["acceptTag"] = comp.acceptTag;
+        }
+        j["highlightColor"] = writeVec4(comp.highlightColor);
+        j["interactable"] = comp.interactable;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIDropTarget(const json& j, components::UIDropTargetComponent& comp)
+    {
+        comp.acceptTag = j.value("acceptTag", std::string(""));
+        readVec4(j, "highlightColor", comp.highlightColor);
+        comp.interactable = j.value("interactable", true);
     }
 
 } // namespace serialization

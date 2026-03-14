@@ -42,6 +42,8 @@ namespace windows::details {
         bool hasDecal = false;
         bool hasUIAnimation = false;
         bool hasUIMask = false;
+        bool hasUIDraggable = false;
+        bool hasUIDropTarget = false;
     };
 
     class AddComponentPopup {

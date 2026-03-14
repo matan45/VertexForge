@@ -509,4 +509,70 @@ namespace controllers::offscreen::ui_screenspace
         }
     }
 
+    void generateDragGhostDrawData(
+        entt::registry& registry, const FrameContext& ctx,
+        std::vector<render::ui::UIImageRenderData>& drawList)
+    {
+        if (components::UIDraggableComponent::activeDragEntity == entt::null)
+            return;
+
+        entt::entity dragEntity = components::UIDraggableComponent::activeDragEntity;
+        if (!registry.valid(dragEntity)
+            || !registry.all_of<components::UIDraggableComponent>(dragEntity))
+            return;
+
+        const auto& dragComp = registry.get<components::UIDraggableComponent>(dragEntity);
+        if (!dragComp.isDragging)
+            return;
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        // Draw drop target highlights first (behind ghost)
+        auto dropView = registry.view<components::UIDropTargetComponent, components::UIRectComponent>();
+        for (auto targetEntity : dropView)
+        {
+            if (!isEntityActive(registry, targetEntity))
+                continue;
+
+            const auto& targetComp = registry.get<components::UIDropTargetComponent>(targetEntity);
+            if (!targetComp.isHighlighted)
+                continue;
+
+            const auto* canvas = findCanvasForEntity(registry, targetEntity);
+            if (!canvas) continue;
+
+            float scale = computeCanvasScale(canvas, vw, vh);
+            const auto& rectComp = registry.get<components::UIRectComponent>(targetEntity);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            render::ui::UIImageRenderData highlight;
+            highlight.texturePath = "__white_1x1__";
+            highlight.position = glm::vec2(rect.x, rect.y);
+            highlight.size = glm::vec2(rect.w, rect.h);
+            highlight.colorTint = targetComp.highlightColor;
+            drawList.push_back(std::move(highlight));
+        }
+
+        // Draw ghost image
+        std::string ghostTexture = "__white_1x1__";
+        glm::vec4 ghostTint{1.0f, 1.0f, 1.0f, dragComp.ghostOpacity};
+
+        if (registry.all_of<components::UIImageComponent>(dragEntity))
+        {
+            const auto& imageComp = registry.get<components::UIImageComponent>(dragEntity);
+            if (!imageComp.texturePath.empty())
+                ghostTexture = imageComp.texturePath;
+            ghostTint = imageComp.colorTint;
+            ghostTint.a *= dragComp.ghostOpacity;
+        }
+
+        render::ui::UIImageRenderData ghost;
+        ghost.texturePath = ghostTexture;
+        ghost.position = dragComp.currentGhostPos;
+        ghost.size = dragComp.ghostSize;
+        ghost.colorTint = ghostTint;
+        drawList.push_back(std::move(ghost));
+    }
+
 } // namespace controllers::offscreen::ui_screenspace

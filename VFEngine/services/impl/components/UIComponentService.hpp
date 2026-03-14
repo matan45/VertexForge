@@ -143,6 +143,20 @@ namespace services {
         std::optional<UIMaskData> getUIMaskData(EntityHandle entity) const;
         bool setUIMaskData(EntityHandle entity, const UIMaskData& data);
 
+        // UI Draggable Operations
+        bool addUIDraggableComponent(EntityHandle entity);
+        bool removeUIDraggableComponent(EntityHandle entity);
+        bool hasUIDraggableComponent(EntityHandle entity) const;
+        std::optional<UIDraggableData> getUIDraggableData(EntityHandle entity) const;
+        bool setUIDraggableData(EntityHandle entity, const UIDraggableData& data);
+
+        // UI DropTarget Operations
+        bool addUIDropTargetComponent(EntityHandle entity);
+        bool removeUIDropTargetComponent(EntityHandle entity);
+        bool hasUIDropTargetComponent(EntityHandle entity) const;
+        std::optional<UIDropTargetData> getUIDropTargetData(EntityHandle entity) const;
+        bool setUIDropTargetData(EntityHandle entity, const UIDropTargetData& data);
+
     private:
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
@@ -151,6 +165,7 @@ namespace services {
         void registerSliderProgressHandlers(events::EventDispatcher& dispatcher);
         void registerAnimationHandlers(events::EventDispatcher& dispatcher);
         void registerMaskHandlers(events::EventDispatcher& dispatcher);
+        void registerDragDropHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

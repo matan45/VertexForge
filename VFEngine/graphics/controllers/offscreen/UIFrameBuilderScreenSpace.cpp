@@ -476,6 +476,7 @@ namespace controllers::offscreen
         interactionSystem.processDropdownInteraction(ctx);
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
+        interactionSystem.processDragDropInteraction(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -497,6 +498,7 @@ namespace controllers::offscreen
         ui_screenspace::generateScrollbarDrawData(registry, ctx, drawList);
         ui_screenspace::generateTextInputCaretDrawData(registry, ctx, interactionSystem.getFocusedTextInput(), drawList);
         ui_screenspace::generateDropdownDrawData(registry, ctx, drawList);
+        ui_screenspace::generateDragGhostDrawData(registry, ctx, drawList);
 
         renderHandler->setUIImageDrawList(std::move(drawList));
     }

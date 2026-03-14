@@ -53,6 +53,7 @@ namespace windows::details
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
+                           c.hasUIDraggable && c.hasUIDropTarget &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal;
             if (allAdded)
@@ -610,6 +611,34 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Stencil mask for clipping children to arbitrary shapes");
+            }
+        }
+
+        if (!c.hasUIDraggable)
+        {
+            if (ImGui::Selectable("  UI Draggable"))
+            {
+                events::ui::AddUIDraggableComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Marks this element as a drag source for drag-and-drop");
+            }
+        }
+
+        if (!c.hasUIDropTarget)
+        {
+            if (ImGui::Selectable("  UI Drop Target"))
+            {
+                events::ui::AddUIDropTargetComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Marks this element as a drop receiver for drag-and-drop");
             }
         }
     }
