@@ -16,6 +16,7 @@
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "transparency/WBOITPipeline.hpp"
+#include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
@@ -150,6 +151,9 @@ namespace render
         wboitPipeline = std::make_unique<transparency::WBOITPipeline>(device, swapChain, offscreenResources);
         wboitPipeline->init();
         gpuDrivenRenderer->initWBOITPipeline(wboitPipeline->getWBOITRenderPass());
+
+        decalPipeline = std::make_unique<decal::DecalPipeline>(device, swapChain, offscreenResources);
+        decalPipeline->init();
     }
 
     void RenderPassHandler::resetVolumetricFogComposite()
@@ -517,6 +521,11 @@ namespace render
             wboitPipeline->recreate();
         }
 
+        if (decalPipeline && decalPipeline->isInitialized())
+        {
+            decalPipeline->recreate();
+        }
+
         if (postProcessPipeline && postProcessPipeline->isInitialized())
         {
             postProcessPipeline->recreate();
@@ -567,6 +576,11 @@ namespace render
         if (wboitPipeline)
         {
             wboitPipeline->cleanup();
+        }
+
+        if (decalPipeline)
+        {
+            decalPipeline->cleanup();
         }
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

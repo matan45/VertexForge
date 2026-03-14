@@ -34,6 +34,7 @@
 #include "impl/render/RenderHookServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/render/BillboardRenderServiceImpl.hpp"
+#include "impl/render/DecalRenderServiceImpl.hpp"
 #include "impl/render/LightStreamingServiceImpl.hpp"
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
@@ -340,6 +341,10 @@ namespace handlers
             bootstrap->getBillboardRenderProvider()
         );
 
+        decalRenderService = std::make_shared<services::DecalRenderServiceImpl>(
+            bootstrap->getDecalRenderProvider()
+        );
+
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
 
         lightStreamingService = std::make_shared<services::LightStreamingServiceImpl>(
@@ -528,6 +533,7 @@ namespace handlers
         meshBrushService->registerEventHandlers();
         meshBrushModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
+        decalRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();

@@ -39,6 +39,7 @@ namespace windows::details {
         bool hasController = false;
         bool hasIK = false;
         bool hasBehaviorTree = false;
+        bool hasDecal = false;
     };
 
     class AddComponentPopup {

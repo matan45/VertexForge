@@ -36,6 +36,7 @@
 #include "interfaces/render/IRenderHookService.hpp"
 #include "interfaces/render/IDebugDrawService.hpp"
 #include "interfaces/render/IBillboardRenderService.hpp"
+#include "interfaces/render/IDecalRenderService.hpp"
 #include "interfaces/render/ILightStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
@@ -118,6 +119,7 @@ namespace handlers {
 		std::shared_ptr<services::IMeshBrushService> meshBrushService;
 		std::shared_ptr<services::IMeshBrushModeService> meshBrushModeService;
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
+		std::shared_ptr<services::IDecalRenderService> decalRenderService;
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;

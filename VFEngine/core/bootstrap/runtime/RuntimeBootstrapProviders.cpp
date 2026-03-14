@@ -9,6 +9,7 @@
 #include "../../adapters/physics/IKAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -90,6 +91,11 @@ namespace core
     services::IBillboardRenderProvider* RuntimeBootstrap::getBillboardRenderProvider()
     {
         return billboardRenderAdapter.get();
+    }
+
+    services::IDecalRenderProvider* RuntimeBootstrap::getDecalRenderProvider()
+    {
+        return decalRenderAdapter.get();
     }
 
     services::IBehaviorTreeProvider* RuntimeBootstrap::getBehaviorTreeProvider()

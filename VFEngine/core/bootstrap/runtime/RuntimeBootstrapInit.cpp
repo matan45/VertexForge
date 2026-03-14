@@ -16,6 +16,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 
 namespace core
@@ -47,11 +48,13 @@ namespace core
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
+        decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
 
         offScreen->init();
 
         billboardRenderAdapter->setOffScreenController(offScreen.get());
+        decalRenderAdapter->setOffScreenController(offScreen.get());
 
         // Disable editor-only visual aids in runtime
         offScreen->setShowGrid(false);

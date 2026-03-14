@@ -18,6 +18,7 @@ namespace services
     class IRenderTextureProvider;
     class IDebugDrawProvider;
     class IBillboardRenderProvider;
+    class IDecalRenderProvider;
     class IBehaviorTreeProvider;
 }
 
@@ -57,6 +58,7 @@ namespace core
     namespace adapters
     {
         class BillboardRenderAdapter;
+        class DecalRenderAdapter;
     }
     class BehaviorTreeAdapter;
 
@@ -81,6 +83,7 @@ namespace core
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
+        std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
 
     public:
@@ -124,6 +127,8 @@ namespace core
         services::IDebugDrawProvider* getDebugDrawProvider();
 
         services::IBillboardRenderProvider* getBillboardRenderProvider();
+
+        services::IDecalRenderProvider* getDecalRenderProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
 

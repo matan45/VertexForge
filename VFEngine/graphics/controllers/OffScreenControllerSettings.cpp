@@ -370,6 +370,24 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setDecalRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setDecalRenderingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setDecalDrawList(const std::vector<services::DecalRenderData>& decals)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setDecalDrawList(decals);
+        }
+    }
+
     void OffScreenController::setTerrainLODBias(float bias)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

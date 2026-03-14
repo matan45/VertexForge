@@ -165,6 +165,7 @@
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
+    <ClInclude Include="render\decal\DecalPipeline.hpp" />
     <ClInclude Include="render\gi\AccelerationStructureManager.hpp" />
     <ClInclude Include="render\gi\GIDebugRenderer.hpp" />
     <ClInclude Include="render\gi\GITypes.hpp" />
@@ -385,6 +386,7 @@
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
+    <ClCompile Include="render\decal\DecalPipeline.cpp" />
     <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
     <ClCompile Include="render\gi\ProbeStorageBuffer.cpp" />
@@ -550,6 +552,7 @@
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
+    <None Include="..\..\resources\shaders\decal\decal.glsl" />
     <None Include="..\..\resources\shaders\gi\gi_common.glsl" />
     <None Include="..\..\resources\shaders\gi\gi_debug_probe.glsl" />
     <None Include="..\..\resources\shaders\gi\probe_trace.glsl" />

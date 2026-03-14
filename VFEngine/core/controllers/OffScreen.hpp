@@ -15,6 +15,7 @@
 #include "../../graphics/render/lighting/LightStreamManager.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
+#include "providers/render/IDecalRenderProvider.hpp"
 
 namespace render
 {
@@ -144,6 +145,9 @@ namespace controllers
         void setTerrainShadowLOD(uint32_t lod);
 
         void setBillboardRenderingEnabled(bool enabled);
+
+        void setDecalRenderingEnabled(bool enabled);
+        void setDecalDrawList(const std::vector<services::DecalRenderData>& decals);
 
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize);
 

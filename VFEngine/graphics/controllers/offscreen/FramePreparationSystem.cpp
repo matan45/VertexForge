@@ -1,4 +1,6 @@
 #include "FramePreparationSystem.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include "SceneBVHManager.hpp"
 #include "LightBVHManager.hpp"
 #include "CameraController.hpp"
@@ -551,5 +553,66 @@ namespace controllers::offscreen
 
         renderHandler->setBillboardDrawList(billboardFuture.get());
         renderHandler->setTextDrawList(textFuture.get());
+
+        // Prepare decals (lightweight - no pipeline init needed, DecalPipeline is always available)
+        prepareDecals(ctx);
+    }
+
+    void FramePreparationSystem::prepareDecals(const FrameContext& ctx)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::DecalComponent, components::WorldTransformComponent>();
+
+        std::vector<services::DecalRenderData> decalDrawList;
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& decal = view.get<components::DecalComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Extract position and rotation from world matrix, replace scale with halfExtents
+            // This way Transform.scale is ignored — only halfExtents controls decal size
+            glm::mat4 worldMatrix = worldTransform.worldMatrix;
+            glm::vec3 col0 = glm::vec3(worldMatrix[0]);
+            glm::vec3 col1 = glm::vec3(worldMatrix[1]);
+            glm::vec3 col2 = glm::vec3(worldMatrix[2]);
+            glm::vec3 axisX = glm::normalize(col0);
+            glm::vec3 axisY = glm::normalize(col1);
+            glm::vec3 axisZ = glm::normalize(col2);
+
+            glm::mat4 decalWorldMatrix = glm::mat4(1.0f);
+            decalWorldMatrix[0] = glm::vec4(axisX * decal.halfExtents.x, 0.0f);
+            decalWorldMatrix[1] = glm::vec4(axisY * decal.halfExtents.y, 0.0f);
+            decalWorldMatrix[2] = glm::vec4(axisZ * decal.halfExtents.z, 0.0f);
+            decalWorldMatrix[3] = worldMatrix[3]; // position
+
+            services::DecalRenderData renderData;
+            renderData.worldMatrix = decalWorldMatrix;
+            renderData.inverseWorldMatrix = glm::inverse(decalWorldMatrix);
+            renderData.halfExtents = decal.halfExtents;
+            renderData.albedoTexture = decal.albedoTexture;
+            renderData.normalTexture = decal.normalTexture;
+            renderData.ormTexture = decal.ormTexture;
+            renderData.color = decal.color;
+            renderData.angleFadeStart = decal.angleFadeStart;
+            renderData.angleFadeEnd = decal.angleFadeEnd;
+            renderData.edgeFalloff = decal.edgeFalloff;
+            renderData.sortPriority = decal.sortPriority;
+            renderData.modifyNormals = decal.modifyNormals;
+            renderData.normalStrength = decal.normalStrength;
+
+            decalDrawList.push_back(std::move(renderData));
+        }
+
+        ctx.renderHandler->setDecalDrawList(decalDrawList);
     }
 }

@@ -49,6 +49,14 @@ namespace resource {
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
 			if (!anim.animatorPath.empty()) lifecycle.acquire(anim.animatorPath, AssetType::Animator);
 		}
+
+		if (entity.hasComponent<components::DecalComponent>())
+		{
+			const auto& decal = entity.getComponent<components::DecalComponent>();
+			if (!decal.albedoTexture.empty()) lifecycle.acquire(decal.albedoTexture, AssetType::Texture);
+			if (!decal.normalTexture.empty()) lifecycle.acquire(decal.normalTexture, AssetType::Texture);
+			if (!decal.ormTexture.empty()) lifecycle.acquire(decal.ormTexture, AssetType::Texture);
+		}
 	}
 
 	inline void releaseEntityAssets(scene::Entity& entity, AssetLifecycleManager& lifecycle)
@@ -92,6 +100,14 @@ namespace resource {
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
 			if (!anim.animatorPath.empty()) lifecycle.release(anim.animatorPath);
+		}
+
+		if (entity.hasComponent<components::DecalComponent>())
+		{
+			const auto& decal = entity.getComponent<components::DecalComponent>();
+			if (!decal.albedoTexture.empty()) lifecycle.release(decal.albedoTexture);
+			if (!decal.normalTexture.empty()) lifecycle.release(decal.normalTexture);
+			if (!decal.ormTexture.empty()) lifecycle.release(decal.ormTexture);
 		}
 	}
 

@@ -108,6 +108,7 @@
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
+    <ClInclude Include="components\DecalComponents.hpp" />
     <ClInclude Include="components\IKComponent.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />
@@ -285,6 +286,7 @@
     <ClCompile Include="serialization\ProjectSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerializeCore.cpp" />
+    <ClCompile Include="serialization\SceneSerializeDecal.cpp" />
     <ClCompile Include="serialization\SceneSerializeDispatch.cpp" />
     <ClCompile Include="serialization\SceneSerializeGrass.cpp" />
     <ClCompile Include="serialization\SceneSerializeIK.cpp" />

@@ -21,6 +21,7 @@
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
@@ -145,6 +146,11 @@ namespace core
     services::IBillboardRenderProvider* EditorBootstrap::getBillboardRenderProvider()
     {
         return billboardRenderAdapter.get();
+    }
+
+    services::IDecalRenderProvider* EditorBootstrap::getDecalRenderProvider()
+    {
+        return decalRenderAdapter.get();
     }
 
     services::ILightStreamingProvider* EditorBootstrap::getLightStreamingProvider()

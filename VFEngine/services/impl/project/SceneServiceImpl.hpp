@@ -31,6 +31,7 @@ namespace services
     class LightComponentService;
     class UIComponentService;
     class BakeInfoComponentService;
+    class DecalComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -60,6 +61,7 @@ namespace services
         std::unique_ptr<LightComponentService> lightService;
         std::unique_ptr<UIComponentService> uiService;
         std::unique_ptr<BakeInfoComponentService> bakeInfoService;
+        std::unique_ptr<DecalComponentService> decalService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;

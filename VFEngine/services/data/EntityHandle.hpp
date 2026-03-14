@@ -71,6 +71,7 @@ namespace services {
         NavmeshAgent,
         RenderTexture,
         Controller,
+        Decal,
     };
 
 }

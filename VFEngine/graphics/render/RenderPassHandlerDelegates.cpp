@@ -4,6 +4,7 @@
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
+#include "decal/DecalPipeline.hpp"
 
 namespace render
 {
@@ -202,6 +203,19 @@ namespace render
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->setBillboardRenderingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setDecalRenderingEnabled(bool enabled)
+    {
+        decalRenderingEnabled = enabled;
+    }
+
+    void RenderPassHandler::setDecalDrawList(const std::vector<services::DecalRenderData>& decals)
+    {
+        if (decalPipeline)
+        {
+            decalPipeline->updateDecals(decals);
         }
     }
 

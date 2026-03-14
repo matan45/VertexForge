@@ -164,6 +164,7 @@ namespace core::api
         if (type == "SocketOverride") return services::ComponentTypeId::SocketOverride;
         if (type == "NavmeshAgent") return services::ComponentTypeId::NavmeshAgent;
         if (type == "Controller") return services::ComponentTypeId::Controller;
+        if (type == "Decal") return services::ComponentTypeId::Decal;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -211,6 +212,7 @@ namespace core::api
         case services::ComponentTypeId::SocketOverride: return "SocketOverride";
         case services::ComponentTypeId::NavmeshAgent: return "NavmeshAgent";
         case services::ComponentTypeId::Controller: return "Controller";
+        case services::ComponentTypeId::Decal: return "Decal";
         default: return "Unknown";
         }
     }

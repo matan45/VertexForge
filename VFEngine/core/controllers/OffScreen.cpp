@@ -361,6 +361,16 @@ namespace controllers {
 		offScreenController->setBillboardRenderingEnabled(enabled);
 	}
 
+	void OffScreen::setDecalRenderingEnabled(bool enabled)
+	{
+		offScreenController->setDecalRenderingEnabled(enabled);
+	}
+
+	void OffScreen::setDecalDrawList(const std::vector<services::DecalRenderData>& decals)
+	{
+		offScreenController->setDecalDrawList(decals);
+	}
+
 	void OffScreen::setTerrainLODBias(float bias)
 	{
 		offScreenController->setTerrainLODBias(bias);

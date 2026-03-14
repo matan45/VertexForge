@@ -12,6 +12,7 @@
 #include "IKComponent.hpp"
 #include "VegetationComponents.hpp"
 #include "MeshBrushComponents.hpp"
+#include "DecalComponents.hpp"
 
 namespace components
 {
@@ -30,5 +31,5 @@ namespace components
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
-                                               BehaviorTreeComponent>;
+                                               BehaviorTreeComponent, DecalComponent>;
 }

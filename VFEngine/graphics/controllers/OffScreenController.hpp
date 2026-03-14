@@ -9,6 +9,7 @@
 #include "../render/gi/GITypes.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
+#include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -129,6 +130,9 @@ namespace controllers
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
         void setBillboardRenderingEnabled(bool enabled);
+
+        void setDecalRenderingEnabled(bool enabled);
+        void setDecalDrawList(const std::vector<services::DecalRenderData>& decals);
 
         void setOcclusionCullingEnabled(bool enabled);
 
