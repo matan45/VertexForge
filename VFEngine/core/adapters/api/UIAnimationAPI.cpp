@@ -1,8 +1,10 @@
+// mType headers must come first to avoid Windows macro conflicts
+#include <services/ScriptInterpreter.hpp>
+
 #include "UIAnimationAPI.hpp"
 #include "NativeHelpers.hpp"
-#include "events/EventDispatcher.hpp"
-#include "events/ui/UIEvents.hpp"
-#include <services/ScriptInterpreter.hpp>
+#include "../../../services/events/EventDispatcher.hpp"
+#include "../../../services/events/ui/UIEvents.hpp"
 
 namespace core::api
 {
@@ -24,7 +26,7 @@ namespace core::api
                                                 if (entityId < 0)
                                                     return value::Value(std::monostate{});
 
-                                                services::events::ui::PlayUIAnimationCommand cmd;
+                                                events::ui::PlayUIAnimationCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
                                                 dispatcher.execute(cmd);
 
@@ -45,7 +47,7 @@ namespace core::api
                                                 if (entityId < 0)
                                                     return value::Value(std::monostate{});
 
-                                                services::events::ui::StopUIAnimationCommand cmd;
+                                                events::ui::StopUIAnimationCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
                                                 dispatcher.execute(cmd);
 
@@ -66,7 +68,7 @@ namespace core::api
                                                 if (entityId < 0)
                                                     return value::Value(std::monostate{});
 
-                                                services::events::ui::PauseUIAnimationCommand cmd;
+                                                events::ui::PauseUIAnimationCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
                                                 dispatcher.execute(cmd);
 
@@ -87,7 +89,7 @@ namespace core::api
                                                 if (entityId < 0)
                                                     return value::Value(std::monostate{});
 
-                                                services::events::ui::ResumeUIAnimationCommand cmd;
+                                                events::ui::ResumeUIAnimationCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
                                                 dispatcher.execute(cmd);
 
@@ -108,7 +110,7 @@ namespace core::api
                                                 if (entityId < 0)
                                                     return value::Value(false);
 
-                                                services::events::ui::IsUIAnimationPlayingQuery query;
+                                                events::ui::IsUIAnimationPlayingQuery query;
                                                 query.entity = intToEntity(entityId);
                                                 bool playing = dispatcher.query(query);
 

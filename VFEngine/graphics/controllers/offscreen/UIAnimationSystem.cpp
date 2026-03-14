@@ -3,8 +3,8 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "math/EasingFunctions.hpp"
-#include "events/EventDispatcher.hpp"
-#include "events/ui/UIEvents.hpp"
+#include "../../../services/events/EventDispatcher.hpp"
+#include "../../../services/events/ui/UIEvents.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
