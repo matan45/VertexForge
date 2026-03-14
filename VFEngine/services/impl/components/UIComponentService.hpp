@@ -124,12 +124,25 @@ namespace services {
         bool setUIProgressBarData(EntityHandle entity, const UIProgressBarData& progressBarData);
         bool setUIProgressBarValue(EntityHandle entity, float value);
 
+        // UI Animation Operations
+        bool addUIAnimationComponent(EntityHandle entity);
+        bool removeUIAnimationComponent(EntityHandle entity);
+        bool hasUIAnimationComponent(EntityHandle entity) const;
+        std::optional<UIAnimationData> getUIAnimationData(EntityHandle entity) const;
+        bool setUIAnimationData(EntityHandle entity, const UIAnimationData& data);
+        bool playUIAnimation(EntityHandle entity);
+        bool stopUIAnimation(EntityHandle entity);
+        bool pauseUIAnimation(EntityHandle entity);
+        bool resumeUIAnimation(EntityHandle entity);
+        bool isUIAnimationPlaying(EntityHandle entity) const;
+
     private:
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
         void registerInteractiveHandlers(events::EventDispatcher& dispatcher);
         void registerDropdownTabsHandlers(events::EventDispatcher& dispatcher);
         void registerSliderProgressHandlers(events::EventDispatcher& dispatcher);
+        void registerAnimationHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

@@ -10,6 +10,7 @@
 #include "../api/LightAPI.hpp"
 #include "../api/PostProcessAPI.hpp"
 #include "../api/UIAPI.hpp"
+#include "../api/UIAnimationAPI.hpp"
 #include "../api/WaterAPI.hpp"
 #include "../api/SocketAPI.hpp"
 #include "../api/NavmeshAPI.hpp"
@@ -54,6 +55,7 @@ namespace core
         api::LightAPI::registerAPI(interpreter);
         api::PostProcessAPI::registerAPI(interpreter);
         api::UIAPI::registerAPI(interpreter);
+        api::UIAnimationAPI::registerAPI(interpreter);
         api::WaterAPI::registerAPI(interpreter);
         api::SocketAPI::registerAPI(interpreter);
         api::NavmeshAPI::registerAPI(interpreter);

@@ -210,6 +210,12 @@ namespace serialization
                 entity.getComponent<components::UIProgressBarComponent>());
         }
 
+        if (entity.hasComponent<components::UIAnimationComponent>())
+        {
+            componentsJson["uiAnimation"] = serializeUIAnimation(
+                entity.getComponent<components::UIAnimationComponent>());
+        }
+
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
             componentsJson["socketAttachment"] = serializeSocketAttachment(
@@ -519,6 +525,12 @@ namespace serialization
         {
             auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
             deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
+        }
+
+        if (componentsJson.contains("uiAnimation"))
+        {
+            auto& animComp = entity.addOrReplaceComponent<components::UIAnimationComponent>();
+            deserializeUIAnimation(componentsJson["uiAnimation"], animComp);
         }
 
         if (componentsJson.contains("socketAttachment"))

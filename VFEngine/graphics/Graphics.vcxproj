@@ -127,6 +127,7 @@
     <ClInclude Include="controllers\offscreen\LightBVHManager.hpp" />
     <ClInclude Include="controllers\offscreen\MeshAssetManager.hpp" />
     <ClInclude Include="controllers\offscreen\SceneBVHManager.hpp" />
+    <ClInclude Include="controllers\offscreen\UIAnimationSystem.hpp" />
     <ClInclude Include="controllers\offscreen\UICommon.hpp" />
     <ClInclude Include="controllers\offscreen\UIFrameBuilder.hpp" />
     <ClInclude Include="controllers\offscreen\UIInteractionSystem.hpp" />
@@ -347,6 +348,7 @@
     <ClCompile Include="controllers\offscreen\LightBVHManager.cpp" />
     <ClCompile Include="controllers\offscreen\MeshAssetManager.cpp" />
     <ClCompile Include="controllers\offscreen\SceneBVHManager.cpp" />
+    <ClCompile Include="controllers\offscreen\UIAnimationSystem.cpp" />
     <ClCompile Include="controllers\offscreen\UIFrameBuilder.cpp" />
     <ClCompile Include="controllers\offscreen\UIFrameBuilderScreenSpace.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystem.cpp" />

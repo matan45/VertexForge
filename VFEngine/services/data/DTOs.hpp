@@ -542,4 +542,31 @@ namespace services
         // Runtime
         float displayValue = 0.0f;
     };
+
+    // ========== UI Animation ==========
+
+    struct UIAnimationClipData
+    {
+        uint8_t property = 0;   // UITweenProperty
+        float startValue = 0.0f;
+        float endValue = 1.0f;
+        float duration = 1.0f;
+        float delay = 0.0f;
+        uint8_t easing = 0;     // UIEasingFunction
+        uint8_t loopMode = 0;   // UIAnimationLoopMode
+    };
+
+    struct UIAnimationNodeData
+    {
+        uint8_t type = 0;       // UIAnimationNodeType
+        UIAnimationClipData clip;
+        std::vector<UIAnimationNodeData> children;
+        uint8_t loopMode = 0;   // UIAnimationLoopMode
+    };
+
+    struct UIAnimationData
+    {
+        UIAnimationNodeData rootNode;
+        bool autoPlay = false;
+    };
 }

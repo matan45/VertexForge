@@ -405,4 +405,77 @@ namespace components
         float displayValue = 0.0f;
         bool completedFired = false;
     };
+
+    // ========== UI Animation / Tweening ==========
+
+    enum class UIEasingFunction : uint8_t
+    {
+        Linear,
+        EaseIn,
+        EaseOut,
+        EaseInOut,
+        Bounce,
+        Elastic
+    };
+
+    enum class UIAnimationLoopMode : uint8_t
+    {
+        Once,
+        Loop,
+        PingPong
+    };
+
+    enum class UITweenProperty : uint8_t
+    {
+        Opacity,
+        PositionX,
+        PositionY,
+        ScaleX,
+        ScaleY,
+        Rotation,
+        ColorR,
+        ColorG,
+        ColorB,
+        ColorA
+    };
+
+    enum class UIAnimationNodeType : uint8_t
+    {
+        Clip,
+        Parallel,
+        Sequence
+    };
+
+    struct UIAnimationClip
+    {
+        UITweenProperty property = UITweenProperty::Opacity;
+        float startValue = 0.0f;
+        float endValue = 1.0f;
+        float duration = 1.0f;
+        float delay = 0.0f;
+        UIEasingFunction easing = UIEasingFunction::Linear;
+        UIAnimationLoopMode loopMode = UIAnimationLoopMode::Once;
+    };
+
+    struct UIAnimationNode
+    {
+        UIAnimationNodeType type = UIAnimationNodeType::Clip;
+        UIAnimationClip clip;
+        std::vector<UIAnimationNode> children;
+        UIAnimationLoopMode loopMode = UIAnimationLoopMode::Once;
+    };
+
+    struct UIAnimationComponent
+    {
+        // Config (serialized)
+        UIAnimationNode rootNode;
+        bool autoPlay = false;
+
+        // Runtime state (NOT serialized)
+        bool isPlaying = false;
+        bool isPaused = false;
+        float elapsedTime = 0.0f;
+        bool startedFired = false;
+        bool completedFired = false;
+    };
 }

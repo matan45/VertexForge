@@ -329,14 +329,15 @@ namespace controllers::offscreen
     // Public dispatchers
     // =================================================================
 
-    void UIFrameBuilder::prepareUIImages(const FrameContext& ctx, UIInteractionSystem& interactionSystem)
+    void UIFrameBuilder::prepareUIImages(const FrameContext& ctx, UIInteractionSystem& interactionSystem,
+                                          UIAnimationSystem& animationSystem)
     {
         auto* renderHandler = ctx.renderHandler;
 
         if (ctx.playModeActive)
         {
             renderHandler->setUICanvasImageDrawList({});
-            prepareUIImagesScreenSpace(ctx, interactionSystem);
+            prepareUIImagesScreenSpace(ctx, interactionSystem, animationSystem);
         }
         else
         {

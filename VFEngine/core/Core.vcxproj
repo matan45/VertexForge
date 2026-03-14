@@ -128,6 +128,7 @@
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
+    <ClInclude Include="adapters\api\UIAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
@@ -228,6 +229,7 @@
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
+    <ClCompile Include="adapters\api\UIAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />

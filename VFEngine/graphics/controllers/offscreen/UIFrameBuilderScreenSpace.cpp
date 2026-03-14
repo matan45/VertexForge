@@ -1,6 +1,7 @@
 #include "UIFrameBuilder.hpp"
 #include "UICommon.hpp"
 #include "UIInteractionSystem.hpp"
+#include "UIAnimationSystem.hpp"
 #include "UIScreenSpaceScroll.hpp"
 #include "FramePreparationSystem.hpp"
 #include "../../render/RenderPassHandler.hpp"
@@ -288,7 +289,8 @@ namespace controllers::offscreen
 
     } // anonymous namespace
 
-    void UIFrameBuilder::prepareUIImagesScreenSpace(const FrameContext& ctx, UIInteractionSystem& interactionSystem)
+    void UIFrameBuilder::prepareUIImagesScreenSpace(const FrameContext& ctx, UIInteractionSystem& interactionSystem,
+                                                      UIAnimationSystem& animationSystem)
     {
         auto* renderHandler = ctx.renderHandler;
 
@@ -306,6 +308,7 @@ namespace controllers::offscreen
             return;
         }
 
+        animationSystem.processAnimations(ctx);
         interactionSystem.processButtonInteraction(ctx);
         interactionSystem.processCheckboxInteraction(ctx);
         interactionSystem.processTextInputInteraction(ctx);

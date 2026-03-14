@@ -5,3 +5,4 @@
 #include "UIInputCheckboxEvents.hpp"
 #include "UIDropdownTabsEvents.hpp"
 #include "UISliderProgressEvents.hpp"
+#include "UIAnimationEvents.hpp"

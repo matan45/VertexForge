@@ -52,7 +52,7 @@ namespace windows::details
                            c.hasSocketAttachment && c.hasUICanvas &&
                            c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
-                           c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
+                           c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal;
             if (allAdded)
@@ -582,6 +582,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Non-interactive bar displaying progress");
+            }
+        }
+
+        if (!c.hasUIAnimation)
+        {
+            if (ImGui::Selectable("  UI Animation"))
+            {
+                events::ui::AddUIAnimationComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Tween animation system for UI elements");
             }
         }
     }

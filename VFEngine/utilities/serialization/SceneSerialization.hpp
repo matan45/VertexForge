@@ -224,6 +224,9 @@ namespace serialization
         static json serializeDecal(const components::DecalComponent& decal);
         static void deserializeDecal(const json& j, components::DecalComponent& decal);
 
+        static json serializeUIAnimation(const components::UIAnimationComponent& anim);
+        static void deserializeUIAnimation(const json& j, components::UIAnimationComponent& anim);
+
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
 
