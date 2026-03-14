@@ -11,9 +11,6 @@ namespace controllers::offscreen
 
     class UIAnimationSystem
     {
-    public:
-        void processAnimations(const FrameContext& ctx);
-
     private:
         struct NodePlaybackState
         {
@@ -25,6 +22,10 @@ namespace controllers::offscreen
         };
 
         std::unordered_map<entt::entity, NodePlaybackState> playbackStates;
+    public:
+        void processAnimations(const FrameContext& ctx);
+
+    private:
 
         bool advanceNode(const components::UIAnimationNode& node, NodePlaybackState& state,
                          float dt, entt::registry& registry, entt::entity entity);

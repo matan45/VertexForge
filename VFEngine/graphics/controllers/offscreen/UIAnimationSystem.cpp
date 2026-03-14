@@ -5,8 +5,7 @@
 #include "math/EasingFunctions.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/ui/UIEvents.hpp"
-#include "print/Log.hpp"
-#include <algorithm>
+#include <cmath>
 
 namespace controllers::offscreen
 {
@@ -18,7 +17,6 @@ namespace controllers::offscreen
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::UIAnimationComponent>();
 
-        // Clean up playback states for removed entities
         for (auto it = playbackStates.begin(); it != playbackStates.end();)
         {
             if (!registry.valid(it->first) || !registry.all_of<components::UIAnimationComponent>(it->first))
@@ -33,7 +31,6 @@ namespace controllers::offscreen
         {
             auto& anim = view.get<components::UIAnimationComponent>(entity);
 
-            // Handle autoPlay on first encounter
             if (anim.autoPlay && !anim.isPlaying && !anim.completedFired)
             {
                 anim.isPlaying = true;
@@ -43,7 +40,6 @@ namespace controllers::offscreen
 
             if (!anim.isPlaying)
             {
-                // Clean up stale playback state when animation is stopped externally
                 playbackStates.erase(entity);
                 continue;
             }
@@ -51,12 +47,10 @@ namespace controllers::offscreen
             if (anim.isPaused)
                 continue;
 
-            // Fetch entity name once for use in both started and completed notifications
             std::string entityName;
             if (registry.all_of<components::NameComponent>(entity))
                 entityName = registry.get<components::NameComponent>(entity).name;
 
-            // Publish started notification
             if (!anim.startedFired)
             {
                 anim.startedFired = true;
@@ -66,11 +60,9 @@ namespace controllers::offscreen
                 dispatcher.publish(notif);
             }
 
-            // Get or create playback state
             auto& state = playbackStates[entity];
             ensurePlaybackState(anim.rootNode, state);
 
-            // Advance the animation tree
             bool finished = advanceNode(anim.rootNode, state, ctx.deltaTime, registry, entity);
 
             anim.elapsedTime += ctx.deltaTime;
@@ -120,7 +112,6 @@ namespace controllers::offscreen
             float effectiveElapsed = state.elapsed - node.clip.delay;
             if (effectiveElapsed < 0.0f)
             {
-                // Still in delay, apply start value
                 applyClipValue(node.clip, 0.0f, registry, entity);
                 return false;
             }
@@ -131,7 +122,6 @@ namespace controllers::offscreen
 
             float t = effectiveElapsed / duration;
 
-            // Handle loop modes
             switch (node.clip.loopMode)
             {
             case components::UIAnimationLoopMode::Once:
@@ -143,7 +133,7 @@ namespace controllers::offscreen
                 break;
 
             case components::UIAnimationLoopMode::Loop:
-                t = t - std::floor(t); // wrap to [0,1)
+                t = t - std::floor(t);
                 break;
 
             case components::UIAnimationLoopMode::PingPong:
@@ -158,7 +148,6 @@ namespace controllers::offscreen
 
             float easedT = math::evaluateEasing(node.clip.easing, t);
 
-            // If reversing (PingPong at group level), swap start/end
             if (state.reversing)
                 easedT = 1.0f - easedT;
 
@@ -188,7 +177,6 @@ namespace controllers::offscreen
                     state.finished = true;
                     break;
                 case components::UIAnimationLoopMode::Loop:
-                    // Reset all children
                     for (auto& child : state.children)
                         child = NodePlaybackState{};
                     for (size_t i = 0; i < node.children.size(); ++i)
@@ -246,8 +234,6 @@ namespace controllers::offscreen
             if (idx >= 0 && idx < static_cast<int>(node.children.size())
                 && idx < static_cast<int>(state.children.size()))
             {
-                // Ensure child state is clean before advancing in reverse pass
-                // (forward pass may have left finished=true on this child)
                 if (state.children[idx].finished)
                 {
                     state.children[idx].finished = false;
@@ -325,9 +311,6 @@ namespace controllers::offscreen
                 registry.get<components::UIImageComponent>(entity).colorTint.b = value;
             break;
 
-        case components::UITweenProperty::Rotation:
-            // Deferred — UIRectComponent lacks rotation field
-            break;
         }
     }
 }
