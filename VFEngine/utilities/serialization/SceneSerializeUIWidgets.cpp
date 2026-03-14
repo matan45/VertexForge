@@ -662,7 +662,6 @@ namespace serialization {
     json SceneSerialization::serializeUIMask(const components::UIMaskComponent& mask)
     {
         json j;
-        j["maskMode"] = static_cast<int>(mask.maskMode);
         j["maskTexturePath"] = mask.maskTexturePath;
         j["alphaThreshold"] = mask.alphaThreshold;
         j["showMaskGraphic"] = mask.showMaskGraphic;
@@ -671,8 +670,6 @@ namespace serialization {
 
     void SceneSerialization::deserializeUIMask(const json& j, components::UIMaskComponent& mask)
     {
-        if (j.contains("maskMode"))
-            mask.maskMode = static_cast<components::UIMaskMode>(j["maskMode"].get<int>());
         if (j.contains("maskTexturePath"))
             mask.maskTexturePath = j["maskTexturePath"].get<std::string>();
         if (j.contains("alphaThreshold"))

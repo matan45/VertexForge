@@ -312,25 +312,15 @@ namespace controllers::offscreen
 
                 // Emit mask shape → StencilOp::Write
                 bool showGraphic = maskComp.showMaskGraphic;
-                if (maskComp.maskMode == components::UIMaskMode::AlphaTexture
-                    && !maskComp.maskTexturePath.empty())
-                {
-                    // Alpha texture mask: use the mask texture
-                    emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
-                        scrollContainers, drawList,
-                        render::ui::UIStencilOp::Write, newRef,
-                        !showGraphic, maskComp.alphaThreshold,
-                        maskComp.maskTexturePath);
-                }
-                else
-                {
-                    // Rectangle mask: use white texture
-                    emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
-                        scrollContainers, drawList,
-                        render::ui::UIStencilOp::Write, newRef,
-                        !showGraphic, 0.0f,
-                        "__white_1x1__");
-                }
+                std::string maskTex = maskComp.maskTexturePath.empty()
+                    ? "__white_1x1__" : maskComp.maskTexturePath;
+                float threshold = maskComp.maskTexturePath.empty()
+                    ? 0.0f : maskComp.alphaThreshold;
+
+                emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,
+                    scrollContainers, drawList,
+                    render::ui::UIStencilOp::Write, newRef,
+                    !showGraphic, threshold, maskTex);
 
                 // Also emit the image if entity has one (when mask is visible)
                 if (showGraphic && registry.all_of<components::UIImageComponent>(entity))

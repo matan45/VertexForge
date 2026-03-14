@@ -465,16 +465,9 @@ namespace components
         UIAnimationLoopMode loopMode = UIAnimationLoopMode::Once;
     };
 
-    enum class UIMaskMode : uint8_t
-    {
-        Rectangle,
-        AlphaTexture
-    };
-
     struct UIMaskComponent
     {
-        UIMaskMode maskMode = UIMaskMode::Rectangle;
-        std::string maskTexturePath;  // for AlphaTexture mode
+        std::string maskTexturePath;  // alpha texture used as mask shape
         float alphaThreshold = 0.5f;
         bool showMaskGraphic = false; // render the mask shape visually
     };

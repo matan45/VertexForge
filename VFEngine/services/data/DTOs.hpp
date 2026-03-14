@@ -547,7 +547,6 @@ namespace services
 
     struct UIMaskData
     {
-        uint8_t maskMode = 0;     // 0=Rectangle, 1=AlphaTexture
         std::string maskTexturePath;
         float alphaThreshold = 0.5f;
         bool showMaskGraphic = false;

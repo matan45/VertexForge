@@ -37,65 +37,53 @@ namespace windows::details
             services::UIMaskData data = *dataOpt;
             bool changed = false;
 
-            // Mask mode combo
-            const char* maskModeNames[] = {"Rectangle", "Alpha Texture"};
-            int currentMode = static_cast<int>(data.maskMode);
-            if (ImGui::Combo("Mask Mode##UIMask", &currentMode, maskModeNames, 2))
+            ImGui::TextDisabled("Clips children using texture alpha channel");
+            ImGui::Spacing();
+
+            // Display current texture
+            if (!data.maskTexturePath.empty())
             {
-                data.maskMode = static_cast<uint8_t>(currentMode);
+                std::string filename = data.maskTexturePath;
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                    filename = filename.substr(lastSlash + 1);
+                ImGui::Text("Mask: %s", filename.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("No mask texture selected");
+            }
+
+            if (ImGui::Button("Select Mask Texture##UIMask"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
+                if (!path.empty())
+                {
+                    data.maskTexturePath = path;
+                    changed = true;
+                }
+            }
+
+            ImGui::SameLine();
+            bool noTex = data.maskTexturePath.empty();
+            if (noTex) ImGui::BeginDisabled();
+            if (ImGui::Button("Clear##UIMaskTex"))
+            {
+                data.maskTexturePath = "";
+                changed = true;
+            }
+            if (noTex) ImGui::EndDisabled();
+
+            ImGui::Spacing();
+
+            if (ImGui::SliderFloat("Alpha Threshold##UIMask", &data.alphaThreshold, 0.0f, 1.0f, "%.2f"))
+            {
                 changed = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Rectangle: clips to rect bounds\nAlpha Texture: clips using texture alpha channel");
-
-            // Alpha texture mode fields
-            if (data.maskMode == 1) // AlphaTexture
-            {
-                ImGui::Spacing();
-
-                // Display current texture
-                if (!data.maskTexturePath.empty())
-                {
-                    std::string filename = data.maskTexturePath;
-                    auto lastSlash = filename.find_last_of("/\\");
-                    if (lastSlash != std::string::npos)
-                        filename = filename.substr(lastSlash + 1);
-                    ImGui::Text("Mask: %s", filename.c_str());
-                }
-                else
-                {
-                    ImGui::TextDisabled("No mask texture selected");
-                }
-
-                if (ImGui::Button("Select Mask Texture##UIMask"))
-                {
-                    nfd::FileDialog fileDialog;
-                    std::string path = fileDialog.openFileDialog(
-                        {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-                    if (!path.empty())
-                    {
-                        data.maskTexturePath = path;
-                        changed = true;
-                    }
-                }
-
-                ImGui::SameLine();
-                bool noTex = data.maskTexturePath.empty();
-                if (noTex) ImGui::BeginDisabled();
-                if (ImGui::Button("Clear##UIMaskTex"))
-                {
-                    data.maskTexturePath = "";
-                    changed = true;
-                }
-                if (noTex) ImGui::EndDisabled();
-
-                if (ImGui::SliderFloat("Alpha Threshold##UIMask", &data.alphaThreshold, 0.0f, 1.0f, "%.2f"))
-                {
-                    changed = true;
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Pixels with alpha below this value will not write to stencil");
-            }
+                ImGui::SetTooltip("Pixels with alpha below this value will not write to stencil");
 
             ImGui::Spacing();
 
