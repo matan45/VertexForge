@@ -85,7 +85,7 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::DecalComponent>()) {
-            sceneEntity.addComponent<components::DecalComponent>();
+            return false;
         }
 
         auto& comp = sceneEntity.getComponent<components::DecalComponent>();
@@ -95,7 +95,7 @@ namespace services {
         comp.ormTexture = decalData.ormTexture;
         comp.color = decalData.color;
         comp.angleFadeStart = decalData.angleFadeStart;
-        comp.angleFadeEnd = decalData.angleFadeEnd;
+        comp.angleFadeEnd = std::min(decalData.angleFadeEnd, decalData.angleFadeStart - 0.001f);
         comp.edgeFalloff = decalData.edgeFalloff;
         comp.sortPriority = decalData.sortPriority;
         comp.modifyNormals = decalData.modifyNormals;

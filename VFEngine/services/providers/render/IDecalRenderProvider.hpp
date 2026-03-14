@@ -31,7 +31,5 @@ namespace services
 
         virtual void setDecalRenderingEnabled(bool enabled) = 0;
         virtual bool isDecalRenderingEnabled() const = 0;
-
-        virtual void updateDecals(std::vector<DecalRenderData>&& decals) = 0;
     };
 }

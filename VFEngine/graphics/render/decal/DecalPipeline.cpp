@@ -460,6 +460,14 @@ namespace render::decal
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &blendAttachment;
 
+        std::array<vk::DynamicState, 2> dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
+        dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicStateInfo.pDynamicStates = dynamicStates.data();
+
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
         pipelineInfo.pStages = stages.data();
@@ -470,6 +478,7 @@ namespace render::decal
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicStateInfo;
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.renderPass = decalRenderPass;
         pipelineInfo.subpass = 0;
@@ -570,6 +579,12 @@ namespace render::decal
 
         auto it = decalDescriptorCache.find(key);
         if (it != decalDescriptorCache.end()) return it->second;
+
+        if (decalDescriptorCache.size() >= MAX_CACHED_TEXTURES)
+        {
+            vfLogWarning("DecalPipeline: descriptor cache full ({} entries), using fallback texture set", MAX_CACHED_TEXTURES);
+            return fallbackDescriptorSet;
+        }
 
         // Resolve textures (use fallbacks for empty paths)
         core::Texture* albedoTex = albedoPath.empty() ? fallbackWhiteTexture.get()
@@ -684,6 +699,8 @@ namespace render::decal
         vkDevice.unmapMemory(cameraUBOMemory);
     }
 
+    // INVARIANT: Must be called immediately after the mesh render pass ends,
+    // which leaves depth in eDepthStencilAttachmentOptimal.
     void DecalPipeline::transitionDepthToReadOnly(const vk::CommandBuffer& cmd)
     {
         vk::ImageMemoryBarrier depthBarrier{};

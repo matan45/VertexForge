@@ -27,14 +27,6 @@ namespace services
             }
         );
 
-        dispatcher.registerCommandHandler<events::render::UpdateDecalsCommand>(
-            [this](const events::render::UpdateDecalsCommand& cmd)
-            {
-                auto decals = cmd.decals;
-                provider->updateDecals(std::move(decals));
-            }
-        );
-
         dispatcher.registerQueryHandler<events::render::IsDecalRenderingEnabledQuery>(
             [this](const events::render::IsDecalRenderingEnabledQuery&) -> bool
             {

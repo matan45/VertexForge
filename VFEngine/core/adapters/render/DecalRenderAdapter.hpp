@@ -14,7 +14,6 @@ namespace core::adapters
     private:
         controllers::OffScreen* offScreen = nullptr;
         bool decalEnabled = true;
-        std::vector<services::DecalRenderData> currentDecals;
 
     public:
         explicit DecalRenderAdapter() = default;
@@ -27,9 +26,5 @@ namespace core::adapters
 
         void setDecalRenderingEnabled(bool enabled) override;
         bool isDecalRenderingEnabled() const override;
-
-        void updateDecals(std::vector<services::DecalRenderData>&& decals) override;
-
-        const std::vector<services::DecalRenderData>& getDecals() const { return currentDecals; }
     };
 }

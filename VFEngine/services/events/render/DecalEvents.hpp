@@ -11,12 +11,6 @@ namespace events::render
         std::string_view getName() const override { return "SetDecalRenderingEnabledCommand"; }
     };
 
-    struct UpdateDecalsCommand : ICommand<>
-    {
-        std::vector<services::DecalRenderData> decals;
-        std::string_view getName() const override { return "UpdateDecalsCommand"; }
-    };
-
     struct IsDecalRenderingEnabledQuery : IQuery<bool>
     {
         std::string_view getName() const override { return "IsDecalRenderingEnabledQuery"; }

@@ -16,13 +16,4 @@ namespace core::adapters
     {
         return decalEnabled;
     }
-
-    void DecalRenderAdapter::updateDecals(std::vector<services::DecalRenderData>&& decals)
-    {
-        currentDecals = std::move(decals);
-        if (offScreen)
-        {
-            offScreen->setDecalDrawList(currentDecals);
-        }
-    }
 }
