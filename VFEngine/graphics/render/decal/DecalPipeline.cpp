@@ -3,8 +3,10 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -26,11 +28,12 @@ namespace render::decal
     {
         if (initialized) return;
 
-        createSampler();
+        createSamplers();
         createCubeGeometry();
         createBuffers();
         createRenderPass();
         createFramebuffers();
+        createFallbackTexture();
         createDescriptorResources();
         createPipeline();
 
@@ -41,7 +44,6 @@ namespace render::decal
         }
 
         initialized = true;
-        vfLogInfo("DecalPipeline: initialized successfully");
     }
 
     void DecalPipeline::cleanup()
@@ -53,14 +55,21 @@ namespace render::decal
 
         if (pipeline) { vkDevice.destroyPipeline(pipeline); pipeline = nullptr; }
         if (pipelineLayout) { vkDevice.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
-        if (descriptorPool) { vkDevice.destroyDescriptorPool(descriptorPool); descriptorPool = nullptr; }
-        if (descriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
+
+        if (globalDescriptorPool) { vkDevice.destroyDescriptorPool(globalDescriptorPool); globalDescriptorPool = nullptr; }
+        if (globalDescriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(globalDescriptorSetLayout); globalDescriptorSetLayout = nullptr; }
+        if (textureDescriptorPool) { vkDevice.destroyDescriptorPool(textureDescriptorPool); textureDescriptorPool = nullptr; }
+        if (textureDescriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(textureDescriptorSetLayout); textureDescriptorSetLayout = nullptr; }
 
         for (auto& fb : decalFramebuffers) { vkDevice.destroyFramebuffer(fb); }
         decalFramebuffers.clear();
 
         if (decalRenderPass) { vkDevice.destroyRenderPass(decalRenderPass); decalRenderPass = nullptr; }
         if (depthSampler) { vkDevice.destroySampler(depthSampler); depthSampler = nullptr; }
+        if (textureSampler) { vkDevice.destroySampler(textureSampler); textureSampler = nullptr; }
+
+        textureCache.clear();
+        fallbackTexture.reset();
 
         core::BufferUtilities::destroyBuffer(vkDevice, decalDataBuffer, decalDataMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBOBuffer, cameraUBOMemory);
@@ -84,12 +93,11 @@ namespace render::decal
 
         createFramebuffers();
         createPipeline();
-        updateDescriptorSet();
+        updateGlobalDescriptorSet();
     }
 
     void DecalPipeline::createRenderPass()
     {
-        // Color attachment: load existing scene color, store with blended decals
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -107,7 +115,6 @@ namespace render::decal
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorRef;
 
-        // External dependency to ensure color attachment is available
         vk::SubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
@@ -149,105 +156,175 @@ namespace render::decal
         }
     }
 
-    void DecalPipeline::createSampler()
+    void DecalPipeline::createSamplers()
     {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eNearest;
-        samplerInfo.minFilter = vk::Filter::eNearest;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        // Depth sampler (nearest, clamp)
+        vk::SamplerCreateInfo depthSamplerInfo{};
+        depthSamplerInfo.magFilter = vk::Filter::eNearest;
+        depthSamplerInfo.minFilter = vk::Filter::eNearest;
+        depthSamplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        depthSamplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        depthSamplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        depthSampler = device.getLogicalDevice().createSampler(depthSamplerInfo);
 
-        depthSampler = device.getLogicalDevice().createSampler(samplerInfo);
+        // Texture sampler (linear, clamp for decals)
+        vk::SamplerCreateInfo texSamplerInfo{};
+        texSamplerInfo.magFilter = vk::Filter::eLinear;
+        texSamplerInfo.minFilter = vk::Filter::eLinear;
+        texSamplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        texSamplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        texSamplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        texSamplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        texSamplerInfo.maxLod = 12.0f;
+        texSamplerInfo.anisotropyEnable = VK_TRUE;
+        texSamplerInfo.maxAnisotropy = 4.0f;
+        textureSampler = device.getLogicalDevice().createSampler(texSamplerInfo);
+    }
+
+    void DecalPipeline::createFallbackTexture()
+    {
+        // Create a 1x1 white texture as fallback for decals without albedo texture
+        fallbackTexture = std::make_unique<core::Texture>(device);
+
+        resource::TextureData texData;
+        texData.width = 1;
+        texData.height = 1;
+        texData.numbersOfChannels = 4;
+        texData.mipLevels = 1;
+
+        resource::MipLevelData mip0;
+        mip0.width = 1;
+        mip0.height = 1;
+        mip0.data = {255, 255, 255, 255};
+        texData.mipData.push_back(std::move(mip0));
+
+        fallbackTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Srgb, false);
     }
 
     void DecalPipeline::createDescriptorResources()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Bindings: 0=cameraUBO, 1=depthTexture, 2=decalDataSSBO
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        // Set 0: camera UBO, depth texture, decal data SSBO
+        {
+            std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+            bindings[0].binding = 0;
+            bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+            bindings[0].descriptorCount = 1;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings[1].binding = 1;
+            bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[1].descriptorCount = 1;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        bindings[2].binding = 2;
-        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings[2].binding = 2;
+            bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[2].descriptorCount = 1;
+            bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
+            globalDescriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+            std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+            poolSizes[0] = {vk::DescriptorType::eUniformBuffer, 1};
+            poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 1};
+            poolSizes[2] = {vk::DescriptorType::eStorageBuffer, 1};
 
-        // Pool
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
-        poolSizes[0] = {vk::DescriptorType::eUniformBuffer, 1};
-        poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 1};
-        poolSizes[2] = {vk::DescriptorType::eStorageBuffer, 1};
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            globalDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = globalDescriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &globalDescriptorSetLayout;
+            globalDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+            updateGlobalDescriptorSet();
+        }
 
-        // Allocate set
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &descriptorSetLayout;
+        // Set 1: per-decal albedo texture (one sampler binding)
+        {
+            vk::DescriptorSetLayoutBinding texBinding{};
+            texBinding.binding = 0;
+            texBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            texBinding.descriptorCount = 1;
+            texBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        descriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &texBinding;
+            textureDescriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        updateDescriptorSet();
+            vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, MAX_CACHED_TEXTURES + 1};
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = MAX_CACHED_TEXTURES + 1; // +1 for fallback
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            textureDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
+
+            // Allocate fallback descriptor set
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = textureDescriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &textureDescriptorSetLayout;
+            fallbackDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+            // Write fallback texture
+            vk::DescriptorImageInfo imgInfo{};
+            imgInfo.sampler = textureSampler;
+            imgInfo.imageView = fallbackTexture->getImageView();
+            imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = fallbackDescriptorSet;
+            write.dstBinding = 0;
+            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            write.descriptorCount = 1;
+            write.pImageInfo = &imgInfo;
+            vkDevice.updateDescriptorSets(write, {});
+        }
     }
 
-    void DecalPipeline::updateDescriptorSet()
+    void DecalPipeline::updateGlobalDescriptorSet()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Camera UBO
         vk::DescriptorBufferInfo cameraBufferInfo{};
         cameraBufferInfo.buffer = cameraUBOBuffer;
         cameraBufferInfo.offset = 0;
         cameraBufferInfo.range = sizeof(CameraUBO);
 
-        // Depth texture
         vk::DescriptorImageInfo depthImageInfo{};
         depthImageInfo.sampler = depthSampler;
         depthImageInfo.imageView = offscreenResources.depthImage.depthImageView;
         depthImageInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
-        // Decal data SSBO
         vk::DescriptorBufferInfo decalBufferInfo{};
         decalBufferInfo.buffer = decalDataBuffer;
         decalBufferInfo.offset = 0;
         decalBufferInfo.range = sizeof(DecalGPUData) * maxDecals;
 
         std::array<vk::WriteDescriptorSet, 3> writes{};
-        writes[0].dstSet = descriptorSet;
+        writes[0].dstSet = globalDescriptorSet;
         writes[0].dstBinding = 0;
         writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         writes[0].descriptorCount = 1;
         writes[0].pBufferInfo = &cameraBufferInfo;
 
-        writes[1].dstSet = descriptorSet;
+        writes[1].dstSet = globalDescriptorSet;
         writes[1].dstBinding = 1;
         writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[1].descriptorCount = 1;
         writes[1].pImageInfo = &depthImageInfo;
 
-        writes[2].dstSet = descriptorSet;
+        writes[2].dstSet = globalDescriptorSet;
         writes[2].dstBinding = 2;
         writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[2].descriptorCount = 1;
@@ -269,20 +346,20 @@ namespace render::decal
             return;
         }
 
-        // Push constants: decal world matrix + decal index
         vk::PushConstantRange pushConstant{};
         pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstant.offset = 0;
         pushConstant.size = sizeof(DecalPushConstants);
 
+        std::array<vk::DescriptorSetLayout, 2> layouts = {globalDescriptorSetLayout, textureDescriptorSetLayout};
+
         vk::PipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &descriptorSetLayout;
+        layoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+        layoutInfo.pSetLayouts = layouts.data();
         layoutInfo.pushConstantRangeCount = 1;
         layoutInfo.pPushConstantRanges = &pushConstant;
         pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
 
-        // Vertex input for cube geometry: position only (vec3)
         vk::VertexInputBindingDescription vertexBinding{};
         vertexBinding.binding = 0;
         vertexBinding.stride = sizeof(glm::vec3);
@@ -316,19 +393,16 @@ namespace render::decal
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.polygonMode = vk::PolygonMode::eFill;
         rasterizer.lineWidth = 1.0f;
-        // No culling — decal must be visible from any camera angle
         rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-        // No depth test/write since we sample depth in the fragment shader
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
 
-        // Alpha blending
         vk::PipelineColorBlendAttachmentState blendAttachment{};
         blendAttachment.blendEnable = VK_TRUE;
         blendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -373,24 +447,17 @@ namespace render::decal
 
     void DecalPipeline::createCubeGeometry()
     {
-        // Unit cube vertices [-1, 1] range
         std::vector<glm::vec3> vertices = {
             {-1, -1, -1}, { 1, -1, -1}, { 1,  1, -1}, {-1,  1, -1},
             {-1, -1,  1}, { 1, -1,  1}, { 1,  1,  1}, {-1,  1,  1}
         };
 
         std::vector<uint32_t> indices = {
-            // Front
             0, 1, 2, 2, 3, 0,
-            // Back
             5, 4, 7, 7, 6, 5,
-            // Left
             4, 0, 3, 3, 7, 4,
-            // Right
             1, 5, 6, 6, 2, 1,
-            // Top
             3, 2, 6, 6, 7, 3,
-            // Bottom
             4, 5, 1, 1, 0, 4
         };
 
@@ -399,7 +466,6 @@ namespace render::decal
         vk::Device vkDevice = device.getLogicalDevice();
         vk::PhysicalDevice physDevice = device.getPhysicalDevice();
 
-        // Vertex buffer
         vk::DeviceSize vertSize = sizeof(glm::vec3) * vertices.size();
         core::BufferInfoRequest vertReq(vkDevice, physDevice, vertSize,
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
@@ -409,7 +475,6 @@ namespace render::decal
             device.getGraphicsQueue(), device.getStagingCommandPool(),
             cubeVertexBuffer, vertices.data(), vertSize);
 
-        // Index buffer
         vk::DeviceSize idxSize = sizeof(uint32_t) * indices.size();
         core::BufferInfoRequest idxReq(vkDevice, physDevice, idxSize,
             vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
@@ -425,14 +490,12 @@ namespace render::decal
         vk::Device vkDevice = device.getLogicalDevice();
         vk::PhysicalDevice physDevice = device.getPhysicalDevice();
 
-        // Decal data SSBO (host visible for easy updates)
         vk::DeviceSize decalSize = sizeof(DecalGPUData) * maxDecals;
         core::BufferInfoRequest decalReq(vkDevice, physDevice, decalSize,
             vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
         core::BufferUtilities::createBuffer(decalReq, decalDataBuffer, decalDataMemory);
 
-        // Camera UBO (host visible for easy updates)
         vk::DeviceSize cameraSize = sizeof(CameraUBO);
         core::BufferInfoRequest cameraReq(vkDevice, physDevice, cameraSize,
             vk::BufferUsageFlagBits::eUniformBuffer,
@@ -440,27 +503,60 @@ namespace render::decal
         core::BufferUtilities::createBuffer(cameraReq, cameraUBOBuffer, cameraUBOMemory);
     }
 
+    vk::DescriptorSet DecalPipeline::getOrLoadTexture(const std::string& path)
+    {
+        if (path.empty()) return fallbackDescriptorSet;
+
+        auto it = textureCache.find(path);
+        if (it != textureCache.end()) return it->second.descriptorSet;
+
+        // Load new texture
+        try
+        {
+            auto tex = std::make_unique<core::Texture>(device);
+            tex->loadTextureFromFile(path, vk::Format::eR8G8B8A8Srgb, false);
+
+            // Allocate descriptor set
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = textureDescriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &textureDescriptorSetLayout;
+            vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+            // Write descriptor
+            vk::DescriptorImageInfo imgInfo{};
+            imgInfo.sampler = textureSampler;
+            imgInfo.imageView = tex->getImageView();
+            imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = descSet;
+            write.dstBinding = 0;
+            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            write.descriptorCount = 1;
+            write.pImageInfo = &imgInfo;
+            device.getLogicalDevice().updateDescriptorSets(write, {});
+
+            textureCache[path] = {std::move(tex), descSet};
+            return descSet;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("DecalPipeline: Failed to load texture '{}': {}", path, e.what());
+            return fallbackDescriptorSet;
+        }
+    }
+
     void DecalPipeline::updateDecals(const std::vector<services::DecalRenderData>& decals)
     {
-        if (!decals.empty())
-        {
-            static bool loggedOnce = false;
-            if (!loggedOnce)
-            {
-                vfLogInfo("DecalPipeline: received {} decals", decals.size());
-                loggedOnce = true;
-            }
-        }
         currentDecals = decals;
 
-        // Sort by priority (lower = rendered first, higher = on top)
         std::stable_sort(currentDecals.begin(), currentDecals.end(),
             [](const services::DecalRenderData& a, const services::DecalRenderData& b)
             {
                 return a.sortPriority < b.sortPriority;
             });
 
-        // Build GPU data
         gpuDecalData.resize(currentDecals.size());
         for (size_t i = 0; i < currentDecals.size(); ++i)
         {
@@ -471,7 +567,8 @@ namespace render::decal
             gpu.color = decal.color;
             gpu.fadeParams = glm::vec4(decal.angleFadeStart, decal.angleFadeEnd,
                                        decal.edgeFalloff, decal.normalStrength);
-            gpu.halfExtents = glm::vec4(decal.halfExtents, decal.modifyNormals ? 1.0f : 0.0f);
+            gpu.halfExtents = glm::vec4(decal.halfExtents,
+                                         decal.albedoTexture.empty() ? 0.0f : 1.0f);
         }
     }
 
@@ -563,17 +660,9 @@ namespace render::decal
     {
         if (!initialized || currentDecals.empty() || !pipeline) return;
 
-        static bool loggedRenderOnce = false;
-        if (!loggedRenderOnce)
-        {
-            vfLogInfo("DecalPipeline: rendering {} decals, imageIndex={}", currentDecals.size(), imageIndex);
-            loggedRenderOnce = true;
-        }
-
         uploadDecalData();
         uploadCameraUBO();
 
-        // Transition depth to read-only for shader sampling
         transitionDepthToReadOnly(cmd);
 
         auto extent = swapChain.getSwapchainExtent();
@@ -593,7 +682,7 @@ namespace render::decal
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                               pipelineLayout, 0, descriptorSet, {});
+                               pipelineLayout, 0, globalDescriptorSet, {});
 
         vk::DeviceSize offset = 0;
         cmd.bindVertexBuffers(0, cubeVertexBuffer, offset);
@@ -602,6 +691,11 @@ namespace render::decal
         uint32_t count = std::min(static_cast<uint32_t>(currentDecals.size()), maxDecals);
         for (uint32_t i = 0; i < count; ++i)
         {
+            // Bind per-decal albedo texture (set 1)
+            vk::DescriptorSet texDescSet = getOrLoadTexture(currentDecals[i].albedoTexture);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   pipelineLayout, 1, texDescSet, {});
+
             DecalPushConstants pc{};
             pc.decalWorldMatrix = currentDecals[i].worldMatrix;
             pc.decalIndex = i;
@@ -615,7 +709,6 @@ namespace render::decal
 
         cmd.endRenderPass();
 
-        // Transition depth back to attachment for subsequent passes
         transitionDepthToAttachment(cmd);
     }
 }

@@ -3,12 +3,16 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
+#include <unordered_map>
+#include <memory>
+#include <string>
 #include "../../../services/providers/render/IDecalRenderProvider.hpp"
 
 namespace core
 {
     class Device;
     class SwapChain;
+    class Texture;
     struct OffscreenResources;
 }
 
@@ -19,7 +23,7 @@ namespace render::decal
         glm::mat4 inverseDecalMatrix;
         glm::vec4 color;
         glm::vec4 fadeParams; // x=angleFadeStart, y=angleFadeEnd, z=edgeFalloff, w=normalStrength
-        glm::vec4 halfExtents; // xyz=halfExtents, w=modifyNormals (0 or 1)
+        glm::vec4 halfExtents; // xyz=halfExtents, w=hasAlbedoTexture (0 or 1)
     };
 
     struct DecalPushConstants
@@ -44,11 +48,17 @@ namespace render::decal
         vk::Pipeline pipeline;
         vk::PipelineLayout pipelineLayout;
 
-        vk::DescriptorSetLayout descriptorSetLayout;
-        vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet descriptorSet;
+        // Set 0: camera UBO, depth texture, decal data SSBO
+        vk::DescriptorSetLayout globalDescriptorSetLayout;
+        vk::DescriptorPool globalDescriptorPool;
+        vk::DescriptorSet globalDescriptorSet;
+
+        // Set 1: per-decal albedo texture
+        vk::DescriptorSetLayout textureDescriptorSetLayout;
+        vk::DescriptorPool textureDescriptorPool;
 
         vk::Sampler depthSampler;
+        vk::Sampler textureSampler;
 
         vk::Buffer decalDataBuffer;
         vk::DeviceMemory decalDataMemory;
@@ -72,6 +82,19 @@ namespace render::decal
 
         std::vector<DecalGPUData> gpuDecalData;
         std::vector<services::DecalRenderData> currentDecals;
+
+        // Texture cache: path -> loaded texture + descriptor set
+        struct TextureEntry
+        {
+            std::unique_ptr<core::Texture> texture;
+            vk::DescriptorSet descriptorSet;
+        };
+        std::unordered_map<std::string, TextureEntry> textureCache;
+        static constexpr uint32_t MAX_CACHED_TEXTURES = 64;
+
+        // Fallback 1x1 white texture for decals without albedo
+        std::unique_ptr<core::Texture> fallbackTexture;
+        vk::DescriptorSet fallbackDescriptorSet;
 
         glm::mat4 currentViewProjection{1.0f};
         glm::mat4 currentInverseViewProjection{1.0f};
@@ -99,15 +122,18 @@ namespace render::decal
     private:
         void createRenderPass();
         void createFramebuffers();
-        void createSampler();
+        void createSamplers();
         void createDescriptorResources();
         void createPipeline();
         void createCubeGeometry();
         void createBuffers();
+        void createFallbackTexture();
 
-        void updateDescriptorSet();
+        void updateGlobalDescriptorSet();
         void uploadDecalData();
         void uploadCameraUBO();
+
+        vk::DescriptorSet getOrLoadTexture(const std::string& path);
 
         void transitionDepthToReadOnly(const vk::CommandBuffer& cmd);
         void transitionDepthToAttachment(const vk::CommandBuffer& cmd);
