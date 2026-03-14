@@ -2,6 +2,7 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -39,8 +40,7 @@ namespace windows::details
             // Mask mode combo
             const char* maskModeNames[] = {"Rectangle", "Alpha Texture"};
             int currentMode = static_cast<int>(data.maskMode);
-            ImGui::SetNextItemWidth(150.0f);
-            if (ImGui::Combo("Mask Mode", &currentMode, maskModeNames, 2))
+            if (ImGui::Combo("Mask Mode##UIMask", &currentMode, maskModeNames, 2))
             {
                 data.maskMode = static_cast<uint8_t>(currentMode);
                 changed = true;
@@ -48,30 +48,53 @@ namespace windows::details
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Rectangle: clips to rect bounds\nAlpha Texture: clips using texture alpha channel");
 
-            // Alpha threshold (only for AlphaTexture mode)
+            // Alpha texture mode fields
             if (data.maskMode == 1) // AlphaTexture
             {
                 ImGui::Spacing();
 
-                // Mask texture path
-                char texBuf[256];
-                std::strncpy(texBuf, data.maskTexturePath.c_str(), sizeof(texBuf));
-                texBuf[sizeof(texBuf) - 1] = '\0';
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 10.0f);
-                if (ImGui::InputText("Mask Texture##UIMask", texBuf, sizeof(texBuf)))
+                // Display current texture
+                if (!data.maskTexturePath.empty())
                 {
-                    data.maskTexturePath = texBuf;
+                    std::string filename = data.maskTexturePath;
+                    auto lastSlash = filename.find_last_of("/\\");
+                    if (lastSlash != std::string::npos)
+                        filename = filename.substr(lastSlash + 1);
+                    ImGui::Text("Mask: %s", filename.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("No mask texture selected");
+                }
+
+                if (ImGui::Button("Select Mask Texture##UIMask"))
+                {
+                    nfd::FileDialog fileDialog;
+                    std::string path = fileDialog.openFileDialog(
+                        {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
+                    if (!path.empty())
+                    {
+                        data.maskTexturePath = path;
+                        changed = true;
+                    }
+                }
+
+                ImGui::SameLine();
+                bool noTex = data.maskTexturePath.empty();
+                if (noTex) ImGui::BeginDisabled();
+                if (ImGui::Button("Clear##UIMaskTex"))
+                {
+                    data.maskTexturePath = "";
                     changed = true;
                 }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Path to .vfImage texture used as alpha mask");
+                if (noTex) ImGui::EndDisabled();
 
                 if (ImGui::SliderFloat("Alpha Threshold##UIMask", &data.alphaThreshold, 0.0f, 1.0f, "%.2f"))
                 {
                     changed = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Pixels with alpha below this value will not be masked");
+                    ImGui::SetTooltip("Pixels with alpha below this value will not write to stencil");
             }
 
             ImGui::Spacing();
