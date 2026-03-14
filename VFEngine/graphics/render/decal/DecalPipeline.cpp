@@ -68,8 +68,10 @@ namespace render::decal
         if (depthSampler) { vkDevice.destroySampler(depthSampler); depthSampler = nullptr; }
         if (textureSampler) { vkDevice.destroySampler(textureSampler); textureSampler = nullptr; }
 
+        decalDescriptorCache.clear();
         textureCache.clear();
-        fallbackTexture.reset();
+        fallbackWhiteTexture.reset();
+        fallbackNormalTexture.reset();
 
         core::BufferUtilities::destroyBuffer(vkDevice, decalDataBuffer, decalDataMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBOBuffer, cameraUBOMemory);
@@ -183,22 +185,37 @@ namespace render::decal
 
     void DecalPipeline::createFallbackTexture()
     {
-        // Create a 1x1 white texture as fallback for decals without albedo texture
-        fallbackTexture = std::make_unique<core::Texture>(device);
+        // 1x1 white texture (fallback albedo/ORM)
+        {
+            fallbackWhiteTexture = std::make_unique<core::Texture>(device);
+            resource::TextureData texData;
+            texData.width = 1;
+            texData.height = 1;
+            texData.numbersOfChannels = 4;
+            texData.mipLevels = 1;
+            resource::MipLevelData mip0;
+            mip0.width = 1;
+            mip0.height = 1;
+            mip0.data = {255, 255, 255, 255};
+            texData.mipData.push_back(std::move(mip0));
+            fallbackWhiteTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Srgb, false);
+        }
 
-        resource::TextureData texData;
-        texData.width = 1;
-        texData.height = 1;
-        texData.numbersOfChannels = 4;
-        texData.mipLevels = 1;
-
-        resource::MipLevelData mip0;
-        mip0.width = 1;
-        mip0.height = 1;
-        mip0.data = {255, 255, 255, 255};
-        texData.mipData.push_back(std::move(mip0));
-
-        fallbackTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Srgb, false);
+        // 1x1 flat normal texture (128, 128, 255, 255) = (0.5, 0.5, 1.0) in tangent space
+        {
+            fallbackNormalTexture = std::make_unique<core::Texture>(device);
+            resource::TextureData texData;
+            texData.width = 1;
+            texData.height = 1;
+            texData.numbersOfChannels = 4;
+            texData.mipLevels = 1;
+            resource::MipLevelData mip0;
+            mip0.width = 1;
+            mip0.height = 1;
+            mip0.data = {128, 128, 255, 255};
+            texData.mipData.push_back(std::move(mip0));
+            fallbackNormalTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Unorm, false);
+        }
     }
 
     void DecalPipeline::createDescriptorResources()
@@ -248,22 +265,34 @@ namespace render::decal
             updateGlobalDescriptorSet();
         }
 
-        // Set 1: per-decal albedo texture (one sampler binding)
+        // Set 1: per-decal textures (albedo, normal, ORM)
         {
-            vk::DescriptorSetLayoutBinding texBinding{};
-            texBinding.binding = 0;
-            texBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            texBinding.descriptorCount = 1;
-            texBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+            std::array<vk::DescriptorSetLayoutBinding, 3> texBindings{};
+            texBindings[0].binding = 0; // albedo
+            texBindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            texBindings[0].descriptorCount = 1;
+            texBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            texBindings[1].binding = 1; // normal
+            texBindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            texBindings[1].descriptorCount = 1;
+            texBindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            texBindings[2].binding = 2; // ORM
+            texBindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            texBindings[2].descriptorCount = 1;
+            texBindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &texBinding;
+            layoutInfo.bindingCount = static_cast<uint32_t>(texBindings.size());
+            layoutInfo.pBindings = texBindings.data();
             textureDescriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-            vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, MAX_CACHED_TEXTURES + 1};
+            // 3 samplers per set * MAX sets
+            vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
+                                             3 * (MAX_CACHED_TEXTURES + 1)};
             vk::DescriptorPoolCreateInfo poolInfo{};
-            poolInfo.maxSets = MAX_CACHED_TEXTURES + 1; // +1 for fallback
+            poolInfo.maxSets = MAX_CACHED_TEXTURES + 1;
             poolInfo.poolSizeCount = 1;
             poolInfo.pPoolSizes = &poolSize;
             poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -276,19 +305,30 @@ namespace render::decal
             allocInfo.pSetLayouts = &textureDescriptorSetLayout;
             fallbackDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-            // Write fallback texture
-            vk::DescriptorImageInfo imgInfo{};
-            imgInfo.sampler = textureSampler;
-            imgInfo.imageView = fallbackTexture->getImageView();
-            imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            // Write fallback textures (white albedo, flat normal, white ORM)
+            std::array<vk::DescriptorImageInfo, 3> imgInfos{};
+            imgInfos[0].sampler = textureSampler;
+            imgInfos[0].imageView = fallbackWhiteTexture->getImageView();
+            imgInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-            vk::WriteDescriptorSet write{};
-            write.dstSet = fallbackDescriptorSet;
-            write.dstBinding = 0;
-            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            write.descriptorCount = 1;
-            write.pImageInfo = &imgInfo;
-            vkDevice.updateDescriptorSets(write, {});
+            imgInfos[1].sampler = textureSampler;
+            imgInfos[1].imageView = fallbackNormalTexture->getImageView();
+            imgInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            imgInfos[2].sampler = textureSampler;
+            imgInfos[2].imageView = fallbackWhiteTexture->getImageView();
+            imgInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            std::array<vk::WriteDescriptorSet, 3> writes{};
+            for (uint32_t i = 0; i < 3; ++i)
+            {
+                writes[i].dstSet = fallbackDescriptorSet;
+                writes[i].dstBinding = i;
+                writes[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+                writes[i].descriptorCount = 1;
+                writes[i].pImageInfo = &imgInfos[i];
+            }
+            vkDevice.updateDescriptorSets(writes, {});
         }
     }
 
@@ -503,48 +543,80 @@ namespace render::decal
         core::BufferUtilities::createBuffer(cameraReq, cameraUBOBuffer, cameraUBOMemory);
     }
 
-    vk::DescriptorSet DecalPipeline::getOrLoadTexture(const std::string& path)
+    core::Texture* DecalPipeline::getOrLoadTexture(const std::string& path, vk::Format format)
     {
-        if (path.empty()) return fallbackDescriptorSet;
-
         auto it = textureCache.find(path);
-        if (it != textureCache.end()) return it->second.descriptorSet;
+        if (it != textureCache.end()) return it->second.get();
 
-        // Load new texture
         try
         {
             auto tex = std::make_unique<core::Texture>(device);
-            tex->loadTextureFromFile(path, vk::Format::eR8G8B8A8Srgb, false);
-
-            // Allocate descriptor set
-            vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = textureDescriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &textureDescriptorSetLayout;
-            vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-
-            // Write descriptor
-            vk::DescriptorImageInfo imgInfo{};
-            imgInfo.sampler = textureSampler;
-            imgInfo.imageView = tex->getImageView();
-            imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::WriteDescriptorSet write{};
-            write.dstSet = descSet;
-            write.dstBinding = 0;
-            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            write.descriptorCount = 1;
-            write.pImageInfo = &imgInfo;
-            device.getLogicalDevice().updateDescriptorSets(write, {});
-
-            textureCache[path] = {std::move(tex), descSet};
-            return descSet;
+            tex->loadTextureFromFile(path, format, false);
+            auto* ptr = tex.get();
+            textureCache[path] = std::move(tex);
+            return ptr;
         }
         catch (const std::exception& e)
         {
             vfLogError("DecalPipeline: Failed to load texture '{}': {}", path, e.what());
-            return fallbackDescriptorSet;
+            return nullptr;
         }
+    }
+
+    vk::DescriptorSet DecalPipeline::getOrCreateDecalTextureSet(
+        const std::string& albedoPath, const std::string& normalPath, const std::string& ormPath)
+    {
+        std::string key = albedoPath + "|" + normalPath + "|" + ormPath;
+
+        auto it = decalDescriptorCache.find(key);
+        if (it != decalDescriptorCache.end()) return it->second;
+
+        // Resolve textures (use fallbacks for empty paths)
+        core::Texture* albedoTex = albedoPath.empty() ? fallbackWhiteTexture.get()
+                                                       : getOrLoadTexture(albedoPath, vk::Format::eR8G8B8A8Srgb);
+        core::Texture* normalTex = normalPath.empty() ? fallbackNormalTexture.get()
+                                                       : getOrLoadTexture(normalPath, vk::Format::eR8G8B8A8Unorm);
+        core::Texture* ormTex = ormPath.empty() ? fallbackWhiteTexture.get()
+                                                 : getOrLoadTexture(ormPath, vk::Format::eR8G8B8A8Unorm);
+
+        if (!albedoTex) albedoTex = fallbackWhiteTexture.get();
+        if (!normalTex) normalTex = fallbackNormalTexture.get();
+        if (!ormTex) ormTex = fallbackWhiteTexture.get();
+
+        // Allocate descriptor set
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = textureDescriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &textureDescriptorSetLayout;
+        vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+        // Write all 3 textures
+        std::array<vk::DescriptorImageInfo, 3> imgInfos{};
+        imgInfos[0].sampler = textureSampler;
+        imgInfos[0].imageView = albedoTex->getImageView();
+        imgInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        imgInfos[1].sampler = textureSampler;
+        imgInfos[1].imageView = normalTex->getImageView();
+        imgInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        imgInfos[2].sampler = textureSampler;
+        imgInfos[2].imageView = ormTex->getImageView();
+        imgInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        std::array<vk::WriteDescriptorSet, 3> writes{};
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            writes[i].dstSet = descSet;
+            writes[i].dstBinding = i;
+            writes[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[i].descriptorCount = 1;
+            writes[i].pImageInfo = &imgInfos[i];
+        }
+        device.getLogicalDevice().updateDescriptorSets(writes, {});
+
+        decalDescriptorCache[key] = descSet;
+        return descSet;
     }
 
     void DecalPipeline::updateDecals(const std::vector<services::DecalRenderData>& decals)
@@ -567,8 +639,11 @@ namespace render::decal
             gpu.color = decal.color;
             gpu.fadeParams = glm::vec4(decal.angleFadeStart, decal.angleFadeEnd,
                                        decal.edgeFalloff, decal.normalStrength);
-            gpu.halfExtents = glm::vec4(decal.halfExtents,
-                                         decal.albedoTexture.empty() ? 0.0f : 1.0f);
+            gpu.textureFlags = glm::vec4(
+                decal.albedoTexture.empty() ? 0.0f : 1.0f,
+                (!decal.normalTexture.empty() && decal.modifyNormals) ? 1.0f : 0.0f,
+                decal.ormTexture.empty() ? 0.0f : 1.0f,
+                0.0f);
         }
     }
 
@@ -691,8 +766,11 @@ namespace render::decal
         uint32_t count = std::min(static_cast<uint32_t>(currentDecals.size()), maxDecals);
         for (uint32_t i = 0; i < count; ++i)
         {
-            // Bind per-decal albedo texture (set 1)
-            vk::DescriptorSet texDescSet = getOrLoadTexture(currentDecals[i].albedoTexture);
+            // Bind per-decal textures (set 1: albedo, normal, ORM)
+            vk::DescriptorSet texDescSet = getOrCreateDecalTextureSet(
+                currentDecals[i].albedoTexture,
+                currentDecals[i].normalTexture,
+                currentDecals[i].ormTexture);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                    pipelineLayout, 1, texDescSet, {});
 

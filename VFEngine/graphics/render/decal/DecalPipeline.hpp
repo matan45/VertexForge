@@ -23,7 +23,7 @@ namespace render::decal
         glm::mat4 inverseDecalMatrix;
         glm::vec4 color;
         glm::vec4 fadeParams; // x=angleFadeStart, y=angleFadeEnd, z=edgeFalloff, w=normalStrength
-        glm::vec4 halfExtents; // xyz=halfExtents, w=hasAlbedoTexture (0 or 1)
+        glm::vec4 textureFlags; // x=hasAlbedo, y=hasNormal, z=hasORM, w=unused
     };
 
     struct DecalPushConstants
@@ -53,7 +53,7 @@ namespace render::decal
         vk::DescriptorPool globalDescriptorPool;
         vk::DescriptorSet globalDescriptorSet;
 
-        // Set 1: per-decal albedo texture
+        // Set 1: per-decal textures (albedo + normal)
         vk::DescriptorSetLayout textureDescriptorSetLayout;
         vk::DescriptorPool textureDescriptorPool;
 
@@ -83,17 +83,16 @@ namespace render::decal
         std::vector<DecalGPUData> gpuDecalData;
         std::vector<services::DecalRenderData> currentDecals;
 
-        // Texture cache: path -> loaded texture + descriptor set
-        struct TextureEntry
-        {
-            std::unique_ptr<core::Texture> texture;
-            vk::DescriptorSet descriptorSet;
-        };
-        std::unordered_map<std::string, TextureEntry> textureCache;
-        static constexpr uint32_t MAX_CACHED_TEXTURES = 64;
+        // Individual texture cache: path -> loaded Texture
+        std::unordered_map<std::string, std::unique_ptr<core::Texture>> textureCache;
 
-        // Fallback 1x1 white texture for decals without albedo
-        std::unique_ptr<core::Texture> fallbackTexture;
+        // Per-decal descriptor set cache: "albedo|normal|orm" key -> descriptor set
+        std::unordered_map<std::string, vk::DescriptorSet> decalDescriptorCache;
+        static constexpr uint32_t MAX_CACHED_TEXTURES = 128;
+
+        // Fallback 1x1 textures
+        std::unique_ptr<core::Texture> fallbackWhiteTexture;
+        std::unique_ptr<core::Texture> fallbackNormalTexture; // flat normal (0.5, 0.5, 1.0)
         vk::DescriptorSet fallbackDescriptorSet;
 
         glm::mat4 currentViewProjection{1.0f};
@@ -133,7 +132,10 @@ namespace render::decal
         void uploadDecalData();
         void uploadCameraUBO();
 
-        vk::DescriptorSet getOrLoadTexture(const std::string& path);
+        vk::DescriptorSet getOrCreateDecalTextureSet(const std::string& albedoPath,
+                                                       const std::string& normalPath,
+                                                       const std::string& ormPath);
+        core::Texture* getOrLoadTexture(const std::string& path, vk::Format format);
 
         void transitionDepthToReadOnly(const vk::CommandBuffer& cmd);
         void transitionDepthToAttachment(const vk::CommandBuffer& cmd);
