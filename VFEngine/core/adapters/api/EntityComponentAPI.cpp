@@ -10,6 +10,7 @@
 #include "../../../services/events/scripting/ScriptingEvents.hpp"
 #include "../../../services/events/ui/UIEvents.hpp"
 #include "../../../services/events/physics/SocketEvents.hpp"
+#include "../../../services/events/scene/ComponentMediaEvents.hpp"
 
 namespace core::api
 {
@@ -81,6 +82,7 @@ namespace core::api
                 {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeAddFn<events::scene::AddNavmeshAgentComponentCommand>()},
                 {services::ComponentTypeId::Controller, makeAddFn<events::scene::AddControllerComponentCommand>()},
+                {services::ComponentTypeId::Decal, makeAddFn<events::scene::AddDecalComponentCommand>()},
             };
             return map;
         }
@@ -113,6 +115,7 @@ namespace core::api
                 {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeRemoveFn<events::scene::RemoveNavmeshAgentComponentCommand>()},
                 {services::ComponentTypeId::Controller, makeRemoveFn<events::scene::RemoveControllerComponentCommand>()},
+                {services::ComponentTypeId::Decal, makeRemoveFn<events::scene::RemoveDecalComponentCommand>()},
             };
             return map;
         }

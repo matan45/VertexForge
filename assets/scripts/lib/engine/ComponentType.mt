@@ -49,6 +49,7 @@ public class ComponentType {
     public static final string IBL = "IBL";
     public static final string BILLBOARD = "Billboard";
     public static final string TEXT = "Text";
+    public static final string DECAL = "Decal";
 
     // UI components
     public static final string UI_CANVAS = "UICanvas";

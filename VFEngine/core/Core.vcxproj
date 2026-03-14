@@ -108,6 +108,7 @@
     <ClInclude Include="adapters\api\CameraAPI.hpp" />
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
+    <ClInclude Include="adapters\api\DecalAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\FootIKAPI.hpp" />
@@ -208,6 +209,7 @@
     <ClCompile Include="adapters\api\CameraAPI.cpp" />
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />
+    <ClCompile Include="adapters\api\DecalAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\FootIKAPI.cpp" />

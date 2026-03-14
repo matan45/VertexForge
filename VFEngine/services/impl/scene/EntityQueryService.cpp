@@ -127,6 +127,7 @@ namespace services
             COLLECT_CASE(UISlider, UISliderComponent);
             COLLECT_CASE(UIProgressBar, UIProgressBarComponent);
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
+            COLLECT_CASE(Decal, DecalComponent);
         default:
             break;
         }
@@ -192,6 +193,7 @@ namespace services
             HAS_CASE(UISlider, UISliderComponent);
             HAS_CASE(UIProgressBar, UIProgressBarComponent);
             HAS_CASE(RenderTexture, RenderTextureComponent);
+            HAS_CASE(Decal, DecalComponent);
         default:
             return false;
         }
@@ -245,6 +247,7 @@ namespace services
         CHECK_COMP(UISlider, UISliderComponent);
         CHECK_COMP(UIProgressBar, UIProgressBarComponent);
         CHECK_COMP(RenderTexture, RenderTextureComponent);
+        CHECK_COMP(Decal, DecalComponent);
 
 #undef CHECK_COMP
 
