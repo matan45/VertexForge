@@ -274,6 +274,7 @@
     <ClInclude Include="render\ui\UIRenderBufferManager.hpp" />
     <ClInclude Include="render\ui\UIRenderPipeline.hpp" />
     <ClInclude Include="render\ui\UIRenderTypes.hpp" />
+    <ClInclude Include="render\ui\UISliceHelper.hpp" />
     <ClInclude Include="render\ui\UITextBufferManager.hpp" />
     <ClInclude Include="render\ui\UITextPipeline.hpp" />
     <ClInclude Include="render\ui\UITextRenderTypes.hpp" />
