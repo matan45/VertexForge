@@ -299,11 +299,11 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 12> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 13> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
-                "IUIProgressBarListener",
+                "IUIProgressBarListener", "IUIDragDropListener",
                 "IAnimationEventListener",
                 "ISocketAttachmentListener",
                 "IVFXEventListener"

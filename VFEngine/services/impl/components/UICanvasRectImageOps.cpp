@@ -247,6 +247,10 @@ namespace services {
         else
             data.renderTextureSource = EntityHandle::invalid();
         data.renderTextureSourceName = comp.renderTextureSourceName;
+        data.imageType = static_cast<uint8_t>(comp.imageType);
+        data.border = comp.border;
+        data.sourceWidth = comp.sourceWidth;
+        data.sourceHeight = comp.sourceHeight;
         return data;
     }
 
@@ -265,6 +269,10 @@ namespace services {
         comp.texturePath = imageData.texturePath;
         comp.colorTint = imageData.colorTint;
         comp.renderTextureSourceName = imageData.renderTextureSourceName;
+        comp.imageType = static_cast<components::UIImageType>(imageData.imageType);
+        comp.border = imageData.border;
+        comp.sourceWidth = imageData.sourceWidth;
+        comp.sourceHeight = imageData.sourceHeight;
 
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;

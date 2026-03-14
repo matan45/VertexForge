@@ -210,6 +210,29 @@ namespace serialization
                 entity.getComponent<components::UIProgressBarComponent>());
         }
 
+        if (entity.hasComponent<components::UIAnimationComponent>())
+        {
+            componentsJson["uiAnimation"] = serializeUIAnimation(
+                entity.getComponent<components::UIAnimationComponent>());
+        }
+
+        if (entity.hasComponent<components::UIMaskComponent>())
+        {
+            componentsJson["uiMask"] = serializeUIMask(
+                entity.getComponent<components::UIMaskComponent>());
+        }
+
+        if (entity.hasComponent<components::UIDraggableComponent>())
+        {
+            componentsJson["uiDraggable"] = serializeUIDraggable(
+                entity.getComponent<components::UIDraggableComponent>());
+        }
+        if (entity.hasComponent<components::UIDropTargetComponent>())
+        {
+            componentsJson["uiDropTarget"] = serializeUIDropTarget(
+                entity.getComponent<components::UIDropTargetComponent>());
+        }
+
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
             componentsJson["socketAttachment"] = serializeSocketAttachment(
@@ -519,6 +542,29 @@ namespace serialization
         {
             auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
             deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
+        }
+
+        if (componentsJson.contains("uiAnimation"))
+        {
+            auto& animComp = entity.addOrReplaceComponent<components::UIAnimationComponent>();
+            deserializeUIAnimation(componentsJson["uiAnimation"], animComp);
+        }
+
+        if (componentsJson.contains("uiMask"))
+        {
+            auto& maskComp = entity.addOrReplaceComponent<components::UIMaskComponent>();
+            deserializeUIMask(componentsJson["uiMask"], maskComp);
+        }
+
+        if (componentsJson.contains("uiDraggable"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIDraggableComponent>();
+            deserializeUIDraggable(componentsJson["uiDraggable"], comp);
+        }
+        if (componentsJson.contains("uiDropTarget"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIDropTargetComponent>();
+            deserializeUIDropTarget(componentsJson["uiDropTarget"], comp);
         }
 
         if (componentsJson.contains("socketAttachment"))

@@ -42,5 +42,9 @@ namespace controllers::offscreen
         void generateDropdownDrawData(
             entt::registry& registry, const FrameContext& ctx,
             std::vector<render::ui::UIImageRenderData>& drawList);
+
+        void generateDragGhostDrawData(
+            entt::registry& registry, const FrameContext& ctx,
+            std::vector<render::ui::UIImageRenderData>& drawList);
     }
 }

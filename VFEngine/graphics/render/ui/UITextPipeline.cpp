@@ -56,6 +56,7 @@ namespace render::ui
         }
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        if (pipelineStencilTest) device.getLogicalDevice().destroyPipeline(pipelineStencilTest);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
         createRenderPass();
@@ -74,6 +75,7 @@ namespace render::ui
         framebuffers.clear();
 
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
+        if (pipelineStencilTest) dev.destroyPipeline(pipelineStencilTest);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         fontDescriptorSets.clear();
@@ -146,6 +148,8 @@ namespace render::ui
         {
             std::string_view fontPath;
             UITextCharInstance instance;
+            UIStencilOp stencilOp = UIStencilOp::None;
+            uint8_t stencilRef = 0;
         };
 
         std::unordered_map<ScissorKey, std::vector<GlyphEntry>, ScissorKeyHash> scissorMap;
@@ -289,7 +293,8 @@ namespace render::ui
                     inst.color = label.color;
                     inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
 
-                    scissorMap[scissorKey].push_back({label.fontPath, inst});
+                    scissorMap[scissorKey].push_back({label.fontPath, inst,
+                        label.stencilOp, label.stencilRef});
                 }
             }
         }
@@ -302,19 +307,37 @@ namespace render::ui
             UITextScissorGroup group;
             group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
 
-            // Sub-group by font within this scissor group
-            std::unordered_map<std::string_view, std::vector<UITextCharInstance>> fontedInstances;
+            // Sub-group by font and stencil state within this scissor group
+            struct BatchKey {
+                std::string_view fontPath;
+                UIStencilOp stencilOp;
+                uint8_t stencilRef;
+                bool operator==(const BatchKey& o) const {
+                    return fontPath == o.fontPath && stencilOp == o.stencilOp && stencilRef == o.stencilRef;
+                }
+            };
+            struct BatchKeyHash {
+                size_t operator()(const BatchKey& k) const {
+                    size_t h = std::hash<std::string_view>{}(k.fontPath);
+                    h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.stencilOp)) << 1;
+                    h ^= std::hash<uint8_t>{}(k.stencilRef) << 2;
+                    return h;
+                }
+            };
+            std::unordered_map<BatchKey, std::vector<UITextCharInstance>, BatchKeyHash> fontedInstances;
             for (auto& entry : entries)
             {
-                fontedInstances[entry.fontPath].push_back(entry.instance);
+                fontedInstances[{entry.fontPath, entry.stencilOp, entry.stencilRef}].push_back(entry.instance);
             }
 
-            for (auto& [path, instances] : fontedInstances)
+            for (auto& [batchKey, instances] : fontedInstances)
             {
                 UITextFontBatch batch;
-                batch.fontPath = std::string(path);
+                batch.fontPath = std::string(batchKey.fontPath);
                 batch.firstInstance = static_cast<uint32_t>(allInstances.size());
                 batch.instanceCount = static_cast<uint32_t>(instances.size());
+                batch.stencilOp = batchKey.stencilOp;
+                batch.stencilRef = batchKey.stencilRef;
                 group.batches.push_back(std::move(batch));
 
                 allInstances.insert(allInstances.end(), instances.begin(), instances.end());
@@ -355,7 +378,7 @@ namespace render::ui
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        vk::Pipeline currentPipeline = nullptr;
 
         vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
         vk::DeviceSize offsets[] = {0, 0};
@@ -388,6 +411,21 @@ namespace render::ui
 
             for (const auto& batch : group.batches)
             {
+                // Select pipeline: stencil test if stencilOp == Test, otherwise normal
+                vk::Pipeline targetPipeline = (batch.stencilOp == UIStencilOp::Test)
+                    ? pipelineStencilTest : graphicsPipeline;
+
+                if (targetPipeline != currentPipeline)
+                {
+                    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, targetPipeline);
+                    currentPipeline = targetPipeline;
+                }
+
+                if (batch.stencilOp == UIStencilOp::Test)
+                {
+                    commandBuffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, batch.stencilRef);
+                }
+
                 auto it = fontDescriptorSets.find(batch.fontPath);
                 vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                     ? it->second : defaultDescriptorSet;

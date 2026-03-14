@@ -13,6 +13,9 @@ namespace services {
         registerInteractiveHandlers(dispatcher);
         registerDropdownTabsHandlers(dispatcher);
         registerSliderProgressHandlers(dispatcher);
+        registerAnimationHandlers(dispatcher);
+        registerMaskHandlers(dispatcher);
+        registerDragDropHandlers(dispatcher);
     }
 
 }

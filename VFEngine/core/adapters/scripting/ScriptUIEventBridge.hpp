@@ -72,6 +72,14 @@ namespace core
                                          const std::string& entityName,
                                          float newValue = 0.0f, float previousValue = 0.0f);
 
+        void dispatchDragDropCallback(const char* methodName,
+                                      ::services::EntityHandle sourceEntity,
+                                      const std::string& sourceEntityName,
+                                      ::services::EntityHandle targetEntity = {},
+                                      const std::string& targetEntityName = "",
+                                      const std::string& dragTag = "",
+                                      bool wasDropped = false);
+
         ::services::ScriptInterpreter* interpreter;
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
         const std::unordered_map<uint64_t, std::any>& instanceToObject;

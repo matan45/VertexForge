@@ -317,6 +317,11 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
+
+        uint8_t imageType = 0; // 0=Simple, 1=Sliced, 2=Tiled
+        glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom (source pixels)
+        uint32_t sourceWidth = 0;
+        uint32_t sourceHeight = 0;
     };
 
     struct UIScrollData
@@ -536,5 +541,59 @@ namespace services
 
         // Runtime
         float displayValue = 0.0f;
+    };
+
+    // ========== UI Mask ==========
+
+    struct UIMaskData
+    {
+        std::string maskTexturePath;
+        float alphaThreshold = 0.5f;
+        bool showMaskGraphic = false;
+    };
+
+    // ========== UI Drag & Drop ==========
+
+    struct UIDraggableData
+    {
+        float ghostOpacity = 0.5f;
+        glm::vec2 ghostOffset{0.0f, 0.0f};
+        bool constrainToParent = true;
+        std::string dragTag;
+    };
+
+    struct UIDropTargetData
+    {
+        std::string acceptTag;
+        glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f};
+        glm::vec4 rejectColor{1.0f, 0.2f, 0.2f, 0.3f};
+        bool interactable = true;
+    };
+
+    // ========== UI Animation ==========
+
+    struct UIAnimationClipData
+    {
+        uint8_t property = 0;   // UITweenProperty
+        float startValue = 0.0f;
+        float endValue = 1.0f;
+        float duration = 1.0f;
+        float delay = 0.0f;
+        uint8_t easing = 0;     // UIEasingFunction
+        uint8_t loopMode = 0;   // UIAnimationLoopMode
+    };
+
+    struct UIAnimationNodeData
+    {
+        uint8_t type = 0;       // UIAnimationNodeType
+        UIAnimationClipData clip;
+        std::vector<UIAnimationNodeData> children;
+        uint8_t loopMode = 0;   // UIAnimationLoopMode
+    };
+
+    struct UIAnimationData
+    {
+        UIAnimationNodeData rootNode;
+        bool autoPlay = false;
     };
 }

@@ -224,6 +224,17 @@ namespace serialization
         static json serializeDecal(const components::DecalComponent& decal);
         static void deserializeDecal(const json& j, components::DecalComponent& decal);
 
+        static json serializeUIAnimation(const components::UIAnimationComponent& anim);
+        static void deserializeUIAnimation(const json& j, components::UIAnimationComponent& anim);
+
+        static json serializeUIMask(const components::UIMaskComponent& mask);
+        static void deserializeUIMask(const json& j, components::UIMaskComponent& mask);
+
+        static json serializeUIDraggable(const components::UIDraggableComponent& comp);
+        static void deserializeUIDraggable(const json& j, components::UIDraggableComponent& comp);
+        static json serializeUIDropTarget(const components::UIDropTargetComponent& comp);
+        static void deserializeUIDropTarget(const json& j, components::UIDropTargetComponent& comp);
+
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
 

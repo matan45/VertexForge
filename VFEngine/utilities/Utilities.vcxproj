@@ -133,6 +133,7 @@
     <ClInclude Include="material\MaterialManager.hpp" />
     <ClInclude Include="material\MaterialTypes.hpp" />
     <ClInclude Include="math\BVH.hpp" />
+    <ClInclude Include="math\EasingFunctions.hpp" />
     <ClInclude Include="math\Frustum.hpp" />
     <ClInclude Include="math\LightBounds.hpp" />
     <ClInclude Include="math\MathHelper.hpp" />

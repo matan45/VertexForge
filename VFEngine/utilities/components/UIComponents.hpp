@@ -30,12 +30,24 @@ namespace components
         glm::vec2 anchoredPosition{0.0f, 0.0f};
     };
 
+    enum class UIImageType : uint8_t
+    {
+        Simple,
+        Sliced,
+        Tiled
+    };
+
     struct UIImageComponent
     {
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
+
+        UIImageType imageType = UIImageType::Simple;
+        glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom in source texture pixels
+        uint32_t sourceWidth = 0;
+        uint32_t sourceHeight = 0;
     };
 
     enum class ScrollbarVisibility : uint8_t
@@ -391,6 +403,118 @@ namespace components
 
         // Runtime state (NOT serialized)
         float displayValue = 0.0f;
+        bool completedFired = false;
+    };
+
+    // ========== UI Animation / Tweening ==========
+
+    enum class UIEasingFunction : uint8_t
+    {
+        Linear,
+        EaseIn,
+        EaseOut,
+        EaseInOut,
+        Bounce,
+        Elastic
+    };
+
+    enum class UIAnimationLoopMode : uint8_t
+    {
+        Once,
+        Loop,
+        PingPong
+    };
+
+    enum class UITweenProperty : uint8_t
+    {
+        Opacity,
+        PositionX,
+        PositionY,
+        ScaleX,
+        ScaleY,
+        Rotation,
+        ColorR,
+        ColorG,
+        ColorB,
+        ColorA
+    };
+
+    enum class UIAnimationNodeType : uint8_t
+    {
+        Clip,
+        Parallel,
+        Sequence
+    };
+
+    struct UIAnimationClip
+    {
+        UITweenProperty property = UITweenProperty::Opacity;
+        float startValue = 0.0f;
+        float endValue = 1.0f;
+        float duration = 1.0f;
+        float delay = 0.0f;
+        UIEasingFunction easing = UIEasingFunction::Linear;
+        UIAnimationLoopMode loopMode = UIAnimationLoopMode::Once;
+    };
+
+    struct UIAnimationNode
+    {
+        UIAnimationNodeType type = UIAnimationNodeType::Clip;
+        UIAnimationClip clip;
+        std::vector<UIAnimationNode> children;
+        UIAnimationLoopMode loopMode = UIAnimationLoopMode::Once;
+    };
+
+    struct UIMaskComponent
+    {
+        std::string maskTexturePath;  // alpha texture used as mask shape
+        float alphaThreshold = 0.5f;
+        bool showMaskGraphic = false; // render the mask shape visually
+    };
+
+    struct UIDraggableComponent
+    {
+        // Config (serialized)
+        float ghostOpacity = 0.5f;
+        glm::vec2 ghostOffset{0.0f, 0.0f};
+        bool constrainToParent = true;
+        std::string dragTag;
+
+        // Runtime state (NOT serialized)
+        bool isDragging = false;
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
+        glm::vec2 dragStartEntityPos{0.0f, 0.0f};
+        glm::vec2 currentGhostPos{0.0f, 0.0f};
+        glm::vec2 ghostSize{0.0f, 0.0f};
+
+        // Global singleton: only one entity can be dragged at a time
+        static inline entt::entity activeDragEntity = entt::null;
+    };
+
+    struct UIDropTargetComponent
+    {
+        // Config (serialized)
+        std::string acceptTag;                              // empty = accept all
+        glm::vec4 highlightColor{0.3f, 0.7f, 1.0f, 0.3f}; // overlay when valid drag hovers
+        glm::vec4 rejectColor{1.0f, 0.2f, 0.2f, 0.3f};    // overlay when incompatible drag hovers
+        bool interactable = true;
+
+        // Runtime state (NOT serialized)
+        bool isHighlighted = false;
+        bool isRejected = false;  // true when hovered by incompatible drag
+    };
+
+    struct UIAnimationComponent
+    {
+        // Config (serialized)
+        UIAnimationNode rootNode;
+        bool autoPlay = false;
+
+        // Runtime state (NOT serialized)
+        bool isPlaying = false;
+        bool isPaused = false;
+        float elapsedTime = 0.0f;
+        bool startedFired = false;
         bool completedFired = false;
     };
 }

@@ -219,13 +219,12 @@ namespace core
 		depthStencil.depthWriteEnable = config.depthWriteEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthCompareOp = config.depthCompareOp;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
-		depthStencil.stencilTestEnable = VK_FALSE;
+		depthStencil.stencilTestEnable = config.stencilTestEnable ? VK_TRUE : VK_FALSE;
+		depthStencil.front = config.stencilFront;
+		depthStencil.back = config.stencilBack;
 
 		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-		                                      vk::ColorComponentFlagBits::eG |
-		                                      vk::ColorComponentFlagBits::eB |
-		                                      vk::ColorComponentFlagBits::eA;
+		colorBlendAttachment.colorWriteMask = config.colorWriteMask;
 
 		if (config.blendEnable)
 		{

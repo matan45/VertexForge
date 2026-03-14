@@ -23,6 +23,10 @@ namespace render::ui
         std::string texturePath;
         uint32_t firstInstance = 0;
         uint32_t instanceCount = 0;
+        UIStencilOp stencilOp = UIStencilOp::None;
+        uint8_t stencilRef = 0;
+        bool discardColor = false;
+        float alphaThreshold = 0.0f;
     };
 
     struct UIScissorGroup
@@ -43,7 +47,11 @@ namespace render::ui
         std::shared_ptr<core::Shader> uiShader;
 
         vk::RenderPass renderPass;
-        vk::Pipeline graphicsPipeline;
+        vk::Pipeline pipelineNormal;
+        vk::Pipeline pipelineStencilIncNoColor;
+        vk::Pipeline pipelineStencilIncColor;
+        vk::Pipeline pipelineStencilTest;
+        vk::Pipeline pipelineStencilDecNoColor;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;

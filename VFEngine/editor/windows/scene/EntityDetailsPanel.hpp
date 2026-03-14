@@ -36,6 +36,10 @@
 #include "../details/UITabsDrawer.hpp"
 #include "../details/UISliderDrawer.hpp"
 #include "../details/UIProgressBarDrawer.hpp"
+#include "../details/UIAnimationDrawer.hpp"
+#include "../details/UIMaskDrawer.hpp"
+#include "../details/UIDraggableDrawer.hpp"
+#include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
 #include "../details/NavmeshAgentDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
@@ -88,6 +92,10 @@ namespace windows
         details::UITabsDrawer uiTabsDrawer;
         details::UISliderDrawer uiSliderDrawer;
         details::UIProgressBarDrawer uiProgressBarDrawer;
+        details::UIAnimationDrawer uiAnimationDrawer;
+        details::UIMaskDrawer uiMaskDrawer;
+        details::UIDraggableDrawer uiDraggableDrawer;
+        details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;
         details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::ControllerDrawer controllerDrawer;

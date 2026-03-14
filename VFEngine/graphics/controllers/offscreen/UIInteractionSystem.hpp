@@ -16,11 +16,15 @@ namespace controllers::offscreen
         void processDropdownInteraction(const FrameContext& ctx);
         void processTabsInteraction(const FrameContext& ctx);
         void processSliderInteraction(const FrameContext& ctx);
+        void processDragDropInteraction(const FrameContext& ctx);
 
         entt::entity getFocusedTextInput() const { return focusedTextInput; }
 
     private:
         entt::entity focusedTextInput = entt::null;
+
+        // Drag-drop tag matching
+        static bool tagMatches(const std::string& acceptTag, const std::string& dragTag);
 
         // Text input sub-methods
         void textInputHitTest(const FrameContext& ctx, entt::entity& hoveredTextInput);

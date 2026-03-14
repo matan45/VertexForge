@@ -2,31 +2,6 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 
-namespace {
-    using json = nlohmann::json;
-
-    void readVec4(const json& j, const std::string& key, glm::vec4& out) {
-        if (j.contains(key) && j[key].is_array() && j[key].size() >= 4) {
-            out = glm::vec4(j[key][0].get<float>(), j[key][1].get<float>(),
-                           j[key][2].get<float>(), j[key][3].get<float>());
-        }
-    }
-
-    void readVec2(const json& j, const std::string& key, glm::vec2& out) {
-        if (j.contains(key) && j[key].is_array() && j[key].size() >= 2) {
-            out = glm::vec2(j[key][0].get<float>(), j[key][1].get<float>());
-        }
-    }
-
-    json writeVec4(const glm::vec4& v) {
-        return json::array({v.x, v.y, v.z, v.w});
-    }
-
-    json writeVec2(const glm::vec2& v) {
-        return json::array({v.x, v.y});
-    }
-}
-
 namespace serialization {
 
     // ---- Canvas ----
@@ -85,6 +60,19 @@ namespace serialization {
         {
             j["renderTextureSourceName"] = image.renderTextureSourceName;
         }
+        if (image.imageType != components::UIImageType::Simple)
+        {
+            j["imageType"] = static_cast<int>(image.imageType);
+        }
+        if (image.border.x != 0.0f || image.border.y != 0.0f || image.border.z != 0.0f || image.border.w != 0.0f)
+        {
+            j["border"] = writeVec4(image.border);
+        }
+        if (image.sourceWidth > 0 && image.sourceHeight > 0)
+        {
+            j["sourceWidth"] = image.sourceWidth;
+            j["sourceHeight"] = image.sourceHeight;
+        }
         return j;
     }
 
@@ -94,6 +82,10 @@ namespace serialization {
         readVec4(j, "colorTint", image.colorTint);
         image.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         image.renderTextureSource = entt::null; // Resolved post-load
+        image.imageType = static_cast<components::UIImageType>(j.value("imageType", 0));
+        readVec4(j, "border", image.border);
+        image.sourceWidth = j.value("sourceWidth", 0u);
+        image.sourceHeight = j.value("sourceHeight", 0u);
     }
 
     // ---- ScaleMode enum ----

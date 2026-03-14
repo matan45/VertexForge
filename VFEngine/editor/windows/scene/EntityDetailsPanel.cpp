@@ -120,6 +120,10 @@ namespace windows
         bool hasUITabs = uiTabsDrawer.draw(handle);
         bool hasUISlider = uiSliderDrawer.draw(handle);
         bool hasUIProgressBar = uiProgressBarDrawer.draw(handle);
+        bool hasUIAnimation = uiAnimationDrawer.draw(handle);
+        bool hasUIMask = uiMaskDrawer.draw(handle);
+        bool hasUIDraggable = uiDraggableDrawer.draw(handle);
+        bool hasUIDropTarget = uiDropTargetDrawer.draw(handle);
 
         addComponentPopup.draw({handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                 hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
@@ -129,7 +133,8 @@ namespace windows
                                 hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
                                 hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent,
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
-                                hasDecal});
+                                hasDecal, hasUIAnimation, hasUIMask,
+                                hasUIDraggable, hasUIDropTarget});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

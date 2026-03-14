@@ -5,6 +5,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/tools/UICanvasImageRenderer.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
+#include "../../render/ui/UISliceHelper.hpp"
 #include "../../render/ui/UITextRenderTypes.hpp"
 #include "../../render/text/TextTypes.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -41,6 +42,27 @@ namespace controllers::offscreen
             float localCY = cy / canvas.referenceHeight - 0.5f;
             float normW = w / canvas.referenceWidth;
             float normH = h / canvas.referenceHeight;
+
+            glm::mat4 canvasScaled = worldMatrix
+                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+
+            return canvasScaled
+                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
+        }
+
+        // Compute model matrix for an arbitrary sub-rect within the canvas (in canvas pixel coords)
+        glm::mat4 computeCanvasSubRectModelMatrix(
+            const components::UICanvasComponent& canvas,
+            const glm::mat4& worldMatrix,
+            float patchCX, float patchCY, float patchW, float patchH)
+        {
+            float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
+            float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
+            float localCX = patchCX / canvas.referenceWidth - 0.5f;
+            float localCY = patchCY / canvas.referenceHeight - 0.5f;
+            float normW = patchW / canvas.referenceWidth;
+            float normH = patchH / canvas.referenceHeight;
 
             glm::mat4 canvasScaled = worldMatrix
                 * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
@@ -99,6 +121,23 @@ namespace controllers::offscreen
         }
 
         // --- Screen-space labels: emit UILabel entities ---
+        // Count mask depth for a label entity by walking up parent chain
+        uint8_t computeStencilDepthForEntity(entt::registry& registry, entt::entity entity)
+        {
+            uint8_t depth = 0;
+            entt::entity current = entity;
+            while (registry.all_of<components::ParentComponent>(current))
+            {
+                entt::entity parent = registry.get<components::ParentComponent>(current).parent;
+                if (parent == entt::null || !registry.valid(parent))
+                    break;
+                if (registry.all_of<components::UIMaskComponent>(parent))
+                    depth++;
+                current = parent;
+            }
+            return depth;
+        }
+
         void emitLabelEntities(
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
@@ -126,6 +165,9 @@ namespace controllers::offscreen
                 auto [scrollAncestor, scissor] = findScrollInfo(registry, entity, scrollContainers);
                 applyScrollOffset(rect, scrollAncestor, scrollContainers);
 
+                // Determine stencil depth for this label
+                uint8_t stencilDepth = computeStencilDepthForEntity(registry, entity);
+
                 render::ui::UITextRenderData renderData;
                 renderData.fontPath = labelComp.fontPath;
                 renderData.text = labelComp.text;
@@ -140,6 +182,9 @@ namespace controllers::offscreen
                 renderData.position = glm::vec2(rect.x, rect.y);
                 renderData.size = glm::vec2(rect.w, rect.h);
                 renderData.scissorRect = scissor;
+                renderData.stencilOp = (stencilDepth > 0)
+                    ? render::ui::UIStencilOp::Test : render::ui::UIStencilOp::None;
+                renderData.stencilRef = stencilDepth;
                 drawList.push_back(std::move(renderData));
             }
         }
@@ -307,14 +352,15 @@ namespace controllers::offscreen
     // Public dispatchers
     // =================================================================
 
-    void UIFrameBuilder::prepareUIImages(const FrameContext& ctx, UIInteractionSystem& interactionSystem)
+    void UIFrameBuilder::prepareUIImages(const FrameContext& ctx, UIInteractionSystem& interactionSystem,
+                                          UIAnimationSystem& animationSystem)
     {
         auto* renderHandler = ctx.renderHandler;
 
         if (ctx.playModeActive)
         {
             renderHandler->setUICanvasImageDrawList({});
-            prepareUIImagesScreenSpace(ctx, interactionSystem);
+            prepareUIImagesScreenSpace(ctx, interactionSystem, animationSystem);
         }
         else
         {
@@ -368,12 +414,60 @@ namespace controllers::offscreen
             const auto& worldTransform = registry.get<components::WorldTransformComponent>(canvasInfo.canvasEntity);
             const auto& rectComp = view.get<components::UIRectComponent>(entity);
 
-            render::mesh::UICanvasImageRenderData renderData;
-            renderData.modelMatrix = computeCanvasImageModelMatrix(
-                *canvasInfo.canvas, worldTransform.worldMatrix, rectComp);
-            renderData.texturePath = imageComp.texturePath;
-            renderData.colorTint = imageComp.colorTint;
-            drawList.push_back(std::move(renderData));
+            bool useSlice = imageComp.imageType != components::UIImageType::Simple
+                && imageComp.sourceWidth > 0 && imageComp.sourceHeight > 0
+                && (imageComp.border.x > 0.0f || imageComp.border.y > 0.0f
+                    || imageComp.border.z > 0.0f || imageComp.border.w > 0.0f);
+
+            if (!useSlice)
+            {
+                render::mesh::UICanvasImageRenderData renderData;
+                renderData.modelMatrix = computeCanvasImageModelMatrix(
+                    *canvasInfo.canvas, worldTransform.worldMatrix, rectComp);
+                renderData.texturePath = imageComp.texturePath;
+                renderData.colorTint = imageComp.colorTint;
+                drawList.push_back(std::move(renderData));
+            }
+            else
+            {
+                // Compute element pixel rect in canvas space
+                const auto& canvas = *canvasInfo.canvas;
+                float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
+                float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
+                float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
+                float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
+                float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+                float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+                float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+                float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+                float elemLeft = cx - w * 0.5f;
+                float elemTop = cy - h * 0.5f;
+
+                // Generate screen-space slice data, then convert to world-space model matrices
+                std::vector<render::ui::UIImageRenderData> sliceData;
+                render::ui::generateSlicedInstances(
+                    glm::vec2(elemLeft, elemTop), glm::vec2(w, h),
+                    imageComp.border,
+                    imageComp.sourceWidth, imageComp.sourceHeight,
+                    imageComp.colorTint, glm::vec4(0.0f),
+                    imageComp.texturePath, imageComp.imageType,
+                    sliceData);
+
+                for (const auto& slice : sliceData)
+                {
+                    float patchCX = slice.position.x + slice.size.x * 0.5f;
+                    float patchCY = slice.position.y + slice.size.y * 0.5f;
+
+                    render::mesh::UICanvasImageRenderData renderData;
+                    renderData.modelMatrix = computeCanvasSubRectModelMatrix(
+                        canvas, worldTransform.worldMatrix,
+                        patchCX, patchCY, slice.size.x, slice.size.y);
+                    renderData.texturePath = imageComp.texturePath;
+                    renderData.colorTint = imageComp.colorTint;
+                    renderData.uvRect = slice.uvRect;
+                    drawList.push_back(std::move(renderData));
+                }
+            }
         }
 
         if (!drawList.empty())

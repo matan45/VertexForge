@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UIRenderTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
@@ -78,5 +79,9 @@ namespace render::ui
         uint8_t overflow = 0;             // 0=Overflow, 1=Clip, 2=Ellipsis
         bool wordWrap = true;
         glm::vec4 scissorRect{0.0f};     // x, y, width, height (0,0,0,0 = full viewport)
+
+        // Stencil masking
+        UIStencilOp stencilOp = UIStencilOp::None;
+        uint8_t stencilRef = 0;
     };
 }

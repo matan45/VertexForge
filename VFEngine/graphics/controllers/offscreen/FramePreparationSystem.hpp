@@ -2,6 +2,7 @@
 #include "DebugFrameBuilder.hpp"
 #include "UIFrameBuilder.hpp"
 #include "UIInteractionSystem.hpp"
+#include "UIAnimationSystem.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
@@ -62,6 +63,7 @@ namespace controllers::offscreen
         DebugFrameBuilder debugBuilder;
         UIFrameBuilder uiFrameBuilder;
         UIInteractionSystem uiInteraction;
+        UIAnimationSystem uiAnimation;
 
         const render::mesh::ExtractedPBRValues* getCachedPBRValues(const std::string& materialPath);
         void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath);
@@ -92,7 +94,7 @@ namespace controllers::offscreen
         void prepareClusterDebug(const FrameContext& ctx) { debugBuilder.prepareClusterDebug(ctx); }
         void prepareUICanvasOutlines(const FrameContext& ctx) { debugBuilder.prepareUICanvasOutlines(ctx); }
 
-        void prepareUIImages(const FrameContext& ctx) { uiFrameBuilder.prepareUIImages(ctx, uiInteraction); }
+        void prepareUIImages(const FrameContext& ctx) { uiFrameBuilder.prepareUIImages(ctx, uiInteraction, uiAnimation); }
         void prepareUILabels(const FrameContext& ctx) { uiFrameBuilder.prepareUILabels(ctx); }
 
         void invalidateMaterialCache(const std::string& materialPath);

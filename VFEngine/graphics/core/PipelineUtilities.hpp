@@ -56,6 +56,14 @@ namespace core
 		vk::BlendFactor srcAlphaBlendFactor = vk::BlendFactor::eOne;
 		vk::BlendFactor dstAlphaBlendFactor = vk::BlendFactor::eZero;
 
+		bool stencilTestEnable = false;
+		vk::StencilOpState stencilFront{};
+		vk::StencilOpState stencilBack{};
+		vk::ColorComponentFlags colorWriteMask = vk::ColorComponentFlagBits::eR |
+		                                         vk::ColorComponentFlagBits::eG |
+		                                         vk::ColorComponentFlagBits::eB |
+		                                         vk::ColorComponentFlagBits::eA;
+
 		std::vector<vk::DynamicState> dynamicStates;
 	};
 
