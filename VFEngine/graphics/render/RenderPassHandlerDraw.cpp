@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "RenderPassHandler.hpp"
+#include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
 #include "ClearColor.hpp"
@@ -362,6 +363,13 @@ namespace render
         }
 
         meshPipeline->endRenderPass(commandBuffer);
+
+        // Decal pass: project decals onto scene geometry
+        if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
+        {
+            decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
+            decalPipeline->render(commandBuffer, imageIndex);
+        }
 
         if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
         {

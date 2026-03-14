@@ -258,6 +258,12 @@ namespace serialization
                 entity.getComponent<components::BehaviorTreeComponent>());
         }
 
+        if (entity.hasComponent<components::DecalComponent>())
+        {
+            componentsJson["decal"] = serializeDecal(
+                entity.getComponent<components::DecalComponent>());
+        }
+
         return componentsJson;
     }
 
@@ -561,6 +567,12 @@ namespace serialization
         {
             auto& btComp = entity.addOrReplaceComponent<components::BehaviorTreeComponent>();
             deserializeBehaviorTree(componentsJson["behaviorTree"], btComp);
+        }
+
+        if (componentsJson.contains("decal"))
+        {
+            auto& decalComp = entity.addOrReplaceComponent<components::DecalComponent>();
+            deserializeDecal(componentsJson["decal"], decalComp);
         }
     }
 

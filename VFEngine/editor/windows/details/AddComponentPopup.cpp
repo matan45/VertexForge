@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
+#include "events/scene/ComponentMediaEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
@@ -53,7 +54,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
-                           c.hasIK && c.hasBehaviorTree;
+                           c.hasIK && c.hasBehaviorTree && c.hasDecal;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -191,6 +192,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Renders camera view to a texture (requires Camera component)");
+            }
+        }
+
+        if (!c.hasDecal)
+        {
+            if (ImGui::Selectable("  Decal"))
+            {
+                events::scene::AddDecalComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Projected decal onto scene geometry (footprints, bullet holes, etc.)");
             }
         }
     }

@@ -1,4 +1,6 @@
 #include "FramePreparationSystem.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include "SceneBVHManager.hpp"
 #include "LightBVHManager.hpp"
 #include "CameraController.hpp"
@@ -551,5 +553,55 @@ namespace controllers::offscreen
 
         renderHandler->setBillboardDrawList(billboardFuture.get());
         renderHandler->setTextDrawList(textFuture.get());
+
+        // Prepare decals (lightweight - no pipeline init needed, DecalPipeline is always available)
+        prepareDecals(ctx);
+    }
+
+    void FramePreparationSystem::prepareDecals(const FrameContext& ctx)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::DecalComponent, components::WorldTransformComponent>();
+
+        std::vector<services::DecalRenderData> decalDrawList;
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& decal = view.get<components::DecalComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Build world matrix with half extents baked into scale
+            glm::mat4 worldMatrix = worldTransform.worldMatrix;
+            glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), decal.halfExtents);
+            glm::mat4 decalWorldMatrix = worldMatrix * scaleMatrix;
+
+            services::DecalRenderData renderData;
+            renderData.worldMatrix = decalWorldMatrix;
+            renderData.inverseWorldMatrix = glm::inverse(decalWorldMatrix);
+            renderData.halfExtents = decal.halfExtents;
+            renderData.albedoTexture = decal.albedoTexture;
+            renderData.normalTexture = decal.normalTexture;
+            renderData.ormTexture = decal.ormTexture;
+            renderData.color = decal.color;
+            renderData.angleFadeStart = decal.angleFadeStart;
+            renderData.angleFadeEnd = decal.angleFadeEnd;
+            renderData.edgeFalloff = decal.edgeFalloff;
+            renderData.sortPriority = decal.sortPriority;
+            renderData.modifyNormals = decal.modifyNormals;
+            renderData.normalStrength = decal.normalStrength;
+
+            decalDrawList.push_back(std::move(renderData));
+        }
+
+        ctx.renderHandler->setDecalDrawList(decalDrawList);
     }
 }

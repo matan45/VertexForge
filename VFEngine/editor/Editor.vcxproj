@@ -177,6 +177,7 @@
     <ClInclude Include="windows\details\CameraDrawer.hpp" />
     <ClInclude Include="windows\details\ColliderDrawer.hpp" />
     <ClInclude Include="windows\details\ControllerDrawer.hpp" />
+    <ClInclude Include="windows\details\DecalDrawer.hpp" />
     <ClInclude Include="windows\details\DirectionalLightDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\IKDrawer.hpp" />
@@ -317,6 +318,7 @@
     <ClCompile Include="windows\details\CameraDrawer.cpp" />
     <ClCompile Include="windows\details\ColliderDrawer.cpp" />
     <ClCompile Include="windows\details\ControllerDrawer.cpp" />
+    <ClCompile Include="windows\details\DecalDrawer.cpp" />
     <ClCompile Include="windows\details\DirectionalLightDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\IKDrawer.cpp" />

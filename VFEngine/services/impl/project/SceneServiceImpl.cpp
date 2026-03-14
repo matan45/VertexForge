@@ -14,6 +14,7 @@
 #include "../components/LightComponentService.hpp"
 #include "../components/UIComponentService.hpp"
 #include "../components/BakeInfoComponentService.hpp"
+#include "../components/DecalComponentService.hpp"
 #include "../scene/HierarchyService.hpp"
 #include "../scene/EntityQueryService.hpp"
 #include "../scene/TransformComponentService.hpp"
@@ -43,6 +44,7 @@ namespace services
         , lightService(std::make_unique<LightComponentService>())
         , uiService(std::make_unique<UIComponentService>(sceneGraph))
         , bakeInfoService(std::make_unique<BakeInfoComponentService>())
+        , decalService(std::make_unique<DecalComponentService>(sceneGraph))
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
         , transformService(std::make_unique<TransformComponentService>(sceneGraph))
@@ -78,6 +80,7 @@ namespace services
         lightService->registerEventHandlers(dispatcher);
         uiService->registerEventHandlers(dispatcher);
         bakeInfoService->registerEventHandlers(dispatcher);
+        decalService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);

@@ -211,6 +211,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // Decal Component Events
+    // ============================================
+
+    struct AddDecalComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddDecalComponent"; }
+    };
+
+    struct RemoveDecalComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveDecalComponent"; }
+    };
+
+    struct SetDecalDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::DecalData decalData;
+
+        std::string_view getName() const override { return "SetDecalData"; }
+    };
+
+    struct HasDecalComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasDecalComponent"; }
+    };
+
+    struct GetDecalDataQuery : IQuery<std::optional<services::DecalData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetDecalData"; }
+    };
+
+    // ============================================
     // RenderTexture Component Events
     // ============================================
 

@@ -6,6 +6,7 @@
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/text/TextTypes.hpp"
+#include "../../../services/providers/render/IDecalRenderProvider.hpp"
 #include <string>
 #include <functional>
 #include <unordered_map>
@@ -79,6 +80,7 @@ namespace controllers::offscreen
     private:
         std::vector<render::billboard::BillboardRenderData> gatherBillboardData(const FrameContext& ctx);
         std::vector<render::text::TextRenderData> gatherTextData(const FrameContext& ctx);
+        void prepareDecals(const FrameContext& ctx);
 
     public:
 

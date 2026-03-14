@@ -96,6 +96,7 @@ namespace windows
         bool hasRenderTexture = renderTextureDrawer.draw(handle);
         bool hasIK = ikDrawer.draw(handle);
         bool hasBehaviorTree = behaviorTreeDrawer.draw(handle);
+        bool hasDecal = decalDrawer.draw(handle);
 
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
@@ -127,7 +128,8 @@ namespace windows
                                 hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
                                 hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
                                 hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent,
-                                hasRenderTexture, hasController, hasIK, hasBehaviorTree});
+                                hasRenderTexture, hasController, hasIK, hasBehaviorTree,
+                                hasDecal});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

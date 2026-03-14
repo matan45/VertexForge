@@ -6,6 +6,7 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/RenderHookContext.hpp"
+#include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -42,6 +43,11 @@ namespace render::postprocess
 namespace render::transparency
 {
     class WBOITPipeline;
+}
+
+namespace render::decal
+{
+    class DecalPipeline;
 }
 
 namespace render::volumetric
@@ -110,6 +116,9 @@ namespace render
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
+
+        std::unique_ptr<decal::DecalPipeline> decalPipeline;
+        bool decalRenderingEnabled = true;
 
         core::OffscreenResources& offscreenResources;
 
@@ -313,6 +322,9 @@ namespace render
         void setTerrainShadowLOD(uint32_t lod);
 
         void setBillboardRenderingEnabled(bool enabled);
+
+        void setDecalRenderingEnabled(bool enabled);
+        void setDecalDrawList(const std::vector<services::DecalRenderData>& decals);
 
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);

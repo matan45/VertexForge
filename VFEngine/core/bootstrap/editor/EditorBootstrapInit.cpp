@@ -25,6 +25,7 @@
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
+#include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
@@ -68,6 +69,7 @@ namespace core
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
+        decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
@@ -76,6 +78,7 @@ namespace core
 
         // Wire adapters to offscreen controller
         billboardRenderAdapter->setOffScreenController(offScreen.get());
+        decalRenderAdapter->setOffScreenController(offScreen.get());
         lightStreamingAdapter->setOffScreenController(offScreen.get());
         giAdapter->setOffScreenController(offScreen.get());
         audioAdapter->init();
