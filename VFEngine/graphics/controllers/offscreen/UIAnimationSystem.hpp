@@ -24,7 +24,7 @@ namespace controllers::offscreen
             std::vector<NodePlaybackState> children;
         };
 
-        std::unordered_map<uint32_t, NodePlaybackState> playbackStates;
+        std::unordered_map<entt::entity, NodePlaybackState> playbackStates;
 
         bool advanceNode(const components::UIAnimationNode& node, NodePlaybackState& state,
                          float dt, entt::registry& registry, entt::entity entity);

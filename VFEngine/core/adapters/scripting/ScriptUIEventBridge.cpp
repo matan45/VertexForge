@@ -266,6 +266,7 @@ namespace core
         const std::string& dragTag,
         bool wasDropped)
     {
+        // Safe to capture methodName (const char*) by reference: dispatchToListeners is synchronous
         dispatchToListeners("IUIDragDropListener", methodName, [&]()
         {
             std::string_view method(methodName);

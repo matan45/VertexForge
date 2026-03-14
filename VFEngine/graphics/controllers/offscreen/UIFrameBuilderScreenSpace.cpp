@@ -206,6 +206,7 @@ namespace controllers::offscreen
                 && (imageComp.border.x > 0.0f || imageComp.border.y > 0.0f
                     || imageComp.border.z > 0.0f || imageComp.border.w > 0.0f))
             {
+                size_t preSliceCount = drawList.size();
                 render::ui::generateSlicedInstances(
                     glm::vec2(rect.x, rect.y), glm::vec2(rect.w, rect.h),
                     imageComp.border,
@@ -216,7 +217,11 @@ namespace controllers::offscreen
                 // Apply stencil to sliced instances
                 if (stencilOp != render::ui::UIStencilOp::None)
                 {
-                    // Not typical for sliced images to be masks, but set stencil on recently added entries
+                    for (size_t i = preSliceCount; i < drawList.size(); i++)
+                    {
+                        drawList[i].stencilOp = stencilOp;
+                        drawList[i].stencilRef = stencilRef;
+                    }
                 }
             }
             else
@@ -374,7 +379,7 @@ namespace controllers::offscreen
             std::vector<render::ui::UIImageRenderData>& drawList)
         {
             // Check if any UIMaskComponent exists - if so, use hierarchy traversal
-            bool hasMasks = !registry.view<components::UIMaskComponent>().empty();
+            bool hasMasks = registry.storage<components::UIMaskComponent>().size() > 0;
 
             if (hasMasks)
             {

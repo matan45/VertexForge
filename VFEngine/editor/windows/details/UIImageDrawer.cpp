@@ -132,12 +132,19 @@ namespace windows::details
                     uint32_t w = 0, h = 0;
                     file.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
                     file.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
-                    file.close();
-
-                    data.texturePath = path;
-                    data.sourceWidth = w;
-                    data.sourceHeight = h;
-                    changed = true;
+                    if (!file.good())
+                    {
+                        vfLogWarning("Failed to read .vfImage header (file too short): {}", path);
+                        file.close();
+                    }
+                    else
+                    {
+                        file.close();
+                        data.texturePath = path;
+                        data.sourceWidth = w;
+                        data.sourceHeight = h;
+                        changed = true;
+                    }
                 }
                 else
                 {
@@ -193,8 +200,12 @@ namespace windows::details
         if (data.imageType != 0) // Sliced or Tiled
         {
             // Auto-detect dimensions if texture exists but dimensions are missing (old scenes)
-            if ((data.sourceWidth == 0 || data.sourceHeight == 0) && !data.texturePath.empty())
+            // Only attempt the read once per texture path to avoid file I/O every frame
+            static std::string lastAutoReadPath;
+            if ((data.sourceWidth == 0 || data.sourceHeight == 0) && !data.texturePath.empty()
+                && data.texturePath != lastAutoReadPath)
             {
+                lastAutoReadPath = data.texturePath;
                 std::ifstream texFile(data.texturePath, std::ios::binary);
                 if (texFile.good())
                 {
@@ -202,8 +213,9 @@ namespace windows::details
                     uint32_t w = 0, h = 0;
                     texFile.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
                     texFile.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
+                    bool readOk = texFile.good();
                     texFile.close();
-                    if (w > 0 && h > 0)
+                    if (readOk && w > 0 && h > 0)
                     {
                         data.sourceWidth = w;
                         data.sourceHeight = h;

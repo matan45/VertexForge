@@ -153,6 +153,13 @@ namespace windows::details
 
     bool UIAnimationDrawer::drawNode(services::UIAnimationNodeData& node, int depth, int& nodeId)
     {
+        static constexpr int MAX_NODE_DEPTH = 32;
+        if (depth >= MAX_NODE_DEPTH)
+        {
+            ImGui::TextDisabled("Max nesting depth reached");
+            return false;
+        }
+
         bool changed = false;
         int currentNodeId = nodeId++;
 
@@ -163,7 +170,7 @@ namespace windows::details
 
         // Node type combo
         ImGui::SetNextItemWidth(120.0f);
-        if (ImGui::Combo("Node Type", &currentType, nodeTypeNames, 3))
+        if (ImGui::Combo("Node Type", &currentType, nodeTypeNames, IM_ARRAYSIZE(nodeTypeNames)))
         {
             node.type = static_cast<uint8_t>(currentType);
             changed = true;
@@ -179,7 +186,7 @@ namespace windows::details
             const char* loopModeNames[] = {"Once", "Loop", "PingPong"};
             int currentLoop = static_cast<int>(node.loopMode);
             ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::Combo("Loop Mode##Node", &currentLoop, loopModeNames, 3))
+            if (ImGui::Combo("Loop Mode##Node", &currentLoop, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
             {
                 node.loopMode = static_cast<uint8_t>(currentLoop);
                 changed = true;
@@ -225,7 +232,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        ImGui::PushID(nodeId + 10000);
+        ImGui::PushID("clip");
 
         const char* propertyNames[] = {
             "Opacity", "PositionX", "PositionY", "ScaleX", "ScaleY",
@@ -233,7 +240,7 @@ namespace windows::details
         };
         int currentProp = static_cast<int>(clip.property);
         ImGui::SetNextItemWidth(120.0f);
-        if (ImGui::Combo("Property", &currentProp, propertyNames, 10))
+        if (ImGui::Combo("Property", &currentProp, propertyNames, IM_ARRAYSIZE(propertyNames)))
         {
             clip.property = static_cast<uint8_t>(currentProp);
             changed = true;
@@ -264,7 +271,7 @@ namespace windows::details
         };
         int currentEasing = static_cast<int>(clip.easing);
         ImGui::SetNextItemWidth(120.0f);
-        if (ImGui::Combo("Easing", &currentEasing, easingNames, 6))
+        if (ImGui::Combo("Easing", &currentEasing, easingNames, IM_ARRAYSIZE(easingNames)))
         {
             clip.easing = static_cast<uint8_t>(currentEasing);
             changed = true;
@@ -273,7 +280,7 @@ namespace windows::details
         const char* loopModeNames[] = {"Once", "Loop", "PingPong"};
         int currentLoop = static_cast<int>(clip.loopMode);
         ImGui::SetNextItemWidth(120.0f);
-        if (ImGui::Combo("Loop Mode##Clip", &currentLoop, loopModeNames, 3))
+        if (ImGui::Combo("Loop Mode##Clip", &currentLoop, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
         {
             clip.loopMode = static_cast<uint8_t>(currentLoop);
             changed = true;

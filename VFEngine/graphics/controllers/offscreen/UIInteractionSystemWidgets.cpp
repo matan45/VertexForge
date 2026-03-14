@@ -851,7 +851,10 @@ namespace controllers::offscreen
     void UIInteractionSystem::processDragDropInteraction(const FrameContext& ctx)
     {
         if (!ctx.playModeActive)
+        {
+            components::UIDraggableComponent::activeDragEntity = entt::null;
             return;
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& dispatcher = events::EventDispatcher::instance();

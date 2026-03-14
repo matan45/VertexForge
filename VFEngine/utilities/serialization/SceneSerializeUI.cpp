@@ -2,31 +2,6 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 
-namespace {
-    using json = nlohmann::json;
-
-    void readVec4(const json& j, const std::string& key, glm::vec4& out) {
-        if (j.contains(key) && j[key].is_array() && j[key].size() >= 4) {
-            out = glm::vec4(j[key][0].get<float>(), j[key][1].get<float>(),
-                           j[key][2].get<float>(), j[key][3].get<float>());
-        }
-    }
-
-    void readVec2(const json& j, const std::string& key, glm::vec2& out) {
-        if (j.contains(key) && j[key].is_array() && j[key].size() >= 2) {
-            out = glm::vec2(j[key][0].get<float>(), j[key][1].get<float>());
-        }
-    }
-
-    json writeVec4(const glm::vec4& v) {
-        return json::array({v.x, v.y, v.z, v.w});
-    }
-
-    json writeVec2(const glm::vec2& v) {
-        return json::array({v.x, v.y});
-    }
-}
-
 namespace serialization {
 
     // ---- Canvas ----

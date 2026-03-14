@@ -21,8 +21,7 @@ namespace controllers::offscreen
         // Clean up playback states for removed entities
         for (auto it = playbackStates.begin(); it != playbackStates.end();)
         {
-            auto entity = static_cast<entt::entity>(it->first);
-            if (!registry.valid(entity) || !registry.all_of<components::UIAnimationComponent>(entity))
+            if (!registry.valid(it->first) || !registry.all_of<components::UIAnimationComponent>(it->first))
                 it = playbackStates.erase(it);
             else
                 ++it;
@@ -42,8 +41,20 @@ namespace controllers::offscreen
                 anim.startedFired = false;
             }
 
-            if (!anim.isPlaying || anim.isPaused)
+            if (!anim.isPlaying)
+            {
+                // Clean up stale playback state when animation is stopped externally
+                playbackStates.erase(entity);
                 continue;
+            }
+
+            if (anim.isPaused)
+                continue;
+
+            // Fetch entity name once for use in both started and completed notifications
+            std::string entityName;
+            if (registry.all_of<components::NameComponent>(entity))
+                entityName = registry.get<components::NameComponent>(entity).name;
 
             // Publish started notification
             if (!anim.startedFired)
@@ -51,14 +62,12 @@ namespace controllers::offscreen
                 anim.startedFired = true;
                 events::ui::UIAnimationStartedNotification notif;
                 notif.entity = services::EntityHandle{static_cast<uint64_t>(entity)};
-                if (registry.all_of<components::NameComponent>(entity))
-                    notif.entityName = registry.get<components::NameComponent>(entity).name;
+                notif.entityName = entityName;
                 dispatcher.publish(notif);
             }
 
             // Get or create playback state
-            uint32_t entityId = static_cast<uint32_t>(entity);
-            auto& state = playbackStates[entityId];
+            auto& state = playbackStates[entity];
             ensurePlaybackState(anim.rootNode, state);
 
             // Advance the animation tree
@@ -73,11 +82,10 @@ namespace controllers::offscreen
 
                 events::ui::UIAnimationCompletedNotification notif;
                 notif.entity = services::EntityHandle{static_cast<uint64_t>(entity)};
-                if (registry.all_of<components::NameComponent>(entity))
-                    notif.entityName = registry.get<components::NameComponent>(entity).name;
+                notif.entityName = entityName;
                 dispatcher.publish(notif);
 
-                playbackStates.erase(entityId);
+                playbackStates.erase(entity);
             }
         }
     }
@@ -238,6 +246,22 @@ namespace controllers::offscreen
             if (idx >= 0 && idx < static_cast<int>(node.children.size())
                 && idx < static_cast<int>(state.children.size()))
             {
+                // Ensure child state is clean before advancing in reverse pass
+                // (forward pass may have left finished=true on this child)
+                if (state.children[idx].finished)
+                {
+                    state.children[idx].finished = false;
+                    state.children[idx].elapsed = 0.0f;
+                    state.children[idx].currentChild = 0;
+                    state.children[idx].reversing = state.reversing;
+                    for (auto& grandchild : state.children[idx].children)
+                    {
+                        grandchild = NodePlaybackState{};
+                        grandchild.reversing = state.reversing;
+                    }
+                    ensurePlaybackState(node.children[idx], state.children[idx]);
+                }
+
                 bool childDone = advanceNode(node.children[idx], state.children[idx],
                                               dt, registry, entity);
                 if (childDone)
