@@ -5,6 +5,7 @@
 #include "FramePreparationSystem.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
+#include "../../render/ui/UISliceHelper.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <algorithm>
@@ -193,13 +194,31 @@ namespace controllers::offscreen
                 }
             }
 
-            render::ui::UIImageRenderData renderData;
-            renderData.texturePath = effectiveTexturePath.empty() ? "__white_1x1__" : effectiveTexturePath;
-            renderData.position = glm::vec2(rect.x, rect.y);
-            renderData.size = glm::vec2(rect.w, rect.h);
-            renderData.colorTint = imageComp.colorTint;
-            renderData.scissorRect = scissor;
-            drawList.push_back(std::move(renderData));
+            std::string resolvedPath = effectiveTexturePath.empty() ? "__white_1x1__" : effectiveTexturePath;
+
+            if (imageComp.imageType != components::UIImageType::Simple
+                && imageComp.sourceWidth > 0 && imageComp.sourceHeight > 0
+                && (imageComp.border.x > 0.0f || imageComp.border.y > 0.0f
+                    || imageComp.border.z > 0.0f || imageComp.border.w > 0.0f))
+            {
+                render::ui::generateSlicedInstances(
+                    glm::vec2(rect.x, rect.y), glm::vec2(rect.w, rect.h),
+                    imageComp.border,
+                    imageComp.sourceWidth, imageComp.sourceHeight,
+                    imageComp.colorTint, scissor,
+                    resolvedPath, imageComp.imageType,
+                    drawList);
+            }
+            else
+            {
+                render::ui::UIImageRenderData renderData;
+                renderData.texturePath = resolvedPath;
+                renderData.position = glm::vec2(rect.x, rect.y);
+                renderData.size = glm::vec2(rect.w, rect.h);
+                renderData.colorTint = imageComp.colorTint;
+                renderData.scissorRect = scissor;
+                drawList.push_back(std::move(renderData));
+            }
         }
 
         void emitUIImagePasses(

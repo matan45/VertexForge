@@ -85,6 +85,19 @@ namespace serialization {
         {
             j["renderTextureSourceName"] = image.renderTextureSourceName;
         }
+        if (image.imageType != components::UIImageType::Simple)
+        {
+            j["imageType"] = static_cast<int>(image.imageType);
+        }
+        if (image.border.x != 0.0f || image.border.y != 0.0f || image.border.z != 0.0f || image.border.w != 0.0f)
+        {
+            j["border"] = writeVec4(image.border);
+        }
+        if (image.sourceWidth > 0 && image.sourceHeight > 0)
+        {
+            j["sourceWidth"] = image.sourceWidth;
+            j["sourceHeight"] = image.sourceHeight;
+        }
         return j;
     }
 
@@ -94,6 +107,10 @@ namespace serialization {
         readVec4(j, "colorTint", image.colorTint);
         image.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         image.renderTextureSource = entt::null; // Resolved post-load
+        image.imageType = static_cast<components::UIImageType>(j.value("imageType", 0));
+        readVec4(j, "border", image.border);
+        image.sourceWidth = j.value("sourceWidth", 0u);
+        image.sourceHeight = j.value("sourceHeight", 0u);
     }
 
     // ---- ScaleMode enum ----

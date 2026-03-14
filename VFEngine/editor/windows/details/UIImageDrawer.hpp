@@ -17,5 +17,6 @@ namespace windows::details
         bool drawTexturePath(services::UIImageData& data);
         bool drawRenderTextureSource(services::UIImageData& data);
         bool drawColorTint(services::UIImageData& data);
+        bool drawSliceSettings(services::UIImageData& data);
     };
 }

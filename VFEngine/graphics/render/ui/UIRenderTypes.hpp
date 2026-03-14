@@ -44,6 +44,7 @@ namespace render::ui
     {
         glm::vec4 posAndSize;  // xy = pixel position, zw = pixel size
         glm::vec4 colorTint;   // RGBA color tint
+        glm::vec4 uvRect{0.0f, 0.0f, 1.0f, 1.0f}; // u0, v0, u1, v1
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -54,9 +55,9 @@ namespace render::ui
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 2> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -67,6 +68,11 @@ namespace render::ui
             attributes[1].location = 3;
             attributes[1].format = vk::Format::eR32G32B32A32Sfloat;
             attributes[1].offset = offsetof(UIImageInstance, colorTint);
+
+            attributes[2].binding = 1;
+            attributes[2].location = 4;
+            attributes[2].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[2].offset = offsetof(UIImageInstance, uvRect);
 
             return attributes;
         }
@@ -94,5 +100,6 @@ namespace render::ui
         glm::vec2 size;        // pixel size
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f}; // x, y, width, height; 0,0,0,0 = full viewport
+        glm::vec4 uvRect{0.0f, 0.0f, 1.0f, 1.0f}; // u0, v0, u1, v1
     };
 }

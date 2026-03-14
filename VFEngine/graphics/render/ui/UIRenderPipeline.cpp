@@ -422,6 +422,7 @@ namespace render::ui
             UIImageInstance inst{};
             inst.posAndSize = glm::vec4(image.position, image.size);
             inst.colorTint = image.colorTint;
+            inst.uvRect = image.uvRect;
 
             scissorMap[key].push_back({image.texturePath, inst});
         }

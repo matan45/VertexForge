@@ -51,6 +51,8 @@ namespace windows::details
             changed |= drawRenderTextureSource(data);
             ImGui::Spacing();
             changed |= drawColorTint(data);
+            ImGui::Spacing();
+            changed |= drawSliceSettings(data);
 
             if (changed)
             {
@@ -121,11 +123,20 @@ namespace windows::details
                 {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
             if (!path.empty())
             {
-                std::ifstream file(path);
+                std::ifstream file(path, std::ios::binary);
                 if (file.good())
                 {
+                    // Read texture dimensions from .vfImage header:
+                    // 1 byte file type + 12 bytes version = 13 bytes, then uint32 width, uint32 height
+                    file.seekg(13, std::ios::beg);
+                    uint32_t w = 0, h = 0;
+                    file.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
+                    file.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
                     file.close();
+
                     data.texturePath = path;
+                    data.sourceWidth = w;
+                    data.sourceHeight = h;
                     changed = true;
                 }
                 else
@@ -141,6 +152,8 @@ namespace windows::details
         if (ImGui::Button("Clear##UIImageTex"))
         {
             data.texturePath = "";
+            data.sourceWidth = 0;
+            data.sourceHeight = 0;
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();
@@ -160,6 +173,65 @@ namespace windows::details
         if (ImGui::ColorEdit4("Color Tint##UIImage", &data.colorTint.x))
         {
             changed = true;
+        }
+
+        return changed;
+    }
+
+    bool UIImageDrawer::drawSliceSettings(services::UIImageData& data)
+    {
+        bool changed = false;
+
+        const char* imageTypeNames[] = {"Simple", "Sliced", "Tiled"};
+        int currentType = static_cast<int>(data.imageType);
+        if (ImGui::Combo("Image Type##UIImage", &currentType, imageTypeNames, 3))
+        {
+            data.imageType = static_cast<uint8_t>(currentType);
+            changed = true;
+        }
+
+        if (data.imageType != 0) // Sliced or Tiled
+        {
+            // Auto-detect dimensions if texture exists but dimensions are missing (old scenes)
+            if ((data.sourceWidth == 0 || data.sourceHeight == 0) && !data.texturePath.empty())
+            {
+                std::ifstream texFile(data.texturePath, std::ios::binary);
+                if (texFile.good())
+                {
+                    texFile.seekg(13, std::ios::beg);
+                    uint32_t w = 0, h = 0;
+                    texFile.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
+                    texFile.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
+                    texFile.close();
+                    if (w > 0 && h > 0)
+                    {
+                        data.sourceWidth = w;
+                        data.sourceHeight = h;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (data.sourceWidth == 0 || data.sourceHeight == 0)
+            {
+                ImGui::TextDisabled("Select a texture to configure borders");
+            }
+            else
+            {
+                ImGui::Text("Source: %ux%u", data.sourceWidth, data.sourceHeight);
+
+                float maxW = static_cast<float>(data.sourceWidth);
+                float maxH = static_cast<float>(data.sourceHeight);
+
+                if (ImGui::DragFloat("Border Left##UIImage", &data.border.x, 1.0f, 0.0f, maxW, "%.0f"))
+                    changed = true;
+                if (ImGui::DragFloat("Border Right##UIImage", &data.border.y, 1.0f, 0.0f, maxW, "%.0f"))
+                    changed = true;
+                if (ImGui::DragFloat("Border Top##UIImage", &data.border.z, 1.0f, 0.0f, maxH, "%.0f"))
+                    changed = true;
+                if (ImGui::DragFloat("Border Bottom##UIImage", &data.border.w, 1.0f, 0.0f, maxH, "%.0f"))
+                    changed = true;
+            }
         }
 
         return changed;

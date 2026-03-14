@@ -30,12 +30,24 @@ namespace components
         glm::vec2 anchoredPosition{0.0f, 0.0f};
     };
 
+    enum class UIImageType : uint8_t
+    {
+        Simple,
+        Sliced,
+        Tiled
+    };
+
     struct UIImageComponent
     {
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
+
+        UIImageType imageType = UIImageType::Simple;
+        glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom in source texture pixels
+        uint32_t sourceWidth = 0;
+        uint32_t sourceHeight = 0;
     };
 
     enum class ScrollbarVisibility : uint8_t

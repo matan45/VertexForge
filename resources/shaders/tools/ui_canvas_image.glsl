@@ -10,12 +10,13 @@ layout(push_constant) uniform PushConstants {
     mat4 viewProj;
     mat4 modelMatrix;
     vec4 colorTint;
+    vec4 uvRect;
 } pc;
 
 void main() {
     vec4 worldPos = pc.modelMatrix * vec4(inPosition, 0.0, 1.0);
     gl_Position = pc.viewProj * worldPos;
-    fragTexCoord = inTexCoord;
+    fragTexCoord = mix(pc.uvRect.xy, pc.uvRect.zw, inTexCoord);
 }
 
 #type FRAGMENT
@@ -31,6 +32,7 @@ layout(push_constant) uniform PushConstants {
     mat4 viewProj;
     mat4 modelMatrix;
     vec4 colorTint;
+    vec4 uvRect;
 } pc;
 
 void main() {

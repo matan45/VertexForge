@@ -289,6 +289,7 @@ namespace render::mesh
             pushConstants.viewProj = editorViewProj;
             pushConstants.modelMatrix = image.modelMatrix;
             pushConstants.colorTint = image.colorTint;
+            pushConstants.uvRect = image.uvRect;
 
             commandBuffer.pushConstants(pipelineLayout,
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

@@ -8,6 +8,7 @@ layout(location = 1) in vec2 inTexCoord;   // UV coordinates (0.0 to 1.0)
 // Per-instance data (binding 1)
 layout(location = 2) in vec4 inPosAndSize;  // xy = pixel position, zw = pixel size
 layout(location = 3) in vec4 inColorTint;   // RGBA color tint
+layout(location = 4) in vec4 inUVRect;      // u0, v0, u1, v1
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColorTint;
@@ -28,7 +29,7 @@ void main() {
     vec2 ndc = (pixelPos / pc.viewportSize) * 2.0 - 1.0;
 
     gl_Position = vec4(ndc, 0.0, 1.0);
-    fragTexCoord = inTexCoord;
+    fragTexCoord = mix(inUVRect.xy, inUVRect.zw, inTexCoord);
     fragColorTint = inColorTint;
 }
 

@@ -21,6 +21,7 @@ namespace render::mesh
         glm::mat4 modelMatrix;
         std::string texturePath;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 uvRect{0.0f, 0.0f, 1.0f, 1.0f};
     };
 
     struct UICanvasImagePushConstants
@@ -28,6 +29,7 @@ namespace render::mesh
         glm::mat4 viewProj;
         glm::mat4 modelMatrix;
         glm::vec4 colorTint;
+        glm::vec4 uvRect;
     };
 
     class UICanvasImageRenderer : public DebugRendererBase

@@ -317,6 +317,11 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
+
+        uint8_t imageType = 0; // 0=Simple, 1=Sliced, 2=Tiled
+        glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom (source pixels)
+        uint32_t sourceWidth = 0;
+        uint32_t sourceHeight = 0;
     };
 
     struct UIScrollData
