@@ -175,6 +175,18 @@ namespace core::api
                 });
         }
 
+        void registerDragDropFunctions(services::ScriptInterpreter* interpreter,
+                                       events::EventDispatcher& dispatcher)
+        {
+            interpreter->registerNativeFunction("_native_ui_cancelDrag",
+                [&dispatcher](const std::vector<value::Value>&) -> value::Value
+                {
+                    events::ui::CancelDragCommand cmd;
+                    bool result = dispatcher.execute(cmd);
+                    return value::Value(result);
+                });
+        }
+
         void registerProgressBarFunctions(services::ScriptInterpreter* interpreter,
                                           events::EventDispatcher& dispatcher)
         {
@@ -294,7 +306,8 @@ namespace core::api
         registerTabsFunctions(interpreter, dispatcher);
         registerSliderFunctions(interpreter, dispatcher);
         registerProgressBarFunctions(interpreter, dispatcher);
+        registerDragDropFunctions(interpreter, dispatcher);
 
-        vfLogInfo("[UIValueAPI] Registered Tabs/Slider/ProgressBar native functions");
+        vfLogInfo("[UIValueAPI] Registered Tabs/Slider/ProgressBar/DragDrop native functions");
     }
 }

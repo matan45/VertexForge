@@ -86,6 +86,14 @@ namespace events::ui {
     };
 
     // ============================================
+    // UI Drag & Drop Runtime Commands
+    // ============================================
+
+    struct CancelDragCommand : ICommand<bool> {
+        std::string_view getName() const override { return "CancelDrag"; }
+    };
+
+    // ============================================
     // UI Drag & Drop Notifications
     // ============================================
 

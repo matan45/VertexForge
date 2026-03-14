@@ -308,4 +308,14 @@ public class UI {
     public static function setProgressBarMinMax(int entityId, float min, float max): void {
         _native_ui_setProgressBarMinMax(entityId, min, max);
     }
+
+    // ============================================
+    // Drag & Drop
+    // ============================================
+
+    // Cancel the current drag operation (e.g. when drop target is occupied)
+    // Returns true if a drag was active and cancelled, false if nothing was being dragged
+    public static function cancelDrag(): bool {
+        return _native_ui_cancelDrag();
+    }
 }

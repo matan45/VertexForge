@@ -232,6 +232,28 @@ namespace services {
                 return getUIDraggableData(query.entity);
             });
 
+        // Cancel drag command
+        dispatcher.registerCommandHandler<events::ui::CancelDragCommand>(
+            [](const events::ui::CancelDragCommand&) {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity dragEntity = components::UIDraggableComponent::activeDragEntity;
+                if (dragEntity == entt::null || !registry.valid(dragEntity))
+                    return false;
+                if (registry.all_of<components::UIDraggableComponent>(dragEntity))
+                    registry.get<components::UIDraggableComponent>(dragEntity).isDragging = false;
+                components::UIDraggableComponent::activeDragEntity = entt::null;
+
+                // Clear all drop target highlights
+                auto dropView = registry.view<components::UIDropTargetComponent>();
+                for (auto target : dropView)
+                {
+                    auto& tc = registry.get<components::UIDropTargetComponent>(target);
+                    tc.isHighlighted = false;
+                    tc.isRejected = false;
+                }
+                return true;
+            });
+
         // DropTarget queries
         dispatcher.registerQueryHandler<events::ui::HasUIDropTargetComponentQuery>(
             [this](const events::ui::HasUIDropTargetComponentQuery& query) {
