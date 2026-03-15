@@ -24,6 +24,7 @@
 #include "../api/BehaviorTreeAPI.hpp"
 #include "../api/DecalAPI.hpp"
 #include "../api/CoroutineAPI.hpp"
+#include "../api/ScriptCommunicationAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -80,6 +81,7 @@ namespace core
         api::BehaviorTreeAPI::registerAPI(interpreter);
         api::DecalAPI::registerAPI(interpreter);
         api::CoroutineAPI::registerAPI(interpreter);
+        api::ScriptCommunicationAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

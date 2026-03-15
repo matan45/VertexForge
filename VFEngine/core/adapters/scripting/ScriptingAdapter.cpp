@@ -12,7 +12,9 @@
 #include "ScriptNavigationEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
+#include "ScriptCommunicationManager.hpp"
 #include "../api/CoroutineAPI.hpp"
+#include "../api/ScriptCommunicationAPI.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
 #include <filesystem>
@@ -59,8 +61,12 @@ namespace core
 
             coroutineManager = std::make_unique<CoroutineManager>();
 
+            communicationManager = std::make_unique<ScriptCommunicationManager>(
+                interpreter.get(), instanceToClassName, instanceToEntity, instanceToObject);
+
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
+            api::ScriptCommunicationAPI::setManager(communicationManager.get());
             apiRegistry->registerEngineAPIs();
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
@@ -358,6 +364,11 @@ namespace core
             coroutineManager->removeAllForInstance(instanceId);
         }
 
+        if (communicationManager)
+        {
+            communicationManager->removeListenersForInstance(instanceId);
+        }
+
         auto it = instanceToClassName.find(instanceId);
         if (it != instanceToClassName.end())
         {
@@ -374,6 +385,11 @@ namespace core
         if (coroutineManager)
         {
             coroutineManager->clear();
+        }
+
+        if (communicationManager)
+        {
+            communicationManager->clearAll();
         }
 
         instanceToClassName.clear();

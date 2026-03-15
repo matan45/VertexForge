@@ -22,6 +22,7 @@ namespace core
     class ScriptNavigationEventBridge;
 
     class CoroutineManager;
+    class ScriptCommunicationManager;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
@@ -35,6 +36,7 @@ namespace core
         std::unique_ptr<ScriptSocketEventBridge> socketEventBridge;
         std::unique_ptr<ScriptVFXEventBridge> vfxEventBridge;
         std::unique_ptr<ScriptNavigationEventBridge> navigationEventBridge;
+        std::unique_ptr<ScriptCommunicationManager> communicationManager;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;
