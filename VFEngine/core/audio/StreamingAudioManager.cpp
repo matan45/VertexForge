@@ -124,6 +124,14 @@ namespace core::audio {
         cleanupFinishedSources();
     }
 
+    ALuint StreamingAudioManager::getSourceId(AudioHandle handle) const {
+        auto it = activeSources.find(handle);
+        if (it != activeSources.end()) {
+            return it->second->getSourceId();
+        }
+        return 0;
+    }
+
     void StreamingAudioManager::cleanupFinishedSources() {
         for (auto it = activeSources.begin(); it != activeSources.end(); ) {
             if (it->second->isFinished()) {

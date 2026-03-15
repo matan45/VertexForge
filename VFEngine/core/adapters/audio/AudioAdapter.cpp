@@ -191,4 +191,35 @@ namespace core {
         return audioController->getSnapshotNames();
     }
 
+    // === Audio Effects ===
+
+    bool AudioAdapter::addBusEffect(const std::string& busName, const types::BusEffectConfig& config) {
+        return audioController->addBusEffect(busName, config);
+    }
+
+    bool AudioAdapter::removeBusEffect(const std::string& busName, uint32_t effectId) {
+        return audioController->removeBusEffect(busName, effectId);
+    }
+
+    bool AudioAdapter::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                        const types::BusEffectConfig& config) {
+        return audioController->updateBusEffect(busName, effectId, config);
+    }
+
+    bool AudioAdapter::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) {
+        return audioController->setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    bool AudioAdapter::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) {
+        return audioController->setBusEffectWetDry(busName, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioAdapter::getBusEffectChain(const std::string& busName) const {
+        return audioController->getBusEffectChain(busName);
+    }
+
+    int AudioAdapter::getMaxEffectsPerBus() const {
+        return audioController->getMaxEffectsPerBus();
+    }
+
 }

@@ -169,11 +169,13 @@
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioBusManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
+    <ClInclude Include="audio\AudioEffectManager.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
     <ClInclude Include="audio\AudioSceneUpdater.hpp" />
     <ClInclude Include="audio\AudioSource.hpp" />
     <ClInclude Include="audio\AudioSourceManager.hpp" />
     <ClInclude Include="audio\AudioSystem.hpp" />
+    <ClInclude Include="audio\ReverbPresets.hpp" />
     <ClInclude Include="audio\StreamingAudioManager.hpp" />
     <ClInclude Include="audio\StreamingAudioSource.hpp" />
     <ClInclude Include="bootstrap\editor\EditorBootstrap.hpp" />
@@ -272,11 +274,13 @@
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioBusManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
+    <ClCompile Include="audio\AudioEffectManager.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
     <ClCompile Include="audio\AudioSceneUpdater.cpp" />
     <ClCompile Include="audio\AudioSource.cpp" />
     <ClCompile Include="audio\AudioSourceManager.cpp" />
     <ClCompile Include="audio\AudioSystem.cpp" />
+    <ClCompile Include="audio\ReverbPresets.cpp" />
     <ClCompile Include="audio\StreamingAudioManager.cpp" />
     <ClCompile Include="audio\StreamingAudioSource.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrap.cpp" />

@@ -199,4 +199,34 @@ public class Audio {
     public static function loadSnapshot(string name): void {
         _native_audio_loadSnapshot(name);
     }
+
+    // ============================================
+    // Audio Effects (VK-917)
+    // ============================================
+
+    // Add an effect to a bus (Reverb, EQ, Compressor, Echo, Chorus)
+    // Returns effect ID (> 0) on success, 0 if at max or EFX unavailable
+    public static function addBusEffect(string busName, string effectType): int {
+        return _native_audio_addBusEffect(busName, effectType);
+    }
+
+    // Remove an effect from a bus by its effect ID
+    public static function removeBusEffect(string busName, int effectId): void {
+        _native_audio_removeBusEffect(busName, effectId);
+    }
+
+    // Enable or disable an effect on a bus
+    public static function setBusEffectEnabled(string busName, int effectId, bool enabled): void {
+        _native_audio_setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    // Set wet/dry mix for an effect (0.0 = fully dry, 1.0 = fully wet)
+    public static function setBusEffectWetDry(string busName, int effectId, float mix): void {
+        _native_audio_setBusEffectWetDry(busName, effectId, mix);
+    }
+
+    // Set reverb preset by name (e.g., "Cave", "Concert Hall", "Bathroom")
+    public static function setReverbPreset(string busName, int effectId, string presetName): void {
+        _native_audio_setReverbPreset(busName, effectId, presetName);
+    }
 }

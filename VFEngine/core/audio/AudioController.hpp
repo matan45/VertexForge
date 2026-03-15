@@ -5,7 +5,9 @@
 #include "AudioListener.hpp"
 #include "StreamingAudioManager.hpp"
 #include "AudioBusManager.hpp"
+#include "AudioEffectManager.hpp"
 #include "types/AudioTypes.hpp"
+#include "types/AudioEffectTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
@@ -45,6 +47,7 @@ namespace core::audio {
         std::unique_ptr<AudioListener> listener;
         std::unique_ptr<StreamingAudioManager> streamingManager;
         std::unique_ptr<AudioBusManager> busManager;
+        std::unique_ptr<AudioEffectManager> effectManager;
 
         bool initialized = false;
         std::chrono::steady_clock::time_point lastUpdateTime;
@@ -99,6 +102,15 @@ namespace core::audio {
         void loadMixSnapshot(const std::string& name);
         void deleteMixSnapshot(const std::string& name);
         std::vector<std::string> getSnapshotNames() const;
+
+        // === Audio Effects ===
+        bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config);
+        bool removeBusEffect(const std::string& busName, uint32_t effectId);
+        bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config);
+        bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled);
+        bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry);
+        std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const;
+        int getMaxEffectsPerBus() const;
 
         // === Buffer Management ===
         void unloadAudioBuffer(const std::string& path);

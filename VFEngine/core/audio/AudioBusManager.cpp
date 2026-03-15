@@ -1,4 +1,5 @@
 #include "AudioBusManager.hpp"
+#include "AudioEffectManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
@@ -7,6 +8,16 @@ namespace core::audio
     void AudioBusManager::init(VolumeApplyCallback callback)
     {
         volumeCallback = std::move(callback);
+    }
+
+    void AudioBusManager::setEffectManager(AudioEffectManager* manager)
+    {
+        effectManager = manager;
+    }
+
+    void AudioBusManager::setSourceResolveCallback(SourceResolveCallback callback)
+    {
+        sourceResolveCallback = std::move(callback);
     }
 
     void AudioBusManager::cleanUp()
@@ -175,11 +186,34 @@ namespace core::audio
         {
             volumeCallback(handle, userVolume * effective);
         }
+
+        // Route source to bus effects
+        if (effectManager && sourceResolveCallback)
+        {
+            ALuint sourceId = sourceResolveCallback(handle);
+            if (sourceId != 0)
+            {
+                effectManager->routeSourceToBus(sourceId, busId);
+            }
+        }
     }
 
     void AudioBusManager::removeSource(AudioHandle handle)
     {
-        trackedSources.erase(handle);
+        auto it = trackedSources.find(handle);
+        if (it != trackedSources.end())
+        {
+            // Unroute source from bus effects
+            if (effectManager && sourceResolveCallback)
+            {
+                ALuint sourceId = sourceResolveCallback(handle);
+                if (sourceId != 0)
+                {
+                    effectManager->unrouteSource(sourceId, it->second.busId);
+                }
+            }
+            trackedSources.erase(it);
+        }
     }
 
     void AudioBusManager::setSourceUserVolume(AudioHandle handle, float volume)
@@ -206,6 +240,15 @@ namespace core::audio
         {
             snapshot.busVolumes[bus.name] = bus.volume;
             snapshot.busMutes[bus.name] = bus.muted;
+
+            if (effectManager)
+            {
+                auto chain = effectManager->getBusEffectChain(bus.id);
+                if (!chain.empty())
+                {
+                    snapshot.busEffects[bus.name] = chain;
+                }
+            }
         }
         snapshots[name] = std::move(snapshot);
     }
@@ -261,6 +304,15 @@ namespace core::audio
 
     void AudioBusManager::loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
     {
+        // Clear existing effects before clearing buses
+        if (effectManager)
+        {
+            for (const auto& bus : buses)
+            {
+                effectManager->clearBusEffects(bus.id);
+            }
+        }
+
         buses.clear();
         nameToId.clear();
         nextBusId = 0;
@@ -307,6 +359,19 @@ namespace core::audio
             }
         }
 
+        // Load effect chains for each bus
+        if (effectManager)
+        {
+            for (const auto& def : definitions)
+            {
+                uint32_t busId = getBusIdByName(def.name);
+                for (const auto& effectConfig : def.effects)
+                {
+                    effectManager->addEffect(busId, effectConfig);
+                }
+            }
+        }
+
         recalculateEffectiveVolumes();
     }
 
@@ -335,6 +400,110 @@ namespace core::audio
             defs.push_back(std::move(def));
         }
         return defs;
+    }
+
+    bool AudioBusManager::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
+    {
+        if (!effectManager) return false;
+        uint32_t busId = getBusIdByName(busName);
+        if (!getBus(busId)) return false;
+
+        if (!effectManager->addEffect(busId, config)) return false;
+
+        // Route all existing sources on this bus to the updated effect chain
+        if (sourceResolveCallback)
+        {
+            for (auto& [handle, tracked] : trackedSources)
+            {
+                if (tracked.busId == busId)
+                {
+                    ALuint sourceId = sourceResolveCallback(handle);
+                    if (sourceId != 0)
+                    {
+                        effectManager->routeSourceToBus(sourceId, busId);
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    bool AudioBusManager::removeBusEffect(const std::string& busName, uint32_t effectId)
+    {
+        if (!effectManager) return false;
+        uint32_t busId = getBusIdByName(busName);
+        if (!getBus(busId)) return false;
+
+        // Unroute sources first, then remove, then re-route
+        if (sourceResolveCallback)
+        {
+            for (auto& [handle, tracked] : trackedSources)
+            {
+                if (tracked.busId == busId)
+                {
+                    ALuint sourceId = sourceResolveCallback(handle);
+                    if (sourceId != 0)
+                    {
+                        effectManager->unrouteSource(sourceId, busId);
+                    }
+                }
+            }
+        }
+
+        bool result = effectManager->removeEffect(busId, effectId);
+
+        // Re-route with remaining effects
+        if (sourceResolveCallback)
+        {
+            for (auto& [handle, tracked] : trackedSources)
+            {
+                if (tracked.busId == busId)
+                {
+                    ALuint sourceId = sourceResolveCallback(handle);
+                    if (sourceId != 0)
+                    {
+                        effectManager->routeSourceToBus(sourceId, busId);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    bool AudioBusManager::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                           const types::BusEffectConfig& config)
+    {
+        if (!effectManager) return false;
+        uint32_t busId = getBusIdByName(busName);
+        return effectManager->updateEffectParams(busId, effectId, config);
+    }
+
+    bool AudioBusManager::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
+    {
+        if (!effectManager) return false;
+        uint32_t busId = getBusIdByName(busName);
+        return effectManager->setEffectEnabled(busId, effectId, enabled);
+    }
+
+    bool AudioBusManager::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
+    {
+        if (!effectManager) return false;
+        uint32_t busId = getBusIdByName(busName);
+        return effectManager->setEffectWetDry(busId, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioBusManager::getBusEffectChain(const std::string& busName) const
+    {
+        if (!effectManager) return {};
+        auto it = nameToId.find(busName);
+        if (it == nameToId.end()) return {};
+        return effectManager->getBusEffectChain(it->second);
+    }
+
+    int AudioBusManager::getMaxEffectsPerBus() const
+    {
+        if (!effectManager) return 0;
+        return effectManager->getMaxEffectsPerBus();
     }
 
     void AudioBusManager::recalculateEffectiveVolumes()

@@ -10,6 +10,7 @@ namespace core::audio
           , listener(std::make_unique<AudioListener>())
           , streamingManager(std::make_unique<StreamingAudioManager>())
           , busManager(std::make_unique<AudioBusManager>())
+          , effectManager(std::make_unique<AudioEffectManager>())
     {
     }
 
@@ -36,6 +37,9 @@ namespace core::audio
 
         sourceManager->initPool(32);
 
+        // Initialize effect manager
+        effectManager->init(audioSystem->getMaxAuxiliarySends());
+
         busManager->init([this](AudioHandle handle, float effectiveVolume)
         {
             if (StreamingAudioManager::isStreamingHandle(handle))
@@ -49,6 +53,19 @@ namespace core::audio
                 {
                     source->setVolume(effectiveVolume);
                 }
+            }
+        });
+        busManager->setEffectManager(effectManager.get());
+        busManager->setSourceResolveCallback([this](AudioHandle handle) -> ALuint
+        {
+            if (StreamingAudioManager::isStreamingHandle(handle))
+            {
+                return streamingManager->getSourceId(handle);
+            }
+            else
+            {
+                AudioSource* source = sourceManager->getSource(handle);
+                return source ? source->getId() : 0;
             }
         });
         busManager->createDefaultBuses();
@@ -67,6 +84,7 @@ namespace core::audio
 
         stopAll();
 
+        effectManager->cleanUp();
         busManager->cleanUp();
         sourceManager.reset();
         streamingManager.reset();
@@ -362,7 +380,34 @@ namespace core::audio
     types::AudioSettings AudioController::getCurrentSettings() const
     {
         if (!initialized) return types::AudioSettings::createDefault();
-        return audioSystem->getCurrentSettings();
+        auto settings = audioSystem->getCurrentSettings();
+
+        // Capture current bus definitions including effect chains
+        auto busNames = busManager->getBusNames();
+        settings.busDefinitions.clear();
+        for (const auto& name : busNames)
+        {
+            types::AudioBusDefinition def;
+            def.name = name;
+            def.defaultVolume = busManager->getBusVolume(name);
+            // Find parent name
+            auto* bus = busManager->getBusByName(name);
+            if (bus && bus->id != bus->parentId)
+            {
+                auto* parent = busManager->getBus(bus->parentId);
+                if (parent)
+                {
+                    def.parentName = parent->name;
+                }
+            }
+            def.effects = busManager->getBusEffectChain(name);
+            settings.busDefinitions.push_back(def);
+        }
+
+        // Capture snapshots
+        settings.mixSnapshots = busManager->getSnapshotDefinitions();
+
+        return settings;
     }
 
     // === Audio Buses ===
@@ -431,6 +476,51 @@ namespace core::audio
     {
         if (!initialized) return {};
         return busManager->getSnapshotNames();
+    }
+
+    // === Audio Effects ===
+
+    bool AudioController::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
+    {
+        if (!initialized) return false;
+        return busManager->addBusEffect(busName, config);
+    }
+
+    bool AudioController::removeBusEffect(const std::string& busName, uint32_t effectId)
+    {
+        if (!initialized) return false;
+        return busManager->removeBusEffect(busName, effectId);
+    }
+
+    bool AudioController::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                           const types::BusEffectConfig& config)
+    {
+        if (!initialized) return false;
+        return busManager->updateBusEffect(busName, effectId, config);
+    }
+
+    bool AudioController::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
+    {
+        if (!initialized) return false;
+        return busManager->setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    bool AudioController::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
+    {
+        if (!initialized) return false;
+        return busManager->setBusEffectWetDry(busName, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioController::getBusEffectChain(const std::string& busName) const
+    {
+        if (!initialized) return {};
+        return busManager->getBusEffectChain(busName);
+    }
+
+    int AudioController::getMaxEffectsPerBus() const
+    {
+        if (!initialized) return 0;
+        return busManager->getMaxEffectsPerBus();
     }
 
     void AudioController::unloadAudioBuffer(const std::string& path)

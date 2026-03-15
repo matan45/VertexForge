@@ -66,5 +66,14 @@ namespace core
         void loadMixSnapshot(const std::string& name) override;
         void deleteMixSnapshot(const std::string& name) override;
         std::vector<std::string> getSnapshotNames() const override;
+
+        // === Audio Effects ===
+        bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config) override;
+        bool removeBusEffect(const std::string& busName, uint32_t effectId) override;
+        bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config) override;
+        bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) override;
+        bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) override;
+        std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const override;
+        int getMaxEffectsPerBus() const override;
     };
 }

@@ -48,6 +48,15 @@ namespace services {
         void deleteMixSnapshot(const std::string& name) override;
         [[nodiscard]] std::vector<std::string> getSnapshotNames() const override;
 
+        // === Audio Effects ===
+        bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config) override;
+        bool removeBusEffect(const std::string& busName, uint32_t effectId) override;
+        bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config) override;
+        bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) override;
+        bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) override;
+        [[nodiscard]] std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const override;
+        [[nodiscard]] int getMaxEffectsPerBus() const override;
+
     private:
         AudioPlayParams convertParams(const AudioParams& params) const;
 

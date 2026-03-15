@@ -10,6 +10,16 @@ namespace core::audio {
     LPALFILTERI AudioSystem::alFilteri = nullptr;
     LPALFILTERF AudioSystem::alFilterf = nullptr;
 
+    LPALGENEFFECTS AudioSystem::alGenEffects = nullptr;
+    LPALDELETEEFFECTS AudioSystem::alDeleteEffects = nullptr;
+    LPALEFFECTI AudioSystem::alEffecti = nullptr;
+    LPALEFFECTF AudioSystem::alEffectf = nullptr;
+    LPALEFFECTFV AudioSystem::alEffectfv = nullptr;
+    LPALGENAUXILIARYEFFECTSLOTS AudioSystem::alGenAuxiliaryEffectSlots = nullptr;
+    LPALDELETEAUXILIARYEFFECTSLOTS AudioSystem::alDeleteAuxiliaryEffectSlots = nullptr;
+    LPALAUXILIARYEFFECTSLOTI AudioSystem::alAuxiliaryEffectSloti = nullptr;
+    LPALAUXILIARYEFFECTSLOTF AudioSystem::alAuxiliaryEffectSlotf = nullptr;
+
     AudioSystem::~AudioSystem() {
         if (initialized) {
             cleanUp();
@@ -56,18 +66,43 @@ namespace core::audio {
             alFilteri = reinterpret_cast<LPALFILTERI>(alGetProcAddress("alFilteri"));
             alFilterf = reinterpret_cast<LPALFILTERF>(alGetProcAddress("alFilterf"));
 
-            if (!alGenFilters || !alDeleteFilters || !alFilteri || !alFilterf)
+            // Load effect function pointers
+            alGenEffects = reinterpret_cast<LPALGENEFFECTS>(alGetProcAddress("alGenEffects"));
+            alDeleteEffects = reinterpret_cast<LPALDELETEEFFECTS>(alGetProcAddress("alDeleteEffects"));
+            alEffecti = reinterpret_cast<LPALEFFECTI>(alGetProcAddress("alEffecti"));
+            alEffectf = reinterpret_cast<LPALEFFECTF>(alGetProcAddress("alEffectf"));
+            alEffectfv = reinterpret_cast<LPALEFFECTFV>(alGetProcAddress("alEffectfv"));
+            alGenAuxiliaryEffectSlots = reinterpret_cast<LPALGENAUXILIARYEFFECTSLOTS>(alGetProcAddress("alGenAuxiliaryEffectSlots"));
+            alDeleteAuxiliaryEffectSlots = reinterpret_cast<LPALDELETEAUXILIARYEFFECTSLOTS>(alGetProcAddress("alDeleteAuxiliaryEffectSlots"));
+            alAuxiliaryEffectSloti = reinterpret_cast<LPALAUXILIARYEFFECTSLOTI>(alGetProcAddress("alAuxiliaryEffectSloti"));
+            alAuxiliaryEffectSlotf = reinterpret_cast<LPALAUXILIARYEFFECTSLOTF>(alGetProcAddress("alAuxiliaryEffectSlotf"));
+
+            if (!alGenFilters || !alDeleteFilters || !alFilteri || !alFilterf ||
+                !alGenEffects || !alDeleteEffects || !alEffecti || !alEffectf || !alEffectfv ||
+                !alGenAuxiliaryEffectSlots || !alDeleteAuxiliaryEffectSlots ||
+                !alAuxiliaryEffectSloti || !alAuxiliaryEffectSlotf)
             {
-                vfLogWarning("OpenAL EFX extension present but failed to load filter functions");
+                vfLogWarning("OpenAL EFX extension present but failed to load EFX functions");
                 efxSupported = false;
                 alGenFilters = nullptr;
                 alDeleteFilters = nullptr;
                 alFilteri = nullptr;
                 alFilterf = nullptr;
+                alGenEffects = nullptr;
+                alDeleteEffects = nullptr;
+                alEffecti = nullptr;
+                alEffectf = nullptr;
+                alEffectfv = nullptr;
+                alGenAuxiliaryEffectSlots = nullptr;
+                alDeleteAuxiliaryEffectSlots = nullptr;
+                alAuxiliaryEffectSloti = nullptr;
+                alAuxiliaryEffectSlotf = nullptr;
             }
             else
             {
-                vfLogInfo("OpenAL EFX extension supported");
+                // Query max auxiliary sends
+                alcGetIntegerv(device, ALC_MAX_AUXILIARY_SENDS, 1, &maxAuxiliarySends);
+                vfLogInfo("OpenAL EFX extension supported - max auxiliary sends: {}", maxAuxiliarySends);
             }
         }
         else

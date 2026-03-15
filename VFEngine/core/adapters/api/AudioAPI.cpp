@@ -6,6 +6,8 @@
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/audio/AudioEvents.hpp"
 #include "../../../services/events/audio/AudioBusEvents.hpp"
+#include "../../../services/events/audio/AudioEffectEvents.hpp"
+#include "types/AudioEffectTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -511,6 +513,96 @@ namespace core::api
                 });
         }
 
+        void registerEffectFunctions(services::ScriptInterpreter* interpreter,
+                                     events::EventDispatcher& dispatcher)
+        {
+            interpreter->registerNativeFunction("_native_audio_addBusEffect",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 2) return value::Value(static_cast<int64_t>(0));
+                    std::string busName = extractString(args[0]);
+                    std::string effectType = extractString(args[1]);
+
+                    auto type = types::stringToAudioEffectType(effectType);
+                    auto config = types::BusEffectConfig::createDefault(type);
+
+                    events::audio::AddBusEffectCommand cmd;
+                    cmd.busName = busName;
+                    cmd.config = config;
+                    bool result = dispatcher.execute(cmd);
+                    return value::Value(static_cast<int64_t>(result ? config.id : 0));
+                });
+
+            interpreter->registerNativeFunction("_native_audio_removeBusEffect",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    auto effectId = static_cast<uint32_t>(extractInt64(args[1]));
+
+                    events::audio::RemoveBusEffectCommand cmd;
+                    cmd.busName = busName;
+                    cmd.effectId = effectId;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_setBusEffectEnabled",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 3) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    auto effectId = static_cast<uint32_t>(extractInt64(args[1]));
+                    bool enabled = extractBool(args[2]);
+
+                    events::audio::SetBusEffectEnabledCommand cmd;
+                    cmd.busName = busName;
+                    cmd.effectId = effectId;
+                    cmd.enabled = enabled;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_setBusEffectWetDry",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 3) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    auto effectId = static_cast<uint32_t>(extractInt64(args[1]));
+                    float mix = extractFloat(args[2]);
+
+                    events::audio::SetBusEffectWetDryCommand cmd;
+                    cmd.busName = busName;
+                    cmd.effectId = effectId;
+                    cmd.wetDryMix = mix;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_setReverbPreset",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 3) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    auto effectId = static_cast<uint32_t>(extractInt64(args[1]));
+                    std::string presetName = extractString(args[2]);
+
+                    types::BusEffectConfig config;
+                    config.id = effectId;
+                    config.type = types::AudioEffectType::Reverb;
+                    types::ReverbParams params;
+                    params.presetName = presetName;
+                    config.params = params;
+
+                    events::audio::UpdateBusEffectCommand cmd;
+                    cmd.busName = busName;
+                    cmd.effectId = effectId;
+                    cmd.config = config;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+        }
+
         void registerBusFunctions(services::ScriptInterpreter* interpreter,
                                   events::EventDispatcher& dispatcher)
         {
@@ -586,5 +678,6 @@ namespace core::api
         registerPropertyFunctions(interpreter, dispatcher);
         registerSpatialPropertyFunctions(interpreter, dispatcher);
         registerBusFunctions(interpreter, dispatcher);
+        registerEffectFunctions(interpreter, dispatcher);
     }
 }

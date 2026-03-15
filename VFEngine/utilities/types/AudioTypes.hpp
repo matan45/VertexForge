@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "AudioEffectTypes.hpp"
 
 namespace types
 {
@@ -22,6 +23,7 @@ namespace types
         std::string name;
         std::string parentName = "Master";
         float defaultVolume = 1.0f;
+        std::vector<BusEffectConfig> effects;
     };
 
     struct AudioMixSnapshotDefinition

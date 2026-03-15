@@ -20,13 +20,27 @@ namespace core::audio
         static bool s_efxAvailable;
 
     public:
-        // EFX function pointers (loaded dynamically)
+        // EFX filter function pointers (loaded dynamically)
         static LPALGENFILTERS alGenFilters;
         static LPALDELETEFILTERS alDeleteFilters;
         static LPALFILTERI alFilteri;
         static LPALFILTERF alFilterf;
 
+        // EFX effect function pointers
+        static LPALGENEFFECTS alGenEffects;
+        static LPALDELETEEFFECTS alDeleteEffects;
+        static LPALEFFECTI alEffecti;
+        static LPALEFFECTF alEffectf;
+        static LPALEFFECTFV alEffectfv;
+        static LPALGENAUXILIARYEFFECTSLOTS alGenAuxiliaryEffectSlots;
+        static LPALDELETEAUXILIARYEFFECTSLOTS alDeleteAuxiliaryEffectSlots;
+        static LPALAUXILIARYEFFECTSLOTI alAuxiliaryEffectSloti;
+        static LPALAUXILIARYEFFECTSLOTF alAuxiliaryEffectSlotf;
+
+        int getMaxAuxiliarySends() const { return maxAuxiliarySends; }
+
     private:
+        int maxAuxiliarySends = 0;
 
     public:
         explicit AudioSystem() = default;

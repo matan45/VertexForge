@@ -1,6 +1,8 @@
 #pragma once
 #include "AudioSourceManager.hpp"
 #include "types/AudioTypes.hpp"
+#include "types/AudioEffectTypes.hpp"
+#include <AL/al.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -21,11 +23,14 @@ namespace core::audio
         std::vector<uint32_t> childIds;
     };
 
+    class AudioEffectManager;
+
     struct MixSnapshot
     {
         std::string name;
         std::map<std::string, float> busVolumes;
         std::map<std::string, bool> busMutes;
+        std::map<std::string, std::vector<types::BusEffectConfig>> busEffects;
     };
 
     struct TrackedSource
@@ -39,8 +44,11 @@ namespace core::audio
     {
     public:
         using VolumeApplyCallback = std::function<void(AudioHandle, float)>;
+        using SourceResolveCallback = std::function<ALuint(AudioHandle)>;
 
         void init(VolumeApplyCallback callback);
+        void setEffectManager(AudioEffectManager* manager);
+        void setSourceResolveCallback(SourceResolveCallback callback);
         void cleanUp();
 
         // Bus management
@@ -69,6 +77,15 @@ namespace core::audio
         void deleteSnapshot(const std::string& name);
         std::vector<std::string> getSnapshotNames() const;
 
+        // Effect chain (delegates to effectManager)
+        bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config);
+        bool removeBusEffect(const std::string& busName, uint32_t effectId);
+        bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config);
+        bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled);
+        bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry);
+        std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const;
+        int getMaxEffectsPerBus() const;
+
         // Setup
         void createDefaultBuses();
         void loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions);
@@ -86,5 +103,7 @@ namespace core::audio
         std::map<std::string, MixSnapshot> snapshots;
         uint32_t nextBusId = 0;
         VolumeApplyCallback volumeCallback;
+        SourceResolveCallback sourceResolveCallback;
+        AudioEffectManager* effectManager = nullptr;
     };
 }

@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include "types/AudioEffectTypes.hpp"
 
 namespace services {
 
@@ -88,6 +89,15 @@ namespace services {
         virtual void loadMixSnapshot(const std::string& name) = 0;
         virtual void deleteMixSnapshot(const std::string& name) = 0;
         virtual std::vector<std::string> getSnapshotNames() const = 0;
+
+        // === Audio Effects ===
+        virtual bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config) = 0;
+        virtual bool removeBusEffect(const std::string& busName, uint32_t effectId) = 0;
+        virtual bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config) = 0;
+        virtual bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) = 0;
+        virtual bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) = 0;
+        virtual std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const = 0;
+        virtual int getMaxEffectsPerBus() const = 0;
     };
 
 }

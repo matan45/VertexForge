@@ -2,6 +2,7 @@
 #include "../../events/audio/AudioEvents.hpp"
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/audio/AudioBusEvents.hpp"
+#include "../../events/audio/AudioEffectEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include <cassert>
 
@@ -149,6 +150,43 @@ namespace services {
             [this](const auto&) {
                 return getSnapshotNames();
             });
+
+        // Audio Effect Commands
+        dispatcher.registerCommandHandler<events::audio::AddBusEffectCommand>(
+            [this](const auto& cmd) {
+                return addBusEffect(cmd.busName, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::RemoveBusEffectCommand>(
+            [this](const auto& cmd) {
+                return removeBusEffect(cmd.busName, cmd.effectId);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::UpdateBusEffectCommand>(
+            [this](const auto& cmd) {
+                return updateBusEffect(cmd.busName, cmd.effectId, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusEffectEnabledCommand>(
+            [this](const auto& cmd) {
+                return setBusEffectEnabled(cmd.busName, cmd.effectId, cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusEffectWetDryCommand>(
+            [this](const auto& cmd) {
+                return setBusEffectWetDry(cmd.busName, cmd.effectId, cmd.wetDryMix);
+            });
+
+        // Audio Effect Queries
+        dispatcher.registerQueryHandler<events::audio::GetBusEffectChainQuery>(
+            [this](const auto& query) {
+                return getBusEffectChain(query.busName);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetMaxEffectsPerBusQuery>(
+            [this](const auto&) {
+                return getMaxEffectsPerBus();
+            });
     }
 
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
@@ -272,6 +310,37 @@ namespace services {
 
     std::vector<std::string> AudioServiceImpl::getSnapshotNames() const {
         return audioProvider->getSnapshotNames();
+    }
+
+    // === Audio Effects ===
+
+    bool AudioServiceImpl::addBusEffect(const std::string& busName, const types::BusEffectConfig& config) {
+        return audioProvider->addBusEffect(busName, config);
+    }
+
+    bool AudioServiceImpl::removeBusEffect(const std::string& busName, uint32_t effectId) {
+        return audioProvider->removeBusEffect(busName, effectId);
+    }
+
+    bool AudioServiceImpl::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                            const types::BusEffectConfig& config) {
+        return audioProvider->updateBusEffect(busName, effectId, config);
+    }
+
+    bool AudioServiceImpl::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) {
+        return audioProvider->setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    bool AudioServiceImpl::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) {
+        return audioProvider->setBusEffectWetDry(busName, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioServiceImpl::getBusEffectChain(const std::string& busName) const {
+        return audioProvider->getBusEffectChain(busName);
+    }
+
+    int AudioServiceImpl::getMaxEffectsPerBus() const {
+        return audioProvider->getMaxEffectsPerBus();
     }
 
 }
