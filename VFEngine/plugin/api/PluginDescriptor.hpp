@@ -29,6 +29,8 @@ namespace plugin
 
         // Directory containing the .vfplugin file
         std::filesystem::path basePath;
+        // Full path to the .vfplugin file itself
+        std::filesystem::path descriptorPath;
 
         std::filesystem::path getLibraryPath() const
         {
@@ -66,6 +68,7 @@ namespace plugin
             desc.apiVersion = json["apiVersion"].get<uint32_t>();
             desc.library = json["library"].get<std::string>();
             desc.basePath = path.parent_path();
+            desc.descriptorPath = path;
 
             // Optional fields
             if (json.contains("author") && json["author"].is_string())

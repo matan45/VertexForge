@@ -337,6 +337,10 @@ namespace plugin {
         {
             auto& reg = scene::EntityRegistry::getRegistry();
             auto view = reg.view<components::PluginComponentsComponent>();
+
+            // Collect entities to remove component from (can't modify during iteration)
+            std::vector<entt::entity> toRemove;
+
             for (auto entity : view)
             {
                 auto& pluginComp = view.get<components::PluginComponentsComponent>(entity);
@@ -346,9 +350,15 @@ namespace plugin {
                 }
                 if (pluginComp.components.empty())
                 {
-                    reg.remove<components::PluginComponentsComponent>(entity);
+                    toRemove.push_back(entity);
                 }
             }
+
+            for (auto entity : toRemove)
+            {
+                reg.remove<components::PluginComponentsComponent>(entity);
+            }
+
             PluginComponentRegistry::instance().unregisterPlugin(pluginName);
             registeredComponentNames.clear();
         }

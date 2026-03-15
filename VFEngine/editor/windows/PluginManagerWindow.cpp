@@ -217,23 +217,9 @@ namespace windows
 
     void PluginManagerWindow::writeEnabledState(PluginEntry& entry, bool enabled)
     {
-        auto vfpluginPath = entry.descriptor.basePath / (entry.descriptor.name + ".vfplugin");
+        auto vfpluginPath = entry.descriptor.descriptorPath;
 
-        // Try the descriptor's base path first, then search for the actual file
-        if (!std::filesystem::exists(vfpluginPath))
-        {
-            // Search for any .vfplugin in basePath
-            for (const auto& file : std::filesystem::directory_iterator(entry.descriptor.basePath))
-            {
-                if (file.path().extension() == ".vfplugin")
-                {
-                    vfpluginPath = file.path();
-                    break;
-                }
-            }
-        }
-
-        if (!std::filesystem::exists(vfpluginPath))
+        if (vfpluginPath.empty() || !std::filesystem::exists(vfpluginPath))
             return;
 
         // Read, modify, write
