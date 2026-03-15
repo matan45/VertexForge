@@ -110,6 +110,8 @@ namespace animator
         std::string directClipPath;
         bool directClipLoop = true;
         float directClipSpeed = 1.0f;
+        AdditiveReferencePose additiveRefPose = AdditiveReferencePose::FirstFrame;
+        float additiveRefFrame = 0.0f;
         AnimatorGraph graph;
     };
 

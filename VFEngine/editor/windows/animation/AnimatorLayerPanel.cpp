@@ -92,6 +92,26 @@ namespace windows::animation
                 isDirty = true;
             }
 
+            // Additive reference pose (only shown for Additive blend mode)
+            if (layer.blendMode == animator::LayerBlendMode::Additive)
+            {
+                const char* refPoses[] = {"BindPose", "FirstFrame", "SpecificFrame"};
+                int refPose = static_cast<int>(layer.additiveRefPose);
+                if (ImGui::Combo("Ref Pose", &refPose, refPoses, 3))
+                {
+                    layer.additiveRefPose = static_cast<animator::AdditiveReferencePose>(refPose);
+                    isDirty = true;
+                }
+
+                if (layer.additiveRefPose == animator::AdditiveReferencePose::SpecificFrame)
+                {
+                    if (ImGui::DragFloat("Ref Frame", &layer.additiveRefFrame, 0.01f, 0.0f, 100.0f))
+                    {
+                        isDirty = true;
+                    }
+                }
+            }
+
             // Source Mode
             const char* sourceModes[] = {"StateMachine", "DirectClip"};
             int sourceMode = static_cast<int>(layer.sourceMode);

@@ -22,6 +22,13 @@ namespace animator
         DirectClip
     };
 
+    enum class AdditiveReferencePose : uint8_t
+    {
+        BindPose,
+        FirstFrame,
+        SpecificFrame
+    };
+
     struct BoneMaskDefinition
     {
         std::string name;
@@ -59,5 +66,23 @@ namespace animator
     {
         if (str == "DirectClip") return LayerSourceMode::DirectClip;
         return LayerSourceMode::StateMachine;
+    }
+
+    inline const char* additiveReferencePoseToString(AdditiveReferencePose ref)
+    {
+        switch (ref)
+        {
+        case AdditiveReferencePose::BindPose: return "BindPose";
+        case AdditiveReferencePose::FirstFrame: return "FirstFrame";
+        case AdditiveReferencePose::SpecificFrame: return "SpecificFrame";
+        default: return "FirstFrame";
+        }
+    }
+
+    inline AdditiveReferencePose stringToAdditiveReferencePose(const std::string& str)
+    {
+        if (str == "BindPose") return AdditiveReferencePose::BindPose;
+        if (str == "SpecificFrame") return AdditiveReferencePose::SpecificFrame;
+        return AdditiveReferencePose::FirstFrame;
     }
 }

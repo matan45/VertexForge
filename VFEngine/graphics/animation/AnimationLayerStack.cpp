@@ -39,6 +39,8 @@ namespace animation
                 runtime.weight = layerData.weight;
                 runtime.blendMode = layerData.blendMode;
                 runtime.sourceMode = layerData.sourceMode;
+                runtime.additiveRefPose = layerData.additiveRefPose;
+                runtime.additiveRefFrame = layerData.additiveRefFrame;
 
                 if (layerData.sourceMode == animator::LayerSourceMode::StateMachine)
                 {
@@ -82,6 +84,12 @@ namespace animation
         }
 
         resolveBoneMasks();
+
+        for (auto& layer : layers)
+        {
+            computeReferencePose(layer);
+        }
+
         initialized = true;
     }
 
@@ -145,6 +153,64 @@ namespace animation
                 }
             }
             layer.hasMask = layer.boneMask.any();
+        }
+    }
+
+    void AnimationLayerStack::computeReferencePose(AnimationLayerRuntime& layer)
+    {
+        if (layer.blendMode != animator::LayerBlendMode::Additive)
+        {
+            layer.referencePose.clear();
+            return;
+        }
+
+        if (layer.additiveRefPose == animator::AdditiveReferencePose::BindPose)
+        {
+            if (skeletonData)
+            {
+                layer.referencePose = skeletonData->bindPoses;
+            }
+            return;
+        }
+
+        // FirstFrame or SpecificFrame: evaluate the clip at the target time
+        float refTimeSec = 0.0f;
+        if (layer.additiveRefPose == animator::AdditiveReferencePose::SpecificFrame)
+        {
+            refTimeSec = layer.additiveRefFrame;
+        }
+
+        AnimationEvaluator refEvaluator;
+        const resource::AnimationData* clipData = nullptr;
+
+        if (layer.sourceMode == animator::LayerSourceMode::DirectClip)
+        {
+            clipData = layer.directClipData;
+        }
+        else if (layer.stateMachine)
+        {
+            // Use the default state's animation for reference
+            const auto* graph = layer.stateMachine->getActiveGraph();
+            if (graph)
+            {
+                const auto* defaultState = graph->findStateById(graph->defaultStateId);
+                if (defaultState && !defaultState->animationPath.empty() && animationLoadCallback)
+                {
+                    clipData = animationLoadCallback(defaultState->animationPath);
+                }
+            }
+        }
+
+        if (clipData && skeletonData)
+        {
+            refEvaluator.loadAnimation(*clipData, *skeletonData);
+            float timeInTicks = refEvaluator.secondsToTicks(refTimeSec);
+            layer.referencePose = refEvaluator.evaluatePose(timeInTicks);
+        }
+        else if (skeletonData)
+        {
+            // Fallback to bind poses
+            layer.referencePose = skeletonData->bindPoses;
         }
     }
 
@@ -244,11 +310,15 @@ namespace animation
             }
             else if (layer.blendMode == animator::LayerBlendMode::Additive)
             {
-                if (skeletonData && !skeletonData->bindPoses.empty())
+                const auto& refPose = layer.referencePose.empty()
+                    ? skeletonData->bindPoses
+                    : layer.referencePose;
+
+                if (!refPose.empty())
                 {
                     AnimationBlender::additivePoseBlend(
                         finalBoneMatrices, layerPose, layer.weight,
-                        layer.boneMask, layer.hasMask, skeletonData->bindPoses);
+                        layer.boneMask, layer.hasMask, refPose);
                 }
             }
         }

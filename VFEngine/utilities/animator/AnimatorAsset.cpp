@@ -476,6 +476,12 @@ namespace animator
             j["directClipSpeed"] = layer.directClipSpeed;
         }
 
+        if (layer.blendMode == LayerBlendMode::Additive)
+        {
+            j["additiveRefPose"] = additiveReferencePoseToString(layer.additiveRefPose);
+            j["additiveRefFrame"] = layer.additiveRefFrame;
+        }
+
         if (layer.sourceMode == LayerSourceMode::StateMachine)
         {
             j["graph"] = serializeGraph(layer.graph);
@@ -495,6 +501,8 @@ namespace animator
         layer.directClipPath = j.value("directClipPath", "");
         layer.directClipLoop = j.value("directClipLoop", true);
         layer.directClipSpeed = j.value("directClipSpeed", 1.0f);
+        layer.additiveRefPose = stringToAdditiveReferencePose(j.value("additiveRefPose", "FirstFrame"));
+        layer.additiveRefFrame = j.value("additiveRefFrame", 0.0f);
 
         if (j.contains("graph") && j["graph"].is_object())
         {

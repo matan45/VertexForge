@@ -105,6 +105,7 @@ namespace animation
         void forceTransitionTo(const std::string& stateName, float blendDuration = 0.25f);
 
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }
+        const animator::AnimatorGraph* getActiveGraph() const { return activeGraph; }
 
         const std::vector<const animator::AnimationEvent*>& getFiredEvents() const { return firedEventsThisFrame; }
 

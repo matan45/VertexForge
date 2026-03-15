@@ -30,6 +30,10 @@ namespace animation
         bool clipLoop = true;
         float clipSpeed = 1.0f;
         bool clipPlaying = true;
+
+        animator::AdditiveReferencePose additiveRefPose = animator::AdditiveReferencePose::FirstFrame;
+        float additiveRefFrame = 0.0f;
+        std::vector<glm::mat4> referencePose;
     };
 
     class AnimationLayerStack
@@ -110,5 +114,6 @@ namespace animation
 
         void blendLayers();
         void resolveBoneMasks();
+        void computeReferencePose(AnimationLayerRuntime& layer);
     };
 }
