@@ -86,7 +86,7 @@ namespace windows::animation
             // Blend Mode
             const char* blendModes[] = {"Override", "Additive"};
             int blendMode = static_cast<int>(layer.blendMode);
-            if (ImGui::Combo("Blend Mode", &blendMode, blendModes, 2))
+            if (ImGui::Combo("Blend", &blendMode, blendModes, 2))
             {
                 layer.blendMode = static_cast<animator::LayerBlendMode>(blendMode);
                 isDirty = true;
@@ -97,7 +97,7 @@ namespace windows::animation
             {
                 const char* refPoses[] = {"BindPose", "FirstFrame", "SpecificFrame"};
                 int refPose = static_cast<int>(layer.additiveRefPose);
-                if (ImGui::Combo("Ref Pose", &refPose, refPoses, 3))
+                if (ImGui::Combo("Ref", &refPose, refPoses, 3))
                 {
                     layer.additiveRefPose = static_cast<animator::AdditiveReferencePose>(refPose);
                     isDirty = true;
@@ -105,7 +105,7 @@ namespace windows::animation
 
                 if (layer.additiveRefPose == animator::AdditiveReferencePose::SpecificFrame)
                 {
-                    if (ImGui::DragFloat("Ref Frame", &layer.additiveRefFrame, 0.01f, 0.0f, 100.0f))
+                    if (ImGui::DragFloat("Frame", &layer.additiveRefFrame, 0.01f, 0.0f, 100.0f))
                     {
                         isDirty = true;
                     }
@@ -144,7 +144,7 @@ namespace windows::animation
                 char maskBuf[128];
                 std::strncpy(maskBuf, layer.boneMaskName.c_str(), sizeof(maskBuf) - 1);
                 maskBuf[sizeof(maskBuf) - 1] = '\0';
-                if (ImGui::InputText("Bone Mask", maskBuf, sizeof(maskBuf)))
+                if (ImGui::InputText("Mask", maskBuf, sizeof(maskBuf)))
                 {
                     layer.boneMaskName = maskBuf;
                     isDirty = true;
